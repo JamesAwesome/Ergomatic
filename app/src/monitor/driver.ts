@@ -1469,10 +1469,14 @@ export function createPm5Driver(
   } | null = null;
   /** The live reconcile deadline's canceller, or `null` when none is armed
    *  — one at a time, because a run finishes once (`armSummaryReconcile`).
-   *  Cancelled when a new `program()` replaces the run it belongs to and
-   *  when the caller hangs up: a deadline whose run is gone has nothing
-   *  left to decide, and firing it anyway would be the timer talking about
-   *  someone else's workout. */
+   *  SETTLED, never merely cancelled, whenever the run it belongs to stops
+   *  being this driver's concern: both replacement doors (`program()` and
+   *  `beginFreeRow()`, RC-13 V2) and every teardown path
+   *  (`disconnect()`, `reconcile()`, `t.onDisconnect`) run
+   *  `drainSummaryReconcile`, which answers from the evidence already in
+   *  hand and then empties this slot. A deadline whose run is gone can no
+   *  longer WAIT for more wire evidence; that is not the same as having
+   *  nothing left to decide, and this comment used to say it was. */
   let pendingSummaryReconcile: (() => void) | null = null;
   /** The terminate path's own one-at-a-time pending emit (summary-record
    *  design spec §1), or `null` when none is armed — its timer's
@@ -1492,7 +1496,12 @@ export function createPm5Driver(
    *  permanently. */
   let pendingTerminateObservations: {
     cancel: () => void;
-    emit: () => void;
+    /** RC-13 §10: the emit names WHAT RELEASED IT — the hash sub-window
+     *  elapsing on its own clock, or an early flush and what caused it. A
+     *  detail that asserted a fixed window had closed would be untrue on
+     *  every early-flush path, and identical details on consecutive entries
+     *  coalesce in the ring (`eventLog.record`). */
+    emit: (release: string) => void;
   } | null = null;
   let reconnectPending = false;
   /** This task's single-flight gate (`ProgramBusyError`'s own doc comment,
@@ -1523,6 +1532,37 @@ export function createPm5Driver(
    *  disconnect hatch resolves `pendingAck` as `"disconnected"`, which
    *  rejects the send). */
   let programInFlight: false | "program()" | "beginFreeRow()" = false;
+  /**
+   * V3 — A REPLACEMENT IS ATOMIC WITH RESPECT TO THIS DRIVER'S OWN API
+   * (RC-13, spec 2026-09-09). Names the door currently replacing
+   * `activeRun`, from the moment it begins until it has finished announcing
+   * the new run; `null` at every other moment.
+   *
+   * LIFETIME: minted at exactly two sites (the two doors), cleared in a
+   * `finally` at each so a throw anywhere in a replacement cannot strand it,
+   * and NEVER survives the synchronous block that set it — it is not
+   * per-run, per-connection or per-session state and nothing clears it at
+   * teardown, because nothing can still be holding it by then.
+   *
+   * WHY IT EXISTS, and why it is not `programInFlight`: settling the
+   * outgoing run at a door (V2) is what puts subscriber code on that door's
+   * stack, and a subscriber can call back in. `program()` re-entrant already
+   * hits `programInFlight`; `disconnect()` re-entrant reaches an idempotent
+   * no-op. **`beginFreeRow()` re-entrant passes `runIsOpen()`** — the
+   * outgoing run is closed — and assigns `activeRun` in the middle of the
+   * other door's replacement, which that door then overwrites. Today that is
+   * held off only by `useMonitorSession`'s `phase === "programming"` guard,
+   * i.e. by an argument about the current call graph, which is the thing
+   * this whole change exists to stop relying on. **Which door owns the
+   * window is a fact this driver knows about itself.**
+   *
+   * `beginFreeRow()`'s window deliberately ENDS where `programInFlight`
+   * begins, and the two together cover the whole of that door: its own
+   * `armed` announcement fires from a detached `.finally()` long after this
+   * flag is down, and a `beginFreeRow()` re-entered there is refused by the
+   * ordinary `runIsOpen()` guard instead — the free row it opened is open.
+   */
+  let replacingRun: "program()" | "beginFreeRow()" | null = null;
   /** The SETTLED promise of `beginFreeRow()`'s detached p.80 send — the
    *  whole chain, so it resolves (never rejects: both handlers are
    *  attached, and neither throws) on ack, NAK, deadline or disconnect,
@@ -2170,8 +2210,47 @@ export function createPm5Driver(
     });
   }
 
+  /**
+   * V1 — DELIVERY IS ISOLATED (RC-13, spec 2026-09-09). A listener that
+   * throws while receiving a driver event costs that listener's own
+   * delivery and nothing else: the remaining listeners still receive the
+   * event, and no event delivery may fail the operation that emitted it.
+   *
+   * **This function used to be `for (const cb of listeners) cb(e);` and
+   * that was a LIVE defect, not hardening.** `emit({ kind: "armed" })` is
+   * the last statement inside `program()`'s own `try`, three lines past
+   * `activeRun = { … }` and after `await verifyArmed(p)` has confirmed the
+   * erg is holding the workout — so a throwing subscriber rejected
+   * `driver.program(p)` on the ordinary programmed path,
+   * `useMonitorSession`'s catch ran `mapProgramFailure`, closed the still-
+   * open record as `program-failed` and moved `phase` to `"failed"`. The
+   * rower was told programming failed for a workout the erg was holding.
+   * One production subscriber, no fault injection required.
+   *
+   * WHAT THIS DOES NOT CLAIM: that a subscriber has ever been observed
+   * throwing in production. RC-14's row names a throw in here as one of
+   * three surviving explanations for an observed silent zero-fired verdict
+   * — a SURVIVOR, not a cause. This is a live hazard on a supported path;
+   * it is not a confirmed field defect.
+   *
+   * The ring entry is what makes a contained throw diagnosable at all
+   * (RC-14's Shape A dependency): a swallowed error with no record would
+   * trade one silence for another. Its detail carries the event kind AND
+   * the error, so two different contained deliveries never coalesce into
+   * one entry (`eventLog.record` collapses a CONSECUTIVE identical
+   * kind+detail pair without advancing `seq`).
+   */
   function emit(e: MonitorEvent): void {
-    for (const cb of listeners) cb(e);
+    for (const cb of listeners) {
+      try {
+        cb(e);
+      } catch (err) {
+        log.record(
+          "listener-threw",
+          `a subscriber threw while receiving an "${e.kind}" event — that delivery is abandoned, the driver and the operation that emitted it continue: ${String(err)}`,
+        );
+      }
+    }
   }
 
   const controlReassembler = reassemble();
@@ -2324,7 +2403,7 @@ export function createPm5Driver(
     // `drainSummaryReconcile` (Task 7): `disconnect()` below now applies
     // this identical rule for a caller-initiated hang-up, which used to
     // discard the same verdict this comment refuses to.
-    drainSummaryReconcile();
+    drainSummaryReconcile("the link dropped");
     if (activeRun !== null && activeRun.closed) {
       // The old `terminalLatched` flag's SECOND consumer, re-scoped to the
       // run (Task 4, spec §4: replaced, never deleted). Appendix E (cited
@@ -3170,7 +3249,11 @@ export function createPm5Driver(
       // the two windows are coupled constants and their ORDER of arming is
       // what makes "the fill happens before navigation" a fact about the
       // code rather than about the event loop.
-      armSummaryReconcile(activeRun!);
+      armSummaryReconcile(
+        activeRun!,
+        FINISH_GRACE_MS,
+        `the ${FINISH_GRACE_MS}ms finish grace closed on its own clock`,
+      );
       log.record("terminal", "finished");
       emit({ kind: "workoutComplete" });
       // Review fix round 1, HIGH finding: fired AFTER the emit above, not
@@ -4159,8 +4242,10 @@ export function createPm5Driver(
 
   /**
    * Schedules the summary gate's reconcile for the instant the finish grace
-   * closes (fast-follow Task 2, design spec §5). `FINISH_GRACE_MS` (the
-   * default `ms`) is the delay for a reason that is not convenience: the
+   * closes (fast-follow Task 2, design spec §5). `FINISH_GRACE_MS` — which
+   * the natural-finish call site passes explicitly, since `ms` HAS NO
+   * DEFAULT (see the parameters' own comment below) — is the delay for a
+   * reason that is not convenience: the
    * reconcile's question is "did the split fail to arrive before the grace
    * expired?", so it must ask at exactly the moment the grace stopped
    * accepting one — a shorter delay would answer while a split could still
@@ -4194,18 +4279,29 @@ export function createPm5Driver(
    */
   function armSummaryReconcile(
     run: NonNullable<typeof activeRun>,
-    ms: number = FINISH_GRACE_MS,
+    /** BOTH REQUIRED, and `ms` lost its `FINISH_GRACE_MS` default to make
+     *  `release` so (branch review, finding 5). `release` is what this
+     *  deadline's own firing RELEASES the reconcile for, in the words
+     *  `reconcileSummary` prints. This pair used to be `ms = FINISH_GRACE_MS`
+     *  plus an OPTIONAL `release` defaulting to the 3000ms sentence, under a
+     *  comment claiming a caller re-arming at a different delay "cannot
+     *  quietly keep the 3000ms sentence" — which `armSummaryReconcile(run,
+     *  500)` compiled and did. The claim is now the signature's, not the
+     *  comment's. */
+    ms: number,
+    release: string,
   ): void {
     pendingSummaryReconcile?.();
     pendingSummaryReconcile = schedule(() => {
       pendingSummaryReconcile = null;
       // The run this deadline was armed FOR, captured — never `activeRun`
-      // as it stands when the timer fires. A `program()` that landed in
-      // between cancels this timer outright (see its call site), and this
-      // guard is the belt to that braces: a deadline may only ever speak
-      // about its own workout.
+      // as it stands when the timer fires. A door that landed in between
+      // has already SETTLED this deadline and emptied the slot (RC-13 V2,
+      // `program()` and `beginFreeRow()` both), so this guard is the belt
+      // to that braces: a deadline may only ever speak about its own
+      // workout.
       if (activeRun !== run) return;
-      reconcileSummary(run);
+      reconcileSummary(run, release);
       // RC-9a: called HERE, not at the terminal transition — by the time
       // `reconcileSummary` returns, this run's finish grace has fully
       // resolved (a late split recorded ordinarily, the summary fill, or
@@ -4217,6 +4313,58 @@ export function createPm5Driver(
       // itself arrives.
       recordAvgPaceVerdict(run);
     }, ms);
+  }
+
+  /**
+   * V2's second sentence, as code: **SETTLING MAY NOT FAIL THE REPLACEMENT**
+   * (branch review, finding 4). The doors called `drainSummaryReconcile`
+   * bare, inside a `try { … } finally { replacingRun = null; }` with no
+   * `catch` — and in `program()` that sits inside the very `try` whose last
+   * statement is the `armed` emit, so a throw out of the settlement would
+   * reject `driver.program(p)` AFTER `verifyArmed` confirmed the erg holds
+   * the workout, leaving this driver tracking the outgoing run while the
+   * machine holds the new program. That is `emit`'s own live defect (V1) one
+   * function over.
+   *
+   * NOT REACHABLE TODAY, and said plainly: with per-listener isolation in
+   * place only driver code runs on that stack, and no throwing path was
+   * found in it. It is here for the same reason V3 is — the driver knowing
+   * this about itself beats an argument that nothing on the current call
+   * graph can do it.
+   *
+   * WHAT THE SWALLOW COSTS, stated because a swallow that hides a cost is
+   * the defect it is meant to prevent: the outgoing run's answer — its
+   * `summary-reconciled` verdict, its `avg-pace-verdict`, and any
+   * observations still pending — is LOST for good, and the `settlement-threw`
+   * entry is the only trace of it. The replacement is what may not fail;
+   * the answer is not rescued.
+   *
+   * WHAT IT MAY NOT DO IS RELOCATE THE THROW, and the first version of this
+   * function did (scoped re-review, finding 1). `drainSummaryReconcile` ran
+   * its canceller BEFORE emptying the slot, so a throwing canceller left
+   * `pendingSummaryReconcile` holding itself; this `catch` then let the door
+   * proceed and handed the live fault to the next caller of that slot —
+   * `driver.reconcile()` re-threw, and `armSummaryReconcile` fired the stale
+   * canceller from inside a BLE notification handler at the NEXT run's
+   * natural finish. Both are gated now. The slot is emptied first, so a
+   * swallowed settlement leaves nothing armed.
+   *
+   * SCOPED TO THE DOORS ON PURPOSE. The teardown paths (`disconnect()`,
+   * `reconcile()`, `t.onDisconnect`) still call `drainSummaryReconcile`
+   * bare: V2 is an invariant about REPLACEMENT, and swallowing a throw on a
+   * teardown would change what those callers see for a reason nothing has
+   * argued for. That is a statement about a teardown's OWN settlement only —
+   * it never licensed this function to leave a fault behind for one.
+   */
+  function settleOutgoingRun(cause: string): void {
+    try {
+      drainSummaryReconcile(cause);
+    } catch (err) {
+      log.record(
+        "settlement-threw",
+        `settling the outgoing run (${cause}) threw — the replacement completes regardless and the outgoing run's answer is lost: ${String(err)}`,
+      );
+    }
   }
 
   /** THE F7 RULE, AS ITS OWN FUNCTION (Task 7, "one terminal path" — this
@@ -4243,7 +4391,27 @@ export function createPm5Driver(
    *  `pendingSummaryReconcile` is already `null` is a no-op, so calling it
    *  from more than one of those three sites in the same teardown costs
    *  nothing. */
-  function drainSummaryReconcile(): void {
+  function drainSummaryReconcile(
+    /** THE NEUTRAL HALF OF THE RELEASE CAUSE — who drained, with no window
+     *  clause attached (branch review, finding 2). This parameter used to be
+     *  the whole sentence, and five of the six call sites named a finish
+     *  grace in it — three as "… before the finish grace closed" and two as
+     *  "… before ITS finish grace closed" (the two doors) — which this
+     *  function then handed to BOTH slots. (The count is stated exactly
+     *  because the round that introduced this comment got it wrong: it said
+     *  five sites "spelled it" the first way, when two spelled it the
+     *  second, which is why three test expectations had to be edited.) That is false on the terminate slot: `noteTerminateObservations`'s
+     *  two call sites are gated on `terminatedAwaitingSummary`, and a
+     *  terminated close opens NO finish grace and arms NO reconcile deadline
+     *  (`maybeEmitFrame`'s terminated branch says so in as many words), so
+     *  every terminate-observations emit concerns a run whose
+     *  `finishGraceUntil` is `null`. The detail read "… released when
+     *  `reconcile()` … before its finish grace closed … this run was
+     *  abandoned, not finished" — self-contradictory in one breath, and a
+     *  WIDENING, since the pre-RC-13 wording named no window at all. Each
+     *  slot now appends the window that is actually its own. */
+    cause: string,
+  ): void {
     // The terminate path's own pending emit drains here too (summary-record
     // design spec §1). Same rule as the sentence above, applied to the
     // other slot: the link going away costs this run its ability to WAIT
@@ -4255,18 +4423,65 @@ export function createPm5Driver(
     // because the emit reaches the record and the reconcile below can only
     // ever concern a DIFFERENT run's shape (the two are mutually exclusive
     // — `terminatedAwaitingSummary`'s own doc comment).
-    flushTerminateObservations();
+    // The terminate slot's own window is the hash sub-window, never a
+    // finish grace (see `cause`).
+    flushTerminateObservations(
+      `${cause} while the ${HASH_SUBWINDOW_MS}ms wait for 0x003F was still open`,
+    );
     if (pendingSummaryReconcile !== null) {
-      pendingSummaryReconcile();
+      // EMPTIED BEFORE THE CANCELLER RUNS, not after (scoped re-review,
+      // finding 1) — the same discipline `flushTerminateObservations` states
+      // one function up, for a second reason. It used to be
+      // `pendingSummaryReconcile(); pendingSummaryReconcile = null;`, so a
+      // canceller that THREW left the slot holding itself. `settleOutgoingRun`
+      // then swallowed at the door and proceeded, handing the live fault to
+      // whoever touched the slot next — measured on two reachable arms, and
+      // neither is wrapped: `driver.reconcile()` (the hook's own
+      // `reconcileAndReleaseHandoff` teardown) re-entered this branch and
+      // re-threw, and `armSummaryReconcile`'s opening
+      // `pendingSummaryReconcile?.()` fired the stale canceller from inside
+      // `maybeEmitFrame`, i.e. inside a BLE notification handler, when the
+      // NEXT run reached its own natural finish. A swallow that relocates a
+      // throw is not containment.
+      const cancelDeadline = pendingSummaryReconcile;
       pendingSummaryReconcile = null;
-      // `armSummaryReconcile` is armed from exactly one call site (the
-      // `finished` branch in `maybeEmitFrame`, immediately after
-      // `activeRun!.closed = true`), and `program()`'s own replacement
-      // path cancels this same field before a new run ever opens — so a
-      // deadline still pending here can only name the CURRENT `activeRun`,
-      // closed and non-null.
+      cancelDeadline();
+      // A deadline still pending here can only name the CURRENT
+      // `activeRun`, closed and non-null — and RC-13 corrected the support
+      // this sentence used to carry, which was false twice.
+      //
+      // IT USED TO SAY: "`armSummaryReconcile` is armed from exactly one
+      // call site" (it has THREE — the `finished` branch in
+      // `maybeEmitFrame` plus two `HASH_SUBWINDOW_MS` re-arms inside
+      // `maybeReconcileImmediately`), "and `program()`'s own replacement
+      // path cancels this same field before a new run ever opens" (which
+      // said nothing about `beginFreeRow`, which cancelled nothing at all).
+      //
+      // WHICH LAYER HOLDS IT, and there are now TWO independent holders,
+      // exactly as at `noteTerminateObservations`'s identity branch — see
+      // that comment for both, and for why the hook's holder is weighed by
+      // the DATE it landed (#259, 2026-09-01). The driver's own holder is
+      // structural: BOTH doors empty this slot before the new run exists,
+      // whichever call site armed it and however many there are.
+      //
+      // THIS FUNCTION STILL HAS NO IDENTITY GUARD OF ITS OWN — it
+      // reconciles whatever `activeRun` reads, not the run the deadline was
+      // armed for, unlike both scheduled callbacks. That is filed as a
+      // register row rather than argued here: binding the run into the slot
+      // would make the precondition structural instead of stated.
       if (activeRun !== null) {
-        reconcileSummary(activeRun);
+        // "BEFORE THE DEADLINE FIRED", never "before the grace closed"
+        // (scoped re-review, finding 5). This driver already uses
+        // open/closed for the GRACE PREDICATE (`graceIsOpen`,
+        // `describeClosedGrace`), and one composed sentence — the summary
+        // burst's — is true under that reading and false under "the 3000ms
+        // deadline fired". Naming the deadline is the reading that is true
+        // at every one of these call sites, and it matches
+        // `armSummaryReconcile`'s own default sentence.
+        reconcileSummary(
+          activeRun,
+          `${cause} before the finish grace's own deadline fired`,
+        );
         // RC-9a: the same pairing `armSummaryReconcile`'s own scheduled
         // callback makes (its own comment) — this is the SECOND of the two
         // places `reconcileSummary` is ever called, and this verdict must
@@ -4323,7 +4538,9 @@ export function createPm5Driver(
    * duplicate of its logic: it is already idempotent (Task 7's own F7
    * rule — a no-op once `pendingSummaryReconcile` is `null`) and already
    * cancels the real timer before calling `reconcileSummary`, so calling
-   * this from more than one of ITS four production call sites below costs
+   * this from more than one of ITS production call sites (six since RC-13:
+   * `t.onDisconnect`, this function, `reconcile()`, `disconnect()`, and
+   * both replacement doors) costs
    * nothing on a run that settles the other way, and guarantees
    * `reconcileSummary` still runs AT MOST ONCE per run whichever site
    * fires it.
@@ -4334,7 +4551,11 @@ export function createPm5Driver(
     if (!run.recordedActuals.has(lastIndex)) return;
     if (run.summaryInGrace === null) return;
     if (run.verificationBytes === null) {
-      armSummaryReconcile(run, HASH_SUBWINDOW_MS);
+      armSummaryReconcile(
+        run,
+        HASH_SUBWINDOW_MS,
+        `the ${HASH_SUBWINDOW_MS}ms wait for 0x003F elapsed inside the finish grace`,
+      );
       return;
     }
     // Phase LP (spec §2.3): 0x003A is part of the burst. On every committed
@@ -4344,10 +4565,16 @@ export function createPm5Driver(
     // without it (`summary-1-missing`) — never a second wait.
     if (run.additionalSummary === null && !run.additionalSummaryWaited) {
       run.additionalSummaryWaited = true;
-      armSummaryReconcile(run, HASH_SUBWINDOW_MS);
+      armSummaryReconcile(
+        run,
+        HASH_SUBWINDOW_MS,
+        `the ${HASH_SUBWINDOW_MS}ms wait for 0x003A elapsed inside the finish grace`,
+      );
       return;
     }
-    drainSummaryReconcile();
+    drainSummaryReconcile(
+      "the summary burst completed early (0x0039 and its verification hash both in hand)",
+    );
   }
 
   /**
@@ -4626,11 +4853,11 @@ export function createPm5Driver(
     // own `run.finishGraceUntil = null` sits beside a `recordedActuals`
     // bound that already covers it.
     run.summaryInGrace = null;
-    const emitTerminate = (): void => {
+    const emitTerminate = (release: string): void => {
       pendingTerminateObservations = null;
       log.record(
         "summary-reconciled",
-        `terminate-observations — 0x0039 ${ordering === "early" ? "held from before our own terminal transition (buffered while the run was still open in its final interval)" : "arrived after a rower-ended close"} (${summary.elapsedSeconds}s/${summary.meters}m, hash ${run.verificationBytes === null ? "never arrived" : "included"}) and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)`,
+        `terminate-observations — 0x0039 ${ordering === "early" ? "held from before our own terminal transition (buffered while the run was still open in its final interval)" : "arrived after a rower-ended close"} (${summary.elapsedSeconds}s/${summary.meters}m, hash ${run.verificationBytes === null ? "never arrived" : "included"}), released when ${release}, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)`,
       );
       emit(
         summaryObservationsEvent(
@@ -4646,23 +4873,43 @@ export function createPm5Driver(
     if (run.verificationBytes !== null) {
       // The hash was already in hand (a 0x003F that beat its own 0x0039, or
       // a stray one earlier in this run) — nothing to wait for.
-      emitTerminate();
+      emitTerminate("0x003F was already in hand");
       return;
     }
     const cancel = schedule(() => {
-      // A `program()` in between replaced the run this emit belongs to.
-      // Same identity guard, and the same belt-to-`program()`'s-braces
-      // reasoning, as `armSummaryReconcile`'s own: `program()` already
-      // cancels this timer before it swaps `activeRun`, and nothing else in
-      // this driver ever reassigns that variable, so this branch is
-      // UNREACHABLE today and is uncovered on purpose (the same trade
-      // `reconcileSummary`'s `lastIndex < 0` guard states: one branch
-      // against a timer speaking about someone else's workout).
+      // A door replaced the run this emit belongs to. This branch is still
+      // UNREACHABLE and still uncovered on purpose — but RC-13 corrected
+      // WHY, because the reason this comment used to give was false.
+      //
+      // IT USED TO SAY: "`program()` already cancels this timer before it
+      // swaps `activeRun`, and nothing else in this driver ever reassigns
+      // that variable". The second clause was never true — `beginFreeRow`
+      // assigns `activeRun` too — and the first is no longer what happens:
+      // both doors now SETTLE the outgoing run (V2), which empties this
+      // slot rather than cancelling into it.
+      //
+      // WHICH LAYER HOLDS IT, and there are now TWO independent holders:
+      //  1. THIS DRIVER. Every door that replaces `activeRun` drains both
+      //     pending slots first (`drainSummaryReconcile` at `program()` and
+      //     `beginFreeRow()`), so nothing can still be sitting here to fire
+      //     against a run it does not belong to.
+      //  2. THE HOOK, one layer up. `useMonitorSession`'s `beginFreeRow`
+      //     returns on `phase === "ended"`, `JustRow.tsx` latches
+      //     `armedThisStart`, and `session.program()`'s one caller is gated
+      //     on `phase === "pairing"`, written only inside `connect()`,
+      //     which refuses when a driver already exists.
+      //
+      // WEIGH HOLDER 2 BY ITS DATE: the `ended` clause landed 2026-09-01 in
+      // #259, and its own comment says it "was NOT here at first, and the
+      // e2e flow found the consequence". A guard added reactively last week
+      // is not an invariant that has held for a year, which is exactly why
+      // holder 1 now exists. Holder 1 is what makes this branch uncovered;
+      // do not delete it on holder 2's word.
       if (activeRun !== run) {
         pendingTerminateObservations = null;
         return;
       }
-      emitTerminate();
+      emitTerminate(`the ${HASH_SUBWINDOW_MS}ms hash sub-window elapsed`);
     }, HASH_SUBWINDOW_MS);
     pendingTerminateObservations = { cancel, emit: emitTerminate };
   }
@@ -4674,7 +4921,7 @@ export function createPm5Driver(
    *  `disconnect()`, `onDisconnect` — so waiting for more wire evidence is
    *  no longer a thing this run can do). Idempotent: a no-op once the slot
    *  is `null`, exactly like `drainSummaryReconcile` itself. */
-  function flushTerminateObservations(): void {
+  function flushTerminateObservations(release: string): void {
     const pending = pendingTerminateObservations;
     if (pending === null) return;
     pending.cancel();
@@ -4682,7 +4929,7 @@ export function createPm5Driver(
     // synchronously, and this slot must already read "nothing pending" by
     // the time anything that listener touches could call back in here.
     pendingTerminateObservations = null;
-    pending.emit();
+    pending.emit(release);
   }
 
   /**
@@ -4727,7 +4974,16 @@ export function createPm5Driver(
    * function runs at most once per run (`armSummaryReconcile` arms a
    * single deadline; `pendingSummaryReconcile`'s own doc comment).
    */
-  function reconcileSummary(run: NonNullable<typeof activeRun>): void {
+  function reconcileSummary(
+    run: NonNullable<typeof activeRun>,
+    /** RC-13 §10: what released this reconcile. These sentences used to
+     *  assert that the `FINISH_GRACE_MS` window had closed, which was
+     *  already untrue on every drain path (`disconnect()`, `reconcile()`,
+     *  `onDisconnect`) and is untrue at both replacement doors. A named
+     *  release cause is also what keeps per-door details DISTINCT, so
+     *  `eventLog.record` cannot coalesce two of them into one entry. */
+    release: string,
+  ): void {
     const lastIndex = run.program.intervals.length - 1;
     // A program with NO intervals, guarded rather than assumed away — the
     // one shape where this function could fabricate an identity. With
@@ -4744,7 +5000,7 @@ export function createPm5Driver(
       const held = run.summaryInGrace;
       log.record(
         "summary-reconciled",
-        `split-won — interval ${lastIndex} was already recorded when the ${FINISH_GRACE_MS}ms finish grace closed${held === null ? ' (no 0x0039 was being held — one may still have ARRIVED and been refused storage; check for an out-of-window entry above before reading this as "the summary never came")' : " (a 0x0039 was held; its totals are recorded as observations alongside the split — the split stays authoritative for the interval ACTUAL, review I4)"}`,
+        `split-won — interval ${lastIndex} was already recorded when ${release}${held === null ? ' (no 0x0039 was being held — one may still have ARRIVED and been refused storage; check for an out-of-window entry above before reading this as "the summary never came")' : " (a 0x0039 was held; its totals are recorded as observations alongside the split — the split stays authoritative for the interval ACTUAL, review I4)"}`,
       );
       if (held !== null) {
         run.summaryInGrace = null;
@@ -4765,7 +5021,7 @@ export function createPm5Driver(
     if (summary === null) {
       log.record(
         "summary-reconciled",
-        `declined — interval ${lastIndex} is still missing and no 0x0039 arrived inside the ${FINISH_GRACE_MS}ms finish grace; nothing filed (this run logs one interval short, and the trace says why)`,
+        `declined — interval ${lastIndex} is still missing and no 0x0039 arrived before ${release}; nothing filed (this run logs one interval short, and the trace says why)`,
       );
       return;
     }
@@ -4795,7 +5051,7 @@ export function createPm5Driver(
     if (!derived.ok) {
       log.record(
         "summary-reconciled",
-        `declined — interval ${lastIndex} cannot be derived from 0x0039: ${derived.why}; nothing filed`,
+        `declined — interval ${lastIndex} cannot be derived from 0x0039: ${derived.why}; nothing filed (released when ${release})`,
       );
       return;
     }
@@ -4866,7 +5122,7 @@ export function createPm5Driver(
     run.finalFilledFromSummary = true;
     log.record(
       "summary-reconciled",
-      `filled-from-summary — the final split never arrived, so interval ${lastIndex} is synthesized from 0x0039: elapsed=${derived.elapsedSeconds}s distance=${derived.distanceMeters}m (${derived.how}). Avg split/spm/HR are OMITTED (null): 0x0039's averages are the whole workout's, not this interval's (design spec §5, B3)`,
+      `filled-from-summary — the final split never arrived, so interval ${lastIndex} is synthesized from 0x0039: elapsed=${derived.elapsedSeconds}s distance=${derived.distanceMeters}m (${derived.how}). Avg split/spm/HR are OMITTED (null): 0x0039's averages are the whole workout's, not this interval's (design spec §5, B3; released when ${release})`,
     );
     emit({ kind: "intervalComplete", actual, finalBoundary: true });
     // The OBSERVATION rides separately from the ACTUAL above (storage-spine
@@ -5725,7 +5981,7 @@ export function createPm5Driver(
         // This is that missing trigger: the byte the observations emit is
         // waiting for has arrived, so it goes out NOW rather than at the end
         // of its `HASH_SUBWINDOW_MS`. A no-op on every other run.
-        flushTerminateObservations();
+        flushTerminateObservations("0x003F arrived");
       }
     });
 
@@ -6594,8 +6850,32 @@ export function createPm5Driver(
      * Idempotent against an open run: a second call while one is live is
      * ignored rather than replacing it, so a stray re-entry cannot silently
      * discard a row in progress.
+     *
+     * AND AGAINST A CLOSED ONE THAT STILL OWES AN ANSWER (RC-13 V2): this
+     * door replaces `activeRun`, so it SETTLES the outgoing run first —
+     * `drainSummaryReconcile`, the same call `program()` and every teardown
+     * path make. It used to do nothing at all with either pending slot, so
+     * a run replaced here lost its reconcile and its terminate-observations
+     * emit in silence. No product path reaches that ordering today (the
+     * hook returns on `phase === "ended"`, a guard added 2026-09-01 in
+     * #259), which is why this is hardening rather than a defect fix.
+     *
+     * Re-entrant calls arriving from a subscriber while EITHER door is
+     * mid-replacement are refused before the `runIsOpen()` check, which
+     * cannot see them (`replacingRun`'s own declaration, V3).
      */
     beginFreeRow(): void {
+      // V3, checked BEFORE `runIsOpen()` because that guard cannot see this
+      // case: mid-replacement the outgoing run is CLOSED, so a re-entrant
+      // call sails past it and assigns `activeRun` underneath the door that
+      // is already replacing it. Refused visibly, never silently ignored.
+      if (replacingRun !== null) {
+        log.record(
+          "run-replace-reentered",
+          `beginFreeRow() was called while ${replacingRun} was replacing the active run — refused; a replacement has exactly one writer of activeRun in flight`,
+        );
+        return;
+      }
       if (runIsOpen()) {
         log.record(
           "free-row-ignored",
@@ -6603,28 +6883,53 @@ export function createPm5Driver(
         );
         return;
       }
-      activeRun = {
-        program: { intervals: [] },
-        freeRow: true,
-        closed: false,
-        actuals: 0,
-        recordedActuals: new Map(),
-        lastActiveState: null,
-        finishGraceUntil: null,
-        summaryInGrace: null,
-        additionalSummary: null,
-        additionalSummaryWaited: false,
-        summaryStamp: null,
-        additionalSummaryStamp: null,
-        graceClaimed: false,
-        verificationBytes: null,
-        terminatedAwaitingSummary: false,
-        finalFilledFromSummary: false,
-      };
-      log.record(
-        "free-row-open",
-        "opened a free row; sending the PM5 its Just Row program (CSAFE-DEF p.80), no prepare",
-      );
+      // V2 — THE OUTGOING RUN IS SETTLED BEFORE IT IS REPLACED (RC-13).
+      // This door used to do NOTHING with either pending slot: the reconcile
+      // deadline kept a live canceller for a timer that would fire, see
+      // `activeRun !== run` and return, and the terminate-observations emit
+      // was dropped the same way — the outgoing run's answer lost in silence
+      // at one door while the other cancelled it. RF34: the invariant governs
+      // every door that replaces a run, and this is the same one call.
+      //
+      // C1 reduces to "before the assignment" here, because this door has no
+      // per-run reset block at all (ROADMAP register row: whoever adds one
+      // must place it BELOW this line or re-introduce C1's exact bug).
+      // `activeRun` is still the OUTGOING run on this line (I2).
+      //
+      // V3's window opens above the settlement and closes the moment the
+      // new run has been opened and announced to the ring. Nothing between
+      // there and `programInFlight` below can run listener code
+      // (`buildJustRowProgram()` is pure), and from the assignment onwards
+      // `runIsOpen()` refuses a re-entrant `beginFreeRow()` on its own —
+      // see `replacingRun`'s declaration for how the two cover this door.
+      replacingRun = "beginFreeRow()";
+      try {
+        settleOutgoingRun("beginFreeRow() replaced this run");
+        activeRun = {
+          program: { intervals: [] },
+          freeRow: true,
+          closed: false,
+          actuals: 0,
+          recordedActuals: new Map(),
+          lastActiveState: null,
+          finishGraceUntil: null,
+          summaryInGrace: null,
+          additionalSummary: null,
+          additionalSummaryWaited: false,
+          summaryStamp: null,
+          additionalSummaryStamp: null,
+          graceClaimed: false,
+          verificationBytes: null,
+          terminatedAwaitingSummary: false,
+          finalFilledFromSummary: false,
+        };
+        log.record(
+          "free-row-open",
+          "opened a free row; sending the PM5 its Just Row program (CSAFE-DEF p.80), no prepare",
+        );
+      } finally {
+        replacingRun = null;
+      }
       const sequence = buildJustRowProgram();
       programInFlight = "beginFreeRow()";
       let cancelDeadline: (() => void) | null = null;
@@ -6729,6 +7034,19 @@ export function createPm5Driver(
       if (programInFlight) {
         throw new ProgramBusyError(programInFlight);
       }
+      // V3, and NOT covered by the line above: `beginFreeRow()` sets
+      // `programInFlight` only AFTER its own replacement window, so a
+      // subscriber called from that door's settlement reaches this method
+      // with the flag still down. Refused VISIBLY — a caller sees the typed
+      // rejection it already handles, and the ring says a re-entrant call
+      // was turned away rather than leaving a silence to explain later.
+      if (replacingRun !== null) {
+        log.record(
+          "run-replace-reentered",
+          `program() was called while ${replacingRun} was replacing the active run — refused; a replacement has exactly one writer of activeRun in flight`,
+        );
+        throw new ProgramBusyError(replacingRun);
+      }
       programInFlight = "program()";
       try {
         // Fix-3 Task 2 (design spec §1b): the machine's state AT THE MOMENT
@@ -6785,106 +7103,140 @@ export function createPm5Driver(
         // otherwise entirely constructible (it would emit this run's
         // identity carrying the last run's averages — D4's corruption, one
         // level up).
-        if (runIsOpen()) {
-          log.record(
-            "run-replaced",
-            `program() replaced a run that was still OPEN (its ${activeRun!.program.intervals.length}-interval program had accumulated ${activeRun!.actuals} actual(s)) — that run closes here with no workoutComplete/terminated event of its own`,
-          );
+        // V3's window opens HERE, one statement above the first thing this
+        // block does to the outgoing run, and closes in the `finally` below
+        // once the new run has been announced. Everything between is
+        // synchronous — there is no `await`, `.then` or `yield` past
+        // `verifyArmed(p)` — so the only way back into this driver inside it
+        // is a subscriber re-entering from the settlement's emits or from
+        // the `armed` emit itself.
+        replacingRun = "program()";
+        try {
+          if (runIsOpen()) {
+            log.record(
+              "run-replaced",
+              `program() replaced a run that was still OPEN (its ${activeRun!.program.intervals.length}-interval program had accumulated ${activeRun!.actuals} actual(s)) — that run closes here with no workoutComplete/terminated event of its own`,
+            );
+          }
+          if (
+            boundaryHalves.split !== null ||
+            boundaryHalves.asSplit !== null
+          ) {
+            log.record(
+              "boundary-orphan",
+              `a boundary half was still pending when a new run opened (0x0037=${boundaryHalves.split}, 0x0038=${boundaryHalves.asSplit}) — discarded rather than paired with the new run's first boundary`,
+            );
+          }
+          // V2 — THE OUTGOING RUN IS SETTLED BEFORE IT IS REPLACED (RC-13).
+          // This used to be four cancel lines at the BOTTOM of this block
+          // (`pendingSummaryReconcile?.()`, `= null`, the terminate slot's
+          // `cancel()`, `= null`): the outgoing run's unfinished business was
+          // thrown away rather than decided from evidence already in hand. It
+          // is one call now, and `drainSummaryReconcile` is the same
+          // settlement `disconnect()`, `reconcile()` and `t.onDisconnect`
+          // already apply — flush the terminate-observations emit, then cancel
+          // the reconcile deadline and answer it.
+          //
+          // C1 — PLACEMENT IS LOAD-BEARING, AND IT IS AN INVARIANT, NOT A LINE
+          // NUMBER: the settlement runs before ANY per-run reset below it, and
+          // any reset added to this block later inherits that. The reset that
+          // makes it matter today is `lastWorkStateAverageSplit = null` ~25
+          // lines down — `recordAvgPaceVerdict` reads exactly that variable in
+          // its FIRST guard, so a settlement placed at the old cancel site
+          // would file `suppressed — no work-state (0x0032) averageSplit
+          // observed this run` for a run that observed one. A false reason on
+          // a real entry, invisible to any kind-only assertion.
+          //
+          // `activeRun` is still the OUTGOING run here (I2): it is assigned at
+          // exactly two sites in this file and never nulled, and the new one is
+          // not built until below.
+          //
+          // THIS PUTS SUBSCRIBER CODE ON THIS DOOR'S STACK — the settlement
+          // emits `intervalComplete`/`summary-observations`. That is contained
+          // (V1, `emit`'s own comment) and its re-entrancy is refused (V3,
+          // `replacingRun`), which is why both of those landed with it.
+          settleOutgoingRun("program() replaced this run");
+          boundaryHalves.split = null;
+          boundaryHalves.asSplit = null;
+          // The session register map is per-RUN state for the same reason a
+          // pending boundary half is (`session`'s own doc comment): a new
+          // program's totals start at zero, and the outgoing run's keys must
+          // not be carried into it — the new run's first frame would otherwise
+          // max-merge into a key that belongs to a workout it never saw.
+          session = { seen: new Map() };
+          // `refusedKeysLogged`'s own comment: the gate is per-run state,
+          // same as `session` it rides alongside — a re-armed run's own
+          // first refusal is a new fact, not a repeat of the outgoing run's.
+          refusedKeysLogged = new Set();
+          // `clampedKeysLogged`'s own comment: the gate is per-run state,
+          // same as `session` and `refusedKeysLogged` it rides alongside — a
+          // re-armed run's own first clamp is a new fact, not a repeat of
+          // the outgoing run's.
+          clampedKeysLogged = new Set();
+          // `splitAvgPaceProvenanceIndex`'s own comment: per-run state, same
+          // reason — the outgoing run's last AS2 sample says nothing about
+          // the new run's own interval numbering.
+          splitAvgPaceProvenanceIndex = null;
+          // Diagnostics-only (R0, Task 1's own doc comment): the outgoing
+          // run's last-seen totals belong to that run, not the new one.
+          lastEmittedTotals = { elapsedSeconds: 0, distanceMeters: 0 };
+          // M5 (review): `lastLoggedTwd` is the same kind of per-run
+          // diagnostic state as `lastEmittedTotals` right above it — reset it
+          // alongside its siblings so a re-arm's very first `"twd-sample"`
+          // entry is judged against nothing carried from the outgoing run,
+          // not against a bucket that workout happened to leave `twd` in.
+          lastLoggedTwd = null;
+          // RC-9a: the outgoing run's last work-state 0x0032 reading says
+          // nothing about the new run's own average — same "per-run
+          // diagnostic, reset on re-arm" reasoning as every field in this
+          // block.
+          lastWorkStateAverageSplit = null;
+          // `summarySeen`'s own comment (Task 8): whether a 0x0039 arrived is
+          // a fact about THIS run, and a re-arm's own summary has not arrived
+          // yet just because the outgoing run's did.
+          summarySeen = false;
+          // RC-37 (`armedWatch`'s own doc comment): the outgoing program's
+          // leftover mismatch streak says nothing about the incoming one —
+          // same per-run reset discipline as every field in this block.
+          armedWatch = {
+            lastMismatch: null,
+            mismatchStreak: 0,
+            mismatchSince: null,
+          };
+          armedWatchFired = false;
+          // Fix round 1, finding 2: the near-miss log cap is per-run state
+          // too, same reset discipline as `armedWatch`/`armedWatchFired`
+          // immediately above.
+          armedWatchRecoveredLogged = 0;
+          // Both pending slots were emptied by the settlement at the top of
+          // this block (RC-13 V2) — a deadline still standing belonged to the
+          // run being replaced, and letting either reach the new run would
+          // have it speak about a workout it never saw. The scheduled
+          // callbacks' own `activeRun !== run` identity guards remain the
+          // second line of defence.
+          activeRun = {
+            program: p,
+            freeRow: false,
+            closed: false,
+            actuals: 0,
+            recordedActuals: new Map(),
+            lastActiveState: null,
+            finishGraceUntil: null,
+            summaryInGrace: null,
+            additionalSummary: null,
+            additionalSummaryWaited: false,
+            summaryStamp: null,
+            additionalSummaryStamp: null,
+            graceClaimed: false,
+            verificationBytes: null,
+            terminatedAwaitingSummary: false,
+            finalFilledFromSummary: false,
+          };
+          log.record("armed", `programmed ${p.intervals.length} interval(s)`);
+          emit({ kind: "armed" });
+        } finally {
+          replacingRun = null;
         }
-        if (boundaryHalves.split !== null || boundaryHalves.asSplit !== null) {
-          log.record(
-            "boundary-orphan",
-            `a boundary half was still pending when a new run opened (0x0037=${boundaryHalves.split}, 0x0038=${boundaryHalves.asSplit}) — discarded rather than paired with the new run's first boundary`,
-          );
-        }
-        boundaryHalves.split = null;
-        boundaryHalves.asSplit = null;
-        // The session register map is per-RUN state for the same reason a
-        // pending boundary half is (`session`'s own doc comment): a new
-        // program's totals start at zero, and the outgoing run's keys must
-        // not be carried into it — the new run's first frame would otherwise
-        // max-merge into a key that belongs to a workout it never saw.
-        session = { seen: new Map() };
-        // `refusedKeysLogged`'s own comment: the gate is per-run state,
-        // same as `session` it rides alongside — a re-armed run's own
-        // first refusal is a new fact, not a repeat of the outgoing run's.
-        refusedKeysLogged = new Set();
-        // `clampedKeysLogged`'s own comment: the gate is per-run state,
-        // same as `session` and `refusedKeysLogged` it rides alongside — a
-        // re-armed run's own first clamp is a new fact, not a repeat of
-        // the outgoing run's.
-        clampedKeysLogged = new Set();
-        // `splitAvgPaceProvenanceIndex`'s own comment: per-run state, same
-        // reason — the outgoing run's last AS2 sample says nothing about
-        // the new run's own interval numbering.
-        splitAvgPaceProvenanceIndex = null;
-        // Diagnostics-only (R0, Task 1's own doc comment): the outgoing
-        // run's last-seen totals belong to that run, not the new one.
-        lastEmittedTotals = { elapsedSeconds: 0, distanceMeters: 0 };
-        // M5 (review): `lastLoggedTwd` is the same kind of per-run
-        // diagnostic state as `lastEmittedTotals` right above it — reset it
-        // alongside its siblings so a re-arm's very first `"twd-sample"`
-        // entry is judged against nothing carried from the outgoing run,
-        // not against a bucket that workout happened to leave `twd` in.
-        lastLoggedTwd = null;
-        // RC-9a: the outgoing run's last work-state 0x0032 reading says
-        // nothing about the new run's own average — same "per-run
-        // diagnostic, reset on re-arm" reasoning as every field in this
-        // block.
-        lastWorkStateAverageSplit = null;
-        // `summarySeen`'s own comment (Task 8): whether a 0x0039 arrived is
-        // a fact about THIS run, and a re-arm's own summary has not arrived
-        // yet just because the outgoing run's did.
-        summarySeen = false;
-        // RC-37 (`armedWatch`'s own doc comment): the outgoing program's
-        // leftover mismatch streak says nothing about the incoming one —
-        // same per-run reset discipline as every field in this block.
-        armedWatch = {
-          lastMismatch: null,
-          mismatchStreak: 0,
-          mismatchSince: null,
-        };
-        armedWatchFired = false;
-        // Fix round 1, finding 2: the near-miss log cap is per-run state
-        // too, same reset discipline as `armedWatch`/`armedWatchFired`
-        // immediately above.
-        armedWatchRecoveredLogged = 0;
-        // A reconcile deadline still standing belongs to the run being
-        // replaced, and is cancelled here for the same reason a pending
-        // boundary half is dropped above (fast-follow Task 2): both are
-        // the OUTGOING run's unfinished business, and letting either reach
-        // the new run would have it speak about a workout it never saw.
-        // `armSummaryReconcile`'s own identity guard is the second line of
-        // defence; this is the first.
-        pendingSummaryReconcile?.();
-        pendingSummaryReconcile = null;
-        // The terminate path's own deadline, cancelled for the identical
-        // reason one line up (summary-record design spec §1): an
-        // observations emit still waiting on 0x003F belongs to the run
-        // being replaced, and firing it against the new one would fold a
-        // dead workout's numbers onto a live record.
-        pendingTerminateObservations?.cancel();
-        pendingTerminateObservations = null;
-        activeRun = {
-          program: p,
-          freeRow: false,
-          closed: false,
-          actuals: 0,
-          recordedActuals: new Map(),
-          lastActiveState: null,
-          finishGraceUntil: null,
-          summaryInGrace: null,
-          additionalSummary: null,
-          additionalSummaryWaited: false,
-          summaryStamp: null,
-          additionalSummaryStamp: null,
-          graceClaimed: false,
-          verificationBytes: null,
-          terminatedAwaitingSummary: false,
-          finalFilledFromSummary: false,
-        };
-        log.record("armed", `programmed ${p.intervals.length} interval(s)`);
-        emit({ kind: "armed" });
       } finally {
         // Cleared on EVERY exit — resolve, every reject (a typed
         // `ProgramRejectionError` of any reason including `"disconnected"`,
@@ -6995,7 +7347,7 @@ export function createPm5Driver(
     // is still live) and leaves nothing here to drain — this call is the
     // belt to that braces for any OTHER caller of `disconnect()`.
     reconcile(): void {
-      drainSummaryReconcile();
+      drainSummaryReconcile("the caller drained it (reconcile())");
     },
 
     async disconnect(): Promise<void> {
@@ -7031,7 +7383,7 @@ export function createPm5Driver(
       // after the radio really is hung up below, so nothing is deferred
       // past this line — and a driver that leaves live timers behind is a
       // driver a test cannot finish cleanly.
-      drainSummaryReconcile();
+      drainSummaryReconcile("the caller hung up (disconnect())");
       await t.disconnect();
     },
   };

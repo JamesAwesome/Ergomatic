@@ -6323,3 +6323,46 @@ quiet before your first pull now says so and waits, instead of showing an alarm
 or a control that did nothing. **A gate that catches a body for over-claiming a
 fix can restate the same over-claim in its own conditions; check the verdict's
 own words against the same evidence bar it applied.**
+
+## RC-13, 2026-09-09 — the latent half and the live half of one spec
+
+**Ruling: build, but with the spec's halves inverted.** RC-13's spec (REV 2) led
+with a driver-door drain no rower can reach and filed its `emit` containment as
+task 3 of 7. The containment is the only part with a supported producer —
+`driver.ts`'s `MonitorDriver.program` ends its own `try` with
+`emit({ kind: "armed" })` — cited by symbol, because the line number this
+entry first carried (`:6887`, true on main at the time) was already stale on
+the branch that landed it, and a ledger outlives every line number in it, so a throwing subscriber rejects `program()` **after**
+`verifyArmed` confirmed the erg holds the workout, and the hook then tells the
+rower programming failed for a workout the erg is holding. It is also the exact
+blocker `ROADMAP.md`'s RC-14 row records for James's "INSTRUMENT it" order. One
+PR, two orders; the drain rides along on RF34, priced at 0.2 hd.
+
+**"Unreachable today" is a claim with a DATE, and you must go and find it.** The
+whole build/no-build question turned on `useMonitorSession.ts`'s `beginFreeRow`
+`ended` guard. `git log -L` on that clause: `8c8fe05e`, **2026-09-01**, eight
+days before the gate — and its own comment says the clause "was NOT here at
+first, and the e2e flow found the consequence" (a re-arm the instant the row
+ended, opening a second session). James's RC-13 order predates the guard by one
+day. **Before accepting "no product path can reach this" as a reason to defer,
+date the guard that closes it.** A guard added last week, reactively, after the
+product was observed doing the thing, is not the same evidence as an invariant
+that has held for a year — and the difference is one `git log -L`.
+
+**A false comment justifies fixing the comment; it does not justify the code.**
+The spec's stated reason for the work was that the driver argues its own safety
+from a stale call graph. That is a real RF18 tripwire and it is worth 0.25, not
+1.5 half-days. What justified the code was a live hazard plus a blocked order.
+When a spec's headline justification is "our comment is wrong", ask what the
+code does that the comment cannot fix.
+
+**Gate proportionality is about DISPATCH COUNT, not about the class.** Ruled:
+TRIAD stands on unreachable code (one definition of dangerous across the SDLC),
+the antagonist's single anchor pass discharges the spec-side obligation with no
+delta pass owed, and Gate 0 / hardware walk are declined on their own written
+criteria rather than on "nothing is reachable anyway".
+
+**Register hygiene as a PR condition.** RC-13's own row records that two agents
+in one session misread it as already fixed. A row whose framing an antagonist
+has just falsified gets REWRITTEN in the same PR — with the date of the guard
+that closed it — or the next reader is the third.

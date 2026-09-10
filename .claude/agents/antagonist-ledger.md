@@ -9862,3 +9862,85 @@ One entry for the whole run, both lenses. Techniques, not history.
   consumers, ask what the IMPLEMENTER will find when they reach the second
   one.** An unnamed asymmetry is a silent off-ramp (RF34's shape): build the
   easy half, find no analogous seam, and let the claim stand half-proved.
+
+- **"A run replaced inside its finish grace loses the rower a machine summary."**
+  Believed because the driver-level mechanism is exactly as described — a natural
+  finish arms a 3 s deadline, a rower-ended close arms a 200 ms hash wait, and both
+  doors that replace `activeRun` cancel rather than drain. False at the product
+  layer: **neither door has a supported producer.** `useMonitorSession`'s
+  `beginFreeRow` returns on `phase === "ended"`; `JustRow.tsx` adds a
+  once-per-start `armedThisStart` latch; `session.program()` has exactly one caller,
+  gated on `phase === "pairing"`, which is written only inside `connect()`, which
+  itself opens `if (connectingRef.current || driverRef.current !== null) return;` —
+  and the driver is minted below that guard. So `driver.program()` always runs
+  against a fresh driver whose `activeRun` is `null`, and a closed-but-owing run can
+  never be replaced on a live driver. **Technique: for any "the rower can hit this"
+  claim about a driver-level door, walk UP from the driver method to its single
+  production call site, then to that caller's own guard, then to the component that
+  invokes it — and stop only at a user gesture.** Three layers, three independent
+  guards, and the spec had read none of them. The repo's own source says it in
+  passing ("latent today, since no UI path re-programs from ready") — grep the hook
+  for `latent`, `no UI path`, `unreachable today` before writing a reachability
+  claim. Cost of not doing it: a spec that tells James a rower is losing data today.
+
+- **"Settling inside a replacement door puts subscriber code on that door's stack,
+  which today it never is."** Believed because the settlement's `reconcileSummary`
+  emits, and the cancel it replaces does not. False: `emit({ kind: "armed" })` is
+  the last statement inside `program()`'s own `try`, three lines past the assignment,
+  and `emit` is a bare `for (const cb of listeners) cb(e)`. A throwing subscriber
+  ALREADY rejects `driver.program(p)` after `verifyArmed` passed — the exact harm the
+  spec called "strictly worse than the bug being fixed". **Technique: when a spec
+  says a change INTRODUCES a hazard, read to the end of the function it is changing.**
+  The claim is about a function's whole body, and "today it never is" is a census
+  claim that dies to reading the last three lines. Corollary: a containment scoped to
+  the new call sites, in a spec whose whole subject is RF34, leaves the identical live
+  hazard uncontained six lines below the new one.
+
+- **"These two committed comments are FALSIFIED."** Half true, and the half matters.
+  `noteTerminateObservations`'s "nothing else in this driver ever reassigns that
+  variable" IS false (`beginFreeRow` does), but its conclusion — "this branch is
+  UNREACHABLE today" — SURVIVES, held up one layer higher by a hook guard the comment
+  never names. **Technique: separate a comment's REASON from its CONCLUSION before
+  calling it falsified, and check whether some other layer is holding the conclusion
+  up.** The fix that follows is different: "close the door so the sentence is true
+  again" restates a call-graph argument the next caller invalidates, where naming the
+  layer that actually holds the invariant does not. This is RF18's layer trap pointed
+  inward, at our own comments.
+
+## RC-13 hardening run, 2026-09-09 — one edit, zero dispatches
+
+Subject: `docs/superpowers/specs/2026-09-09-rc13-drain-containment-design.md`.
+**The measurements below are re-runnable against that file** — they were not when
+this entry was first written, because the spec lived only in a session scratchpad.
+That is RF16's dangling-citation corollary and it was caught at re-review: an
+uncheckable number in a durable record reads as evidence. The fix was to commit
+the spec, not to soften the entry.
+
+**Both lenses accounted for without a dispatch, and that is the intended outcome
+rather than a shortcut.** Lens 1 (mechanism) was already discharged: the
+antagonist's full anchor pass had run at phase open on this TRIAD spec and the PM
+ruled no delta owed. Lens 2 was SKIPPED and the skip is spoken: the spec
+prescribed NO executable content — one fenced block in 478 lines, a census grep,
+which the controller ran and reproduced exactly. The skill's own rule is that a
+spec gets lens 2 only where it prescribes executable content, so a spec that
+prescribes none costs one Phase 0 edit and nothing else.
+
+**Phase 0 caught exactly the generator the skill was built for, at exactly the
+predicted rate.** Three of the four checks were clean — no unmeasured numbers, no
+line citations into the document (its 21 references are `§` section anchors, which
+survive a fold where line numbers do not), and the one shell block paste-tested.
+The fourth was not: **12 revision mentions across three rewrites.** The skill
+records the same curve on the plan that motivated it, 2 mentions growing to 21,
+one per fold. **Technique: grep the document for its own revision vocabulary
+(`REV n`, "superseded", "withdrawn from") before dispatching anything, and count.
+The count IS the signal — it only ever grows, and each mention is a sentence a
+later pass will re-read and re-argue.**
+
+**What to keep when stripping revision history, which is the only judgement in
+Phase 0.** Delete the scaffolding; keep a withdrawn claim only where a future
+reader could re-derive it, and state it as a fact about the code rather than as
+revision history. Here: "the free-row door is independently reachable" became
+"FALSE, and recorded so it is not re-derived", and `finishGraceRefusalReason`
+became "a symbol that does not exist". Both change no code block, gate command,
+expected value or walk step — so by the skill's own stop rule they are
+bookkeeping, and bookkeeping gets FOLDED, never dispatched against.
