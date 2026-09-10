@@ -954,7 +954,7 @@ closed with zero Concept2 contact.
   path remains struck. Deferred Correct Resume research considers a retained
   same-device route after a proven drop, not a scan. That capability is not
   shipped or scheduled; today the rower can End and log what the app has.
-  · dies 2026-11-10 · unless Wave E's connect work needs it, this is a comment in `capacitorBle.ts` and not a row
+  · dies 2026-11-10 (approved by James 2026-09-10) · unless Wave E's connect work needs it, this is a comment in `capacitorBle.ts` and not a row
 - **Nothing was observed closing a free row the rower walked away from** — the workout stayed
   active for 896.8 s after the rower stopped, with frames still arriving and
   no auto-terminate — a BOUNDED observation, since the operator ended the
@@ -992,13 +992,13 @@ skipped.
 **SLATE COMPLETE 2026-09-03.** All twelve items above are ticked; item 2
 (#278) was the last, and its walk found the connect latency that #283 then
 fixed.
-  · dies 2026-10-10 · a rower can hit this today; if Wave E has not taken it in a month it needs its own phase, not a row
+  · dies 2026-10-10 (approved by James 2026-09-10) · a rower can hit this today; if Wave E has not taken it in a month it needs its own phase, not a row
 - **Smaller wire reconciliations owed** (lifted from Phase JR, 2026-09-10). `domain/monitor/pm5/uuids.ts` says 0x003F "has
   never been recorded" and one now has been; status frames arrive at 1.00/s, not
   the ~2.2/s the tooling assumes; and the observer heading renders
   `PM5 432331249 Row connected` because the advertised BLE name already ends in
   "Row".
-  · dies 2026-10-10 · three doc corrections that ride any PR touching the wire notes; if none does in a month they are stale rather than owed
+  · dies 2026-10-10 (approved by James 2026-09-10) · three doc corrections that ride any PR touching the wire notes; if none does in a month they are stale rather than owed
 - [x] **PR0 — post a reconciled row to `log-dev.concept2.com`, pull `export/`
       back, and diff.** RUN LIVE 2026-08-31 (result 85557, log-dev user
       2211); claims narrowed and the two residuals CLOSED at James's #244
@@ -2013,7 +2013,7 @@ six.
   keys no gate on it. The verbatim row is still owed: James can drop the
   CSAFE PDF into `docs/monitor/` and the transcription is a comment
   change. Still **S**, no longer scheduled against a PR.
-  · dies 2026-11-10 · needs a Concept2 PDF only James can supply; if it has not arrived, the disposition already recorded at `domain/monitor/pm5/commands.ts:32-46` stands and this row dies
+  · dies 2026-11-10 (approved by James 2026-09-10) · needs a Concept2 PDF only James can supply; if it has not arrived, the disposition already recorded at `domain/monitor/pm5/commands.ts:32-46` stands and this row dies
 - _(previously none open)_ — the `/api/today` row that sat here from Phase SF PR1
   closed 2026-09-05: James ruled DELETE, and the route, its unit block and
   the isolation test's dependence on it left in the same PR (the "done is
@@ -2402,7 +2402,7 @@ Each needs erg time or a deliberate recording session.
   `app/ios/App/App.xcodeproj/project.pbxproj`'s four `E2A1B0…` entries sit out
   of ascending-id order and Xcode will re-sort them on its next save (cosmetic;
   expect that churn in the next iOS PR, not a CLI rewrite).
-  · dies 2026-10-10 · rides the next PR touching the auth callback or the Xcode project; the Xcode half self-resolves on the next iOS save
+  · dies 2026-10-10 (approved by James 2026-09-10) · rides the next PR touching the auth callback or the Xcode project; the Xcode half self-resolves on the next iOS save
 - **Shipped release-note strings say `PM5`. THIS ROW NO LONGER CARRIES A
   COUNT, on purpose — run the command:**
   `grep -v '^\s*//' app/src/news/content/releaseNotes.ts | grep -c "PM5"` for
