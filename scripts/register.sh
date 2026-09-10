@@ -23,6 +23,12 @@
 #            deliberately rather than in a merge.
 #   closed   rows whose TITLES match the closed vocabulary, as CANDIDATES.
 #            NOT that they are closed, NOT that no closed row remains.
+#   sections which sections have no row `closed` left OPEN. It is `closed`'s
+#            heuristic aggregated, so it inherits every cap above: NOT that a
+#            section is finished, and NOT that its PROSE agrees — a section's
+#            status line lives in text this never reads, and the one real
+#            candidate today says "Status: OPEN at James's request" above six
+#            ticked criteria.
 #
 # `date` is banned here. `date -j -f` is BSD-only and exits 1 on the Linux
 # runner, and the two platforms disagree about invalid calendar dates — a gate
@@ -34,6 +40,14 @@ CLASSES="register debt pinned vision phase ledger container"
 # Classes the ratchet charges for. `debt` is counted and never payable (I8):
 # a row saying "nobody has measured X" has no code site to become a comment.
 RATCHET_CLASS="register"
+
+# A typo here would charge zero rows forever with nothing printed for it.
+for _c in $RATCHET_CLASS; do
+  case " $CLASSES " in
+    *" $_c "*) ;;
+    *) echo "register.sh: REFUSED — RATCHET_CLASS names '$_c', which is not one of: $CLASSES" >&2; exit 2 ;;
+  esac
+done
 
 refuse() {
   echo "register.sh: REFUSED — $*" >&2
@@ -133,7 +147,7 @@ BEGIN { sections = 0; pending = 0; cls = ""; inrow = 0; intable = 0; fence = 0 }
 # deleting such a block banks two phantom strikes that pay for two real
 # filings. `ROADMAP.md` carries several fenced shell blocks already, and PR 2
 # added a prose section describing shell commands.
-/^ *```/ { if (inrow) buf = buf " " $0; fence = !fence; next }
+/^ *(```|~~~)/ { if (inrow) buf = buf " " $0; fence = !fence; next }
 fence { if (inrow) buf = buf " " $0; next }
 
 /^#{1,2} / {
@@ -211,7 +225,17 @@ fence { if (inrow) buf = buf " " $0; next }
 # line-scoped parse truncates most titles.
 { if (inrow) buf = buf " " $0 }
 
-END { flush(); if (pending) print "BAD\t" heading "\t"; print "SECTIONS\t" sections }
+# An UNBALANCED fence is refused rather than parsed. Left to run, it swallows
+# every row, section and marker after it and reports the loss as strikes —
+# measured: one stray ``` above three rows printed `delta:-3`, named all three
+# as LEFT, and exited 0. Over-counting was the old bug; under-counting is the
+# direction that PAYS for filings, so this one fails closed.
+END {
+  flush()
+  if (pending) print "BAD\t" heading "\t"
+  if (fence) print "FENCE"
+  print "SECTIONS\t" sections
+}
 AWK
 
 # parse <spec> — run the parser, or refuse. Sets PARSED.
@@ -238,12 +262,15 @@ parse() {
     printf '%s\n' "$bad" >&2
     refuse "$(printf '%s\n' "$bad" | grep -c .) section(s) unmarked or carrying an unrecognised marker in '${spec:-the working tree}'"
   fi
+  if printf '%s\n' "$PARSED" | grep -q '^FENCE$'; then
+    refuse "'${spec:-the working tree}' ends inside an unclosed code fence — everything after it is invisible, and invisible rows read as strikes"
+  fi
   local badrow
   badrow="$(printf '%s\n' "$PARSED" | awk -F'\t' '$1 == "BADROW" { printf "  %s\n", $2 }')"
   if [ -n "$badrow" ]; then
     echo "register.sh: a row with no title cannot be counted or diffed, in '${spec:-the working tree}':" >&2
     printf '%s\n' "$badrow" >&2
-    refuse "$(printf '%s\n' "$badrow" | grep -c .) untitled row(s) — an empty title is invisible to the charge and visible in the tally"
+    refuse "$(printf '%s\n' "$badrow" | grep -c .) untitled row(s) in '${spec:-the working tree}' — an empty title is invisible to the charge and visible in the tally"
   fi
 }
 
@@ -313,23 +340,27 @@ cmd_closed() {
 # prose is not a gate (RF37).
 cmd_sections() {
   parse "${1:-}"
-  printf '%s\n' "$PARSED" | awk -F'\t' '
+  # ONE pass, for the reason the ratchet's two counters were folded into one:
+  # a marker and a count that are computed separately can disagree about the
+  # claim they jointly make.
+  local out
+  out="$(printf '%s\n' "$PARSED" | awk -F'\t' '
+    $1 == "SEC" && ($2 == "register" || $2 == "debt") { cls[$3] = $2 }
     $1 == "ROW" && $4 != "sub" && ($2 == "register" || $2 == "debt") {
       if ($3 == "closed") c[$6]++; else o[$6]++
-      cls[$6] = $2
     }
     END {
-      for (k in cls)
-        printf "%-9s open:%-3d closed:%-3d %s%s\n", cls[k], o[k] + 0, c[k] + 0,
-          (o[k] + 0 == 0 ? "ARCHIVE  " : "         "), k
-    }' | sort -k2
-  local ready
-  ready="$(printf '%s\n' "$PARSED" | awk -F'\t' '
-    $1 == "ROW" && $4 != "sub" && ($2 == "register" || $2 == "debt") {
-      if ($3 == "closed") c[$6]++; else o[$6]++
-    }
-    END { for (k in c) if (o[k] + 0 == 0) print k }' | grep -c .)"
-  echo "archive-ready=$ready"
+      n = 0
+      for (k in cls) {
+        cand = (o[k] + 0 == 0)
+        if (cand) n++
+        printf "S\t%-9s open:%-3d closed:%-3d %s%s\n", cls[k], o[k] + 0, c[k] + 0,
+          (cand ? "ARCHIVE? " : "         "), k
+      }
+      printf "N\tarchive-candidates=%d\n", n
+    }')"
+  printf '%s\n' "$out" | awk -F'\t' '$1 == "S" { print $2 }' | sort -k2
+  printf '%s\n' "$out" | awk -F'\t' '$1 == "N" { print $2 }'
 }
 
 cmd_ratchet() {

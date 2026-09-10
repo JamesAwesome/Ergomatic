@@ -38,9 +38,9 @@ Prose only. This section carries no rows at all.
 Two bullets inside a fence, which are not rows:
 
 ```bash
-grep -n '- ' ROADMAP.md
-  # - [ ] not a row
-  # - [x] also not a row
+grep -n 'x' ROADMAP.md
+- [ ] not a row, because it is fenced
+- [x] DONE — also not a row, because it is fenced
 ```
 
 ## Rides the next PR touching the connected surface
@@ -64,6 +64,11 @@ grep -n '- ' ROADMAP.md
 - [ ] **Nobody has measured X.** No code site exists; the producer is a human.
 - [x] **DONE — an absent-evidence row that was finally measured.** Debt is
       exempt from the ratchet, not from housekeeping.
+
+## A debt bucket that was finally emptied
+<!-- debt -->
+
+- [x] **DONE — the last absent-evidence row here was measured.** Finished.
 
 ## Accepted, pinned, and not being fixed
 <!-- pinned -->

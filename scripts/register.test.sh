@@ -24,6 +24,10 @@ has() { case "$1" in *"$2"*) echo "ok: $3" ;; *) echo "FAIL: $3 (missing '$2')";
 lacks() { case "$1" in *"$2"*) echo "FAIL: $3 (unwanted '$2')"; fails=$((fails + 1)) ;; *) echo "ok: $3" ;; esac; }
 
 run() { out="$(bash "$SCRIPT" "$@" 2>&1)"; rc=$?; }
+# has_last <needle> <name> — the needle must be on the REFUSAL line itself. The
+# marker refusal prints the path twice, on an echo and on the refuse, and an
+# assertion over the whole output is satisfied by either.
+has_last() { case "$(printf '%s\n' "$out" | tail -1)" in *"$1"*) echo "ok: $2" ;; *) echo "FAIL: $2 (refusal line lacks '$1')"; fails=$((fails + 1)) ;; esac; }
 
 # ---------------------------------------------------------------- count
 
@@ -31,7 +35,7 @@ run count "$FIX/well-formed.md"
 check "$rc" "0" "count: a fully marked file exits 0"
 has "$out" "unmarked=0" "count: reports unmarked=0"
 has "$out" "register open:10 closed:8 sub:1" "count: register tallies both carriers"
-has "$out" "debt open:1 closed:1 sub:0" "count: debt is counted, never payable"
+has "$out" "debt open:1 closed:2 sub:0" "count: debt is counted, never payable"
 has "$out" "pinned open:1" "count: pinned is reported (I6)"
 has "$out" "vision open:1" "count: vision is reported (I6)"
 has "$out" "phase open:1 closed:1" "count: phase is reported (I6)"
@@ -73,7 +77,7 @@ lacks "$out" "NOT DISCHARGED" "closed: does NOT flag 'NOT DISCHARGED BY IT'"
 lacks "$out" "RESOLVED in principle" "closed: does NOT flag an open [ ] row"
 lacks "$out" "A row with a clean title" "closed: does NOT match the row BODY"
 lacks "$out" "a phase task" "closed: looks only in register and debt sections"
-check "$(bash "$SCRIPT" closed "$FIX/well-formed.md" 2> /dev/null | grep -c .)" "9" "closed: exactly nine candidates"
+check "$(bash "$SCRIPT" closed "$FIX/well-formed.md" 2> /dev/null | grep -c .)" "10" "closed: exactly ten candidates"
 
 run closed "$FIX/bad-marker.md"
 check "$rc" "2" "closed: REFUSES an unrecognised marker"
@@ -98,15 +102,30 @@ check "$rc" "2" "count: REFUSES a section whose heading is followed by another h
 has "$out" "# A" "count: names the empty unmarked section"
 
 run count "$FIX/bad-marker.md"
-has "$out" "bad-marker.md" "refusals name WHICH tree they read, not just what was wrong"
+has_last "bad-marker.md" "the marker REFUSAL line names which tree it read"
+
+run count "$FIX/unclosed-fence.md"
+check "$rc" "2" "count: REFUSES a file that ends inside an unclosed fence"
+has_last "unclosed-fence.md" "the fence REFUSAL line names which tree it read"
+
+run count "$FIX/empty-cell.md"
+check "$rc" "2" "count: REFUSES a table row whose first cell is empty"
+
+run count "$FIX/trailing-heading.md"
+check "$rc" "2" "count: REFUSES an unmarked heading on the LAST line of the file"
+has "$out" "A trailing heading with no marker" "count: names the trailing unmarked section"
+
+run count "$FIX/untitled-row.md"
+has_last "untitled-row.md" "the untitled-row REFUSAL line names which tree it read"
 
 # ------------------------------------------------------------- sections
 
 run sections "$FIX/well-formed.md"
 check "$rc" "0" "sections: exits 0"
-has "$out" "ARCHIVE  ## A door whose criteria are all ticked" "sections: marks a fully-ticked section ARCHIVE"
-has "$out" "archive-ready=1" "sections: counts the archive-ready sections"
-lacks "$out" "ARCHIVE  ## Small, queued" "sections: a section with open rows is NOT archive-ready"
+has "$out" "ARCHIVE? ## A door whose criteria are all ticked" "sections: marks a fully-ticked section as a CANDIDATE"
+has "$out" "ARCHIVE? ## A debt bucket that was finally emptied" "sections: an emptied DEBT section is a candidate too"
+has "$out" "archive-candidates=2" "sections: counts the candidates"
+lacks "$out" "ARCHIVE? ## Small, queued" "sections: a section with open rows is NOT a candidate"
 lacks "$out" "## Phase ZZ" "sections: phase sections are out of scope"
 
 # ---------------------------------------------------------------- ratchet
@@ -185,6 +204,12 @@ file_row "## Owed captures and walk items" "A newly filed absent-evidence row"
 run ratchet "$BASE"
 check "$rc" "0" "ratchet: filing into DEBT is never payable by strike (I8)"
 has "$out" "debt base:1 head:2" "ratchet: the debt rise is REPORTED, just not charged"
+teardown
+
+mkrepo
+file_row "## Completed phases" "A newly recorded ledger row"
+run ratchet "$BASE"
+check "$rc" "0" "ratchet: filing into LEDGER is not charged"
 teardown
 
 mkrepo
