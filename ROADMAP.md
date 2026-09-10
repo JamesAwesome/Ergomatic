@@ -530,6 +530,18 @@ it lands the stranger on this same denial.
       (RF30: if it is ruled out, it gets a measured reason, not a clause).**
       And note the exemption's word is _exclusively_: adding our own accounts
       BESIDE Google discharges nothing.
+      **AND THE ROW IS TRIAD TWICE OVER, not once — found 2026-09-10 while
+      writing the guidance above, and it binds BOTH options rather than only
+      the exempt one.** `server/db/schema.ts`'s `users` table keys identity on
+      `googleSub: text("google_sub").notNull().unique()` — **NOT NULL**, and
+      it is the only identity column there is. So a rower who signs in with
+      Apple has nothing to be stored as, and a rower with an own-accounts
+      login has nothing either. Every version of this wave's front door needs
+      `google_sub` nullable or identity lifted into its own table, which makes
+      this **a STORED-SHAPE change and a migration on top of the auth change**
+      the row already declared. The row read as auth-only; it is not, and the
+      spec sizes the migration before the gate rather than discovering it in
+      the build.
 - [ ] **In-app account deletion.** No DELETE-user route and no UI exist
       anywhere (checked across `app/server` and `app/src`: baselines reset and
       logs delete, but nothing removes a user). The spec enumerates exactly
