@@ -2750,9 +2750,9 @@ thirteen line numbers, and its own diff broke every one.**
 ## Phase RR — the register may only go down
 
 **OPEN 2026-09-09.** Design approved in chat the same day; spec
-`docs/superpowers/specs/2026-09-09-register-ratchet-design.md` (**rev 2** — the
-mechanism was rebuilt after `/harden` lens 1 and the PM phase-open gate; rev 1's
-falsified claims are replaced, not annotated). Filing a row is free and closing
+`docs/superpowers/specs/2026-09-09-register-ratchet-design.md` (**rev 3** — the
+mechanism was rebuilt twice, after `/harden` lens 1 plus the PM phase-open gate,
+then after lens 2; falsified claims are replaced, not annotated). Filing a row is free and closing
 one is not, so the register only grows: RF14 says everything with a life after
 merge goes here and nothing anywhere says when a row may DIE. James, 2026-09-09:
 _"we need to figure out how we can continue working without filling this
@@ -2774,16 +2774,18 @@ them owes no strike. They are dispositioned by `/close-phase RR`.
 - [ ] **PR 1 — the spec and this section.** Docs only. RF17: same commit.
 - [ ] **PR 2 — the mechanism, minus `dies`.** `scripts/register.sh`
       `count`/`closed`/`ratchet` + `scripts/register.test.sh` + fixtures
-      (failing test first), wired into CI's `scripts` job; a class marker on all
-      32 sections; **rules 1 and 3 in `CLAUDE.md`, together, because rule 3 is
+      (failing test first), wired into CI's `scripts` job; one of SEVEN
+      whitelisted class markers on every section that can hold a row; **rules 1 and 3 in `CLAUDE.md`, together, because rule 3 is
       what funds rule 1** — dead strikeable inventory is ~32 rows against
       6.75 filings/day, so a ratchet shipped alone is unpayable inside five
       days; the `/register-gate` skill; `/close-phase TD`'s refusal.
-- [ ] **PR 3 — the eviction.** ~32 already-closed rows out of the register and
-      into `docs/history/`, and the one malformed table row repaired.
-      **Its body must say this closes ZERO open work** — 85 open before, 85
-      after. It is file hygiene against a register growing 6.75/day, not debt
-      closure.
+- [ ] **PR 3 — the eviction.** Already-closed rows out of the register and into
+      `docs/history/`, and the one malformed table row repaired. **Every
+      candidate is confirmed BY HAND** — the vocabulary has measured false
+      positives, including RC-14, a HELD order of James's whose row contains the
+      words "NOT DISCHARGED BY IT". **Its body must say this closes ZERO open
+      work**: file hygiene against a register growing 6.75/day, not debt
+      closure. The count comes from the spec's §8.1 at PR 3's own tree.
 - [ ] **PR 4 — `dies`.** `stamps` and `expired`, `/close-phase` Phase 4 step 5's
       expiry defence, and the stamp pass over every register row. Lands after
       James answers the spec's §10, because 37+ rows cannot honestly carry a
@@ -2812,12 +2814,24 @@ useful part:**
   `git log --reverse -S` measures first appearance — six rows, six dates.
   Stamping ~50 rows with today's date would have erased the age evidence that
   justifies striking them.
-- **Dead inventory is ~32, not 21.** The closed regex anchored after the
+- **The closed-row predicate was wrong in BOTH directions, and the second
+  version could have evicted a live row.** Rev 1's regex anchored after the
   bullet's `**` while this file writes dispositions mid-line, and `ANSWERED`
-  matched zero rows because the file writes `ASKED AND ANSWERED`. Widening it
-  then over-caught row IDs and emphatic openers (`TWO`, `TIER B2`, `RC-38`,
-  `AUD-012`, `PWA`), so the vocabulary is derived, curated, and graded a
-  HEURISTIC rather than deterministic.
+  matched zero rows because the file writes `ASKED AND ANSWERED` — so dead
+  inventory was undercounted at 21. Widening it over-caught row IDs and
+  emphatic openers (`TWO`, `TIER B2`, `RC-38`, `AUD-012`, `PWA`), and matching a
+  row's BODY flags **RC-14 on the words "NOT DISCHARGED BY IT"** and Phase TD on
+  `RESOLVED` inside **`UNRESOLVED`**. It now matches the row TITLE only, with
+  word boundaries, a negation guard and `- [ ]` as a hard OPEN override, reports
+  CANDIDATES, and is graded a HEURISTIC.
+- **Four more gates read green over their own defect** (lens 2, all measured):
+  `ratchet` passed clean when it could not resolve a base, because an optional
+  `<base>` is set-but-EMPTY and `: "${VAR:?}"` does not fire on that; an empty
+  or deleted `ROADMAP.md` reported clean AND credited three strikes; a
+  MISSPELLED marker reported `unmarked=0` with a fall of 3; and the two-branch
+  collision case could not go red as worded. `date` is now banned from the
+  script — `date -j -f` is BSD-only and fails OPEN on the Linux runner into a
+  tidier number than the truth.
 
 **The condition that would have failed the phase (PM, binding):** a
 `<!-- debt -->` class for `## Phase TD` and `## Owed captures and walk items` —
