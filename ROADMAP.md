@@ -147,141 +147,6 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | **C** | The submission surface      | L    | The most visible wave                       |
 | **E** | The Concept2 logbook        | L    | After PR2 ships the send surface            |
 
-## Phase RN — straight to the numbers, if that is how you row
-
-**Status: GATE 0 CLOSED 2026-09-09 — cleared to implement.** Both hardening
-lenses run and folded; three rulings tabled in the spec. Spec:
-[docs/superpowers/specs/2026-09-09-ready-card-preference-design.md](docs/superpowers/specs/2026-09-09-ready-card-preference-design.md).
-
-James asked for the `Ready when you pull` card to become a choice (2026-09-09):
-an option on `/you/settings` that, when turned off, makes the app behave as
-though **Show me the numbers** had been pressed the instant the monitor was
-ready. Default is today's behaviour, so a rower who never opens Settings sees
-no change. One stored word, the initial value of two `useState` flags, and
-nothing on the wire.
-
-TRIAD (a stored shape), so the spec takes a full antagonist pass and the PR
-takes a PM final gate. It changes user-visible copy and layout, so Gate 0 —
-the rendered settings screen, plus both skipped paths beside the cards they
-replace — is approved before task 1.
-
-- [x] **Hardening — RUN 2026-09-09, both lenses, closed.** The mechanism lens
-      returned one BLOCKING (the store's read precedence made both of its own
-      persistence gates unfailable) and three MAJOR; the prescribed-code lens
-      returned one (I-5's two consumers need different test seams, and the
-      harder one had no name). All folded; one ledger entry landed. **S**
-- [x] **Gate 0 — CLOSED 2026-09-09, ROUND 2 CLOSED the same day.** Three
-      rulings from round 1, tabled in the spec, plus round 2's.
-      Copy candidate A; the pre-pull link loss takes option C (Just Row's
-      hand-off arm requires the link to be up, for a tapped hand-off as well
-      as a skipped one); the parked comfort settings do NOT ride. **S**
-- [x] **The PR — MERGED as #381 (`2157a9bd`), ticked 2026-09-09.** Seven
-      tasks, spec §"PR shape". Shipped: the `you/readyCard.ts` store; the
-      READY SCREEN section on `/you/settings` with its own save-failure
-      notice; both consumers reading the setting; Gate 0 ruling 2's link
-      guard in `JustRow.tsx`; the upstream-of-the-producer seam test; a
-      wire-equality test proving the byte sequence is identical under both
-      settings **on the programmed door only** — Just Row's half of I-5 is
-      gated one layer up, as a `beginFreeRow` call-count pair, because that
-      screen takes no transport injection; the spec's prescribed `vi.doMock`
-      seam was not built, and the downgrade is stated in the test rather than
-      silent; six e2e legs across `connected.spec.ts` and
-      `justrow.spec.ts`; a `design.spec.ts` assertion for the new group; and
-      the recaptured settings screen. Unticked deliberately until it merges.
-      **M**
-
-**THREE LESSONS FOUND WHILE BUILDING IT, ALL THREE LANDED IN `CLAUDE.md` IN
-THIS PR** rather than deferred to the merge-time agent-config check: this
-section is archived at phase close, and two of them are facts about a fixture
-and a module shape every future test touches (PM final gate, #381). Lesson 1
-is now recurring failure 41; lesson 2 amends recurring failure 21; lesson 3
-amends recurring failure 38. Kept here as the account of where they came
-from. All three are the same shape — a gate that was green and could not
-have been red — and all three were caught by running a mutation rather than
-by reading.
-
-1. **A fixture that streams frames makes any assertion about this feature
-   decoration.** A rowing frame opens the run, and an open run renders the
-   connected surface regardless of the ready-screen setting. Measured: with
-   the store's `setItem` deleted, all three of the phase's first e2e legs
-   passed. On a motionless fixture the same mutation fails two of them. The
-   identical trap appeared twice in one day — first in the Gate 0 capture
-   harness for Just Row, then in `connected.spec.ts` — so it is a property of
-   the fake, not of one test.
-2. **An in-memory fallback beside a store disarms every persistence gate,
-   and the read order is not the half that matters.** Setting it on a
-   SUCCESSFUL write is what lets a deleted `setItem` read back as a working
-   save; four probes established that reversing the read order alone fails
-   nothing.
-3. **A same-document navigation is RF38's mirror.** Phase JC's lesson was
-   that a reload made both legs pass; here a CLICK makes both legs blind,
-   because the store module survives it. Two legs, and the reload one is the
-   gate.
-
-**DEVIATIONS: one row RECONCILED, no new row owed (2026-09-09).** The
-ready-dwell row said "Ready holds until the rower presses Show me the numbers
-or the first real pull" — this phase adds a third exit, and that row now says
-so. The first version of this check reasoned only about colour pairings and
-missed it (RF9, caught at the whole-branch review). No NEW row is owed: the new section introduces
-no colour pairing `index.css`'s own computed table does not already carry —
-its options are the colour options' rules with `.setting-*` appended to the
-selector lists in place — so Phase JC's "`/you/settings` gets NO row" ruling
-still holds for the same three reasons it gave.
-
-**ACCEPTED CONSEQUENCE, ruled by James 2026-09-09 — and it is the REMINDER
-that is lost, not the mechanism.** `keepAwakeOn()` is a mount-lifetime
-`useEffect` in both consumers, independent of this setting, so SKIP costs the
-printed line and nothing else. That belongs on this row because this row is
-where the loss is re-opened, and an overstated cost is the version a future
-author inherits (PM final gate, #381). What a rower who turns the card off
-stops seeing is `KEEP YOUR PHONE SCREEN ON` — Phase LM's Gate 0 called it the
-only preventive element in that phase, and the ready card is the only place it
-appears — and trades the card's Cancel, which terminates on the erg,
-for the surface's End session. Both were offered a home on the pre-pull
-surface and declined: the default is on, and a rower who turned it off asked
-for less copy, not more. This row is where that is re-opened if the
-phone-sleep work ever needs the warning back.
-
-**This was the SECOND SETTINGS PR** that the parked comfort settings (countdown
-length, pace tolerance) retargeted to at Phase JC's Gate 0. **ANSWERED at RN's
-Gate 0 (James, 2026-09-09): NO, neither rides.** Pace tolerance changes what a
-judged number means, which is the triad's first clause and a second risk model
-in one review; countdown length is genuinely cheap and was held on review shape
-rather than difficulty. **The trigger is not struck — it retargets again, to
-the THIRD settings PR.** The one thing that would change the countdown answer
-is still untested: nobody has measured how `/you/settings` reads at four
-sections on a 375px viewport.
-
-**GATE 0 ROUND 2 (James, 2026-09-09): the silent-link screen says what is
-true.** Ruling 2 was decided from an option table whose stated cost was
-false — "A leaves a rower stranded on an End button in the exact state a
-reconnect would have worked". The reconnect does not work: `frameSilence`
-disposes nothing, so `connect()` early-returns on the installed driver and
-Just Row's `Try again` was DEAD in that state, and had been before this phase.
-An adversary then blocked the obvious fix (cancel-then-connect) twice over: the
-naive form strands the connect claim and bricks the screen permanently, and the
-sequenced form terminates an armed monitor off a heuristic that retracts itself
-while awaiting an ack that has no bound. **Ruled: split the screen by what told
-us the link was gone.** A transport-reported `disconnected` keeps `Lost the
-monitor` and its working `Try again`; frame silence reads `Waiting for the
-monitor / It has gone quiet. This usually clears on its own.` with Cancel
-alone. RF30's own shape, pointed at the road TAKEN rather than the one refused.
-
-**OWED, and deliberately out of scope here — the programmed door's version of
-the same wire state.** At `ready` with frames stopped, `ConnectedInterstitial`
-switches on raw `session.phase` and renders `Ready when you pull` over a silent
-link: no warning, no lost treatment, and no `Try again` to be dead. It is the
-least honest of the three treatments this one wire state produces, and nobody
-has designed it. **Trigger:** the next phase that touches the programmed
-connect flow, or a tester reporting a ready screen that never starts. **S**
-
-**ACCEPTED DIVERGENCE, ruled at the same gate.** Ruling 2 changes `JustRow.tsx`
-and deliberately does not change `ConnectedInterstitial.tsx`: the programmed
-path has no pre-row lost screen to bypass, so under `skip` a frame-silent ready
-lands on the surface's LOST banner rather than on a ready card that says
-"Ready when you pull" and mentions nothing. That is more informative than
-today, and it is the one place the two entry points behave differently.
-
 ## Phase MT — the app refuses a machine it cannot record
 
 **Status: SPEC APPROVED 2026-09-08, in flight.** Shape approved by James the
@@ -500,444 +365,6 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       "2/3/2017 ... Deleted Machine Type information in Device Info Service as
       firmware unable to support it. V1.21." Establish that before costing it.
       **S**
-
-## Phase JC — the rower chooses what red and blue mean
-
-**Status: GATE 0 CLOSED 2026-09-08 — cleared to implement.** The anchor
-antagonist pass returned two blocking findings and four majors, all folded;
-Gate 0's nine rulings are tabled in the spec. Shape approved by James
-2026-09-07: four slots, each RED / BLUE / OFF; both the connected pane and the
-post-workout summary obey; device-local; a new SETTINGS door in You. Spec:
-[docs/superpowers/specs/2026-09-08-judge-colours-design.md](docs/superpowers/specs/2026-09-08-judge-colours-design.md).
-
-Blue-for-faster and red-for-slower were a tester's request in August 2026 and
-have been hardcoded since. Some rowers read red on a number as an alarm; some
-want the split coloured and the stroke rate left alone. It is a preference,
-so it becomes one. Defaults are exactly today's appearance.
-
-TRIAD (a stored shape), so the spec takes a full antagonist pass and the PR
-takes a PM final gate. It changes user-visible copy and layout, so Gate 0 —
-the rendered screen, the door group, and before/after captures of a connected
-pane and a summary — is approved before task 1.
-
-- [x] **Gate 0 — CLOSED 2026-09-08.** Nine rulings, tabled in the spec. The
-      three that change the build: door order is BASELINES, CONCEPT2,
-      SETTINGS, DIAGNOSTICS with the group staying FLAT; **the summary's
-      `← FASTER (BLUE) · SLOWER (RED) →` legend is DELETED** rather than
-      derived from the slots; and the parked comfort settings do NOT ride this
-      PR. **S**
-- **LESSON FOUND MID-IMPLEMENTATION, 2026-09-08 — candidate recurring failure,
-      to be decided at the merge-time agent-config check.** Phase JC's rename moved
-      the summary's verdict classes onto a shared family ~5000 lines UP `index.css`,
-      and `.summary-row-pace { color: var(--ink) }` sits below them at identical
-      (0,1,0) specificity — so later won and **every judged row on the post-workout
-      summary rendered plain ink**. The old `.summary-row-faster` had sat 30 lines
-      BELOW that rule and beaten it, which is why nothing ever had to know. **No
-      class-name assertion could see this by construction** (jsdom resolves no
-      `var()`); `pnpm e2e` caught it. `index.css` already stated the rule in prose
-      after the identical bug on a connected pane's hero — prose is not a gate.
-      Shape: *moving a rule in a stylesheet silently changes which of two
-      equal-specificity rules wins, and only a real browser can see it.*
-- **SECOND LESSON, same phase, 2026-09-08 — also for the merge-time
-      agent-config check.** Phase JC's seam test rests on navigating by CLICK
-      rather than `page.goto`, because the settings screen's inline root
-      properties survive a client-side nav and die on a reload — that asymmetry
-      is what makes its two legs test different things. The plan defended that
-      in PROSE and gated nothing. Measured: swap the click for a `goto` and
-      **every colour assertion still passes** (the boot apply repaints from
-      storage, so the cell is the right colour either way) while the two-legs
-      claim is silently false. A same-document sentinel, asserted present in one
-      leg and absent in the other, is what closes it. Shape: *a test whose value
-      depends on HOW it navigated needs an assertion about the navigation, or
-      the requirement is a comment.*
-- **THIRD, from the PM final gate — an amendment to an EXISTING CLAUDE.md rule
-      rather than a new one.** The "after withdrawing a claim, grep its
-      PHRASING across every file that repeated it" bullet caught the deleted
-      legend's literal words and missed five present-tense sentences in
-      `app/src/news/content/releaseNotes.ts` asserting the same fact in
-      different words. Proposed addition: *"and grep the PROPOSITION, not only
-      the string: a shipped release note asserting the same fact in different
-      words is the copy most likely to survive the sweep."* Decide at the
-      merge-time agent-config check.
-- **`/you/settings` gets NO `DEVIATIONS.md` row, decided at the Task 8 sweep
-      (2026-09-08) — recorded so the next author does not re-open it.** Three
-      reasons. The handoff has no settings screen, so there is nothing to
-      deviate FROM; the file's own inclusion test is the SPM-target row's
-      ("recorded here since this is a genuinely NEW cell, not a re-use of an
-      existing color decision") and every colour on this screen is a re-use —
-      `--ink`/`--ink-3` at ratios the file already records many times over,
-      `--accent` as the checked state (the onboarding chip's own idiom), the
-      swatch inks from the judgement-palette row, and a decorative sub-3:1
-      `--rule-3` border that `.diag-copy` and `.onb-option` already ship
-      rowless on the SHUFFLE/FILTER-chip row's precedent. And insertion
-      is not free: this table numbers rows BY POSITION, so a new row would rot
-      every "see row N" above it, including the three this phase just
-      reconciled — the migration-to-stable-IDs item is still open below.
-      (Cited by subject, not by number, on purpose: main added a row at the
-      file's line 81 while this branch was open, so every number above it has
-      already moved once.) The
-      screen's full computed-contrast table, including the one figure under
-      3:1 and why it is decoration, lives in its own `index.css` block instead.
-- [x] **The PR — MERGED as #371 (`e162c091`), ticked 2026-09-09.** Built and
-      PM-gated (PASS WITH CONDITIONS); the whole-branch review and James's merge
-      approval were given and it landed.
-      **This row's own rule is why it took a sweep to tick it, and the rule is
-      RIGHT:** it said "unticked deliberately — a ticked box whose text says it
-      is not done has been wrong on main for weeks at a time here." So the tick
-      and the TEXT move together, or neither moves. What the rule does not
-      supply is anyone to come back and do it: this box stayed open for a day
-      after its own PR merged, and three others like it were open when the
-      Phase OD sweep ran.
-      Eight tasks, spec §"PR shape". The load-bearing one is the
-      e2e seam test: Vitest mocks every `.css` import to an empty string here,
-      so **no client test can prove a colour lands on a pixel** — only e2e can
-      start upstream of the producer (recurring failure 24). Shipped: the
-      `you/judgeColors.ts` store; the palette split into two raw inks and four
-      resolvable slots; four `.judge-{pace,spm}-{faster,slower}` rules where two
-      pairs stood; the six judged call sites taking a REQUIRED metric; the
-      legend deletion; a generalised `OptionGroup`; `/you/settings` behind
-      You's third door; the `main.tsx` boot apply; and the two-leg seam test.
-      **M**
-
-**Three structural notes worth keeping even if the phase changes shape.**
-`index.css` documented "ONE PAIR SERVES BOTH JUDGED METRICS ... There is no
-per-metric colour branch to keep in step"; per-slot control retired that
-sentence (Task 3 deleted it along with the pair), and the six judged call
-sites each already knew their own metric, so nothing new threads through
-`surfaceModel`. **But there were TWO judged class pairs, not one** —
-`.summary-row-faster`/`-slower` was a second, independent pair on the summary
-screen, and the honest blast radius (measured at phase open) was 114
-references across 29 files including 12 committed e2e HTML fixtures and
-`design.spec.ts`'s own judged-colour harness; Task 3 folded both pairs onto
-the shared `.judge-{pace,spm}-{faster,slower}` family and retired the old
-ones. **And the summary screen named both colours in hardcoded copy**
-(`← FASTER (BLUE) · SLOWER (RED) →`, pinned by an e2e `toHaveText`), which
-eight of the nine reachable pace configurations made false; Gate 0 ruled it
-DELETED on `TraceChart.tsx`'s own precedent ("naming a colour here would just
-be a second thing to get wrong later"), and Task 4 removed the element, its
-CSS rule, the `hasJudgedRow` guard that was its only consumer, and the e2e
-pin (now its negative). And `--judge-slower` was doing two
-jobs — the judged tint AND `.connected-lost`'s red alarm background — which is
-why the spec splits raw inks (`--judge-red`/`--judge-blue`) from resolved
-slots rather than overriding the existing tokens in place. Overriding in place
-would have been fewer lines and would have turned the LOST THE MONITOR banner
-blue for any rower who chose all-blue.
-
-## Phase JR — Just Row
-
-**Status: CLOSED 2026-09-01 — released v0.32.0 (build 811), exit walk
-PASSED, both close gates run; the follow-on slate below is the live
-work.** PR 0a instrument + PR 0b capture DONE 2026-08-31 (#246); PR 1
-MERGED as #255; PR 2 MERGED as #259 (2026-09-01, 3-round review loop,
-accepted with no findings); James relaxed R-A so v0.32.0 tags both PRs
-together; notes #260, release-capture reup #261, TestFlight upload
-0.32.0 (811) all landed 2026-09-01. The exit walk ran the same evening
-on build 811 against prod and PASSED — record at
-`docs/monitor/sessions/walk-2026-09-01-jr-exit/`. Its first save failed
-because prod was FROZEN at v0.31.0: main's `deploy` job had been red for
-eleven hours across six merges (a dirty deploy-host checkout — four
-empty shell-redirect droppings), and nobody read main's CI; cleaned,
-redeployed, the retry saved. The app held the record and retried
-correctly; what it could not do is tell a permanent 400 from a transient
-one. Both close gates (antagonist exit pass, PM close) said CLOSE, with
-the evidence gaps landed in the close-out PR: the ready screen's keep-on
-strip wore a class with zero CSS rules (James found it at the erg — of
-ten approved Gate 0 artboards only four had captures of the BUILT
-screen; `justrow-ready` is now captured), exit criterion 5 (`ended_by`)
-is now asserted on PRODUCED free-row values, criterion 2 on an actual
-history list, criterion 7 from one stored row, and two vacuous
-`.type-badge` assertions are gone. Still ungated: the app-End arm of
-criterion 8 (the replay capture is a Menu end; the walk's Done-ended
-row is accepted on James's operator report).
-
-- [x] PR 0a — the observe-only instrument (#246)
-- [x] PR 0b — the capture walk (walk-2026-08-31-justrow)
-- [x] PR 1 — every stored shape (#255, migration 0019)
-- [x] PR 2 — surface + session + log door (#259, released v0.32.0)
-- [x] Exit walk — PASSED 2026-09-01 (both endings; Menu-ended row
-      digit-identical with the machine-confirmed stamp on a free row)
-- [x] Phase close — antagonist exit pass + PM close gate (2026-09-01);
-      close-out PR carries the evidence fixes and this slate's shaping
-- [x] Ready screen defect — `connected-keep-on` restored, `justrow-ready`
-      captured (close-out PR)
-
-**Follow-on slate — shaped at the close (2026-09-01), James's build order:
-item 3 first, then item 2 if still wanted once the ready fix is in hand,
-then items 4+5 as one TRIAD PR — AMENDED at Gate 0 (James, 2026-09-02:
-"it's just missing the JR chip"): item 4 shipped WITH item 3 in #268, so
-item 5 ships alone.** The PM's counsel that Wave F's
-pocketed-phone row outranks this slate against the north star is on the
-record (this would be a second household exception); James chose the
-slate.
-
-- **Ready screen should BE the programmed ready view** — walk finding,
-  resolved as a DEFECT: the built screen wore `connected-ready-warning`,
-  a class with zero CSS rules, where the approved artboard was "the
-  shipped interstitial, one word changed". Fixed in the close-out PR by
-  using the shipped `connected-keep-on` class. The remaining delta
-  between the two ready screens is four lines of copy; look again once
-  James has the fix on a phone before unifying components.
-- **Connect should put the erg into a Just Row session** — walk finding,
-  reframed by the close: an ACKNOWLEDGMENT gap, not a capability gap.
-  The 08-31 walk already observed that pulling from the main menu with
-  the app connected auto-enters Just Row (OPEN 5, James at the erg).
-  The wire frame to drive the screen is Concept2 p.80, transcribed at
-  `docs/monitor/pm5-interface-notes.md:204` (`SET_WORKOUTTYPE(0x01)` +
-  `SET_SCREENSTATE(PREPARETOROWWORKOUT)`), and `SET_SCREENSTATE` is
-  already built and emitted. **No research pass — the earlier line here
-  saying one was owed was wrong (RF18).** One driver change plus one walk
-  leg; carries RC-38 (`0x01`'s enum row is a doc LABEL, not a transcribed
-  `OBJ_WORKOUTTYPE_T` entry). **M**
-  **RE-CONFIRMED by James, 2026-09-02 ("i do want item 2"), after using the
-  ready fix: build it. Its own PR (wire semantics + a walk leg), after the
-  Timer-mode design pass. Ground already in the repo: the 08-31 walk's
-  OPEN 5, the p.80 JustRow frame at `docs/monitor/pm5-interface-notes.md:204`,
-  RC-38 rides with it.** **IMPLEMENTED (PR #278, 2026-09-02; spec
-  `docs/superpowers/specs/2026-09-02-just-row-connect-programs-design.md`
-  rev 5, Gate 0 rev 1c): `beginFreeRow()` opens the run, then sends the
-  p.80 frame ALONE — no prepare, since a terminate with a run open is the
-  row's own END — as a DETACHED send bounded by
-  `FREE_ROW_PROGRAM_DEADLINE_MS` (5 s, raised from 3 s by the walk's
-  measured write→ack of 1968/2060/1788 ms); its outcome goes to the ring
-  (`free-row-program-sent`/`-unanswered`/`-failed`) and nothing on the
-  phone branches on it. The earlier cost line here ("gains a reject path
-  and an ack gate") was half wrong: there is a reject PATH but no ack
-  GATE, because the readback that would verify the program (0x0031
-  `workoutType = 1`) is also the PM5's idle-after-terminate default, so
-  the erg's own screen is the acknowledgment. The Ready line is James's:
-  `The clock starts on your first stroke.` (the shipped `Nothing is
-  programmed…` line became false and is gone). Gates: `commands.test.ts`
-  pins the frame literal; `driver.test.ts` the ring order, the no-prepare
-  literal, NAK, the terminate-waits ordering and deadline paths;
-  `justRowReplay.test.ts` the
-  unanswered send over the 08-31 capture; `e2e/justrow.spec.ts` reads
-  `free-row-program-sent` off the diagnostics door's copied ring.
-  **WALK RUN 2026-09-03** (`docs/monitor/sessions/walk-2026-09-03-jr-connect/`,
-  three sessions with the control): the frame DOES drive the erg —
-  `workoutType` 0 at the virgin menu, ack at 1.97 s, type 1 89 ms later,
-  and the PM5's own Just Row screen photographed. It also found the
-  defect James saw: **Cancel on the Ready screen left the erg in the Just
-  Row session.** ONE cause was observed — `cancel()` excluded
-  `mode === "justrow"` from its terminate on the now-false ground that "a
-  free row armed nothing". Two more paths to the same stranded monitor were
-  found by reading, NOT on the erg, and are fixed as hardening: the
-  driver's `terminate()` refusal while the send holds the ack slot (never
-  entered on the walk — ring 3's Cancel ran 1589 ms after the ack), and a
-  teardown hang-up overtaking the terminate that refusal fix introduced
-  (~186 ms of margin, from ring 1's own END timings). FIXED in this PR:
-  both exclusions go, `terminate()` WAITS OUT the free-row send instead of
-  refusing it (bounded by the deadline above), and `disconnect()` holds the
-  hang-up while a terminate still owes its write. RC-38's disposition is
-  under Phase PROTO.**
-- **Tester request: an UNCONNECTED "Just Row" mode** — no erg link, an
-  infinite timer and the ability to log. **IN PROGRESS (2026-09-02):
-  James ruled TIME ONLY; Gate 0 PASSED on rev 2e
-  (`docs/design/handoffs/2026-09-02-just-row-unconnected/`, every label
-  lifted from a captured shipped screen); spec at
-  `docs/superpowers/specs/2026-09-02-just-row-unconnected-design.md`,
-  antagonist delta pass RAN (BLOCK on rev 1's mechanism, folded), James
-  hardened it twice → spec rev 5.1; IMPLEMENTING on branch
-  `jr-unconnected`; ships in ONE PR with the JR chip below, TRIAD: `mode`
-  required on `SessionRun`, a `stopwatch-elapsed` `PhaseActual` variant,
-  and `session_logs.source` (pm5 | timer | manual, NOT NULL, backfilled
-  by migration 0020 — every log door now writes which door the row came
-  in by; the client's provenance inference is deleted).** The close found
-  most of it built: `Step`'s `{ k: "test" }` member yields a phase with no seconds
-  and no metres, `Timer.tsx` counts UP for exactly that case
-  (`Timer.test.tsx` pins it), and `SessionRun` with `workoutId: null`
-  stores it with no `v` bump — **no new stored shape**; PR 1's server row
-  takes it as-is. So: a producer, a route, a door. The one ruling that was
-  James's — type the distance off the monitor, or time only? — is RULED:
-  **time only** (2026-09-02); no distance is typed or invented. The only
-  item with an outside voice; built first. **S/M**
-- **"JR" badge on Just Row sessions**, in the manner of the other type
-  chips (James, 2026-09-01 — supersedes the shipped "no type chip on
-  purpose" stance). **DESIGNED 2026-09-02 on the unconnected board
-  above: a HOLLOW chip (the CUSTOM tag's treatment, `.free-row-chip`,
-  never `.type-badge`) — a filled ink chip was literally `--type-tr`,
-  ink-3 "still a bit close"; rides the unconnected PR.** **A DERIVED
-  display concern, never stored:**
-  `isFreeRow(workoutId, workoutType)` is load-bearing three times (the
-  server's plan opt-in default — once a refusal, until item 5 — its
-  empty-`steps` allowance, the absent badge),
-  so `"JR"` can never live in `workout_type`. Visual precedent exists —
-  `.workout-row-custom`, the ink-outline metadata chip — since
-  `TypeBadge.tsx` refuses to mint a fifth intensity colour. SHIPPED in
-  #268 with item 3 (hollow `.free-row-chip` on the door and every free
-  row in History/Today), so item 5's plan-linked free row will already
-  carry it. **S**
-- **Logging a Just Row against a plan — as SUBSTITUTION** — **SHIPPED in
-  #272 (2026-09-02):** Gate 0 PASSED rev 1d
-  (`docs/design/handoffs/2026-09-02-just-row-substitution/`), spec rev 3
-  after two antagonist passes
-  (`docs/superpowers/specs/2026-09-02-just-row-substitution-design.md`),
-  PM TRIAD gate SHIP-WITH-CONDITIONS (all landed in the PR). No new
-  stored shape: the link is the stand-in record; the store resolves
-  `advancesPlan ?? !isFreeRow`. Deleting a stood-in Just Row un-ticks the
-  session (stated, not overruled; the shipped delete copy already warns,
-  keyed on `planKey`). The original row follows:
-- **(original)** Logging a Just Row against a plan — as SUBSTITUTION (James,
-  2026-09-01: "advances the record, records the stand-in"): the rower
-  may say "this free row stands in for session N"; it advances the plan
-  AND the row records that it stood in. Default stays off-plan. **TRIAD**
-  — it changes what SESSION n OF 84 means and amends the unconnected
-  spec's frozen exit criterion 2 (`done_n` unchanged across a Just Row
-  save) with its own gate, retiring its criterion 1's `Save this row`
-  pin; the Gate 0 centring rule also moves every swapped plan row's
-  badge (stated in the handoff README); it removes the server's ONLY free-row plan enforcement
-  (`logs.ts`'s `!isFreeRow(...)`), so the substitution must be an
-  explicit stored fact the server checks, not a client promise; and the
-  reversing release note must acknowledge v0.32.0's "A Just Row never
-  advances your plan" or the News tab contradicts itself. Ships ALONE
-  (the badge went with item 3 in #268). **S code / L ruling**
-- **Fidelity note, from the walk:** the app ROUNDS 93.7 s to `1:34` where
-  the PM5 truncates to `1:33` — one quantity, four renderings across the
-  two screens. For a phase whose promise is "the machine's own numbers
-  land in your log", showing a figure the erg never displays deserves a
-  line at the next design pass. **XS**
-- [x] **`source` derive-when-absent SUNSET — DONE in the v0.35.0 PR
-      (2026-09-02); trigger was v0.35.0, the tag
-      AFTER the one that ships #268 (v0.34.0, shipped 2026-09-02). NOT
-      v0.34.0: firing it on the tag that introduces the field 400s every
-      save from every build still installed. DELIBERATE CO-TAG (#272's PM
-      gate): v0.35.0 also carries the substitution feature (#272); the
-      sunset lands as its own XS PR BEFORE the v0.35.0 tag is cut, so the
-      tag carries both on purpose — builds ≤811 (v0.32.0) lose saves at
-      that tag, build 823+ already posts `source`.** The server derives `source`
-      for a POST that omits it only so build 811-era TestFlight clients
-      keep saving (additive-only between tags). At that tag: `source`
-      becomes REQUIRED on `POST /api/logs` (400 when absent), the route's
-      `deriveLogSource` call and its `source=derived` log line are
-      deleted, and `docs/RELEASING.md`'s API note records the break. The
-      0020 BACKFILL rule stays (it is history, not a live inference).
-      Filed here per RF14 and the spec's exit criterion 8b. **XS**
-- [x] **v0.35.0's release notes must RETIRE "A Just Row never advances
-      your plan" (v0.32.0).** **DONE — shipped in `releaseNotes.ts:18`
-      (v0.35.0 entry): "v0.32.0 said a Just Row never advances your plan;
-      now it can, when you say so, and never otherwise."** Ticked at door
-      PR A's PM gate, which found the row discharged and unticked. Filed at
-      the substitution spec (RF14). **XS**
-- [x] **v0.34.0's release notes must RETIRE two things v0.32.0's notes
-      told testers.** **DONE — both shipped in the v0.34.0 entry:
-      `releaseNotes.ts:39` ("v0.32.0 said connect to the erg; that is now
-      one of two ways in") and `:40` ("v0.32.0 said no type chip, on
-      purpose; in practice the row was too easy to lose in History, so it
-      has one now").** Ticked at door PR A's PM gate, which found the row
-      discharged and unticked. Filed at #268's PM gate (RF14). **XS**
-- [x] **Timer mode, on the phone — DONE in this PR (2026-09-02; spec
-      `docs/superpowers/specs/2026-09-02-timer-mode-design.md`, Gate 0
-      `docs/design/handoffs/2026-09-02-timer-mode/`). One END box in both
-      orientations; portrait's ◀ ▶ row sits under Pause; landscape's grid
-      fills the frame (the band was the min-height formula and the shell's
-      reserved tab-bar strip, not the rows — row 4 was already `1fr`).**
-      (James, 2026-09-02, build 823, on a
-      Just Row): "really fucked up". Two defects, both the SHIPPED
-      Timer's own — the free row copied it mechanically and made them
-      visible on a one-phase screen. (1) **END does not match between
-      orientations:** portrait prints `END →` as plain header text (ink-4,
-      no box); landscape prints it as an accent-outlined 44 px box in the
-      gutter — two treatments of one control. (2) **A giant gap:** in
-      portrait the ◀ ▶ arrows are pinned to the bottom with the middle
-      third empty; in landscape the whole layout stops at ~70 % of the
-      height and the rest is blank (the landscape rules were written for a
-      390 px-tall viewport and the phone is taller). Captures:
-      `docs/design/findings/2026-09-02-timer-mode-{portrait,landscape}.png`.
-      A design pass with a Gate 0 (both orientations, the programmed and
-      the free-row timer side by side, since the fix is for both), then a
-      fast-path or small PR. **S**
-- [x] **Free-row copy, three notes — DONE in this PR (2026-09-02, with
-      the Timer-mode pass; rulings 3-5 of the same spec): the band reads
-      `Start a free row session.`, a time-only History row prints
-      `TIME m:ss`, and the no-plan button reads `Save` on both doors.**
-      Three notes for ONE design pass (batched, not one
-      per gate — #268's and #272's PM gates): (1) the Just Row door's
-      paragraph ("The monitor keeps its own time…") now captions two
-      buttons and describes one; (2) a time-only row's History line shows
-      no number until opened; (3) with no plan the Just Row log door's only
-      button reads `Save without logging` (was `Save this row`) — consistent
-      with the shipped summary door, and a stranger meets a button that
-      names what it does NOT do, now on two screens. Rides the Timer-mode
-      design pass above. **XS–S**
-
-**Owed within PR 2's own scope, recorded here so phase close can quote
-it:** a free row recovered with a `truncated` series trace (>4 h of rowing,
-no 0x0039) reports its numbers UNAVAILABLE rather than posting the cap as
-the row's end — the honest refusal, not a fixed bound; if a >4 h free row
-ever matters, the fix is persisting the latest cumulative frame, which is a
-stored-shape change. And `PULL TO RESUME` is reachable on a free row's
-frozen clock and appears on none of the Gate 0 artboards — literally true
-for a Just Row (the PM5's clock does resume on the next pull) but
-undesigned; noted in the handoff README.
-
-This is a deliberate household exception to the stranger-first
-ordering, requested by James on 2026-08-31. Walk record and full decodes:
-`docs/monitor/sessions/walk-2026-08-31-justrow/README.md`; runsheet at
-`docs/monitor/sessions/walk-phase-jr-capture/RUNSHEET.md`.
-
-**The headline is good: 0x0031's elapsed and distance do NOT reset at the
-5-minute auto-split**, so a long free row stores as its true length and PR 2's
-two headline numbers are safe. **Two capture findings re-open design,
-though, and they must be settled before PR 1 tags its enum** (both are
-written up in the spec's own CLOSED section):
-
-- **The PM5 does not advertise while a Just Row is open**, so a generic scan
-  cannot discover it mid-row. The spec's "already mid-Just-Row at connect"
-  path remains struck. Deferred Correct Resume research considers a retained
-  same-device route after a proven drop, not a scan. That capability is not
-  shipped or scheduled; today the rower can End and log what the app has.
-- **Nothing was observed closing a free row the rower walked away from** — the workout stayed
-  active for 896.8 s after the rower stopped, with frames still arriving and
-  no auto-terminate — a BOUNDED observation, since the operator ended the
-  capture rather than the monitor. Documentation neither confirms nor denies
-  a closer: CSAFE Appendix E's JustRow sentence is CONDITIONAL ("that is
-  terminated…") and describes the sequence AFTER a terminate, so it does not
-  enumerate exits, and Concept2's PM5 guide says the monitor powers down
-  after inactivity with no Bluetooth qualification. The proposed
-  `ended_by: "idle"` member is withdrawn PERMANENTLY. **Rulings 8 and 9
-  (2026-09-01) settle it together**: assume the machine never closes a
-  connected row, and decline to close it ourselves either — a Just Row nobody
-  ends runs until the phone sleeps, the app dies, the rower leaves range or
-  the battery goes. That needs no new mechanism, because a link drop already
-  leaves a recoverable `MonitorRun` that Today offers and
-  `completeInterruptedRun` stamps `"interrupted"` — a value whose documented
-  meaning, "closed later with no evidence", is exactly what we know. **The
-  accepted cost is battery, not storage**: idle adds ~one series sample
-  (measured — 890 frozen-clock frames collapsed into one), but the BLE link
-  and wake lock stay up until something else ends them.
-  (The old "6 s → 220 s → power off" chain turned out to be
-  three different layers; the timeouts are CSAFE slave-state ones that never
-  governed an unprogrammed row in either connection state.)
-
-Smaller reconciliations owed: `domain/monitor/pm5/uuids.ts` says 0x003F "has
-never been recorded" and one now has been; status frames arrive at 1.00/s, not
-the ~2.2/s the tooling assumes; and the observer heading renders
-`PM5 432331249 Row connected` because the advertised BLE name already ends in
-"Row".
-
-**Honest distance: three to five weeks of working sessions.** Waves D and B
-ship a tester nothing, so they release alongside C rather than alone — two
-consecutive empty release notes is how the invisible-but-necessary wave gets
-skipped.
-
-**SLATE COMPLETE 2026-09-03.** All twelve items above are ticked; item 2
-(#278) was the last, and its walk found the connect latency that #283 then
-fixed.
-
-- [x] **Connect programs the erg sooner, and the free row waits for it
-      (#283, 2026-09-03).** Not a slate item: item 2's walk exposed it.
-      Every connect this app has ever made waited ~1.7-2.1 s between our
-      first CSAFE write and the PM5's ack, because `createPm5Driver`
-      enqueued ten native calls before the program write on the plugin's
-      single FIFO queue. The driver now defers its status subscriptions
-      until the first non-prepare sequence is acked. **Walked 2026-09-03**
-      (`docs/monitor/sessions/walk-2026-09-03-connect-sooner/`): free row
-      202 ms, programmed workout's erg screen 1799 ms against a prior
-      2700-2969 ms. Part 2 in the same PR: the free row waits for the
-      monitor like a workout does, with the Gate 0 "Starting your row"
-      card. **Spec** `docs/superpowers/specs/2026-09-03-connect-programs-sooner-design.md`.
-
----
-
 
 ## Phase DE — Difficulty out, effort in
 
@@ -1522,6 +949,56 @@ gate was explicit that without the transcription the criterion evaporates on
 the rename — and Phase RC is titled "the row Concept2 would recognise" and
 closed with zero Concept2 contact.
 
+- **The PM5 does not advertise while a Just Row is open**, so a generic scan
+  cannot discover it mid-row. The spec's "already mid-Just-Row at connect"
+  path remains struck. Deferred Correct Resume research considers a retained
+  same-device route after a proven drop, not a scan. That capability is not
+  shipped or scheduled; today the rower can End and log what the app has.
+  · dies 2026-11-10 (approved by James 2026-09-10) · unless Wave E's connect work needs it, this is a comment in `capacitorBle.ts` and not a row
+- **Nothing was observed closing a free row the rower walked away from** — the workout stayed
+  active for 896.8 s after the rower stopped, with frames still arriving and
+  no auto-terminate — a BOUNDED observation, since the operator ended the
+  capture rather than the monitor. Documentation neither confirms nor denies
+  a closer: CSAFE Appendix E's JustRow sentence is CONDITIONAL ("that is
+  terminated…") and describes the sequence AFTER a terminate, so it does not
+  enumerate exits, and Concept2's PM5 guide says the monitor powers down
+  after inactivity with no Bluetooth qualification. The proposed
+  `ended_by: "idle"` member is withdrawn PERMANENTLY. **Rulings 8 and 9
+  (2026-09-01) settle it together**: assume the machine never closes a
+  connected row, and decline to close it ourselves either — a Just Row nobody
+  ends runs until the phone sleeps, the app dies, the rower leaves range or
+  the battery goes. That needs no new mechanism, because a link drop already
+  leaves a recoverable `MonitorRun` that Today offers and
+  `completeInterruptedRun` stamps `"interrupted"` — a value whose documented
+  meaning, "closed later with no evidence", is exactly what we know. **The
+  accepted cost is battery, not storage**: idle adds ~one series sample
+  (measured — 890 frozen-clock frames collapsed into one), but the BLE link
+  and wake lock stay up until something else ends them.
+  (The old "6 s → 220 s → power off" chain turned out to be
+  three different layers; the timeouts are CSAFE slave-state ones that never
+  governed an unprogrammed row in either connection state.)
+
+Smaller reconciliations owed: `domain/monitor/pm5/uuids.ts` says 0x003F "has
+never been recorded" and one now has been; status frames arrive at 1.00/s, not
+the ~2.2/s the tooling assumes; and the observer heading renders
+`PM5 432331249 Row connected` because the advertised BLE name already ends in
+"Row".
+
+**Honest distance: three to five weeks of working sessions.** Waves D and B
+ship a tester nothing, so they release alongside C rather than alone — two
+consecutive empty release notes is how the invisible-but-necessary wave gets
+skipped.
+
+**SLATE COMPLETE 2026-09-03.** All twelve items above are ticked; item 2
+(#278) was the last, and its walk found the connect latency that #283 then
+fixed.
+  · dies 2026-10-10 (approved by James 2026-09-10) · a rower can hit this today; if Wave E has not taken it in a month it needs its own phase, not a row
+- **Smaller wire reconciliations owed** (lifted from Phase JR, 2026-09-10). `domain/monitor/pm5/uuids.ts` says 0x003F "has
+  never been recorded" and one now has been; status frames arrive at 1.00/s, not
+  the ~2.2/s the tooling assumes; and the observer heading renders
+  `PM5 432331249 Row connected` because the advertised BLE name already ends in
+  "Row".
+  · dies 2026-10-10 (approved by James 2026-09-10) · three doc corrections that ride any PR touching the wire notes; if none does in a month they are stale rather than owed
 - [x] **PR0 — post a reconciled row to `log-dev.concept2.com`, pull `export/`
       back, and diff.** RUN LIVE 2026-08-31 (result 85557, log-dev user
       2211); claims narrowed and the two residuals CLOSED at James's #244
@@ -2487,215 +1964,42 @@ closed with zero Concept2 contact.
   reapplies and re-reviews the patch and re-runs the 31 native tests before
   the dependency is accepted** (`docs/RELEASING.md` step 3 has the command).
 
-## Phase MEM — local test runs stop OOMing, and stop reading as flake
-
-Opened 2026-09-08. Spec:
-`docs/superpowers/specs/2026-09-08-local-test-memory-design.md`
-(revised after a `/harden` lens 1 pass that falsified two of its
-load-bearing premises).
-
-**The problem.** Test runs are killed for want of memory and the kill is
-read as flake, so it gets retried into a machine with no room. Baseline
-at rest is 8.8 GB of 16 GB with swap at 6.6 of 7.2 GB and 66 MB of free
-pages, across 3 live agent sessions and 6 worktrees. The client suite
-peaks at **2.76 GB** at Vitest's default 9 workers and **1.84 GB** at 4
-(38 s vs 25 s). **Those two figures came from an UNSCOPED sampler** that
-summed every Node process on the machine, in one sitting, against an
-unmeasured floor — they are a relative comparison, not absolutes. The
-sampler is path-scoped now; a re-measurement of `--project client`
-against `start_floor=0MB` reads 1459 MB at 4, 2091 MB at 6, 2612 MB at 9.
-Four is the LIGHTEST setting and that is why it ships; the old "six is
-strictly dominated by four" line does not reproduce on that command
-(six was faster and heavier), so it is withdrawn.
-
-**The first framing was wrong and is corrected here, not appended to.**
-The spec originally said a memory kill exits 1 and is indistinguishable
-from a test failure. Measured: `pnpm run` and a raw binary both preserve
-the signal (**134** for a V8 fatal, **137** for SIGKILL); only
-`pnpm exec` collapses it to 1. The original measurement was taken through
-`pnpm exec`. **CLAUDE.md itself prescribes that shape** as the workaround
-for pnpm swallowing scoped flags, so the repo's own advice routes agents
-onto the one path where the signal dies. The genuinely ambiguous case is
-different: a **fork-worker** OOM leaves the parent alive, exiting 1 with
-a full `Test Files` summary.
-
-**Three premises falsified while measuring, recorded so nobody
-re-derives them:** idle per-worktree compose stacks cost **236 MB across
-two** (not a memory lever); `--coverage` adds **50 MB**; and a V8 OOM
-prints `Ineffective mark-compacts near heap limit`, not `Reached heap
-limit`, on 4 of 4 runs of the growth shape a real suite has. **The needle
-that ships is `Allocation failed`**: a third V8 fatal string exists
-(`Allocation failed - process out of memory`) that carries no "heap"
-wording at all, so `JavaScript heap out of memory` misses it, and
-`Allocation failed` matches 2 of 23 lines in the node binary against 14
-for the tempting `out of memory` (which catches recoverable HTTP/2 and
-wasm errors).
-
-**Three parts, James-approved 2026-09-08:** (A) a wrapper reading the
-exit code first and the message second, plus a preflight advisory that
-**warns and does not block** (his call); (B) `maxWorkers` 4 and
-Playwright `workers` 2 (proposed), both env-overridable and both
-**disabled under CI**, so a bigger machine pays nothing (his call); (C)
-pre-push runs `--changed` plus, unconditionally, the whole-tree gates
-that `--changed` structurally cannot select — **both** the `scripts/`
-suites and the 46 client suites that read the tree, the second of which
-the first implementation missed.
-
-**BUILT, UNMERGED — all six tasks are on branch `phase-mem-test-memory`
-(Tasks 1-5 the mechanism, Task 6 the documentation half); nothing has
-landed on main.**
-`app/scripts/test-run.sh` implements the four-way signal split (silent
-Ctrl-C at 130; memory banner at 137; then the stderr needle, gated on a
-non-zero exit, which is what makes a 134 a memory kill rather than a bare
-abort; a distinct "killed by signal" banner at any other exit ≥ 128,
-including a needle-less 134; then the missing-summary rule — CLAUDE.md
-RF40, spec A1) and is wired into
-`ci.yml`'s `scripts` job by name. **Worker counts, measured (Task 4,
-verified clean floor):** default → **4**; `ERGOMATIC_TEST_WORKERS=8` →
-**8**; `CI=true` → **9** (the cap is genuinely inert under CI). **The
-Playwright default shipped as 3, not the proposed 2** — measured wall-clock
-(Task 4): 2 workers = 6:12 total (5.5 m test phase), 3 workers = 3:58
-(3.6 m), 5 workers (the old default) = 2:39 (2.3 m). 2 workers cost
-2.34-2.39x the old default, over the spec's ~2x threshold; 3 costs only
-~1.5x, so the implementing PR raised the shipped default from 2 to 3
-(`playwright.config.ts`, spec Part B2).
-
-**The open question the desk cannot settle.** No capture of the real
-failure exists — everything measured so far is a reproduction. A V8 OOM
-is a per-process 4192 MB limit while the whole tree peaks at 2.76 GB
-(unscoped; 2612 MB scoped to this checkout), and
-an OS memory kill of a terminal `node` on darwin is unobserved
-(`memorystatus`, not the Linux OOM killer;
-`kill_on_sustained_pressure_count` is 0 here). So Part B's lever and Part
-A's classifier may not be aimed at the same event. The spec's A0 ships a
-capture step for exactly this; the next real kill answers it.
-
-**A `/harden` lens 2 pass then found 24 more, 5 blocking**, all in the
-prescribed blocks: the pre-push hook body runs under `sh -e`, so the ref
-guard as written **aborts the hook** instead of falling back; `--changed`
-and a path filter INTERSECT, so "append the `scripts/` gates" needed two
-invocations rather than one; piping the child through `tee` puts the
-child's status out of `$?`'s reach, so the wrapper reads `PIPESTATUS[0]`
-(measured 2026-09-08 at the final review: `rc=$?` alone still reports 137
-because the script also sets `pipefail`, but the two together — a dropped
-`-o pipefail` and `rc=$?` — make a SIGKILL read as exit **0**, and
-`PIPESTATUS[0]` is correct either way); the third V8 fatal OOM string
-above forced the needle change; and `process.env.CI` being a string means
-`CI=false` silently removes both caps.
-
-**One of them is worth remembering on its own:** the clause invoking RF34
-committed RF34 — it said the e2e instruction lives in "all three places"
-and named three, where a repo-wide grep finds **five** (a second
-`CLAUDE.md` site and `README.md` were missed).
-
-**Owed at implementation — both resolved.** Playwright's cost at 2 workers
-was measured at Task 4 (table above), which is why the shipped default
-moved to 3. `test-run.test.sh` and `test-run-advisory.test.sh` are both in
-`ci.yml`'s `scripts` job by name (`.github/workflows/ci.yml:181,185`).
-**Still true and still unaddressed:** that job is `ubuntu-latest`, so
-**nothing gates the bash-3.2.57 constraint** the wrapper is written under.
-
-## Phase OD — an order of James's does not go quiet
-
-**S · one PR · docs-only · tester sees nothing · opened 2026-09-09.**
-
-**What and why.** Four orders James gave in his own words sat undone in one
-register band, the oldest 23 days, and were found only because a debt census
-happened to grep his name. Two agents then read the nine-day-old one (RC-13) as
-already fixed and nearly struck it. This phase is not "clear the register" —
-that is ~57 rows and a day cannot touch them. It is the narrower problem that
-**the register can swallow a direct instruction, and nothing in the repo
-notices.**
-
-**Two diagnoses were wrong before the right one, and both are recorded because
-the wrongness is the useful part.**
-
-1. _Passive triggers kill orders; give them dates._ FALSIFIED by Wave D's
-   **Hunt the e2e flakes** row — a live order from 2026-08-20 with an ACTIVE
-   trigger the row itself records as having FIRED. The remedy already applied,
-   already failing.
-2. _Size kills them; every order is fast-path or a phase, and the middle state
-   is banned._ FALSIFIED at the PM gate: it reads one variable off a single
-   control (n=1) in which cheapness, a scheduled trigger, and having no open
-   question all co-vary — the same confound that killed diagnosis 1, repeated
-   one variable over. Banning a state without supplying the missing one mints a
-   phase per 0.5 row, and this file already carried 54 phase sections before the
-   rebalance, 40 of them describing finished work.
-
-**THE RULE: an order's OPEN QUESTION is scheduled before the order is.** An
-order rots when it carries an unanswered question that nobody owns; then it
-cannot be done and no trigger rescues it. Four for four on the rotted orders —
-RC-14's question was "which survivor is it" (answered 2026-09-09 by a probe,
-not by reads, and the answer was none of the three: nothing threw, and the
-entry was lost in the SNAPSHOT one frame below the driver — see its row),
-AUD-006's was what "the compiler's own fold" means for display (a read
-plus a spec sentence), RC-13's was whether draining yields a WRONG verdict (a
-read plus a judgement — answered 2026-09-09: a settlement cannot see LESS
-evidence than the deadline would have, and the row now reads DONE), and `PULL TO RESUME`'s was whether it was still wanted
-(James answered it by withdrawing). Every question is ≤0.25 of reading; the
-orders were 0.5-1.0 and stalled.
-
-**What this phase did.** Landed seven rulings of 2026-09-09; struck the
-`PULL TO RESUME` order in both files that carry it; gave all twelve live orders
-their open question and one next action, or said plainly that they have none;
-struck SQ-12 and CA-1 against their landed artifacts; retired the false half of
-the Concept2 wire-hardening acceptance; replaced two drifted line citations with
-symbols and one stale count with its command; ticked three boxes whose PRs had
-merged; and added one line to CLAUDE.md's post-merge ritual.
-
-**What it deliberately did NOT build.** A CI gate grepping for orders in the
-banned state, cut at the PM gate for three independent reasons: ten of
-seventeen attribution hits are RULINGS, which close by being made, so it taxes
-the common case to catch the rare one; its defining grep already missed four
-live orders, so it would ship at roughly half recall reading as coverage — 5 of the 9 orders
-known when it was proposed, and 5 of the 12 the finished sweep found (RF26); and
-worst, **a green check retires the human grep, which is the only thing that has
-ever found one of these.**
-
-### THE ORDER TOKEN — coverage and gaps, 2026-09-09
-
-**This is not a completeness claim, and it must never be quoted as one.** The
-first sweep of this phase used `awk 'NR>=2109 && NR<=3680 && /James, 20/'` and
-was confidently incomplete: it missed Wave D's **Stand the iOS simulator up as
-a standing instrument** and **Hunt the e2e flakes**, Wave E's **Verification
-code: hide it, say "verified"** (all three outside the range) and **Phase
-PROTO**'s own order (undated). Re-run the commands rather than trusting this
-prose. **Cite rows by NAME here, never by line — this file folds, and a line
-number written into it is wrong by the next merge that touches anything above
-it. This PR proved that on itself: an earlier draft of this very section cited
-thirteen line numbers, and its own diff broke every one.**
-
-- **Swept:** all of `ROADMAP.md`; `docs/` recursively including `docs/history/`;
-  `.claude/` including both agent ledgers and `CLAUDE.md`; code comments under
-  `app/`.
-- **Found:** 12 live orders, 7 live decisions owed to James, ~19 distinct
-  rulings-as-record, 14 discharged, and the bulk of `docs/history/**` historical.
-- **NOT swept, and a branch-only order is invisible to this pass:**
-  `.claude/worktrees/av` and `av-house` hold duplicate `ROADMAP.md` checkouts
-  that were not diffed. **Partial:** `antagonist-ledger.md` (grepped only), the
-  middle of `pm-ledger.md` (sampled), `DEVIATIONS.md` (grepped), and
-  `docs/superpowers/**` spec bodies (grepped plus spot-read). **Not swept at
-  all:** git history and PR history.
-- **One unresolved orphan, deliberately not chased:**
-  `docs/history/phase-ff.md:38`, "the erg confirmation row (James, one step at a
-  time)" — `grep -n nudge ROADMAP.md` returns zero, so it has no live home,
-  while that phase's status line says its walk passed.
-
 ## Needs a decision from James
 
 **BOTH BULLETS THIS SECTION HELD WERE RULED 2026-09-09** in the Phase OD order
 sweep, and were moved to `docs/history/register-evictions-2026-09-10.md` on
 2026-09-10 — the 1 000 ms collision window and the `PM5` / `Timer` provenance
-label, both RULED KEEP. So this section currently holds NO live question. **That is not the same as
-nothing being owed him.** The sweep found seven live decisions waiting on
-James elsewhere in this file, each findable by NAME rather than by a line this
-merge would break — the hand-verified concept2.com log-dev row, the belted
-0x0039 capture owed on the next walk, the Wave E / Phase LP flag-flip trip, the
-`DETAIL`-over-slug failure panel, and three questions explicitly scheduled to be
-RE-ASKED at Wave A's close (the plan calendar, the parametric generator, and
-Phase PROTO's sweep). A reader who takes this section's
-emptiness as "he owes nothing" will be wrong by seven.
+label, both RULED KEEP. **That is not the same as nothing being owed him.** The
+Phase OD sweep found seven live decisions waiting on James, each findable by
+NAME rather than by a line a merge would break — the hand-verified
+concept2.com log-dev row, the belted 0x0039 capture owed on the next walk, the
+Wave E / Phase LP flag-flip trip, the `DETAIL`-over-slug failure panel, and
+three scheduled to be RE-ASKED at Wave A's close.
 
+**It is FIVE now, and both reductions landed on 2026-09-10.** Phase PROTO's
+sweep was one of the three re-asks and James removed that phase
+(`docs/history/phase-proto.md`), leaving the plan calendar and the parametric
+generator. And RC-38 was DISCHARGED the same day — he supplied the CSAFE PDF
+within minutes of being asked, which is the fastest any row in this file has
+ever closed. A reader who takes this section's near-emptiness as "he owes
+nothing" will be wrong by five.
+
+- **RC-38 — DISCHARGED 2026-09-10.** James supplied the document the same day
+  it was asked for: `docs/monitor/PM5_CSAFECommunicationDefinition.pdf`,
+  revision 0.27. `OBJ_WORKOUTTYPE_T` is transcribed verbatim at
+  `app/domain/monitor/pm5/commands.ts`, and it CONFIRMS the reading we shipped
+  on — `0` is `WORKOUTTYPE_JUSTROW_NOSPLITS`, `1` is
+  `WORKOUTTYPE_JUSTROW_SPLITS`, `8` is `WORKOUTTYPE_VARIABLE_INTERVAL`. So
+  `0x01` is a JustRow, specifically the splits variant, and the old comment's
+  refusal to write `_SPLITS` without a quotable label was correct caution
+  rather than a missing fact. It also explains the corroborating capture: `0`
+  is not a separate idle CLASS but JustRow-without-splits, which is what a
+  virgin menu sits at, so the flip to `1` at the first pull is the machine
+  adopting its own 5-minute auto-splits. **The value we program the erg with
+  was right, and is now sourced rather than inferred.**
+  **The document settles more than this row** — it also carries
+  `OBJ_ERGMACHINETYPE_T`, which Phase MT's denylist keys on. Not applied here;
+  MT's own rows can quote it now that the PDF is in the repo.
 - _(previously none open)_ — the `/api/today` row that sat here from Phase SF PR1
   closed 2026-09-05: James ruled DELETE, and the route, its unit block and
   the isolation test's dependence on it left in the same PR (the "done is
@@ -2733,71 +2037,6 @@ question, not a re-raised one.
 | **RC-30**                 | Teardown can TERMINATE a live piece, keyed on derived `phase === "ready"` rather than `frame.state`. **Declined at the RC close 2026-08-28** — it fails the fast path's fifth check, and its fix loses DEVIATIONS row 70's coverage. Never observed in the field; highest per-incident cost of anything in this table                                             | `phase-rc.md` |
 | **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by THREE FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window; and, since 2026-09-04, the per-user `C2_ALLOWED_EMAILS` gate — the VICTIM must be on that list for the callback to complete at all, because the hop re-checks `availableFor(user.email)` at step 3b after resolving its principal, so on a one-account rollout the population that can be victimised is one) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**; and since 2026-09-04 "a real cohort" is itself gated on `C2_ALLOWED_EMAILS`, so the flag flip alone no longer admits one) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
 | **App-wide `ambiguous_auth` promotion** | **RULED (James, 2026-09-03): KEEP — bearer-wins + the `auth_disagreement` log app-wide, the hard refusal only on `/api/concept2/*`. Security read: bearer-wins is not an escalation (the request acts as the bearer holder, who already has that access); cross-site cannot pair a victim's cookie with an attacker's bearer (no CORS middleware, so the custom header fails preflight); the routes where identity binds an external account already refuse; promoting would risk a silent app-wide brick on a shared household phone if a web sign-in ever lands `erg_session` in the native jar beside another account's bearer, on 42-requests-one-install evidence. Trigger to revisit: prod ever logs an `auth_disagreement` line.** Was LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
-
-## Phase PROTO — the wire-semantics audit (HELD, L)
-
-**Phase OD, 2026-09-09 — CORRECTLY PARKED, and recorded so the sweep does not
-re-flag it.** James's 2026-08-27 order (_"a deep dive to ensure we arent
-hallucinating anything in the protocol"_) is 13 days old and undone, but it is
-held by HIS OWN later ruling (2026-08-31): the sweep waits until after the
-front door, RC-38 is pulled forward alone, **re-ask at Wave A's close, not
-before**. **OPEN QUESTION: none.** The trigger's subject — Wave A's close —
-does not exist on any calendar yet, since Wave A is not open. That is a real
-dependency, not a passive trigger, and the distinction is the one this phase
-exists to draw. **NEXT (≤0.25): none owed until Wave A opens.**
-
-James, 2026-08-27: _"im also interested into a deep dive to ensure we arent
-hallucinating anything in the protocol... we've misused fields before or
-conflated them to meanings they dont have."_ Enumerate every claim we make about
-a PM5 field and classify it VENDOR-CITED / OBSERVED / INFERRED.
-
-**Scheduling ruling, James 2026-08-31: the sweep is HELD until after the front
-door (Wave A), and RC-38 is pulled forward on its own.** The audit ships a
-tester nothing and the north star is a stranger using this; RC-38 is the one
-row where we key a live check on an enum we have not read. **Re-ask at Wave A's
-close, not before.**
-
-- **PR1.75b leftovers (2026-09-02, #277's PM gate — RF14):** (1) a unit test for
-  the empty `?state=` callback (`params.get` answers `""`, which the adapter
-  treats as a MISMATCH and refuses — fails safe, untested); (2)
-  `app/ios/App/App.xcodeproj/project.pbxproj`'s four `E2A1B0…` entries sit out
-  of ascending-id order and Xcode will re-sort them on its next save (cosmetic;
-  expect that churn in the next iOS PR, not a CLI rewrite).
-- **RC-38 — BLOCKED ON JAMES (re-stated Phase OD, 2026-09-09).**
-  **OPEN QUESTION: none for us — the residual needs a document only he can
-  supply.** Concept2's PDFs sit behind Cloudflare and could not be fetched, so
-  the honest half already shipped (the disposition is recorded where the value
-  is used, `domain/monitor/pm5/commands.ts:32-46`, which says in terms that
-  `0x01` is a doc LABEL and not a transcription). What is still owed is the
-  verbatim `OBJ_WORKOUTTYPE_T` row. **NEXT (≤0.25): ask James to drop the
-  CSAFE PDF into `docs/monitor/`; the transcription is then a comment change.**
-  This is a decision/action owed by him, not work waiting on a PR, and it
-  should stop being written as though a PR will carry it.
-  _Original framing:_ SCHEDULED (2026-08-31), rides the next connected-surface PR.
-  Transcribe `OBJ_WORKOUTTYPE_T`. We have read one row of an enum we key a check
-  on: `8` is sourced, `1` and `0` are sourced nowhere. James, 2026-08-27:
-  _"have we been making assumptions that are unfounded here? is there
-  documentation about workoutType from concept2?"_ The transcription either
-  confirms our reading or finds a real defect; both outcomes are cheap.
-  **Per recurring failure 16's second corollary, the row for each value is
-  quoted verbatim beside the claim it supports.** **S**
-  **DISPOSITION (Just Row connect spec 2026-09-02, PR #278): NOT
-  transcribed, and said so where the value is used.** Concept2's PDFs sit
-  behind Cloudflare and could not be fetched, so `0x01` ships as
-  `WORKOUTTYPE_JUSTROW` in `domain/monitor/pm5/commands.ts` with a doc
-  comment naming it a LABEL rather than an `OBJ_WORKOUTTYPE_T` row. What
-  the value rests on instead is machine corroboration, counted not
-  transcribed: the 08-31 capture's 0x0031 census
-  (`docs/monitor/sessions/walk-2026-08-31-justrow/decode-0031.py`) reads
-  type `0` at a virgin menu, `1` from the first pull, and `1` again after
-  a Menu end with nothing sent by anyone — so `1` is what the PM5 picks
-  for its own Just Row, and ALSO its idle default, which is why the spec
-  keys no gate on it. The verbatim row is still owed: James can drop the
-  CSAFE PDF into `docs/monitor/` and the transcription is a comment
-  change. Still **S**, no longer scheduled against a PR.
-- **The axis-quantity question — REHOMED 2026-08-31** into the "say which number
-  this is" design pass below. It was never only about `traceModel.ts`'s `t` and
-  `d`; it is one of three places the same screen mixes two quantities.
 
 ## The "say which number this is" design pass — TRIGGER FIRED 2026-09-04, STILL UNOPENED
 
@@ -2884,7 +2123,7 @@ in both orientations.**
 | **RC-13b**                                 | `drainSummaryReconcile` has no identity guard, unlike both scheduled callbacks (`armSummaryReconcile`'s and `noteTerminateObservations`'s each open `if (activeRun !== run) return;`). It reconciles whatever `activeRun` reads at the moment it runs, not the run whose deadline it is draining. RC-13 made its stated precondition TRUE by emptying the slot at every door, but the precondition is still ARGUED rather than structural. **Binding the run into the slot** — storing `{ run, cancel }` instead of a bare canceller — would make it structural, and is the fix if this is ever taken. **CLOSING CONDITION (written 2026-09-09, James's rule 2 applied retroactively):** struck at the first phase close where it is 30 days untouched, unless `drainSummaryReconcile` acquires a caller that can run against a different `activeRun` than the deadline was armed for. Until then the precondition is argued rather than structural, and the argument is recorded at the site | `phase-rc.md`                |
 | **RC-13d**                                 | **OPEN INFERENCE, deliberately unsettled:** whether a door settlement's `summary-observations` write lands on the OUTGOING record. `applyProducerCommit` keys on `next.startedAt` and a revision ref rather than on `identityRef`, and the hook's handler writes to `runRef.current`, which the hook does not touch before `await driver.program(p)` — **so it probably would**, INFERENCE, not measured. Left open on purpose: the only ordering that exercises it has no producer (RC-13), so a hook-level test of it would prove the consequence of a condition nothing creates. **Whoever adds a UI path that re-programs from `ready` inherits this question** and must settle it before that path ships. **CLOSING CONDITION (written 2026-09-09, James's rule 2 applied retroactively):** struck at the first phase close where it is 30 days untouched, unless a UI path that re-programs from `ready` exists. The question is meaningless without one, and the row itself says so | `phase-rc.md`                |
 | **RC-14**                                  | **DONE — fixed 2026-09-09 (the RC-14 PR).** The avg-pace verdict — one of the two genuinely independent oracles RC-9 built after RF11's mirror problem retired `recordTwdVerdict` — was reaching the in-memory ring and dying with the tab. No rower ever saw it and no saved row moved; the cost fell on whoever read a walk afterwards, and it cost more than one line, because the snapshot is taken at the most informative moment in the trace. **THIS ROW'S PREVIOUS ANSWER WAS WRONG AND IS REPLACED, NOT ANNOTATED** (the RC-13 row records two agents misreading an annotated row). It read *"the survivor set is three, not two, and the third is a throw inside a subscriber"* and prescribed a try/catch around `recordAvgPaceVerdict` plus a bracketing record. Nothing throws — RC-13's `emit` isolates per listener — so that instrument would have printed **nothing** while discharging James's order: RF21 with a paper trail. **THE MECHANISM, MEASURED (`c45d0d76`, two red tests, no production change).** `reconcileSummary`'s last act is `emit(summaryObservationsEvent(...))`; `emit` delivers synchronously on the caller's stack; the hook's `summary-observations` case ends with a synchronous `lingerFinishRef.current?.()`, which is the deferred teardown's `finish`. So `reconcileAndReleaseHandoff` -> `unsubscribeAndDisconnect` (which records `disconnect-requested`) -> `stash()` all run to completion INSIDE the driver's own stack, one statement before `recordAvgPaceVerdict(run)`. The stash had `disconnect-requested` last and no verdict; the ring had the verdict next. **THE WALK'S OWN TRIGGER, corrected in the same round:** `rests-finished-ring.json`'s seq 71 says the reconcile ran "when the 3000ms finish grace closed", and that string was HARDCODED on the walk build — RC-13 replaced it with a real release cause precisely because it was already untrue on the drain paths. The capture's `atMs` values settle it: seq 70 `verification-received` ...110, seq 71 ...111, seq 72 ...112, one millisecond apart. The walk drained inside the 0x003F notification (`maybeReconcileImmediately` -> `drainSummaryReconcile`), a third `recordAvgPaceVerdict` call site, now covered by its own test. **THE FIX:** `teardown`'s deferred `finish` keeps its second `stash()` and queues a THIRD via `queueMicrotask` — a third snapshot can only ADD, where moving the second one out would fall back to the linger-start bytes (less than today). Never a timer: a microtask checkpoint runs before control returns to the event loop, and pagehide/freeze/backgrounding are tasks. **THE INVARIANT IS BOUNDED, and the bound is the point:** every entry a session records SYNCHRONOUSLY BENEATH the teardown that serialises it, up to the moment that teardown takes its LAST snapshot, reaches that snapshot. "Beneath" means ON THE STACK WHEN THE SNAPSHOT IS TAKEN, not "anywhere later in the teardown's body" — the IMMEDIATE path stashes BEFORE `unsubscribeAndDisconnect()` and excludes its own disconnect entries by design, which that path's comment has always said. **THE FENCE IS THE HANG-UP, and it is not only about terminate observations:** entries a producer records after its own `await` reach no snapshot, because a microtask runs before a post-`await` continuation — and TWO producers past that line file ORACLE VERDICTS. `driver.disconnect()` reaches `drainSummaryReconcile` (which ends with `recordAvgPaceVerdict`) only AFTER `await terminateWritesDrained`, so a reconcile re-armed during the terminate wait files its verdict unseen; and the driver's 0x003A subscriber calls `recordRestDistanceVerdict` and stays live until `await t.disconnect()` resolves, after the third stash. **So "an absent verdict IS a finding" must never be restated absolutely.** The honest reading, and the one the walk procedure now carries: a verdict missing for a piece whose own summary frames are already IN the log is a finding; a verdict missing where the log shows `disconnect-deferred` or a `summary-half` at or after `disconnect-requested` is INCONCLUSIVE by design, as is an absent terminate-observations entry. Restating any of this unbounded is what put the last walk in the position of reading a silence as a result. **JAMES'S 2026-08-31 ORDER (*"do NOT hunt it; INSTRUMENT it"*) IS CLOSED ON A CHANGED BASIS, and this row says so rather than letting a fix retire it quietly.** His ruling priced a hunt of unknown length; one probe ended it. The DISCRIMINATOR half shipped — every `avg-pace-verdict` line now opens with `#N`, the driver's own verdict count, so `eventLog.record` can never fold two of them into one entry. **Both halves of that sentence are narrower than they sound, and the narrowing is the honest part.** The ordinal is PER CONNECTION: a driver and its log are minted together inside one successful GATT connect and every teardown hangs up, so a walk that leaves the connected screen between pieces gets one log and one `#1` per piece — walk 2026-08-25 is the shape, two pieces, two ring files, each starting at `seq 0`, one verdict apiece. W11's "N pieces ⇒ N lines" therefore stays a count ACROSS PASTES, not within one. And the fold it prevents has NO established production producer: two verdicts can only be consecutive in one ring if two runs share one driver, and the RC-13 row argues at length that neither door has a supported producer for that. The instrument is cheap, harmless, and removes a class rather than a sighting. The BRACKETING RECORD is DECLINED on merit: the survivor is named and removed, its mechanism is pinned by a test that goes red on exactly that mutation, the throw survivor records itself (RC-13's `listener-threw`), and all seven verdict branches record before returning, so "reached and silent" does not exist. **James can put the bracketing half back in one word.** **REGISTER:** this PR filed ZERO rows and struck THREE — RC-13a, RC-13c and RC-13e are now comments at `beginFreeRow()`, the `run-replaced` record call and the `HASH_SUBWINDOW_MS` declaration, each carrying its reasoning. RC-13b and RC-13d gained the 30-day closing conditions they were filed without. Four further findings went to comments rather than rows (the linger refs' lifetime, `cancel()`'s guard as the layer that holds it, the in-emit re-entrancy Shape A leaves live, and `e2e/diagnostics.spec.ts`'s immediate-path-only coverage). **THE SWEEP WAS NOT COMPLETE WHEN IT SAID IT WAS**, and the correction is recorded here rather than left to a commit body: the first pass claimed seven sites and missed two in SOURCE — `oracleCorpusReplay.test.ts`'s header (*"the silence RC-14 is open on … RC-14 stays open"*, in the file whose whole subject is this oracle) and `driver.ts`'s `emit` isolation comment (*"RC-14's row names a throw in here as one of three surviving explanations"*, pointing at a row that now says in bold that nothing threw). Both were found by a later review round and fixed. The lesson is the one CLAUDE.md already states and this branch still tripped over: a correction sweep goes through SOURCE as hard as it goes through docs, because a comment reads as rationale rather than as a claim                                                                                                                                                                                                                                                                                                | `phase-rc.md`                |
-| **RC-38**                                  | Transcribe `OBJ_WORKOUTTYPE_T` — see Phase PROTO above. Pulled forward alone by James on 2026-08-31 while the rest of the sweep is held                                                                                                                                                                                                                                                                                                                       | `phase-rc.md`                |
+| **RC-38**                                  | **DISCHARGED 2026-09-10.** `OBJ_WORKOUTTYPE_T` transcribed verbatim from `docs/monitor/PM5_CSAFECommunicationDefinition.pdf` rev 0.27 into `domain/monitor/pm5/commands.ts`; it confirms `0x01` is `WORKOUTTYPE_JUSTROW_SPLITS`. Full account in `## Needs a decision from James` above                                                                                                                                                                                                                                                                                                                       | `phase-rc.md`                |
 | **RC-11**                                  | The stroke-data reframe: three-way, not two. Owns RC-6's deferred `p: 0` half. Our series clock is a third quantity, and none of the three is C2's `time`                                                                                                                                                                                                                                                                                                      | `phase-rc.md`                |
 | **Session calories** — CLOSED by Phase LP 2026-09-06 (0x003A Total Calories is the honest total; per-split sum equals it on 9/9 committed captures) | 0x0033's `totalCalories` is INTERVAL-scoped (it resets at every boundary) and the 0x0039 summary carries no calorie field, so an honest session CAL needs the register-fold discipline CR2 spec 1 built for distance, plus an honest ramping fake (today's emits a constant 0, so **nothing can go red**), plus a walk photo. **ZONE rides behind it** — it needs a strap and a max-HR source the app lacks. **Ownerless since 2026-08-15**                    | `phase-cr2.md`               |
 | **Cross-pin the two distance derivations** | `sessionDistanceMeters` and `monitorDistanceMeters` are two derivations of one user-facing quantity, shipping on two screens with nothing comparing them                                                                                                                                                                                                                                                                                                       | `phase-cm.md`                |
@@ -3143,6 +2382,13 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **PR1.75b leftovers, lifted from Phase PROTO 2026-09-10.** (1) a unit test for
+  the empty `?state=` callback (`params.get` answers `""`, which the adapter
+  treats as a MISMATCH and refuses — fails safe, untested); (2)
+  `app/ios/App/App.xcodeproj/project.pbxproj`'s four `E2A1B0…` entries sit out
+  of ascending-id order and Xcode will re-sort them on its next save (cosmetic;
+  expect that churn in the next iOS PR, not a CLI rewrite).
+  · dies 2026-10-10 (approved by James 2026-09-10) · rides the next PR touching the auth callback or the Xcode project; the Xcode half self-resolves on the next iOS save
 - **Shipped release-note strings say `PM5`. THIS ROW NO LONGER CARRIES A
   COUNT, on purpose — run the command:**
   `grep -v '^\s*//' app/src/news/content/releaseNotes.ts | grep -c "PM5"` for
@@ -3895,6 +3141,20 @@ trigger is the whole entry.
 One row each. The body is in `docs/history/`, archived verbatim, and it is a
 RECORD — do not cite it for a live question.
 
+- **Phase RN** — a rower can send the ready card away, and a quiet link says so
+  · closed 2026-09-09 · #381 · released in v0.45.0 · [detail](docs/history/phase-rn.md)
+- **Phase JC** — the rower chooses what red and blue mean, or turns them off
+  · closed 2026-09-09 · #371 · released in v0.45.0 · [detail](docs/history/phase-jc.md)
+- **Phase JR** — Just Row: an unprogrammed row is stored, judged and logged like
+  any other · closed 2026-09-01 · #246, #255, #259 · released in v0.32.0,
+  follow-ons through v0.35.0 · [detail](docs/history/phase-jr.md)
+- **Phase MEM** — a killed test run says so instead of reading as flake · closed
+  2026-09-08 · #375 · [detail](docs/history/phase-mem.md)
+- **Phase OD** — an order of James's does not go quiet · closed 2026-09-09 ·
+  #384 · [detail](docs/history/phase-od.md)
+- **Phase PROTO** — the wire-semantics audit · REMOVED 2026-09-10 at James's
+  instruction, never run; its two live residuals were lifted into the slate
+  first · [detail](docs/history/phase-proto.md)
 - **Phase RR — the register may only go down** · ABANDONED 2026-09-10,
   mid-flight · spec merged #386, mechanism closed unmerged #388 ·
   [detail](docs/history/phase-rr.md). The register's growth was real

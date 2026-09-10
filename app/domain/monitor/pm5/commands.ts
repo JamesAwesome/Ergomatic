@@ -29,20 +29,35 @@ const SET_WORKOUTTYPE = 0x01;
  *  values, so this is the only workout type `buildProgrammingSequence`
  *  ever emits — never the undefined-rest sibling type. */
 const WORKOUTTYPE_VARIABLE_INTERVAL = 0x08;
-/** `WORKOUTTYPE_JUSTROW` — a doc LABEL, not a transcription: the notes never
- *  transcribe Appendix A's `OBJ_WORKOUTTYPE_T` row (Concept2's PDFs sit
- *  behind Cloudflare; spec 2026-09-02 §Research, RC-38 disposition). What
- *  this value rests on instead is (1) CSAFE-DEF's own p.80 JustRow worked
- *  example, `F1 76 07 01 01 01 13 02 01 01 61 F2` (interface-notes.md §12
- *  example 2), whose `SET_WORKOUTTYPE` data byte is `01`, and (2) the
- *  machine's own reading: the 2026-08-31 capture's Just Row reports
- *  0x0031 `workoutType = 1` from the first pull
+/** `WORKOUTTYPE_JUSTROW` — TRANSCRIBED 2026-09-10 (RC-38 discharged). James
+ *  supplied the document the earlier disposition could not fetch:
+ *  `docs/monitor/PM5_CSAFECommunicationDefinition.pdf`, revision 0.27. Its
+ *  `OBJ_WORKOUTTYPE_T` rows, verbatim except that the doc's own `/**< … *` + `/`
+ *  comment delimiters are replaced by `--` so they cannot close this block:
+ *
+ *    WORKOUTTYPE_JUSTROW_NOSPLITS,   -- JustRow, no splits (0).
+ *    WORKOUTTYPE_JUSTROW_SPLITS,     -- JustRow, splits (1).
+ *    WORKOUTTYPE_VARIABLE_INTERVAL,  -- Variable interval (8).
+ *
+ *  So `0x01` is a JustRow, and specifically the SPLITS variant — the reading
+ *  this shipped on was correct, and the old comment's refusal to write
+ *  `_SPLITS` without a quotable label was the right caution rather than a
+ *  missing fact.
+ *
+ *  It also explains the corroboration this used to rest on. `0` is not a
+ *  separate idle CLASS; it is JustRow-without-splits, which is what a virgin
+ *  menu sits at, and the 2026-08-31 capture's flip to `1` from the first pull
+ *  is the machine adopting its own 5-minute auto-splits
  *  (`docs/monitor/sessions/walk-2026-08-31-justrow/decode-0031.py` over
- *  `just-row-pm5-recording-1788214688045.jsonl.gz`). Deliberately NOT
- *  named `_SPLITS`, the doc's fuller enum label the notes cannot quote.
- *  NOTE it is also the machine's idle-after-terminate default
- *  (`statusFrames.ts`'s `EMPTY_ARM_STRUCTURE`), which is why no readback
- *  verifies this program landed — the spec's ruling 2. */
+ *  `just-row-pm5-recording-1788214688045.jsonl.gz`). CSAFE-DEF's p.80 JustRow
+ *  worked example, `F1 76 07 01 01 01 13 02 01 01 61 F2`
+ *  (interface-notes.md §12 example 2), carries the same `01` data byte.
+ *
+ *  NOTE `0` and `1` are BOTH JustRow, so an idle-after-terminate monitor and
+ *  a rowing free row differ only by the splits bit
+ *  (`statusFrames.ts`'s `EMPTY_ARM_STRUCTURE`) — which is why no readback
+ *  verifies this program landed, the spec's ruling 2. That reasoning is
+ *  unchanged by the transcription; it is now sourced rather than inferred. */
 const WORKOUTTYPE_JUSTROW = 0x01;
 
 /** `CSAFE_PM_SET_INTERVALTYPE` (interface-notes.md §11). */
