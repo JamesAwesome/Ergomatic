@@ -16,7 +16,6 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$HERE/register.sh"
 FIX="$HERE/fixtures/register"
-REPO_ROOT="$(cd "$HERE/.." && pwd)"
 fails=0
 check() { if [ "$1" = "$2" ]; then echo "ok: $3"; else echo "FAIL: $3 (want '$2' got '$1')"; fails=$((fails + 1)); fi; }
 # has <haystack> <needle> <name> — the needle must appear
@@ -31,8 +30,8 @@ run() { out="$(bash "$SCRIPT" "$@" 2>&1)"; rc=$?; }
 run count "$FIX/well-formed.md"
 check "$rc" "0" "count: a fully marked file exits 0"
 has "$out" "unmarked=0" "count: reports unmarked=0"
-has "$out" "register open:7 closed:4 sub:1" "count: register tallies both carriers"
-has "$out" "debt open:1 closed:0 sub:0" "count: debt is counted, never payable"
+has "$out" "register open:10 closed:8 sub:1" "count: register tallies both carriers"
+has "$out" "debt open:1 closed:1 sub:0" "count: debt is counted, never payable"
 has "$out" "pinned open:1" "count: pinned is reported (I6)"
 has "$out" "vision open:1" "count: vision is reported (I6)"
 has "$out" "phase open:1 closed:1" "count: phase is reported (I6)"
@@ -53,16 +52,12 @@ check "$rc" "2" "count: REFUSES a file with zero sections"
 run count "$FIX/does-not-exist.md"
 check "$rc" "2" "count: REFUSES an unreadable file"
 
-# The PR-2 seam test (spec §8.3): PR 2 writes a marker into every section of
-# the REAL ROADMAP.md and every later gate reads them. Exact tallies are NOT
-# asserted here — a transcribed census goes stale (spec §3.4) — but every one
-# of the seven classes must be present and nothing may be unmarked.
-run count "$REPO_ROOT/ROADMAP.md"
-check "$rc" "0" "count: the real ROADMAP.md is fully marked"
-has "$out" "unmarked=0" "count: the real ROADMAP.md has no unmarked section"
-for cls in register debt pinned vision phase ledger container; do
-  has "$out" "$cls open:" "count: the real ROADMAP.md reports class $cls"
-done
+# NOT HERE: `count` against the REAL ROADMAP.md. It was, and that made marker
+# discipline a RED CI check — this file runs in CI's `scripts` job, which has
+# no `if:` gate, so any PR adding an unmarked section would turn CI red even on
+# a docs-only push. James ruled the gate ADVISORY (2026-09-09) and spec §8.3
+# says in as many words that no CI job checks the real ROADMAP.md after PR 2.
+# The PR-2 seam is run once as a gate command and recorded in the PR body.
 
 # ---------------------------------------------------------------- closed
 
@@ -78,10 +73,41 @@ lacks "$out" "NOT DISCHARGED" "closed: does NOT flag 'NOT DISCHARGED BY IT'"
 lacks "$out" "RESOLVED in principle" "closed: does NOT flag an open [ ] row"
 lacks "$out" "A row with a clean title" "closed: does NOT match the row BODY"
 lacks "$out" "a phase task" "closed: looks only in register and debt sections"
-check "$(bash "$SCRIPT" closed "$FIX/well-formed.md" 2> /dev/null | grep -c .)" "4" "closed: exactly four candidates"
+check "$(bash "$SCRIPT" closed "$FIX/well-formed.md" 2> /dev/null | grep -c .)" "9" "closed: exactly nine candidates"
 
 run closed "$FIX/bad-marker.md"
 check "$rc" "2" "closed: REFUSES an unrecognised marker"
+
+run closed "$FIX/well-formed.md"
+has "$out" "an absent-evidence row that was finally measured" "closed: searches the DEBT class too (I3 housekeeping)"
+lacks "$out" "C2 account injection" "closed: a table row's LATER cell is not its title"
+has "$out" "split with a blank line before it was CLOSED" "closed: a row's fold survives an internal blank line"
+lacks "$out" "AMENDED" "closed: AMENDED is not a disposition (0 of 2 real matches were closed)"
+lacks "$out" "NO LONGER CARRIES A COUNT" "closed: an open row refusing a count is not closed"
+has "$out" "ACCEPTED (2026-09-10)" "closed: ACCEPTED still closes (2 of 2 real matches were closed)"
+lacks "$out" "not a row" "closed: bullets inside a fenced block are not rows"
+
+# ------------------------------------------------------------- refusals
+
+run count "$FIX/untitled-row.md"
+check "$rc" "2" "count: REFUSES an untitled row"
+has "$out" "untitled" "count: names the untitled-row refusal"
+
+run count "$FIX/empty-section.md"
+check "$rc" "2" "count: REFUSES a section whose heading is followed by another heading"
+has "$out" "# A" "count: names the empty unmarked section"
+
+run count "$FIX/bad-marker.md"
+has "$out" "bad-marker.md" "refusals name WHICH tree they read, not just what was wrong"
+
+# ------------------------------------------------------------- sections
+
+run sections "$FIX/well-formed.md"
+check "$rc" "0" "sections: exits 0"
+has "$out" "ARCHIVE  ## A door whose criteria are all ticked" "sections: marks a fully-ticked section ARCHIVE"
+has "$out" "archive-ready=1" "sections: counts the archive-ready sections"
+lacks "$out" "ARCHIVE  ## Small, queued" "sections: a section with open rows is NOT archive-ready"
+lacks "$out" "## Phase ZZ" "sections: phase sections are out of scope"
 
 # ---------------------------------------------------------------- ratchet
 
@@ -116,7 +142,7 @@ file_row "## Small, queued" "A brand new row"
 strike_row "A live row that names no code site"
 run ratchet "$BASE"
 check "$rc" "0" "ratchet: file one, strike one passes"
-has "$out" "register base:7 head:7 delta:0" "ratchet: reports base, head and delta"
+has "$out" "register base:10 head:10 delta:0" "ratchet: reports base, head and delta"
 teardown
 
 mkrepo
@@ -143,9 +169,34 @@ teardown
 mkrepo
 file_row "## Small, queued" "A brand new row"
 run ratchet "$BASE"
-for cls in register debt pinned vision phase ledger container; do
-  has "$out" "$cls base:" "ratchet: reports class $cls at base and head (I6)"
-done
+# Values, not labels: the loop prints every class with `+0` regardless, so
+# asserting the label is a tautology (it passes whenever the command exits 0).
+has "$out" "register base:10 head:11" "ratchet: register tallies are real values"
+has "$out" "debt base:1 head:1" "ratchet: debt is reported at its real value (I6)"
+has "$out" "pinned base:1 head:1" "ratchet: pinned is reported at its real value (I6)"
+has "$out" "vision base:1 head:1" "ratchet: vision is reported at its real value (I6)"
+has "$out" "phase base:1 head:1" "ratchet: phase is reported at its real value (I6)"
+has "$out" "ledger base:1 head:1" "ratchet: ledger is reported at its real value (I6)"
+has "$out" "container base:0 head:0" "ratchet: container is reported at its real value (I6)"
+teardown
+
+mkrepo
+file_row "## Owed captures and walk items" "A newly filed absent-evidence row"
+run ratchet "$BASE"
+check "$rc" "0" "ratchet: filing into DEBT is never payable by strike (I8)"
+has "$out" "debt base:1 head:2" "ratchet: the debt rise is REPORTED, just not charged"
+teardown
+
+mkrepo
+file_row "## Accepted, pinned, and not being fixed" "A newly pinned row"
+run ratchet "$BASE"
+check "$rc" "0" "ratchet: filing into PINNED is not charged"
+teardown
+
+mkrepo
+file_row "## After the strangers" "A new product idea"
+run ratchet "$BASE"
+check "$rc" "0" "ratchet: filing into VISION is not charged"
 teardown
 
 mkrepo

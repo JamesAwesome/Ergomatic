@@ -8,6 +8,7 @@
 # Subcommands (spec docs/superpowers/specs/2026-09-09-register-ratchet-design.md):
 #   count   [<ref|file>]        every class tally, plus unmarked=<n>
 #   closed  [<ref|file>]        candidate closed rows still sitting in the register
+#   sections [<ref|file>]      per-section tallies; names sections with zero open rows
 #   ratchet [<base>]            class tallies at base and head, deltas, identities
 #
 # Exit codes. The third is the whole point: an operator handed exit 1 must be
@@ -41,9 +42,10 @@ refuse() {
 
 usage() {
   cat >&2 <<'USAGE'
-usage: register.sh <count|closed|ratchet> [<ref|file>]
+usage: register.sh <count|closed|sections|ratchet> [<ref|file>]
   count   [<ref|file>]  class tallies plus unmarked=<n>   (2 if any section is unmarked)
   closed  [<ref|file>]  candidate closed rows             (1 if any)
+  sections [<ref|file>] per-section open/closed, and which are ARCHIVE-ready
   ratchet [<base>]      base/head tallies and identities  (1 if the register rose)
 A bare <ref> is read as `git show <ref>:ROADMAP.md`; an existing path is read
 directly; no argument reads ROADMAP.md from the repository root.
@@ -100,7 +102,14 @@ function extract_title(buf, first,   i, j, t) {
 # guard, and `- [ ]` as a hard OPEN override. Heuristic by design (spec §7):
 # it produces CANDIDATES for hand confirmation, never an authority.
 function looks_closed(title,   v) {
-  v = "(^|[^A-Z])(DONE|SHIPPED|CLOSED|RESOLVED|STRUCK|DISCHARGED|DISPOSED|RULED|MOVED OUT|ACCEPTED|AMENDED|ASKED AND ANSWERED|NO LONGER CARRIES A COUNT)([^A-Z]|$)"
+  # AMENDED and NO LONGER CARRIES A COUNT were in the spec's curated set and
+  # are NOT here. Measured over the real ROADMAP.md at ae82e0da: AMENDED 0/2,
+  # NO LONGER CARRIES A COUNT 0/1 — every match was a live row. An AMENDED row
+  # has had its own facts corrected, which is not a disposition, and the
+  # release-note row says it "NO LONGER CARRIES A COUNT" precisely because it
+  # is open and refusing to carry one. The spec expected the `- [ ]` override
+  # to kill that last one; the row has no checkbox, so it never could.
+  v = "(^|[^A-Z])(DONE|SHIPPED|CLOSED|RESOLVED|STRUCK|DISCHARGED|DISPOSED|RULED|MOVED OUT|ACCEPTED|ASKED AND ANSWERED)([^A-Z]|$)"
   if (title !~ v) return 0
   if (title ~ /(NOT|UN)(-| )?(DONE|RESOLVED|DISCHARGED|CLOSED)/) return 0
   return 1
@@ -112,14 +121,24 @@ function flush(   title, state) {
   if (box == "x" || struck) state = "closed"
   else if (box == " ") state = "open"
   else state = looks_closed(title) ? "closed" : "open"
-  printf "ROW\t%s\t%s\t%s\t%s\n", cls, state, carrier, title
+  if (title == "") print "BADROW\t" heading
+  else printf "ROW\t%s\t%s\t%s\t%s\t%s\n", cls, state, carrier, title, heading
   inrow = 0; buf = ""; firstline = ""; box = ""; struck = 0
 }
 
-BEGIN { sections = 0; pending = 0; cls = ""; inrow = 0; intable = 0 }
+BEGIN { sections = 0; pending = 0; cls = ""; inrow = 0; intable = 0; fence = 0 }
+
+# A fenced block's contents are not rows. Without this a ```bash block holding
+# two `- ` lines inflates its section by two, silently and at exit 0 — and
+# deleting such a block banks two phantom strikes that pay for two real
+# filings. `ROADMAP.md` carries several fenced shell blocks already, and PR 2
+# added a prose section describing shell commands.
+/^ *```/ { if (inrow) buf = buf " " $0; fence = !fence; next }
+fence { if (inrow) buf = buf " " $0; next }
 
 /^#{1,2} / {
   flush()
+  if (pending) print "BAD\t" heading "\t"
   sections++
   heading = $0
   cls = ""
@@ -164,7 +183,8 @@ BEGIN { sections = 0; pending = 0; cls = ""; inrow = 0; intable = 0 }
   cell = trim(cell)
   gsub(/^\*\*|\*\*$/, "", cell)
   cell = trim(cell)
-  printf "ROW\t%s\t%s\ttable\t%s\n", cls, (looks_closed(cell) ? "closed" : "open"), cell
+  if (cell == "") print "BADROW\t" heading
+  else printf "ROW\t%s\t%s\ttable\t%s\t%s\n", cls, (looks_closed(cell) ? "closed" : "open"), cell, heading
   next
 }
 
@@ -191,7 +211,7 @@ BEGIN { sections = 0; pending = 0; cls = ""; inrow = 0; intable = 0 }
 # line-scoped parse truncates most titles.
 { if (inrow) buf = buf " " $0 }
 
-END { flush(); print "SECTIONS\t" sections }
+END { flush(); if (pending) print "BAD\t" heading "\t"; print "SECTIONS\t" sections }
 AWK
 
 # parse <spec> — run the parser, or refuse. Sets PARSED.
@@ -202,8 +222,10 @@ parse() {
   PARSED="$(printf '%s\n' "$src" | awk -v KNOWN="$CLASSES" "$PARSER")" || refuse "the parser failed on '${spec:-the working tree}'"
   local sections
   sections="$(printf '%s\n' "$PARSED" | awk -F'\t' '$1 == "SECTIONS" { print $2 + 0 }')"
-  : "${sections:?}"
-  [ -n "$sections" ] || refuse "the parser reported no section count"
+  # No `: "${sections:?}"` here: awk's END always prints a SECTIONS record, so
+  # the variable cannot be empty and the guard would be unreachable — a guard
+  # that cannot fire reads as protection and is not (RF21).
+  [ -n "$sections" ] || refuse "the parser reported no section count for '${spec:-the working tree}'"
   # A file with zero sections is what an emptied or deleted ROADMAP.md looks
   # like, and I9's unmarked guard cannot fire on it: no sections means no
   # unmarked section, so it reads clean and a deletion reads as credit.
@@ -212,8 +234,16 @@ parse() {
   bad="$(printf '%s\n' "$PARSED" | awk -F'\t' '$1 == "BAD" { printf "  %s  [%s]\n", $2, ($3 == "" ? "no marker" : "unrecognised marker: " $3) }')"
   if [ -n "$bad" ]; then
     echo "register.sh: every section carries one of: $CLASSES" >&2
+    echo "register.sh: in '${spec:-the working tree}'" >&2
     printf '%s\n' "$bad" >&2
-    refuse "$(printf '%s\n' "$bad" | grep -c .) section(s) unmarked or carrying an unrecognised marker"
+    refuse "$(printf '%s\n' "$bad" | grep -c .) section(s) unmarked or carrying an unrecognised marker in '${spec:-the working tree}'"
+  fi
+  local badrow
+  badrow="$(printf '%s\n' "$PARSED" | awk -F'\t' '$1 == "BADROW" { printf "  %s\n", $2 }')"
+  if [ -n "$badrow" ]; then
+    echo "register.sh: a row with no title cannot be counted or diffed, in '${spec:-the working tree}':" >&2
+    printf '%s\n' "$badrow" >&2
+    refuse "$(printf '%s\n' "$badrow" | grep -c .) untitled row(s) — an empty title is invisible to the charge and visible in the tally"
   fi
 }
 
@@ -232,11 +262,21 @@ tallies() {
     }'
 }
 
-# register_open <parsed> — the titles of open rows in ratchet-charged classes.
-register_open() {
-  printf '%s\n' "$1" | awk -F'\t' -v want="$RATCHET_CLASS" '
-    $1 == "ROW" && $3 == "open" && $4 != "sub" && index(" " want " ", " " $2 " ") > 0 { print $5 }'
+# rows_open <parsed> <class-list> — titles of open, non-sub rows in those
+# classes. EVERY count in this script goes through here. The charge and the
+# printed tally used to be two different filters, and they could disagree in
+# one run: `grep -c .` does not count an empty line, so an untitled row was
+# invisible to the charge and visible in the tally, and the report read
+# `delta:+2` beside `OK: the register did not rise`. Untitled rows are now
+# refused outright (see `parse`), and this is the only counter either way.
+rows_open() {
+  printf '%s\n' "$1" | awk -F'\t' -v want=" $2 " '
+    $1 == "ROW" && $3 == "open" && $4 != "sub" && index(want, " " $2 " ") > 0 { print $5 }'
 }
+
+# n_rows <list> — line count that is 0 for the empty string, unlike `grep -c .`
+# over a `printf '%s\n'` of it.
+n_rows() { printf '%s' "$1" | awk 'END { print NR + 0 }'; }
 
 cmd_count() {
   parse "${1:-}"
@@ -258,6 +298,32 @@ cmd_closed() {
   [ -z "$hits" ] && return 0
   printf '%s\n' "$hits"
   return 1
+}
+
+# James, 2026-09-10: "If something has everything ticked archive it." A
+# register section whose rows are ALL closed does not get its rows evicted one
+# at a time — the whole section moves to `docs/history/` and leaves a ledger
+# row. This subcommand exists because that is a RULE, and a rule stated only in
+# prose is not a gate (RF37).
+cmd_sections() {
+  parse "${1:-}"
+  printf '%s\n' "$PARSED" | awk -F'\t' '
+    $1 == "ROW" && $4 != "sub" && ($2 == "register" || $2 == "debt") {
+      if ($3 == "closed") c[$6]++; else o[$6]++
+      cls[$6] = $2
+    }
+    END {
+      for (k in cls)
+        printf "%-9s open:%-3d closed:%-3d %s%s\n", cls[k], o[k] + 0, c[k] + 0,
+          (o[k] + 0 == 0 ? "ARCHIVE  " : "         "), k
+    }' | sort -k2
+  local ready
+  ready="$(printf '%s\n' "$PARSED" | awk -F'\t' '
+    $1 == "ROW" && $4 != "sub" && ($2 == "register" || $2 == "debt") {
+      if ($3 == "closed") c[$6]++; else o[$6]++
+    }
+    END { for (k in c) if (o[k] + 0 == 0) print k }' | grep -c .)"
+  echo "archive-ready=$ready"
 }
 
 cmd_ratchet() {
@@ -291,8 +357,8 @@ cmd_ratchet() {
   local head_parsed="$PARSED"
 
   local base_reg head_reg
-  base_reg="$(register_open "$base_parsed" | grep -c .)"
-  head_reg="$(register_open "$head_parsed" | grep -c .)"
+  base_reg="$(n_rows "$(rows_open "$base_parsed" "$RATCHET_CLASS")")"
+  head_reg="$(n_rows "$(rows_open "$head_parsed" "$RATCHET_CLASS")")"
   # The floor from the other side: a head register of zero against a nonzero
   # base is a deletion, and arithmetic alone reports it as credit for every
   # row it destroyed.
@@ -302,8 +368,8 @@ cmd_ratchet() {
 
   local bt ht delta cls
   for cls in $CLASSES; do
-    bt="$(printf '%s\n' "$base_parsed" | awk -F'\t' -v c="$cls" '$1 == "ROW" && $2 == c && $3 == "open" && $4 != "sub"' | grep -c .)"
-    ht="$(printf '%s\n' "$head_parsed" | awk -F'\t' -v c="$cls" '$1 == "ROW" && $2 == c && $3 == "open" && $4 != "sub"' | grep -c .)"
+    bt="$(n_rows "$(rows_open "$base_parsed" "$cls")")"
+    ht="$(n_rows "$(rows_open "$head_parsed" "$cls")")"
     delta=$((ht - bt))
     [ "$delta" -gt 0 ] && delta="+$delta"
     printf '%s base:%d head:%d delta:%s\n' "$cls" "$bt" "$ht" "$delta"
@@ -314,8 +380,8 @@ cmd_ratchet() {
   # reads as credit; 122 of 179 merges in a fortnight touched this file.
   local tmpb tmph
   tmpb="$(mktemp)"; tmph="$(mktemp)"
-  register_open "$base_parsed" | sort > "$tmpb"
-  register_open "$head_parsed" | sort > "$tmph"
+  rows_open "$base_parsed" "$RATCHET_CLASS" | sort > "$tmpb"
+  rows_open "$head_parsed" "$RATCHET_CLASS" | sort > "$tmph"
   comm -23 "$tmpb" "$tmph" | sed 's/^/LEFT: /'
   comm -13 "$tmpb" "$tmph" | sed 's/^/ENTERED: /'
   rm -f "$tmpb" "$tmph"
@@ -331,6 +397,7 @@ cmd_ratchet() {
 case "${1:-}" in
   count) shift; cmd_count "${1:-}" ;;
   closed) shift; cmd_closed "${1:-}" ;;
+  sections) shift; cmd_sections "${1:-}" ;;
   ratchet) shift; cmd_ratchet "${1:-}" ;;
   stamps | expired) refuse "'$1' arrives with \`dies\` in Phase RR PR 4, after James rules on the spec's §10 class defaults" ;;
   *) usage ;;
