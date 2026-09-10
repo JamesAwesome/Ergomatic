@@ -9909,6 +9909,13 @@ One entry for the whole run, both lenses. Techniques, not history.
 
 ## RC-13 hardening run, 2026-09-09 — one edit, zero dispatches
 
+Subject: `docs/superpowers/specs/2026-09-09-rc13-drain-containment-design.md`.
+**The measurements below are re-runnable against that file** — they were not when
+this entry was first written, because the spec lived only in a session scratchpad.
+That is RF16's dangling-citation corollary and it was caught at re-review: an
+uncheckable number in a durable record reads as evidence. The fix was to commit
+the spec, not to soften the entry.
+
 **Both lenses accounted for without a dispatch, and that is the intended outcome
 rather than a shortcut.** Lens 1 (mechanism) was already discharged: the
 antagonist's full anchor pass had run at phase open on this TRIAD spec and the PM
