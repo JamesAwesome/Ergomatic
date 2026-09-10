@@ -341,6 +341,42 @@ requirements).
     bigger PR is cheaper to run gates on but harder to review. When
     grouping would force a reviewer to reason about a stored-shape change
     and an unrelated redesign in one pass, split. Otherwise group.
+- **EVERY ROADMAP ROW SAYS WHEN IT DIES, AND JAMES SEES THE LIST BEFORE IT IS
+  FILED (James, 2026-09-10).** RF14 says everything with a life after merge
+  goes in the ROADMAP; this is the other half, which was missing, and the
+  register grew +6.75 rows/day for twelve straight days because of it.
+  - **The stamp.** A row filed from now on ends with
+    `· dies YYYY-MM-DD · <one clause: why this is a row and not a fix now>`.
+    The clause is the load-bearing half — "filed" with no reason is how a row
+    becomes furniture.
+  - **A date is required EVEN WHEN the row names a trigger.** The trigger
+    fires early when it works; the date is the backstop for when it does not,
+    and Phase OD measured exactly that failure — Wave D's "hunt the e2e
+    flakes" carried an ACTIVE trigger the row itself recorded as having FIRED,
+    and sat 20 days. A trigger is not a schedule.
+  - **Campsite rule, and nothing retroactive.** The rows already in the file
+    carry no date and are not being migrated. When a PR touches a dateless
+    row for any reason, it gives it one on the way past.
+  - **Before filing, say what would FIX it now and why you are not.** A row
+    you cannot justify against its own fix is a fix you are deferring without
+    saying so.
+  - **THE GATE IS THE FINAL PR OF A PIECE OF WORK, and it is a hand-back.**
+    When you open the last PR of a phase, a wave, a fast-path change or a
+    one-off, put TWO lists in front of James in ONE message and STOP:
+    - **Proposed to add** — every row this work wants to file, one line each:
+      title, `dies` date, and the clause saying why it is a row and not a fix.
+    - **Now overdue** — every row ANYWHERE in `ROADMAP.md` whose `dies` date
+      has passed, one line each, oldest first.
+
+    He rules keep / kill / re-date on each. **Nothing is struck without him**
+    (RF30: striking an item is a decision he does not get to make again). A row
+    he re-dates carries the new date and a clause saying who moved it and why.
+    **This is not `/close-phase`'s business** — that skill closes a phase, and
+    most work that files rows never runs it. It fires when a PR is opened,
+    which is also what makes it reach fast-path and one-off changes.
+  - _What this deliberately is NOT: a script, a marker on every heading, a CI
+    check, or anything that strikes a row on its own. Phase RR built that and
+    it was abandoned — `docs/history/phase-rr.md`._
 - **CLOSE THE INVARIANT AND KEEP THE REVIEW RECORD CURRENT.** A fix round closes
   every finding's underlying invariant, not only its latest counterexample.
   Every factual claim in a report, review comment, or code comment names
