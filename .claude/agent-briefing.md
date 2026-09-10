@@ -207,6 +207,31 @@ compose.yml -f compose.e2e.yml build --no-cache` before `up`.
   volumes (`docker compose -p <stack> down -v`) rather than debugging
   the hash mismatch (#182's fix wave hit exactly this).
 
+## Filing a roadmap row (James, 2026-09-10)
+
+You may not file a row into `ROADMAP.md` without both of these:
+
+1. **`· dies YYYY-MM-DD · <one clause: why this is a row and not a fix now>`**
+   at the end of the row. A date is required even when the row also names a
+   trigger — a trigger that has already fired and been ignored is the measured
+   failure this exists for, not a hypothetical one.
+2. **A sentence in your report saying what would FIX it now, and why you are
+   not doing that.** This is the half that bites. "Filed for later" with no
+   answer to "why not now" is a deferral nobody agreed to, and the controller
+   will ask you for it if you leave it out.
+
+**Campsite rule.** If your change touches a row that has no date — for any
+reason, including a reword — give it one. Nothing is being migrated in bulk.
+
+**The controller carries your proposed rows to James** when it opens the final
+PR of the work, with everything already overdue beside them. So a row you file
+without a date or without the "why not now" answer is a row the controller has
+to come back to you for. Write both the first time.
+
+**You never strike a row.** Not an expired one, not an obviously-finished one.
+Say so in your report and let the controller take it to James; striking is a
+decision he does not get to make again (RF30).
+
 ## Report contract
 
 Write your full report to the path your dispatch names. It must contain:

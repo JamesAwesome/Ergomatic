@@ -46,6 +46,20 @@ deliberately not scheduled. The rule that put it there (James, 2026-09-08):
 a filed row needs either a TRIGGER, so it resurfaces when it starts to
 matter, or a PHASE, so it can be scheduled as one piece of work. "Small,
 queued" is neither once it passes a couple of hundred rows, and it had.
+
+**Every row filed from 2026-09-10 ends with a death condition** —
+`· dies YYYY-MM-DD · <why this is a row and not a fix now>` — and a date is
+required even when the row also names a trigger, because Phase OD measured a
+row whose trigger had already fired sitting twenty days. Rows filed before that
+date carry none and are not being migrated; a row gets one the next time any PR
+touches it. The final PR of any piece of work puts two lists in front of James
+before anything is filed: what it proposes to add, and every row anywhere whose
+date has passed. Nothing is struck without him.
+
+**There is no script for this, on purpose.** Phase RR built one — a row
+counter, a class marker on every heading, four rules and a CI gate — and it was
+abandoned on 2026-09-10 as the wrong answer to a real problem
+([detail](docs/history/phase-rr.md)).
 ## Locked decisions
 
 | Area              | Decision                                                                                                                                                                                                                                                                                                  |
