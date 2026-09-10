@@ -972,6 +972,12 @@ test("today-unlogged", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await setBaselines(page);
+  // The capture's SUBJECT is the unlogged row; the suggestion beneath it was
+  // left to the dice and re-rolled every run (measured 2026-09-10: O2 "Imbat"
+  // in one run, AT "Nor'wester" in the next — 14,595 changed pixels, a
+  // different workout rather than noise). Pinned for the same reason
+  // `recovery-today-portrait` already pins.
+  await pinToday(page, { type: "O2", title: "Sea Fret" });
   await importBulk(page, [`${title} | AN | easy | 1`, "w 0:03 6k"].join("\n"));
   await startFromLibrary(page, title);
   await page.getByRole("button", { name: "SKIP ›" }).click();
@@ -1033,6 +1039,15 @@ function compileOrThrow(
 }
 
 const MONITOR_FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
+
+/** The diagnostics ring captures render `savedAt` as a time of day
+ *  (`MonitorLogs.tsx:63`), so seeding them from the real clock made
+ *  `diagnostics-monitor-logs{,-landscape}.png` churn on EVERY run — measured
+ *  2026-09-10 as `13:17` in one run and `13:19` in the next, 140 changed
+ *  pixels. Same idiom and same reason as MONITOR_FIXED_NOW above; a separate
+ *  constant only so the two capture families can move independently.
+ *  See docs/superpowers/specs/2026-09-10-screenshot-churn-design.md. */
+const DIAGNOSTICS_FIXED_NOW = new Date("2026-08-01T13:17:00.000Z");
 const MONITOR_FIXTURE_BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 
 async function libraryWorkoutId(page: Page, title: string): Promise<string> {
@@ -1203,6 +1218,11 @@ test("recovery-today-landscape", async ({ page }) => {
   await page.setViewportSize({ width: 844, height: 390 });
   await page.goto("/today");
   await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+  // Recovery renders BEFORE the suggestion fetch resolves, so waiting only on
+  // UNSAVED WORKOUT let one run of two capture `LOADING…` where the other had
+  // the type chips (measured 2026-09-10). Same settle wait `today-unlogged`
+  // above already documents, and the reason RF7 exists.
+  await expect(page.getByRole("button", { name: "FILTER ⌄" })).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "recovery-today-landscape.png"),
   });
@@ -1236,6 +1256,11 @@ test("recovery-today-both-sources-and-warning-singular-plural", async ({
     name: "Screenshot Tester",
   });
   await setBaselines(page);
+  // Three of this test's captures show the suggestion beneath the recovery
+  // rows, and it was left to the dice: measured 2026-09-10, TR "Ponant" in one
+  // run and O2 "Valley Fog" in the next, which also swaps the selected type
+  // chip. `recovery-today-portrait` already pins for this reason.
+  await pinToday(page, { type: "O2", title: "Sea Fret" });
   const monitor = await seedRecoveryScreenshotRun(page);
   if (monitor.workoutId === null) {
     throw new Error("recovery timer fixture requires its library workout id");
@@ -1250,6 +1275,11 @@ test("recovery-today-both-sources-and-warning-singular-plural", async ({
     await page.setViewportSize(viewport);
     await page.goto("/today");
     await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+    // Recovery renders before the suggestion fetch resolves, so UNSAVED
+    // WORKOUT alone is not a settled frame: with the suggestion pinned, the
+    // remaining run-to-run difference on `recovery-today-both-portrait.png`
+    // was a `LOADING…` capture in one run of two (measured 2026-09-10).
+    await expect(page.getByRole("button", { name: "FILTER ⌄" })).toBeVisible();
 
     await page.goto("/library");
     await page.locator(".workout-row").filter({ hasText: target }).click();
@@ -2855,7 +2885,7 @@ test("diagnostics-monitor-logs", async ({ page }) => {
     email: "screenshots-diagnostics-logs@e2e.test",
     name: "Screenshot Tester",
   });
-  const now = new Date();
+  const now = DIAGNOSTICS_FIXED_NOW;
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   await seedSessionLogHistory(page, [
     {
@@ -2902,7 +2932,7 @@ test("diagnostics-monitor-logs-landscape", async ({ page }) => {
     email: "screenshots-diagnostics-logs-landscape@e2e.test",
     name: "Screenshot Tester",
   });
-  const now = new Date();
+  const now = DIAGNOSTICS_FIXED_NOW;
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   await seedSessionLogHistory(page, [
     {
