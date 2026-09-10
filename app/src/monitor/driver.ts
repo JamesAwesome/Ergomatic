@@ -6943,10 +6943,11 @@ export function createPm5Driver(
       // WHAT BREAKS IF IT GOES ABOVE, in the words the trace will print: a
       // settlement running after `lastWorkStateAverageSplit = null` samples
       // a reset value, and `recordAvgPaceVerdict` files
-      // `suppressed — no work-state (0x0032) averageSplit observed this run`
-      // — a FALSE reason for a run that did observe one. That is RC-13's C1
-      // bug exactly, and the damage is to an ORACLE'S EVIDENCE: the same
-      // tier RC-14 was fixed to protect.
+      // `#N suppressed — no work-state (0x0032) averageSplit observed this
+      // run` (the `#N` is RC-14's fold discriminator — that function's own
+      // comment) — a FALSE reason for a run that did observe one. That is
+      // RC-13's C1 bug exactly, and the damage is to an ORACLE'S EVIDENCE:
+      // the same tier RC-14 was fixed to protect.
       //
       // THE GATE EXISTS, so you will find out: mutation M2 of the RC-13
       // design spec (`docs/superpowers/specs/2026-09-09-rc13-drain-
@@ -6955,7 +6956,8 @@ export function createPm5Driver(
       // present, kind unchanged, detail becomes `suppressed — no
       // work-state (0x0032) averageSplit observed this run`. Invisible to
       // any kind-only assertion, which is why C1 needs its own detail
-      // assertion."
+      // assertion." — quoted VERBATIM as that spec was written, so it
+      // predates RC-14's `#N` prefix; do not "correct" it.
       //
       // THE REQUIREMENT IS UNCONDITIONAL, and deliberately not argued from
       // the current call graph: the settlement must sample THIS RUN'S

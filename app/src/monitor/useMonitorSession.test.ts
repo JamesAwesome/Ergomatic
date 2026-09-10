@@ -2487,9 +2487,13 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
   // `expected false to be true`.
   //
   // THE MECHANISM. `recordAvgPaceVerdict` is NOT called by `reconcileSummary`
-  // — it is the NEXT STATEMENT after it, at both of the driver's two call
-  // sites (`armSummaryReconcile`'s scheduled callback and
-  // `drainSummaryReconcile`). `reconcileSummary`'s own last act is
+  // — it is the NEXT STATEMENT after it, at both of `RECONCILESUMMARY`'s two
+  // call sites (`armSummaryReconcile`'s scheduled callback and
+  // `drainSummaryReconcile`). Two denominators are in play in this block and
+  // each names its own function: `reconcileSummary` has TWO callers;
+  // `recordAvgPaceVerdict` has THREE call sites, the third being the
+  // `terminated` transition, which is why the walked-cell test below calls
+  // `drainSummaryReconcile`'s the THIRD `recordAvgPaceVerdict` site. `reconcileSummary`'s own last act is
   // `emit(summaryObservationsEvent(...))`, and this hook's
   // `summary-observations` handler ends with a SYNCHRONOUS
   // `lingerFinishRef.current?.()`. So when the driver drains while a burst
@@ -2725,7 +2729,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(entries.some((e) => e.kind === "avg-pace-verdict")).toBe(true);
   });
 
-  it("RC-14, THE WALKED CELL: the whole burst lands mid-linger and the driver drains on the hash itself — the third call site, and the one walk-2026-08-25 actually took", async () => {
+  it("RC-14, THE WALKED CELL: the whole burst lands mid-linger and the driver drains on the hash itself — `recordAvgPaceVerdict`'s third call site, and the one walk-2026-08-25 actually took", async () => {
     // WHY THIS CELL EXISTS, and it is NOT the one the design spec named.
     // The spec called the walked cell "(3000 ms deadline x split-won)",
     // reading `rests-finished-ring.json`'s seq 71 detail — "interval 2 was
@@ -2740,9 +2744,9 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // INSIDE the 0x003F notification, through
     // `maybeReconcileImmediately`'s "the summary burst completed early"
     // arm -> `drainSummaryReconcile`, whose own
-    // `recordAvgPaceVerdict(activeRun)` is a THIRD call site neither red
-    // test above reaches (both enter through `armSummaryReconcile`'s
-    // scheduled callback).
+    // `recordAvgPaceVerdict(activeRun)` is the THIRD of that function's
+    // three call sites and one neither red test above reaches (both enter
+    // through `armSummaryReconcile`'s scheduled callback).
     //
     // The script therefore uses a REAL scripted burst rather than the
     // on-demand `deliverSummary`/`deliverVerification` pair: 0x003A is what

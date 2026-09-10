@@ -101,8 +101,12 @@ from a same-shape reproduction elsewhere.** Five reads, in order:
 
 1. **The artifact is a STASH, not a live ring.** This README says so itself
    above: "Rings are `ergomatic:last-rowed-log` verbatim."
-   `useMonitorSession.ts`'s `stash()` is the only writer of that key, and it
-   has three call sites, all inside `teardown`.
+   `useMonitorSession.ts`'s `stash()` is the only writer of that key, and
+   every one of its call sites is inside `teardown`. (An earlier draft of
+   this addendum said "three call sites"; the 2026-09-09 fix added a
+   fourth. The derivation never rested on the number — only-writer plus
+   all-inside-`teardown` carry it — so the count is dropped rather than
+   maintained.)
 2. **`disconnect-requested` (seq 72) proves WHICH stash.** It is recorded
    inside `driver.disconnect()`, which the IMMEDIATE teardown path runs
    AFTER its `stash()` and the DEFERRED path runs BEFORE its second one. Its
@@ -140,15 +144,35 @@ timer fired at all: the drain happened inside the 0x003F notification.
 **Fixed 2026-09-09.** The deferred teardown now takes a THIRD snapshot, via
 `queueMicrotask`, once the stack that triggered it has unwound.
 
-**Two caveats for anyone re-deriving this from the capture.** (1) A tail
-produced by today's build is NOT byte-identical to this one: the
-`summary-recorded` receipt landed after this walk (`9c23315f`, #228), so
-expect an extra line. (2) The restored reading of "an absent verdict is a
-finding" is BOUNDED to entries a session records SYNCHRONOUSLY BENEATH the
-teardown that serialises them. Entries a producer records after its own
-`await` — `driver.disconnect()`'s post-`await` tail is the concrete one —
-are outside that fence and reach no snapshot, so their absence is still not
-a finding.
+**Two caveats for anyone re-deriving this from the capture.**
+
+**(1)** A tail produced by today's build is NOT byte-identical to this one:
+the `summary-recorded` receipt landed after this walk (`9c23315f`, #228),
+so expect an extra line.
+
+**(2) "An absent verdict is a finding" is restored BOUNDED, and the bound
+is the HANG-UP.** Everything a session records up to and including the
+moment the app hangs up reaches the snapshot; a producer that records after
+its own `await` does not, because the microtask taking the last snapshot
+runs before any post-`await` continuation. **This is not only about
+terminate observations, and it is not a caveat about some other kind of
+entry — both verdict kinds have a producer past the fence:**
+
+- `driver.disconnect()` reaches `drainSummaryReconcile` AFTER
+  `await terminateWritesDrained`, and that function ends with
+  `recordAvgPaceVerdict`. A reconcile re-armed during the terminate wait
+  (a late 0x0039) files its `avg-pace-verdict` where no snapshot sees it.
+- the driver's 0x003A subscriber calls `recordRestDistanceVerdict` and
+  stays live until `await t.disconnect()` resolves, which is after that
+  snapshot. A late 0x003A files a `rest-distance-verdict` the same way.
+
+So: a verdict missing for a piece whose own summary frames are already IN
+the log **is** a finding. A verdict missing where the log shows
+`disconnect-deferred`, or a `summary-half` at or after
+`disconnect-requested`, is INCONCLUSIVE by design — the answer was born
+after the log was sealed. Neither hole is reachable on this walk's own
+capture, whose burst is complete and whose tail is the deferred path's
+second stash.
 
 ### W-3 · 0x0039's stroke rate reads exactly DOUBLE on a terminate
 

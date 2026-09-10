@@ -2211,23 +2211,38 @@ under finding W-2; the live disposition is the RC-14 row in `ROADMAP.md`.
 **2. W11's read-it-off procedure still stands, WITH A BOUND — in its own
 terms, so nobody has to read a spec to apply it.**
 
-- **Still a finding, unchanged:** a missing `avg-pace-verdict` line, and a
-  missing `rest-distance-verdict` line. Both are written while the teardown
-  that serialises your log is still on the stack, so they always reach the
-  bytes you paste. **N pieces rowed should produce N `avg-pace-verdict`
-  lines, FULL STOP** — the count rule above is intact.
-- **NOT a finding, and do not raise it:** a missing terminate-observations
-  entry after a hang-up that still owed a terminate write. Those entries
-  are recorded by the disconnect AFTER it waits on that write, which puts
-  them outside the guarantee the 2026-09-09 fix establishes — they reach no
-  snapshot at all, by design, and their absence says nothing about the
-  monitor. The guarantee is bounded to what a session records while the
-  teardown is still running; it is not "the log holds everything".
+- **Still a finding, and this is the ordinary case:** a missing
+  `avg-pace-verdict` line, or a missing `rest-distance-verdict` line, for a
+  piece whose own summary frames are already in the log you pasted.
+  **N pieces rowed should produce N `avg-pace-verdict` lines** — the count
+  rule above holds, and a suppression still WRITES a line rather than
+  subtracting one. There is exactly one exception, and you can read it off
+  the log.
+- **THE BOUND IS THE HANG-UP, and two lines tell you when you are in it.**
+  Everything the session records up to and including the moment the app
+  hangs up reaches your log; anything produced after that does not, by
+  design. You are in that window if the log carries **`disconnect-deferred`**
+  (the hang-up was held waiting on a write the erg still owed), or a
+  **`summary-half` sitting at or after `disconnect-requested`** (the piece's
+  own summary arrived while the app was letting go). If either is there and
+  a verdict line is missing, record the piece **INCONCLUSIVE** and re-walk
+  it — do not file it. If neither is there, a missing line is a finding, and
+  the count rule applies as written.
+- **This is a real hole, not a hedge, and it is BOTH oracles.** The
+  disconnect files `avg-pace-verdict` from its own drain, which runs after
+  it waits on that owed write; and the monitor's 0x003A subscriber files
+  `rest-distance-verdict` right up until the radio is actually released.
+  Either kind can be born after the log has been sealed. The guarantee is
+  "everything up to the hang-up", never "the log holds everything".
+- **NOT a finding, ever:** a missing terminate-observations entry after a
+  hang-up that still owed a terminate write. Same window, and nothing ever
+  promised to carry it.
 - **The lines now number themselves.** Every `avg-pace-verdict` entry opens
   with `#N`, N counting the verdicts filed on that connection, so you read
-  the count off the numbers rather than by counting lines — and a sequence
-  that starts at something other than `#1`, or skips, means entries were
-  lost to the ring's own 500-entry eviction, not folded.
+  the count off the numbers rather than by counting lines. A sequence that
+  does not start at `#1` means the ring evicted its oldest entries (500-entry
+  cap); a sequence that stops SHORT of the pieces you rowed means the later
+  verdicts were born after the log was sealed — the bound above.
 - **The `FINISH_GRACE_MS` zero-fire this clause names is closed.** Both
   doors that replace a run now SETTLE the outgoing one instead of
   cancelling its pending verdict, so arming the next piece within 3 s of

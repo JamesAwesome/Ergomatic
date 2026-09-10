@@ -4851,9 +4851,21 @@ export function useMonitorSession(
           // THE THIRD STASH (RC-14), AND THE INVARIANT IT BUYS.
           //
           // **Every entry a session records SYNCHRONOUSLY BENEATH the
-          // teardown that serialises it reaches the snapshot.** That is a
-          // BOUNDED claim and the bound is load-bearing — see the fence
-          // named at the end of this comment.
+          // teardown that serialises it, up to the moment that teardown
+          // takes its LAST snapshot, reaches that snapshot.** That is a
+          // BOUNDED claim and both halves of the bound are load-bearing.
+          //
+          // "BENEATH" MEANS ON THE STACK WHEN THE SNAPSHOT IS TAKEN, not
+          // "anywhere later in this teardown's own body" — and the
+          // difference is not academic, because the IMMEDIATE path below
+          // falsifies the looser reading: it runs `stash()` and THEN
+          // `unsubscribeAndDisconnect()`, whose `disconnect-requested` is
+          // recorded synchronously beneath the same teardown and is
+          // deliberately absent from that snapshot (STEP 2's own comment
+          // says so, and the ordering-pin test holds it there). The claim
+          // is about what a snapshot can still be MISSING that was already
+          // produced, not about every statement the teardown goes on to
+          // run.
           //
           // WHAT WAS LOST. On the BURST trigger this whole function runs
           // re-entrantly, inside the driver's own `emit`: the driver's
@@ -4897,8 +4909,9 @@ export function useMonitorSession(
           // turn with no timer advanced and goes red against the timer
           // version.
           //
-          // THE SESSION IS CAPTURED HERE, NOT RE-READ INSIDE THE
-          // CALLBACK, and the reason is stated as a REQUIREMENT rather
+          // THE SESSION IS CAPTURED HERE AND THE CALLBACK REFUSES ON ANY
+          // OTHER ONE (it re-reads the ref only to compare, never to
+          // choose what to write), and the reason is a REQUIREMENT rather
           // than as an observation about today's call graph: **this stash
           // must write the session THIS teardown serialised, whatever runs
           // between the queueing and the microtask checkpoint.** A
@@ -4925,20 +4938,47 @@ export function useMonitorSession(
           // rather than argued away, the same defensive-branch case
           // `lastRowingFrameRef`'s clear above already carries (RF21).
           //
-          // THE FENCE, NAMED. Entries a producer records after its OWN
-          // `await` are outside this invariant and are not in any snapshot
-          // this teardown takes. Concretely `driver.disconnect()`, started
-          // just above as `bestEffort(...)` and never awaited: it records
+          // THE FENCE, NAMED — AND IT IS THE HANG-UP, NOT THE TEARDOWN.
+          // Entries a producer records after its OWN `await` are outside
+          // this invariant and are in no snapshot this teardown takes. The
+          // producer is `driver.disconnect()`, started just above as
+          // `bestEffort(...)` and never awaited: it records
           // `disconnect-requested` synchronously, then suspends on
           // `await terminateWritesDrained` whenever a terminate write is
           // still owed, and only afterwards reaches
-          // `drainSummaryReconcile` -> `flushTerminateObservations` -> an
-          // emit. A microtask runs BEFORE a post-`await` continuation, so
-          // this stash is already written by then. An absent
-          // `avg-pace-verdict` or `rest-distance-verdict` IS a finding
-          // again (both are recorded synchronously beneath this teardown);
-          // an absent terminate-observations entry after a hang-up that
-          // owed a write is NOT.
+          // `drainSummaryReconcile` and `await t.disconnect()`. A
+          // microtask runs BEFORE a post-`await` continuation, so this
+          // stash is already written by then.
+          //
+          // **THAT TAIL CAN FILE EITHER ORACLE'S OWN VERDICT, so "an
+          // absent verdict IS a finding" must never be restated
+          // absolutely.** Two producers live past the hang-up, and both
+          // are named rather than left to a call graph:
+          //   - `drainSummaryReconcile` ends with
+          //     `recordAvgPaceVerdict(activeRun)`, and `disconnect()`
+          //     calls it AFTER its own `await`. A reconcile re-armed
+          //     during the terminate wait — a late 0x0039 reaching
+          //     `maybeReconcileImmediately` — therefore files its
+          //     `avg-pace-verdict` where no snapshot can see it. It cannot
+          //     bite today only because `reconcileAndReleaseHandoff()`
+          //     above drains the slot first, which is a fact about the
+          //     current call order and not a guarantee.
+          //   - the driver's own 0x003A subscriber calls
+          //     `recordRestDistanceVerdict`, and it stays subscribed until
+          //     `await t.disconnect()` resolves — after this stash. A late
+          //     0x003A in the hang-up window files a
+          //     `rest-distance-verdict` the same way.
+          //
+          // SO THE HONEST READING, and the one the walk procedure now
+          // carries: everything this session records up to and including
+          // the hang-up reaches the snapshot, so a verdict missing for a
+          // piece whose own summary frames are already IN the log is a
+          // finding. A verdict missing because its evidence arrived DURING
+          // or AFTER the hang-up (`disconnect-deferred` in the log, or a
+          // `summary-half` at or after `disconnect-requested`) is not — it
+          // is inconclusive, by design. An absent terminate-observations
+          // entry after a hang-up that owed a write is in that same second
+          // category.
           const settled = sessionRef.current;
           queueMicrotask(() => {
             if (sessionRef.current !== settled) return;
