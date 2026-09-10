@@ -52,7 +52,14 @@ queued" is neither once it passes a couple of hundred rows, and it had.
 required even when the row also names a trigger, because Phase OD measured a
 row whose trigger had already fired sitting twenty days. Rows filed before that
 date carry none and are not being migrated; a row gets one the next time any PR
-touches it. The final PR of any piece of work puts two lists in front of James
+touches it. **A WAVE IS STAMPED ON ITS STATUS LINE, NOT ROW BY ROW (ruled by
+James 2026-09-10).** A wave's rows are the scope of one sequenced piece of work
+and they all die together when it closes, so dating them individually writes
+the same clause five times — which is the tell that the row is the wrong unit.
+The wave carries one date, and it answers the question that actually rots: has
+this wave OPENED. Wave D's simulator row records its own subject as "two waves
+out and on no calendar", which is the furniture failure at wave size and is
+what the heading stamp catches. The final PR of any piece of work puts two lists in front of James
 before anything is filed: what it proposes to add, and every row anywhere whose
 date has passed. Nothing is struck without him.
 
@@ -464,7 +471,19 @@ recorded in PR 2's body; release note in rower words (spec §6.6).
 ## Wave A — The front door
 
 **Status:** Next in the slate; Wave F closed 2026-09-04. Not opened by that
-closeout. **TRIAD** (auth). **L.**
+closeout. **TRIAD twice — auth AND stored shape** (the second half found
+2026-09-10; see the sign-up row). **L.**
+· dies 2026-10-10 (set 2026-09-10 under the wave-heading rule above) · a month
+after being named next; if the front door has not opened by then the north star
+has gone unfunded for a month, and that comes back to James rather than sliding
+another wave.
+
+**PR 1 IS KNOWN AND IS INDEPENDENT OF THE POLICY DECISION.** `users` has one
+identity column and it is NOT NULL, so lifting identity — `google_sub`
+nullable, or its own table — is the same migration whichever door the gate
+picks. **It is schedulable now, before the policy question is answered**, and
+doing it first means the policy PR is a policy PR rather than a policy PR
+carrying a migration.
 
 **Goal:** someone you have never met installs the build, gets an account, rows,
 and can delete everything from inside the app.
@@ -492,24 +511,87 @@ it lands the stranger on this same denial.
       mockup. Corrected here rather than ticked silently, because the wrong
       premise is what made the row read as more dangerous than it was.
 
-- [ ] **Establish what external TestFlight actually binds, with verbatim
-      quotes, BEFORE anything else in this wave is specced.** The rebalance
-      inherited two claims it could not source: that Beta App Review triggers
-      guideline 4.8 (Sign in with Apple) and 5.1.1(v) (in-app account
-      deletion). **Both are load-bearing and both are currently INFERENCE.**
-      Quote Apple's current wording beside each claim and name the attribute
-      the argument needs — required or recommended, App Store or all
-      distribution (recurring failure 16's second corollary). **If Beta App
-      Review binds neither, this wave shrinks to the front door alone.** **S**
+- [x] **DONE 2026-09-10 — what external TestFlight binds is now sourced, and
+      the wave does NOT shrink.** Research:
+      [2026-09-10-external-testflight-binding.md](docs/superpowers/research/2026-09-10-external-testflight-binding.md),
+      every quote first-party and fetched that day. **Beta App Review reviews
+      the first build of each version against the WHOLE guidelines document**
+      — App Store Connect Help, verbatim: _"the build gets sent to App Review
+      to make sure it follows the App Review Guidelines"_, and guideline 2.2
+      says a TestFlight build _"should comply with the App Review
+      Guidelines"_. No beta-specific subset exists on any page found.
+      **5.1.1(v) CONFIRMED unconditionally** — _"If your app supports account
+      creation, you must also offer account deletion within the app"_: no
+      date, no channel qualifier, no exemption. **4.8 binds too, but the
+      inherited reason was wrong and the wrong reason hid an option** — it is
+      titled **Login Services**, names no Apple product, and triggers on our
+      use of **Google Sign-In** (named verbatim in its own trigger list); what
+      it demands is any login service with three named privacy properties.
+      All five of its exemptions were checked one at a time. The consequences
+      are folded into the two rows below rather than left here. **What is
+      NOT sourced, and stays unsourced:** how strictly Beta App Review
+      enforces any individual guideline in practice — the text binds, the
+      folklore that beta review is lighter has no Apple page behind it and is
+      not planned on in either direction.
 - [ ] **An open sign-up policy, replacing deny-by-default.** What replaces the
       allowlist is the design question: open, invite-code, or a waitlist. The
       denied-user surface stops being a dead end either way. **AUTH — full
       antagonist pass on the spec plus a PM final-PR gate.** **M**
+      **THE GATE'S OPTION LIST GAINED A MEMBER on 2026-09-10, from the
+      binding research above:** guideline 4.8's FIRST exemption is _"Your app
+      exclusively uses your company's own account setup and sign-in
+      systems"_, so **an Ergomatic with no Google door is outside 4.8
+      entirely** and owes no Apple sign-in. It is a real option and it
+      belongs on the list; it is not a recommendation, because it trades one
+      build for a password/reset/verification surface we do not have and
+      takes away the one-tap door every current tester uses.
+      **That trade is UNPRICED, and the SPEC is where it gets priced —
+      ruled 2026-09-10, not a separate errand before the spec.** Pricing one
+      option in isolation produces a list where one member has a number and
+      the rest have adjectives; the option list is costed as a list, in one
+      pass, so the comparison is real (RF30: a ruled-out option gets a
+      measured reason, not a clause). What the pricing must cover: password
+      storage, a reset flow with real email delivery, verification, and the
+      migration of every existing tester off a Google identity.
+      And note the exemption's word is _exclusively_: adding our own accounts
+      BESIDE Google discharges nothing.
+      **AND THE ROW IS TRIAD TWICE OVER, not once — found 2026-09-10 while
+      writing the guidance above, and it binds BOTH options rather than only
+      the exempt one.** `server/db/schema.ts`'s `users` table keys identity on
+      `googleSub: text("google_sub").notNull().unique()` — **NOT NULL**, and
+      it is the only identity column there is. So a rower who signs in with
+      Apple has nothing to be stored as, and a rower with an own-accounts
+      login has nothing either. Every version of this wave's front door needs
+      `google_sub` nullable or identity lifted into its own table, which makes
+      this **a STORED-SHAPE change and a migration on top of the auth change**
+      the row already declared. The row read as auth-only; it is not, and the
+      spec sizes the migration before the gate rather than discovering it in
+      the build.
 - [ ] **In-app account deletion.** No DELETE-user route and no UI exist
       anywhere (checked across `app/server` and `app/src`: baselines reset and
       logs delete, but nothing removes a user). The spec enumerates exactly
       what is removed and what survives — note `session_logs.workout_id` is
       `onDelete: "set null"` while eight other FKs cascade. **M**
+      **FOUR CONSTRAINTS the row did not have, quoted 2026-09-10 from Apple's
+      own account-deletion page** (see the research doc): (1) _"only offering
+      to temporarily deactivate or disable an account is insufficient"_ —
+      this is the sentence the `set null` decision has to be argued against,
+      and it is what makes the enumeration load-bearing rather than
+      descriptive; (2) _"Offer to delete the entire account record, along
+      with associated personal data"_ — the record goes, not only the PII;
+      (3) _"Apps not operating in highly regulated industries should not
+      require people to make a phone call, send an email, or go through other
+      support flows"_ — no email-us door, and we are not regulated; (4) _"Make
+      the account deletion option easy to find in your app. Typically, it's
+      included in the app's account settings"_ — findability is a design-gate
+      input, on You, not merely a route that exists.
+      **AND ONE OPEN QUESTION, three clauses above the one we had quoted:**
+      5.1.1(v) opens _"If your app doesn't include significant account-based
+      features, let people use it without a login."_ **Ergomatic requires a
+      login for everything and nobody has argued this sentence.** The answer
+      is probably that the plan, log, baselines and Concept2 link qualify as
+      significant — and "probably" is what RF16 says to stop writing. The
+      spec answers it in one paragraph with the feature list beside it.
 - [ ] **Apple sign-in** (moved from Phase PROD; the duplicate entry that lived
       under triggered follow-ons is deleted). Works with the existing
       openid-client stack (ES256 client secret, form_post callback, name and
@@ -915,10 +997,27 @@ and stated as a number — before any implementation task starts.
       semantic rather than merely referential. **M**
 
 **Deferred out of this wave for external TestFlight** — they bind at App Store
-submission rather than Beta App Review, subject to the verbatim check Wave A
-owes: store metadata and the legal surface (privacy policy at a real URL,
-support URL, the App Privacy questionnaire, age rating, store screenshots at
-the required sizes). **PWA installability is deferred on a product ground, not
+submission rather than Beta App Review: store metadata and the legal surface
+(privacy policy at a real URL, support URL, the App Privacy questionnaire, age
+rating, store screenshots at the required sizes).
+**THE CHECK THIS PARAGRAPH WAS WAITING ON HAS RUN (2026-09-10,
+[the binding research](docs/superpowers/research/2026-09-10-external-testflight-binding.md)),
+and it NARROWED the ground this deferral stands on rather than confirming
+it.** Guideline 2.2 makes the WHOLE guidelines document apply to a TestFlight
+build, so "beta review is a smaller rulebook" is not available as a reason.
+What survives is narrower and is about METADATA rather than guidelines: Apple's
+own pages say beta review reads _"the build and its accompanying metadata"_,
+and the metadata they name is TestFlight's (_"your beta app description and
+beta app review information are required in order to share your beta with
+external testers"_), never App Store listing metadata. **That is a claim about
+which FIELDS exist, and it was not researched field by field** — in particular
+nothing here says whether 5.1.1(i)'s privacy-policy requirement reaches a beta
+build. **Whoever opens Wave C runs that check; this is a narrowed premise, not
+a settled one.**
+· dies 2026-11-10 · filed rather than fixed now because the answer only binds
+before Wave C ships, and Wave C is two waves out; if it has not opened by then
+the quotes need re-reading anyway, so the check and its freshness expire
+together. **PWA installability is deferred on a product ground, not
 a scheduling one:** CLAUDE.md's native-first rule says the web build is test
 harness, dev loop and fallback, "never polished at the app's expense", and
 installability polishes it.
