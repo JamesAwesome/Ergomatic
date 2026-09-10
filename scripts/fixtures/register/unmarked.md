@@ -74,6 +74,18 @@ A tilde fence, which markdown treats the same way:
 
 - [x] **DONE — the last absent-evidence row here was measured.** Finished.
 
+## An emptied register section nobody removed
+<!-- register -->
+
+Prose only. Every row it once held has already left; this is the terminal state
+`sections` exists to find, and it must not be invisible.
+
+## A section whose only rows are sub-bullets
+<!-- register -->
+
+- ~~**A parent that has been struck.**~~ Its narrative.
+  - [ ] **An orphan sub-bullet with a visible unticked box.** Not archivable.
+
 ## Accepted, pinned, and not being fixed
 <!-- pinned -->
 

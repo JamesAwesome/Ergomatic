@@ -34,7 +34,7 @@ has_last() { case "$(printf '%s\n' "$out" | tail -1)" in *"$1"*) echo "ok: $2" ;
 run count "$FIX/well-formed.md"
 check "$rc" "0" "count: a fully marked file exits 0"
 has "$out" "unmarked=0" "count: reports unmarked=0"
-has "$out" "register open:10 closed:8 sub:1" "count: register tallies both carriers"
+has "$out" "register open:10 closed:9 sub:2" "count: register tallies both carriers"
 has "$out" "debt open:1 closed:2 sub:0" "count: debt is counted, never payable"
 has "$out" "pinned open:1" "count: pinned is reported (I6)"
 has "$out" "vision open:1" "count: vision is reported (I6)"
@@ -77,7 +77,7 @@ lacks "$out" "NOT DISCHARGED" "closed: does NOT flag 'NOT DISCHARGED BY IT'"
 lacks "$out" "RESOLVED in principle" "closed: does NOT flag an open [ ] row"
 lacks "$out" "A row with a clean title" "closed: does NOT match the row BODY"
 lacks "$out" "a phase task" "closed: looks only in register and debt sections"
-check "$(bash "$SCRIPT" closed "$FIX/well-formed.md" 2> /dev/null | grep -c .)" "10" "closed: exactly ten candidates"
+check "$(bash "$SCRIPT" closed "$FIX/well-formed.md" 2> /dev/null | grep -c .)" "11" "closed: exactly eleven candidates"
 
 run closed "$FIX/bad-marker.md"
 check "$rc" "2" "closed: REFUSES an unrecognised marker"
@@ -128,13 +128,24 @@ has "$out" "A trailing heading with no marker" "count: names the trailing unmark
 run count "$FIX/untitled-row.md"
 has_last "untitled-row.md" "the untitled-row REFUSAL line names which tree it read"
 
+run count "$FIX/fence-spans-heading.md"
+check "$rc" "2" "count: REFUSES a fence that SPANS a heading (parity would pass this)"
+has_last "fence-spans-heading.md" "the spanning-fence REFUSAL line names which tree it read"
+
+run count "$FIX/container-row.md"
+check "$rc" "2" "count: REFUSES a row inside a container section"
+has "$out" "container" "count: names the container refusal"
+
 # ------------------------------------------------------------- sections
 
 run sections "$FIX/well-formed.md"
 check "$rc" "0" "sections: exits 0"
 has "$out" "ARCHIVE? ## A door whose criteria are all ticked" "sections: marks a fully-ticked section as a CANDIDATE"
+has "$out" "ARCHIVE? ## An emptied register section nobody removed" "sections: a section emptied to ZERO rows still appears (the terminal state)"
+lacks "$out" "ARCHIVE? ## A section whose only rows are sub-bullets" "sections: an open SUB-bullet disqualifies a section"
+has "$out" "sub:1            ## A section whose only rows are sub-bullets" "sections: reports open sub-bullets so open:0 is not three states at once"
 has "$out" "ARCHIVE? ## A debt bucket that was finally emptied" "sections: an emptied DEBT section is a candidate too"
-has "$out" "archive-candidates=2" "sections: counts the candidates"
+has "$out" "archive-candidates=3" "sections: counts the candidates"
 lacks "$out" "ARCHIVE? ## Small, queued" "sections: a section with open rows is NOT a candidate"
 lacks "$out" "## Phase ZZ" "sections: phase sections are out of scope"
 

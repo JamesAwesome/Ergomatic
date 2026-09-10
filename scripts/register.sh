@@ -23,12 +23,14 @@
 #            deliberately rather than in a merge.
 #   closed   rows whose TITLES match the closed vocabulary, as CANDIDATES.
 #            NOT that they are closed, NOT that no closed row remains.
-#   sections which sections have no row `closed` left OPEN. It is `closed`'s
+#   sections which sections have no row `closed` left OPEN and no open
+#            sub-bullet. It is `closed`'s
 #            heuristic aggregated, so it inherits every cap above: NOT that a
 #            section is finished, and NOT that its PROSE agrees — a section's
 #            status line lives in text this never reads, and the one real
 #            candidate today says "Status: OPEN at James's request" above six
-#            ticked criteria.
+#            ticked criteria. A section that never held rows also reads
+#            `open:0 closed:0` and is offered — the `?` is the whole point.
 #
 # `date` is banned here. `date -j -f` is BSD-only and exits 1 on the Linux
 # runner, and the two platforms disagree about invalid calendar dates — a gate
@@ -139,7 +141,8 @@ function flush(   title, state) {
   if (box == "x" || struck) state = "closed"
   else if (box == " ") state = "open"
   else state = looks_closed(title) ? "closed" : "open"
-  if (title == "") print "BADROW\t" heading
+  if (cls == "container") print "BADCONTAINER\t" heading
+  else if (title == "") print "BADROW\t" heading
   else printf "ROW\t%s\t%s\t%s\t%s\t%s\n", cls, state, carrier, title, heading
   inrow = 0; buf = ""; firstline = ""; box = ""; struck = 0
 }
@@ -152,6 +155,16 @@ BEGIN { sections = 0; pending = 0; cls = ""; inrow = 0; intable = 0; fence = 0 }
 # filings. `ROADMAP.md` carries several fenced shell blocks already, and PR 2
 # added a prose section describing shell commands.
 /^ *(```|~~~)/ { if (inrow) buf = buf " " $0; fence = !fence; next }
+
+# BALANCE IS THE WRONG INVARIANT, and the first version of this checked it.
+# Two forgotten closers pass a parity check and still swallow everything
+# between them: measured, `delta:-1` with two live rows named as LEFT and a
+# whole section and its marker gone, at exit 0. What the parser actually needs
+# is not "is this file well-formed" but "did a fence change which section a row
+# belongs to" — a fence may not span a heading. This rule MUST precede the
+# swallow rule below, or the heading never reaches it.
+fence && /^#{1,2} / { print "FENCE"; fence = 0 }
+
 fence { if (inrow) buf = buf " " $0; next }
 
 /^#{1,2} / {
@@ -267,7 +280,14 @@ parse() {
     refuse "$(printf '%s\n' "$bad" | grep -c .) section(s) unmarked or carrying an unrecognised marker in '${spec:-the working tree}'"
   fi
   if printf '%s\n' "$PARSED" | grep -q '^FENCE$'; then
-    refuse "'${spec:-the working tree}' ends inside an unclosed code fence — everything after it is invisible, and invisible rows read as strikes"
+    refuse "a code fence in '${spec:-the working tree}' spans a heading or is never closed — everything inside it is invisible, and invisible rows read as strikes"
+  fi
+  local badcontainer
+  badcontainer="$(printf '%s\n' "$PARSED" | awk -F'\t' '$1 == "BADCONTAINER" { printf "  %s\n", $2 }' | sort -u)"
+  if [ -n "$badcontainer" ]; then
+    echo "register.sh: a <!-- container --> section holds only other headings, in '${spec:-the working tree}':" >&2
+    printf '%s\n' "$badcontainer" >&2
+    refuse "$(printf '%s\n' "$badcontainer" | grep -c .) container section(s) holding rows — mark the section for what it actually holds"
   fi
   local badrow
   badrow="$(printf '%s\n' "$PARSED" | awk -F'\t' '$1 == "BADROW" { printf "  %s\n", $2 }')"
@@ -350,15 +370,22 @@ cmd_sections() {
   local out
   out="$(printf '%s\n' "$PARSED" | awk -F'\t' '
     $1 == "SEC" && ($2 == "register" || $2 == "debt") { cls[$3] = $2 }
-    $1 == "ROW" && $4 != "sub" && ($2 == "register" || $2 == "debt") {
-      if ($3 == "closed") c[$6]++; else o[$6]++
+    $1 == "ROW" && ($2 == "register" || $2 == "debt") {
+      if ($4 == "sub") { if ($3 != "closed") sb[$6]++ }
+      else if ($3 == "closed") c[$6]++
+      else o[$6]++
     }
     END {
       n = 0
       for (k in cls) {
-        cand = (o[k] + 0 == 0)
+        # An OPEN sub-bullet disqualifies the section. `$4 != "sub"` is right
+        # for the ratchet (one row is a parent plus its children) and wrong
+        # here: a section holding one orphan `- [ ]` sub-bullet reported
+        # open:0 and was offered for archival with a visible unticked box in
+        # it. Measured against a file carrying sub:8 in register sections.
+        cand = (o[k] + 0 == 0 && sb[k] + 0 == 0)
         if (cand) n++
-        printf "S\t%-9s open:%-3d closed:%-3d %s%s\n", cls[k], o[k] + 0, c[k] + 0,
+        printf "S\t%-9s open:%-3d closed:%-3d sub:%-3d %s%s\n", cls[k], o[k] + 0, c[k] + 0, sb[k] + 0,
           (cand ? "ARCHIVE? " : "         "), k
       }
       printf "N\tarchive-candidates=%d\n", n
