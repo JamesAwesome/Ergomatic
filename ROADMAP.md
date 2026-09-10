@@ -1,4 +1,5 @@
 # Ergomatic Roadmap
+<!-- container -->
 
 Ergomatic is a mobile-first tracker and planner for indoor rowing (erg) workouts,
 built around The Erg Book model: a library of numbered workouts whose targets are
@@ -12,6 +13,7 @@ The authoritative UI/UX reference is the design handoff in `docs/design/`
 (high fidelity — colors, type, spacing, 44 px hit targets, and WCAG AA are final).
 
 ## How this file is used
+<!-- ledger -->
 
 **Rebalanced 2026-08-28.** This file was 7,868 lines across 54 phase sections,
 and 40 of those sections described finished work. It is now forward-looking
@@ -46,7 +48,35 @@ deliberately not scheduled. The rule that put it there (James, 2026-09-08):
 a filed row needs either a TRIGGER, so it resurfaces when it starts to
 matter, or a PHASE, so it can be scheduled as one piece of work. "Small,
 queued" is neither once it passes a couple of hundred rows, and it had.
+
+**Every section carries a class marker on the line immediately after its
+heading** (Phase RR, 2026-09-10). It says whether the section's rows are
+inside the ratchet — the rule that a PR filing N register rows strikes N.
+There is no default in either direction, because a default here fails open,
+and the seven strings below are a whitelist: a misspelled marker is treated
+as no marker at all rather than quietly emptying its section.
+
+| Marker | What the section holds | In the ratchet |
+| --- | --- | --- |
+| `<!-- register -->` | open work with no wave | yes |
+| `<!-- debt -->` | the absent-evidence class — "nobody has measured X" | counted, never payable |
+| `<!-- pinned -->` | decided not to fix; owes a receipt | no |
+| `<!-- vision -->` | future product scope | no |
+| `<!-- phase -->` | phases and waves; scheduled work | no |
+| `<!-- ledger -->` | records of closed work, and of contract | no |
+| `<!-- container -->` | a heading that holds only other headings | no |
+
+`debt` is exempt on purpose. A row saying "nobody has measured X" has no code
+site it could become a comment at — the producer is often a human at an erg —
+and that is the row class this repo's history says must not quietly die: it is
+what caught a 3.9x distance error and a headline feature that reached zero of
+sixteen production rows.
+
+Run `bash scripts/register.sh count` for the tallies, `closed` for rows that
+have finished and not yet left, and `ratchet` for what a PR did to the count.
+
 ## Locked decisions
+<!-- ledger -->
 
 | Area              | Decision                                                                                                                                                                                                                                                                                                  |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -91,6 +121,7 @@ they go stale (this has burned us before). Concretely:
 ---
 
 # The live slate
+<!-- container -->
 
 **North star, set by James 2026-08-28: a stranger can use this.** Every wave
 below is ranked by whether it unblocks handing the app to someone outside the
@@ -110,6 +141,7 @@ work and making incomplete capture visible came before opening to strangers;
 same-row Bluetooth reattachment remains in the Icebox, not a front-door gate.
 
 ## Active audit overlay — Codebase integrity
+<!-- ledger -->
 
 **Status:** COMPLETE. Read-only overlay; it was not a seventh product wave.
 The fixed-baseline audit is governed by the
@@ -134,6 +166,7 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | **E** | The Concept2 logbook        | L    | After PR2 ships the send surface            |
 
 ## Phase RN — straight to the numbers, if that is how you row
+<!-- phase -->
 
 **Status: GATE 0 CLOSED 2026-09-09 — cleared to implement.** Both hardening
 lenses run and folded; three rulings tabled in the spec. Spec:
@@ -269,6 +302,7 @@ lands on the surface's LOST banner rather than on a ready card that says
 today, and it is the one place the two entry points behave differently.
 
 ## Phase MT — the app refuses a machine it cannot record
+<!-- phase -->
 
 **Status: SPEC APPROVED 2026-09-08, in flight.** Shape approved by James the
 same day: **Option A (refuse the sitting) with a DENYLIST**. Spec:
@@ -488,6 +522,7 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       **S**
 
 ## Phase JC — the rower chooses what red and blue mean
+<!-- phase -->
 
 **Status: GATE 0 CLOSED 2026-09-08 — cleared to implement.** The anchor
 antagonist pass returned two blocking findings and four majors, all folded;
@@ -610,6 +645,7 @@ would have been fewer lines and would have turned the LOST THE MONITOR banner
 blue for any rower who chose all-blue.
 
 ## Phase JR — Just Row
+<!-- phase -->
 
 **Status: CLOSED 2026-09-01 — released v0.32.0 (build 811), exit walk
 PASSED, both close gates run; the follow-on slate below is the live
@@ -926,6 +962,7 @@ fixed.
 
 
 ## Phase DE — Difficulty out, effort in
+<!-- phase -->
 
 **Status: OPEN 2026-09-05 — spec merged (#308); PR 1 MERGED as #309
 (2026-09-05); PR 2 in flight (worktree `Ergomatic-wt-de2`); release HELD
@@ -1021,6 +1058,7 @@ web build against the post-PR-2 server saves `pain: 3`, reads back
 recorded in PR 2's body; release note in rower words (spec §6.6).
 
 ## Wave A — The front door
+<!-- phase -->
 
 **Status:** Next in the slate; Wave F closed 2026-09-04. Not opened by that
 closeout. **TRIAD** (auth). **L.**
@@ -1091,6 +1129,7 @@ deletes the account and all of its data from inside the app.
 ---
 
 ## Wave D — The toolbox
+<!-- phase -->
 
 **Status:** After A; **releases with Wave C**, never alone. **M.**
 **Ships a tester nothing** — but two items are Wave C dependencies: simulator
@@ -1302,6 +1341,7 @@ type-hardening follow-on are each completed or explicitly disposed.
 ---
 
 ## Wave B — Don't lose their data, and know when it breaks
+<!-- phase -->
 
 **Status:** After D; **releases with Wave C**. **M.** Not triad.
 **Ships a tester nothing** except one privacy disclosure line.
@@ -1347,6 +1387,7 @@ deliberately thrown client error arrives somewhere a person looks.
 ---
 
 ## Wave C — The submission surface
+<!-- phase -->
 
 **Status:** After D. **L, two PRs** — the design-gated pair, then the sweep.
 **The most visible wave in the slate.**
@@ -1490,6 +1531,7 @@ a hand from us.
 ---
 
 ## Wave E — The Concept2 logbook
+<!-- phase -->
 
 **Status:** OPEN 2026-08-31 (James: _"we can open the logbook Saturday"_;
 opened at the brainstorm two days later). Interleaved — it runs on its own
@@ -2202,6 +2244,7 @@ closed with zero Concept2 contact.
       for free rows, or accept and say so in the button's copy. **S**
 
 ## Codebase-audit owners
+<!-- register -->
 - [x] **LOST THE MONITOR must not say "Nothing kept." — DONE in door PR B**
   (2026-09-03). Shipped on all THREE surfaces that carried the phrase, not
   one: the banner's `kept === 0` arm renders its title alone (no body
@@ -2457,6 +2500,7 @@ closed with zero Concept2 contact.
   next PR touching `server/stores/logs.ts`. Found same review.
 
 ## Tooling
+<!-- register -->
 
 - **A `scripts/dist-grep.sh` needle is a fourth retyping of a literal, tied to
   nothing mechanical.** Each needle restates a string that also lives in
@@ -2554,6 +2598,7 @@ closed with zero Concept2 contact.
   the dependency is accepted** (`docs/RELEASING.md` step 3 has the command).
 
 ## Phase MEM — local test runs stop OOMing, and stop reading as flake
+<!-- phase -->
 
 Opened 2026-09-08. Spec:
 `docs/superpowers/specs/2026-09-08-local-test-memory-design.md`
@@ -2662,6 +2707,7 @@ moved to 3. `test-run.test.sh` and `test-run-advisory.test.sh` are both in
 **nothing gates the bash-3.2.57 constraint** the wrapper is written under.
 
 ## Phase OD — an order of James's does not go quiet
+<!-- phase -->
 
 **S · one PR · docs-only · tester sees nothing · opened 2026-09-09.**
 
@@ -2748,6 +2794,7 @@ thirteen line numbers, and its own diff broke every one.**
   while that phase's status line says its walk passed.
 
 ## Phase RR — the register may only go down
+<!-- phase -->
 
 **OPEN 2026-09-09.** Design approved in chat the same day; spec
 `docs/superpowers/specs/2026-09-09-register-ratchet-design.md` (**rev 3** — the
@@ -2857,6 +2904,7 @@ refuses one, and Phase OD falsified the dates remedy one day before this design
 was written.
 
 ## Needs a decision from James
+<!-- register -->
 
 **BOTH BULLETS BELOW WERE RULED 2026-09-09** in the Phase OD order sweep, so
 this section currently holds NO live question. **That is not the same as
@@ -2983,6 +3031,7 @@ question, not a re-raised one.
   copy). Both are counts of the tree at the Phase MT close-out branch.
 
 ## Phase PROTO — the wire-semantics audit (HELD, L)
+<!-- phase -->
 
 **Phase OD, 2026-09-09 — CORRECTLY PARKED, and recorded so the sweep does not
 re-flag it.** James's 2026-08-27 order (_"a deep dive to ensure we arent
@@ -3048,6 +3097,7 @@ close, not before.**
   `d`; it is one of three places the same screen mixes two quantities.
 
 ## The "say which number this is" design pass — TRIGGER FIRED 2026-09-04, STILL UNOPENED
+<!-- register -->
 
 **Phase OD, 2026-09-09: this heading said "(post-Wave F, unopened)" for five
 days after Wave F closed on 2026-09-04.** The trigger fired; the heading kept
@@ -3124,6 +3174,7 @@ in both orientations.**
   header ("NEITHER `t` NOR `d` IS A WORK-ONLY QUANTITY").
 
 ## The unlogged-session door
+<!-- register -->
 
 **Status:** OPEN at James's request, 2026-09-03. Normal Today/warning design
 approved 2026-09-03; additional recovery-case designs approved 2026-09-04.
@@ -3192,6 +3243,7 @@ to lose the row has no move except to walk away.
 ---
 
 ## Rides the next PR touching the connected surface
+<!-- register -->
 
 | Item                                       | What                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Evidence                     |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
@@ -3218,6 +3270,7 @@ to lose the row has no move except to walk away.
 | **Just Row's refusal stack never gets #370's pairing** | `JustRow.tsx`'s free-row refusal wears `.connected-interstitial-actions` WITHOUT the `--failure` modifier, so the landscape pairing rule #370 shipped does not reach it. Harmless TODAY at two buttons — it becomes a cut headline the moment that stack grows a third. Found at Phase MT's Gate 0, 2026-09-08 | Phase MT Gate 0 |
 
 ## Accepted, pinned, and not being fixed
+<!-- pinned -->
 
 - **Three failure frames now render a DETAIL panel that is a heading and a
   slug, with no other content (Phase MT close-out, 2026-09-08).** The approved
@@ -3355,6 +3408,7 @@ new.
   entitlements, or the Xcode project.
 
 ## Owed captures and walk items
+<!-- debt -->
 
 Each needs erg time or a deliberate recording session.
 
@@ -3433,6 +3487,7 @@ Each needs erg time or a deliberate recording session.
   "off Connect Device". (`phase-nf.md`)
 
 ## Small, queued, rides the next PR in its area
+<!-- register -->
 
 - **Shipped release-note strings say `PM5`. THIS ROW NO LONGER CARRIES A
   COUNT, on purpose — run the command:**
@@ -3982,6 +4037,7 @@ Each needs erg time or a deliberate recording session.
   next patch edit, which re-runs the Swift suite anyway. (`phase-nf.md`)
 
 ## Phase TD — the debt Phases LP and AV left behind
+<!-- debt -->
 
 **NOT SCHEDULED, and grouped so it can be scheduled as ONE piece of work
 rather than rediscovered five times** (James, 2026-09-08: file things "either
@@ -4112,6 +4168,7 @@ condition for working on them is a quiet week, not an incident.
 
 
 # Icebox
+<!-- register -->
 
 Not scheduled in any wave. Reconsider only when the recorded trigger fires;
 an iceboxed item is not a phase-close requirement.
@@ -4181,6 +4238,7 @@ an iceboxed item is not a phase-close requirement.
 ---
 
 # After the strangers
+<!-- vision -->
 
 Deferred, not killed. One line and one trigger each. No exits and no sizes — a
 trigger is the whole entry.
@@ -4337,6 +4395,7 @@ trigger is the whole entry.
 ---
 
 # Completed phases
+<!-- ledger -->
 
 One row each. The body is in `docs/history/`, archived verbatim, and it is a
 RECORD — do not cite it for a live question.
@@ -4410,6 +4469,7 @@ RECORD — do not cite it for a live question.
 items were lifted into the open-item register above.
 
 ## Killed at the 2026-08-28 rebalance
+<!-- ledger -->
 
 Four phases, eleven items, no named party disappointed. Each body is archived
 with a banner saying why, so the reasoning survives and the decision is not
