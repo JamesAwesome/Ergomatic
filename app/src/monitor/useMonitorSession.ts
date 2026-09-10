@@ -4555,7 +4555,12 @@ export function useMonitorSession(
       // have not run yet at all, so this is a floor, not the last word —
       // a burst still in flight gets a SECOND stash once they finally do
       // (rewritten from "would never reach sessionStorage" to name it,
-      // storage-spine design spec §2, Task 3).
+      // storage-spine design spec §2, Task 3), and RC-14 added a THIRD
+      // once the stack that triggered that second one has unwound. The
+      // deferred path therefore stashes three times and the immediate path
+      // once; `stash()` is safe to repeat (`session.latchCounted` plus an
+      // identity-bound upsert — its own body says how), so "three" is a
+      // count of snapshots, not of history entries.
       // sessionStorage, not localStorage, for the two keys above:
       // diagnostics for the tab's own lifetime, not a record. Read them
       // back from the console:
@@ -4744,10 +4749,25 @@ export function useMonitorSession(
           unsubscribeAndDisconnect();
           // THE SECOND STASH (spec §2's own "a second ring stash runs at
           // linger end"): the first stash above could not see whatever
-          // STEPS 1/3/4 just wrote to the ring — the drain's own verdict
-          // entry, the disconnect's own entries, and the burst's own
+          // STEPS 1/3/4 just wrote to the ring — the disconnect's own
+          // entries, and the burst's own
           // `summary-observations`/`record-actual` entries if it arrived
           // during the wait. Same keys, overwrite.
+          //
+          // **IT SEES THE DRAIN'S OWN VERDICT ENTRY ON ONE OF THE TWO
+          // TRIGGERS ONLY, and this sentence used to claim both (RC-14).**
+          // On the LINGER TIMEOUT this function runs on the hook's own
+          // stack: `lingerFinishRef` is cleared above before
+          // `reconcileAndReleaseHandoff()`, so the driver's re-entrant
+          // `lingerFinishRef.current?.()` is a no-op, the verdict is
+          // recorded while this function is still between that call and
+          // this line, and the second stash carries it. On the BURST
+          // trigger this whole function is running INSIDE the driver's
+          // `emit`, one statement short of `recordAvgPaceVerdict` — so
+          // this stash cannot carry it, and the third stash below is what
+          // does. That asymmetry was the RC-14 defect; the comment claiming
+          // otherwise sat here, inside the function, for the whole nine
+          // days the walk's silence went unexplained.
           //
           // NOT A SUPERSET, and said so precisely (review fix round 1,
           // MEDIUM finding — the earlier wording here claimed "strictly
@@ -4765,8 +4785,93 @@ export function useMonitorSession(
           // under two seconds to happen at all — bounded, not impossible —
           // and this is the walk's own readout door regardless (exit
           // criterion 7: "the ring's SECOND stash ... without it the walk
-          // sees nothing").
+          // sees nothing"). RC-14's third stash below inherits this
+          // paragraph unchanged: it is a THIRD window on the same ring,
+          // taken a microtask later, so it is a superset of this one only
+          // in the same bounded sense — everything recorded between the two
+          // is present, anything the ring evicted in between is not.
           stash();
+          // THE THIRD STASH (RC-14), AND THE INVARIANT IT BUYS.
+          //
+          // **Every entry a session records SYNCHRONOUSLY BENEATH the
+          // teardown that serialises it reaches the snapshot.** That is a
+          // BOUNDED claim and the bound is load-bearing — see the fence
+          // named at the end of this comment.
+          //
+          // WHAT WAS LOST. On the BURST trigger this whole function runs
+          // re-entrantly, inside the driver's own `emit`: the driver's
+          // reconcile calls `reconcileSummary`, whose last act is
+          // `emit(summaryObservationsEvent(...))`; `emit` delivers
+          // synchronously; the hook's `summary-observations` case ends
+          // with `lingerFinishRef.current?.()`, which is this function. So
+          // the second stash above is serialised while the driver is still
+          // one statement short of `recordAvgPaceVerdict(run)` — the
+          // avg-pace oracle's own line, one of the two genuinely
+          // independent oracles RC-9 built after RF11's mirror problem
+          // retired `recordTwdVerdict`. It reached the in-memory ring and
+          // died with the tab. Walk 2026-08-25 (`W-2`) read that silence
+          // as "the function was never reached", which is exactly what the
+          // walk procedure is told to treat as a finding.
+          //
+          // A THIRD SNAPSHOT, NOT A DELAYED SECOND ONE. The second stash
+          // above stays exactly where it is, so the worst this call can do
+          // is leave today's bytes — it can only ADD. Moving the second
+          // stash out here instead would make a lost or throwing deferral
+          // fall back to the LINGER-START snapshot, which carries neither
+          // the disconnect entries nor the burst's own observations: less
+          // than today. It is free to run again — `session.latchCounted`
+          // guards the one non-idempotent line inside `stash`, and
+          // `upsertSessionLog` is an identity-bound upsert keyed on
+          // `session.id` (that module's own header), so N stashes per
+          // logical session update ONE history entry rather than filling
+          // the three-slot ring with clones of one trace.
+          //
+          // `queueMicrotask`, NEVER A TIMER, and this is a gate rather
+          // than a preference: a microtask checkpoint runs when the JS
+          // stack empties, BEFORE control returns to the event loop, and
+          // `pagehide`/`freeze`/backgrounding are all delivered as tasks —
+          // so none of them can interleave between the queueing here and
+          // the checkpoint that runs it. A `setTimeout(..., 0)` deferral
+          // can be lost to exactly those. The only residual is process
+          // termination, where nothing runs at all and the two
+          // `sessionStorage` keys die anyway (this teardown's own STEP 2
+          // comment says why the third key is `localStorage`). The test
+          // "RC-14, THE DEFERRAL IS MICROTASK-CLASS" flushes one microtask
+          // turn with no timer advanced and goes red against the timer
+          // version.
+          //
+          // THE SESSION IS CAPTURED, NOT RE-READ, matching `stash`'s own
+          // ONE READ discipline: a microtask checkpoint drains the WHOLE
+          // queue in order, so a connect continuation already queued ahead
+          // of this one could in principle mint a fresh logical session
+          // (that code path assigns `sessionRef.current` synchronously
+          // after its `await transport.connect(...)`) before this callback
+          // runs — and a third stash of THAT session's near-empty log
+          // would overwrite the legacy keys with the very trace this
+          // linger exists to preserve. No test reaches it and none is
+          // asked to (RF21): it is the same "two refs that could legally
+          // disagree" hazard `stash`'s own round-5 fix removed, refused
+          // here by construction rather than argued away.
+          //
+          // THE FENCE, NAMED. Entries a producer records after its OWN
+          // `await` are outside this invariant and are not in any snapshot
+          // this teardown takes. Concretely `driver.disconnect()`, started
+          // just above as `bestEffort(...)` and never awaited: it records
+          // `disconnect-requested` synchronously, then suspends on
+          // `await terminateWritesDrained` whenever a terminate write is
+          // still owed, and only afterwards reaches
+          // `drainSummaryReconcile` -> `flushTerminateObservations` -> an
+          // emit. A microtask runs BEFORE a post-`await` continuation, so
+          // this stash is already written by then. An absent
+          // `avg-pace-verdict` or `rest-distance-verdict` IS a finding
+          // again (both are recorded synchronously beneath this teardown);
+          // an absent terminate-observations entry after a hang-up that
+          // owed a write is NOT.
+          const settled = sessionRef.current;
+          queueMicrotask(() => {
+            if (sessionRef.current !== settled) return;
+            stash();
+          });
         };
         lingerFinishRef.current = finish;
         burstLingerCancelRef.current = schedule(finish, BURST_LINGER_MS);
@@ -6144,8 +6249,19 @@ export function useMonitorSession(
   }, []);
 
   // Teardown on unmount: the listener goes, the radio goes, no driver is
-  // left holding a subscription to a component that no longer exists. The
-  // effect body runs once (no deps) and `teardown` reads only refs.
+  // left holding a subscription to a component that no longer exists.
+  // `teardown` reads only refs.
+  //
+  // THIS CLEANUP FIRES AT UNMOUNT AND NOWHERE ELSE, but not for the reason
+  // this comment used to give ("the effect body runs once (no deps)") — the
+  // effect HAS a dep. What actually holds it is that `teardown`'s identity
+  // is stable: its deps are `[releaseHandoff, stopSeriesFlush, nowDate]`,
+  // and each of those resolves through `useCallback`s rooted in `[]`
+  // (`releaseHandoff` -> `resolveHandoffCondition` -> `[update,
+  // verifyHandoffWritable]`, both `[]`). Anything that gives one of those
+  // a changing identity re-runs this cleanup MID-SESSION, which tears the
+  // link down under a live screen — check the chain before adding a dep to
+  // any of them.
   useEffect(() => teardown, [teardown]);
 
   // Hand-off store design spec §1, plan Task 3: wires `handoffStore`'s ONE

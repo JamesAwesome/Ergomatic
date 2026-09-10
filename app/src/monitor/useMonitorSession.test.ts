@@ -2473,13 +2473,18 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(driverTimer.pending()).toBeNull();
   });
   // ===========================================================================
-  // RC-14 REPRODUCTION (measurement branch `rc14-probe`, 2026-09-09).
+  // RC-14 (measured 2026-09-09, fixed in the same PR).
   //
-  // THE TWO TESTS BELOW MARKED "FAILS TODAY" ARE RED ON PURPOSE. They are a
-  // measurement, not a fix: they pin the mechanism by which the walked ring
+  // THE FOUR TESTS BELOW WERE THE MEASUREMENT AND ARE NOW THE GATE. Written
+  // red against the pre-fix code, they pinned the mechanism by which the
+  // walked ring
   // `docs/monitor/sessions/walk-2026-08-25/rests-finished-ring.json` ends at
   // `seq 71 summary-reconciled split-won` / `seq 72 disconnect-requested`
-  // with NO `avg-pace-verdict` entry anywhere in its 73 entries.
+  // with NO `avg-pace-verdict` entry anywhere in its 73 entries; they now
+  // assert the entry the walk lost is in the snapshot. Their deciding
+  // mutation is recorded with them: delete the third `stash()` in
+  // `teardown`'s deferred `finish` and each goes red on
+  // `expected false to be true`.
   //
   // THE MECHANISM. `recordAvgPaceVerdict` is NOT called by `reconcileSummary`
   // — it is the NEXT STATEMENT after it, at both of the driver's two call
@@ -2495,17 +2500,19 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
   // recorded, and the verdict lives only in the in-memory ring, which dies
   // with the tab.
   //
-  // The existing ordering pin above does NOT catch this, because it fires the
+  // The existing ordering pin above did NOT catch this, because it fires the
   // LINGER's own timeout: there the hook drives, `finish` clears
   // `lingerFinishRef` before calling `reconcileAndReleaseHandoff`, the
   // re-entrant `lingerFinishRef.current?.()` is a no-op, `recordAvgPaceVerdict`
   // runs while `finish` is still between `reconcileAndReleaseHandoff` and
-  // `stash`, and the verdict makes the snapshot. The third test below is that
-  // control, asserted rather than assumed (RF21) — same fixture, same
-  // assertion, GREEN on the timeout trigger.
+  // `stash`, and the verdict made the snapshot even before the fix. The
+  // CONTROL test below is that trigger, asserted rather than assumed (RF21) —
+  // same fixture, same assertion, green on both sides of the fix, which is
+  // what proved the two reds were about ordering and not about an
+  // unreachable entry.
   // ===========================================================================
 
-  it("RC-14, FAILS TODAY (the walked split-won shape): a driver-driven drain mid-linger stashes BEFORE recordAvgPaceVerdict, so the avg-pace verdict never reaches the snapshot", async () => {
+  it("RC-14 (the split-won shape): a driver-driven drain mid-linger runs the whole deferred teardown inside the driver's stack, and the avg-pace verdict recorded one statement later still reaches the snapshot", async () => {
     const timer = manualSchedule();
     const driverTimer = manualSchedule();
     const burstTimer = manualSchedule();
@@ -2591,20 +2598,24 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     }[];
 
     // The walked shape, confirmed: this is the `split-won` branch, and the
-    // snapshot ends exactly where `rests-finished-ring.json` ends.
+    // snapshot carries the whole tail `rests-finished-ring.json` carries.
     expect(
       entries.filter((e) => e.kind === "summary-reconciled").at(-1)?.detail,
     ).toContain("split-won");
-    expect(entries.at(-1)?.kind).toBe("disconnect-requested");
 
-    // THE MEASUREMENT. The verdict WAS recorded — it is the very next ring
-    // entry after the `disconnect-requested` the snapshot ends on — and it
-    // is not in the snapshot.
+    // THE MEASUREMENT, NOW THE OTHER WAY UP. Before the fix this snapshot
+    // ENDED at `disconnect-requested` — byte-for-byte the walked ring's
+    // own truncated tail — while the verdict sat one entry further on in
+    // memory only. It is the ADJACENCY that is pinned, not either entry
+    // alone: the pair `[disconnect-requested, avg-pace-verdict]` is
+    // precisely the half the walk is missing.
     expect(ring.at(-1)?.kind).toBe("avg-pace-verdict");
+    expect(entries.at(-2)?.kind).toBe("disconnect-requested");
+    expect(entries.at(-1)?.kind).toBe("avg-pace-verdict");
     expect(entries.some((e) => e.kind === "avg-pace-verdict")).toBe(true);
   });
 
-  it("RC-14, FAILS TODAY (the fill shape): the same loss on the driver's own 3000ms deadline, so it is the re-entrancy and not the split-won branch", async () => {
+  it("RC-14 (the fill shape): the same ordering on the driver's own 3000ms deadline, so it is the re-entrancy and not the split-won branch", async () => {
     const timer = manualSchedule();
     const driverTimer = manualSchedule();
     const burstTimer = manualSchedule();
@@ -2662,12 +2673,14 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
       kind: string;
       detail: string;
     }[];
-    expect(entries.at(-1)?.kind).toBe("disconnect-requested");
+    // Same adjacency as the sibling test above, on the fill branch.
     expect(ring.at(-1)?.kind).toBe("avg-pace-verdict");
+    expect(entries.at(-2)?.kind).toBe("disconnect-requested");
+    expect(entries.at(-1)?.kind).toBe("avg-pace-verdict");
     expect(entries.some((e) => e.kind === "avg-pace-verdict")).toBe(true);
   });
 
-  it("RC-14 CONTROL, GREEN TODAY: on the LINGER's own timeout the identical assertion holds — the probe above can go green, so its red is about the ordering and not about an unreachable entry", async () => {
+  it("RC-14 CONTROL: on the LINGER's own timeout the identical assertion held even BEFORE the fix — the second stash already carried the verdict there, so the reds above were about ordering and not about an unreachable entry", async () => {
     const timer = manualSchedule();
     const driverTimer = manualSchedule();
     const burstTimer = manualSchedule();
