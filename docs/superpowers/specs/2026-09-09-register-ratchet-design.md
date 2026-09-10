@@ -57,16 +57,21 @@ changes.** The audience is agents and James.
 days, 4 at 31-60 days, and **none older than 60 days**:
 
 ```bash
-git blame --line-porcelain -- ROADMAP.md \
+# Pinned to the rev, and to a fixed asof date, so the numbers below are
+# reproducible after this phase's own commits add rows to the file.
+git blame --line-porcelain 275c14b2 -- ROADMAP.md \
   | awk '/^author-time /{t=$2} /^\t/{if($0 ~ /^\t *- /) print t}' \
-  | awk -v now=$(date +%s) '{d=int((now-$1)/86400);
+  | awk -v now=$(date -j -f %Y-%m-%d 2026-09-09 +%s) '{d=int((now-$1)/86400);
       if(d<=7)a++; else if(d<=30)b++; else if(d<=60)c++; else e++}
       END{printf "<=7d:%d  8-30d:%d  31-60d:%d  >60d:%d\n",a,b,c,e}'
+# <=7d:171  8-30d:162  31-60d:4  >60d:0
 ```
 
 The file is reflowed and rewritten constantly, so blame dates when a LINE was
 last edited, not when a row was filed. An expiry sweep built on blame would
-have found 4 rows out of 337 and read as a gate that works (RF21). **Expiry
+have found 4 rows out of the file's 337 bullet lines
+(`grep -cE '^ *- ' <(git show 275c14b2:ROADMAP.md)`) and read as a gate that
+works (RF21). **Expiry
 therefore needs a date the row carries itself**, which collapses rules 2 and 4
 into a single field: a closing condition with a mandatory machine-readable
 deadline IS the expiry rule.
@@ -121,16 +126,22 @@ convention collides with nothing, and `ROADMAP.md` is formatted by no tool
 | `<!-- vision -->` | future product scope with no schedule | no | no |
 | none | phase and wave sections; scheduled work | no | governed by `/close-phase` |
 
-Sections to be marked, with their measured top-level open-row counts at
-`275c14b2` (the census command is in §8.1):
+Sections to be marked. **Deliberately no row counts here** — a transcribed
+census goes stale as the corpus it describes changes, and the artifact is the
+script in §8.1, not a table of its output. Run that script against the tree you
+are working on; every count in this spec is its output at `275c14b2`.
 
-- `<!-- register -->`: Small, queued (31) · Owed captures and walk items (13)
-  · Codebase-audit owners (11) · Rides the next PR touching the connected
-  surface (24 table rows) · say-which-number design pass (5) · Phase TD (5) ·
-  Tooling (4) · Needs a decision from James (3) · Icebox (3) · Active audit
-  overlay (0 open) · The unlogged-session door (0 open)
-- `<!-- pinned -->`: Accepted, pinned and not being fixed (16)
-- `<!-- vision -->`: After the strangers (24)
+- `<!-- register -->`: Small, queued · Owed captures and walk items ·
+  Codebase-audit owners · Rides the next PR touching the connected surface
+  (a table, not bullets — §3.3) · the say-which-number design pass · Phase TD ·
+  Tooling · Needs a decision from James · Icebox · Active audit overlay ·
+  The unlogged-session door
+- `<!-- pinned -->`: Accepted, pinned and not being fixed
+- `<!-- vision -->`: After the strangers
+
+Two of those register sections hold zero OPEN rows at `275c14b2` and empty out
+under I3 (§6.2); they are listed because the marker records the class a section
+had, and an empty section is archived rather than silently reclassified.
 
 **Icebox is inside the ratchet on purpose.** If it were exempt, the ratchet is
 evaded by moving a row there instead of killing it. **`# After the strangers`
@@ -149,8 +160,8 @@ filed <YYYY-MM-DD> · dies <YYYY-MM-DD|vX.Y.Z> unless <one clause>
 ```
 
 `grep -c '· filed' ROADMAP.md` returns **0** at `275c14b2`, and `·` is already
-house punctuation (72 lines carry one), so the token is collision-free and in
-keeping.
+house punctuation (`grep -c '·'` returns 72), so the token is collision-free and
+in keeping.
 
 `dies` takes a date or a version tag. A version is expired when the tag
 exists: `git tag -l <vX.Y.Z>` returns it. That keeps "before the next release"
@@ -183,7 +194,17 @@ require or remove them.
 - **Bullet sections:** a row is a bullet at column zero (`^- `). An indented
   bullet (`^ +- `) is part of its parent row and is not counted or stamped.
 - **Table sections:** a row is a `|`-leading line that is neither the header
-  nor the `---` separator.
+  nor the `---` separator. One register section is a table today — "Rides the
+  next PR touching the connected surface", where RC-13a-e live — and it held 24
+  rows at `275c14b2`:
+
+```bash
+git show 275c14b2:ROADMAP.md | awk '
+  /^## Rides the next PR touching the connected surface/{f=1;next}
+  f && /^#{1,2} /{exit}
+  f && /^\|/{n++}
+  END{print n-2}'   # 24
+```
 
 Measured consequence, and it is a known limit: splitting one row into a parent
 with five sub-bullets reads as one row. Eight indented open bullets exist in
@@ -352,7 +373,9 @@ visible.
 ### 6.2 The arithmetic first, and it is most of the win
 
 I3 evicts every already-closed row from the register before any judgement is
-exercised. Measured at `275c14b2` (§8.1): **about 21 rows**, comprising
+exercised. **PR 3 derives its own number from §8.1 against its own tree and
+reports it; the figure here is evidence that the win exists, not a target to
+hit.** At `275c14b2` it was **21 rows**, comprising
 `## The unlogged-session door` (6 of 6 closed, so the section empties and is
 archived), `## Active audit overlay` (2 of 2 closed, same), Small, queued (7),
 Codebase-audit owners (3), and three table rows — RC-13 (DONE 2026-09-09),
@@ -424,8 +447,11 @@ that pattern.
 
 ### 8.1 The census command the spec's numbers come from
 
+Pinned to `275c14b2`. Drop the `git show` and read `ROADMAP.md` directly to
+census the tree you are working on.
+
 ```bash
-awk '
+git show 275c14b2:ROADMAP.md | awk '
 /^#{1,2} /{sec=$0}
 /^ *- /{
   top    = ($0 ~ /^- /) ? "top" : "sub"
@@ -436,7 +462,7 @@ awk '
 }
 END{ for (s in secs) printf "%-70s top-open:%3d top-closed:%3d sub-open:%3d\n",
        substr(s,1,70), cnt[s"|top|open"], cnt[s"|top|closed"], cnt[s"|sub|open"] }
-' ROADMAP.md | sort
+' | sort
 ```
 
 ### 8.2 Cases, each with the mutation that makes it red
