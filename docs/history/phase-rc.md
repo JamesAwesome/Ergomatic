@@ -1945,6 +1945,9 @@ that needs no erg, and it can run in a test.
       threw, or something outside the driver dropped the entry between
       `log.record` and the persisted `ergomatic:last-rowed-log`. Those two
       are the survivors; start there, not at the call site.
+      **ADDENDUM 2026-09-09: that enumeration is FALSIFIED — see the dated
+      addendum under W11 below, which carries the mechanism and the one
+      change it forces on this card's own read-it-off procedure.**
 - [x] **RC-15 — 0x003A's Interval Rest Time is the LAST interval's.
       SETTLED by the walk itself (2026-08-25, W-9); no experiment
       owed.** The field read 0 for the third capture running, this time
@@ -2185,6 +2188,54 @@ item** and W3/W4 ride the same piece.
   clause used to read "minus any genuinely suppressed ones", which
   invited exactly the miscount that would explain a real zero-fire
   away.)
+
+#### ADDENDUM 2026-09-09 (the RC-14 PR) — RC-14 closed; W11 gains a bound
+
+*This phase's record above stays exactly as written. This block is an
+addition, because W11 is the ancestor of the live walk procedure and two
+things in the text above would now mislead the operator running it.*
+
+**1. RC-14's two-survivor enumeration is FALSIFIED, and so is "the
+function was never REACHED".** The mechanism is NEITHER survivor: nothing
+threw, and nothing outside the driver dropped the entry.
+`recordAvgPaceVerdict` ran and recorded its line into the ring. What went
+wrong is one statement earlier — the deferred teardown had already
+serialised the snapshot that becomes `MONITOR LOG · COPY`, because it was
+running re-entrantly inside the driver's own event delivery, and the
+verdict landed in memory after the bytes were taken. Fixed 2026-09-09: the
+deferred teardown now takes a third snapshot once that stack has unwound.
+The derivation off this walk's own bytes is in
+`docs/monitor/sessions/walk-2026-08-25/README.md`, in the dated addendum
+under finding W-2; the live disposition is the RC-14 row in `ROADMAP.md`.
+
+**2. W11's read-it-off procedure still stands, WITH A BOUND — in its own
+terms, so nobody has to read a spec to apply it.**
+
+- **Still a finding, unchanged:** a missing `avg-pace-verdict` line, and a
+  missing `rest-distance-verdict` line. Both are written while the teardown
+  that serialises your log is still on the stack, so they always reach the
+  bytes you paste. **N pieces rowed should produce N `avg-pace-verdict`
+  lines, FULL STOP** — the count rule above is intact.
+- **NOT a finding, and do not raise it:** a missing terminate-observations
+  entry after a hang-up that still owed a terminate write. Those entries
+  are recorded by the disconnect AFTER it waits on that write, which puts
+  them outside the guarantee the 2026-09-09 fix establishes — they reach no
+  snapshot at all, by design, and their absence says nothing about the
+  monitor. The guarantee is bounded to what a session records while the
+  teardown is still running; it is not "the log holds everything".
+- **The lines now number themselves.** Every `avg-pace-verdict` entry opens
+  with `#N`, N counting the verdicts filed on that connection, so you read
+  the count off the numbers rather than by counting lines — and a sequence
+  that starts at something other than `#1`, or skips, means entries were
+  lost to the ring's own 500-entry eviction, not folded.
+- **The `FINISH_GRACE_MS` zero-fire this clause names is closed.** Both
+  doors that replace a run now SETTLE the outgoing one instead of
+  cancelling its pending verdict, so arming the next piece within 3 s of
+  the previous one's finish files that piece's line rather than swallowing
+  it (pinned by `driver.test.ts`'s two settlement cases, one titled for
+  `program()` and one for `beginFreeRow()`). The count rule no longer has
+  that particular way of coming down — which is why an absence is now
+  worth chasing rather than expecting.
 
 **Arming the hold-open instrument (final-review I3 — the card never said
 HOW before this fix):** W2/W3/W4/W10 all need it armed. On the laptop, in
