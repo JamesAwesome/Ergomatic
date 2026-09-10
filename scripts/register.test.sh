@@ -91,6 +91,16 @@ lacks "$out" "NO LONGER CARRIES A COUNT" "closed: an open row refusing a count i
 has "$out" "ACCEPTED (2026-09-10)" "closed: ACCEPTED still closes (2 of 2 real matches were closed)"
 lacks "$out" "not a row" "closed: bullets inside a fenced block are not rows"
 
+# Two classes the suite deliberately does NOT gate, named rather than left to
+# read as coverage (RF21 — a green probe is a question about the suite):
+#   * charging the `container` class. Container sections hold only other
+#     headings, so they have no rows in any tree; widening the charge to
+#     include one is behaviourally identical. Adding a row to a container
+#     fixture would test a state the grammar forbids.
+#   * `RATCHET_CLASS`'s whitelist check. It is belt: measured, removing the
+#     check AND typo'ing the constant still fails five ratchet cases, because
+#     a class that matches nothing makes every delta zero.
+
 # ------------------------------------------------------------- refusals
 
 run count "$FIX/untitled-row.md"

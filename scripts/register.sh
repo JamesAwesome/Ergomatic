@@ -41,7 +41,11 @@ CLASSES="register debt pinned vision phase ledger container"
 # a row saying "nobody has measured X" has no code site to become a comment.
 RATCHET_CLASS="register"
 
-# A typo here would charge zero rows forever with nothing printed for it.
+# A typo here would charge zero rows forever with nothing printed for it. This
+# is BELT, not the gate: measured, removing this check and typo'ing the
+# constant still fails five ratchet cases, because a class matching no row
+# makes every delta zero. Kept because the failure it prevents is legible and
+# the one it does not prevent is five confusing test failures.
 for _c in $RATCHET_CLASS; do
   case " $CLASSES " in
     *" $_c "*) ;;

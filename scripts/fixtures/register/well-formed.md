@@ -58,6 +58,12 @@ grep -n 'x' ROADMAP.md
 - [x] **DONE — the first criterion.** Approved and shipped.
 - [x] **CLOSED — the second criterion.** Proven on hardware.
 
+A tilde fence, which markdown treats the same way:
+
+~~~
+- [ ] not a row either
+~~~
+
 ## Owed captures and walk items
 <!-- debt -->
 
