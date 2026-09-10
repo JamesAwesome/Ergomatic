@@ -1077,6 +1077,18 @@ const REST_DISTANCE_VERDICT_BAND_METERS = 1;
  * carries verbatim: this is the only capture with both bytes. The margin
  * ratio deliberately matches `BURST_LINGER_MS`'s own ~5.0× precedent
  * rather than inventing a new one.
+ *
+ * **200 IS SHORTER THAN THE ONLY GAP ANYONE HAS MEASURED, AND THAT IS WHY
+ * THE "EMIT ANYWAY" FALL-THROUGH EXISTS AT ALL.** (Was ROADMAP register row
+ * RC-13e; struck 2026-09-09 and moved here, since its own text said it was
+ * filed "so the number is questioned by the next change that touches it" —
+ * and this declaration is where that change happens.) The measured
+ * 0x0039->0x003F gap is ~270-310 ms, so on the ordinary wire this window
+ * expires BEFORE the hash arrives and the observations go out without it.
+ * RC-13 threaded a release cause through that path and must not be read as
+ * validating the number. Nothing has re-measured it since; the corpus is
+ * still the one capture named above. If you are here to change this
+ * constant, that n=1 is the state of the evidence.
  */
 const HASH_SUBWINDOW_MS = 200;
 
@@ -6913,9 +6925,47 @@ export function createPm5Driver(
       // every door that replaces a run, and this is the same one call.
       //
       // C1 reduces to "before the assignment" here, because this door has no
-      // per-run reset block at all (ROADMAP register row: whoever adds one
-      // must place it BELOW this line or re-introduce C1's exact bug).
-      // `activeRun` is still the OUTGOING run on this line (I2).
+      // per-run reset block at all. `activeRun` is still the OUTGOING run on
+      // this line (I2).
+      //
+      // ===================================================================
+      // WHOEVER ADDS A PER-RUN RESET BLOCK TO THIS DOOR MUST PLACE IT BELOW
+      // THE `settleOutgoingRun(...)` CALL. Grep that symbol; never a line
+      // number. (Was ROADMAP register row RC-13a; struck 2026-09-09 and
+      // moved here, because a MUST is enforced at the point of danger and
+      // not in a 4300-line file. `program()`'s replacement path resets ~10
+      // fields — `boundaryHalves`, `session`, `refusedKeysLogged`,
+      // `clampedKeysLogged`, `splitAvgPaceProvenanceIndex`,
+      // `lastEmittedTotals`, `lastLoggedTwd`, `lastWorkStateAverageSplit`,
+      // `summarySeen`, `armedWatch`/`armedWatchFired`/
+      // `armedWatchRecoveredLogged`. This door resets none of them.)
+      //
+      // WHAT BREAKS IF IT GOES ABOVE, in the words the trace will print: a
+      // settlement running after `lastWorkStateAverageSplit = null` samples
+      // a reset value, and `recordAvgPaceVerdict` files
+      // `suppressed — no work-state (0x0032) averageSplit observed this run`
+      // — a FALSE reason for a run that did observe one. That is RC-13's C1
+      // bug exactly, and the damage is to an ORACLE'S EVIDENCE: the same
+      // tier RC-14 was fixed to protect.
+      //
+      // THE GATE EXISTS, so you will find out: mutation M2 of the RC-13
+      // design spec (`docs/superpowers/specs/2026-09-09-rc13-drain-
+      // containment-design.md`) — "move the settlement BELOW
+      // `lastWorkStateAverageSplit = null`. Expected: the entry is still
+      // present, kind unchanged, detail becomes `suppressed — no
+      // work-state (0x0032) averageSplit observed this run`. Invisible to
+      // any kind-only assertion, which is why C1 needs its own detail
+      // assertion."
+      //
+      // THE REQUIREMENT IS UNCONDITIONAL, and deliberately not argued from
+      // the current call graph: the settlement must sample THIS RUN'S
+      // evidence before any per-run reset overwrites it, whoever calls
+      // what. It is not "harmless today because a free row's empty
+      // `program.intervals` returns at `reconcileSummary`'s `lastIndex < 0`
+      // guard" — that is a property of what free rows happen to carry
+      // today, and this driver has twice been caught arguing its own safety
+      // from a call graph that then changed underneath it.
+      // ===================================================================
       //
       // V3's window opens above the settlement and closes the moment the
       // new run has been opened and announced to the ring. Nothing between
@@ -7134,6 +7184,19 @@ export function createPm5Driver(
         replacingRun = "program()";
         try {
           if (runIsOpen()) {
+            // NO PRODUCT PATH REACHES THIS ENTRY, and it is kept anyway.
+            // (Was ROADMAP register row RC-13c; struck 2026-09-09 and moved
+            // here, since its own text said it existed "so the next reader
+            // does not have to re-derive that" — which is the definition of
+            // a comment.) `driver.test.ts` covers it; nothing in the
+            // product produces it, because a driver is minted inside
+            // `connect()` below a guard that refuses when one already
+            // exists, so every `program()` runs against an `activeRun` of
+            // `null`. Kept because it is the one lifecycle transition with
+            // no event of its own: if a UI path that re-programs from
+            // `ready` is ever added, this line becomes the only trace of
+            // it. Do not delete it as dead code without adding that trace
+            // somewhere else first.
             log.record(
               "run-replaced",
               `program() replaced a run that was still OPEN (its ${activeRun!.program.intervals.length}-interval program had accumulated ${activeRun!.actuals} actual(s)) — that run closes here with no workoutComplete/terminated event of its own`,

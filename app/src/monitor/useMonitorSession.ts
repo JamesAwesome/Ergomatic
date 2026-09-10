@@ -2789,7 +2789,35 @@ export function useMonitorSession(
    *  linger's own `BURST_LINGER_MS` timeout). `null` at every other time,
    *  including every OTHER teardown cause, so a `summary-observations`
    *  event arriving outside a linger (the ordinary in-grace "split-won"
-   *  case, still mounted) finds nothing here to call. */
+   *  case, still mounted) finds nothing here to call.
+   *
+   *  **NOT CLEARED BY `connect()`, AND UNREACHABLE ANYWAY — the layer that
+   *  holds that is not in this file's linger code, so it is written down
+   *  here rather than assumed (RC-14's RF27 pass, 2026-09-09).** Only
+   *  `finish` clears this ref and its sibling below; neither `connect()`
+   *  nor `teardown()`'s own entry does. A linger surviving into a fresh
+   *  `connect()` on the same hook instance is nonetheless impossible today,
+   *  and here is why, in four reads: `teardown` has exactly two callers —
+   *  `cancel()` and the unmount effect `useEffect(() => teardown,
+   *  [teardown])`; that effect's identity is stable, so its cleanup fires
+   *  only at unmount; `cancel()` returns early on `phase === "live" ||
+   *  phase === "ended"`; and every close that can set a burst-eligible
+   *  `endedBy` (`"finished"`/`"rower"`) writes `phase: "ended"` in the same
+   *  synchronous body. So `cancel()` can never reach the linger-arming
+   *  branch, only the unmount can, and an unmount destroys the hook
+   *  instance along with these refs.
+   *
+   *  **WHAT FLIPS IT**, i.e. what to re-check before relying on the above:
+   *  (a) any future close that sets a burst-eligible `endedBy` without the
+   *  paired `phase: "ended"` in the same statement; (b) any relaxation of
+   *  `cancel()`'s `live`/`ended` refusal (its guard carries the other half
+   *  of this note); (c) any surface offering Connect at `ended` on a LIVE
+   *  hook instance.
+   *
+   *  **AND THE CONSEQUENCE IF IT FLIPS IS NOT COSMETIC:** a stale `finish`
+   *  reads `unsubscribeRef.current` LIVE, so it would unsubscribe the NEW
+   *  session's listener while hanging up a driver captured at the OLD
+   *  teardown — the app goes deaf to the erg behind a connected screen. */
   const lingerFinishRef = useRef<(() => void) | null>(null);
 
   /** The burst linger's own timeout canceller (`schedule`'s return value),
@@ -2800,7 +2828,11 @@ export function useMonitorSession(
    *  trigger reaches it first, and assigning across that boundary through
    *  a plain closure variable trips `react-hooks/immutability` — the
    *  reassignment lands in the outer scope after the closure that reads it
-   *  has already been handed off (to `lingerFinishRef.current` above). */
+   *  has already been handed off (to `lingerFinishRef.current` above).
+   *
+   *  Same lifetime and the same unreachable-today gap as
+   *  `lingerFinishRef` — that ref's own comment carries the four reads, the
+   *  three things that flip it, and what breaks when they do. */
   const burstLingerCancelRef = useRef<(() => void) | null>(null);
 
   /** Storage-spine design spec §2, Task 3: releases EVERY owed condition
@@ -4237,6 +4269,31 @@ export function useMonitorSession(
         // what clears it, so the identical function stays callable
         // idempotently from EITHER trigger without this call site needing
         // to know which one fired first.
+        //
+        // **THIS CALL IS A DRIVER `emit` RE-ENTERING THE HOOK'S OWN
+        // UNSUBSCRIBE AND HANG-UP, and that hazard is still live (RC-14,
+        // fixed at the snapshot rather than here).** We are executing
+        // inside `driver.ts`'s `for (const cb of listeners)` loop, on the
+        // stack of whatever produced the observations event; `finish` runs
+        // `driver.reconcile()`, `releaseHandoff("teardown")` and
+        // `driver.disconnect()` to completion before this handler's own
+        // next statement. RC-14 was the visible consequence — the deferred
+        // teardown serialised its snapshot one statement before the driver
+        // recorded the run's avg-pace verdict — and the fix took a third
+        // snapshot once this stack unwinds rather than moving this call.
+        //
+        // THE SHAPE THAT WOULD CLOSE THE CLASS, if something other than a
+        // snapshot ever depends on the ordering: defer this call off the
+        // emitting stack. It was measured and REFUSED for RC-14 (PM ruling,
+        // 2026-09-09) on two grounds. It buys about a third of the class —
+        // `handleEvent` has at least two OTHER branches that unsubscribe
+        // and `bestEffort(driver.disconnect())` on the emitting stack, and
+        // `disconnect()` itself re-enters `drainSummaryReconcile` into a
+        // nested emit. And it costs a BLE hang-up re-timed by one turn,
+        // which is RF19's class: a hang-up that does not happen is
+        // invisible to every instrument this repo owns. Deliberately not a
+        // ROADMAP row — nobody browsing the register is about to edit this
+        // line, and the row would have no closing condition.
         lingerFinishRef.current?.();
         return;
       }
@@ -6061,6 +6118,18 @@ export function useMonitorSession(
     // a live run would be the destruction path the spec forbids.
     // `"paused"` dropped from this guard with the phase member (task 5): a
     // frozen session is still `"live"`, so this already covered it.
+    //
+    // **THIS REFUSAL IS ALSO WHAT KEEPS THE BURST LINGER'S REFS SAFE, and
+    // the linger code does not know that.** `teardown`'s deferred branch
+    // arms `lingerFinishRef`/`burstLingerCancelRef`, and nothing but
+    // `finish` ever clears them — not `connect()`, not `teardown()`'s own
+    // entry. A burst-eligible run implies `phase === "ended"`, so the
+    // `ended` clause here is the reason a `cancel()` can never arm a linger
+    // that a later `connect()` could then inherit on this same hook
+    // instance. Relaxing either clause needs `lingerFinishRef`'s own doc
+    // comment read first: it names what breaks (a stale `finish`
+    // unsubscribing the NEW session while hanging up the OLD driver — the
+    // app goes deaf to the erg behind a connected screen).
     if (phase === "live" || phase === "ended") return;
     // Retire any attempt still in flight, BEFORE the awaits below — the
     // same synchronous-claim discipline `driverRef` uses one line down.

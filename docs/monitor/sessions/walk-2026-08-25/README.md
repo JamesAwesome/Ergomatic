@@ -89,6 +89,67 @@ down. Both the recording and the ring are committed here, so this is replayable.
 **This is a live gap in an oracle that shipped one PR ago, on the exact shape it
 exists to check.** Queued as RC-14.
 
+#### ADDENDUM 2026-09-09 (the RC-14 PR) — the inference above is FALSIFIED
+
+*The finding stands; its one mechanism sentence does not.* "Silence therefore
+means the function was never reached on the `finished` path" is wrong. The
+function WAS reached, it recorded its verdict, and the entry was lost in the
+SNAPSHOT — one frame below the driver, in storage.
+
+**This is derived from THIS FILE'S OWN BYTES, not from a call graph and not
+from a same-shape reproduction elsewhere.** Five reads, in order:
+
+1. **The artifact is a STASH, not a live ring.** This README says so itself
+   above: "Rings are `ergomatic:last-rowed-log` verbatim."
+   `useMonitorSession.ts`'s `stash()` is the only writer of that key, and it
+   has three call sites, all inside `teardown`.
+2. **`disconnect-requested` (seq 72) proves WHICH stash.** It is recorded
+   inside `driver.disconnect()`, which the IMMEDIATE teardown path runs
+   AFTER its `stash()` and the DEFERRED path runs BEFORE its second one. Its
+   presence here means this file is the deferred path's second snapshot.
+3. **`recordAvgPaceVerdict` cannot run silently**, on this walk's own build
+   (`c219ee0c`, the commit the lab build names): seven branches, and all
+   seven `log.record("avg-pace-verdict", …)` before returning. A
+   `summary-reconciled` in these bytes therefore OWES a verdict.
+4. **The adjacency `[71 summary-reconciled, 72 disconnect-requested]`
+   discriminates the trigger.** Had seq 71 come from the hook's own
+   `reconcile()` drain, the verdict would sit BETWEEN 71 and 72; had it come
+   from `disconnect()`'s nested drain, AFTER 72. Neither is there.
+5. **The throw survivor dies to the artifact.** The walk build had exactly
+   one production subscriber, so a throw could only originate inside
+   `handleEvent` — and a throw before the second `stash()` would have left
+   the LINGER-START bytes, which contain neither 71 nor 72. This file
+   contains both. (On today's code the question is moot: `emit` isolates per
+   listener and records a `listener-threw` entry.)
+
+**The mechanism.** `reconcileSummary`'s last act is a synchronous
+`emit(summaryObservationsEvent(...))`; the hook's `summary-observations`
+handler ends with a synchronous `lingerFinishRef.current?.()`, which runs the
+deferred teardown's `finish` — hand-off release, unsubscribe, hang-up and
+`stash()` — to completion INSIDE the driver's own stack, one statement before
+`recordAvgPaceVerdict(run)`. The snapshot string was serialised first.
+
+**And seq 71's own text about its trigger is wrong too**, which matters to
+anyone re-deriving this: it says the reconcile ran "when the 3000ms finish
+grace closed". That was a HARDCODED string on this build, and RC-13 replaced
+it with a real release cause because it was already untrue on the drain
+paths. The `atMs` values settle it — seq 70 `verification-received`
+1787694123110, seq 71 ...111, seq 72 ...112 — one millisecond apart, so no
+timer fired at all: the drain happened inside the 0x003F notification.
+
+**Fixed 2026-09-09.** The deferred teardown now takes a THIRD snapshot, via
+`queueMicrotask`, once the stack that triggered it has unwound.
+
+**Two caveats for anyone re-deriving this from the capture.** (1) A tail
+produced by today's build is NOT byte-identical to this one: the
+`summary-recorded` receipt landed after this walk (`9c23315f`, #228), so
+expect an extra line. (2) The restored reading of "an absent verdict is a
+finding" is BOUNDED to entries a session records SYNCHRONOUSLY BENEATH the
+teardown that serialises them. Entries a producer records after its own
+`await` — `driver.disconnect()`'s post-`await` tail is the concrete one —
+are outside that fence and reach no snapshot, so their absence is still not
+a finding.
+
 ### W-3 · 0x0039's stroke rate reads exactly DOUBLE on a terminate
 
 | | 0x0039 byte 10 | 0x0038 byte 3 | PM5 View Detail `s/m` |
@@ -239,7 +300,7 @@ changes what a stored row claims about itself.
 
 | Id | Item |
 | --- | --- |
-| RC-14 | W-2: the avg-pace oracle never fires on a natural finish. Replay `rests-finished-recording.jsonl.gz`. |
+| RC-14 | W-2: the avg-pace oracle never fires on a natural finish. Replay `rests-finished-recording.jsonl.gz`. **CLOSED 2026-09-09** — see the dated addendum under W-2: it fired, and the entry was lost in the snapshot. |
 | RC-15 | W-9: program a workout ENDING in a rest, to settle 0x003A Interval Rest Time. |
 | RC-16 | W-3: suppress 0x0039 average stroke rate on terminated pieces. |
 | Phase LM | W-10: the lost-monitor design pass (prominence, honest copy, provenance label, wake lock research). |
