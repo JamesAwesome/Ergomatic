@@ -114,7 +114,30 @@ function randomBase36(length: number): string {
   return out;
 }
 
-export const RUN_ID = `${String(Date.now()).padStart(13, "0")}-${randomBase36(6)}`;
+/** The screenshots project opts OUT of uniqueness, and it is allowed to
+ *  because `scripts/screenshots.sh` boots a fresh database every run — there
+ *  is no previous run's user left to collide with. Uniqueness is what made
+ *  every capture of an account screen churn: the timestamp half is RENDERED,
+ *  and `you.png` read `screenshots-you-1789060665…` in one run and
+ *  `…1789060783…` in the next.
+ *
+ *  **Why the fixed-width work above did not already solve it, and why a
+ *  back-to-back pair of runs says it did:** the email is TRUNCATED in the UI,
+ *  so the visible characters are the timestamp's LEADING digits, which are
+ *  identical for any two runs inside the same ~hour. Two runs minutes apart
+ *  hash the same and the churn looks absent; two runs an hour apart do not.
+ *  Measured 2026-09-10 — this is the reason four separate filings of the
+ *  screenshot-churn bug never named this cause, since every one of them
+ *  compared back-to-back runs.
+ *
+ *  Deliberately NOT the default: `pnpm e2e` reuses its stack across runs by
+ *  design, so every other project still needs the unique suffix. */
+const STABLE_RUN_ID = "stable0000000-shots0";
+
+export const RUN_ID =
+  process.env.ERGOMATIC_STABLE_RUN_ID === "1"
+    ? STABLE_RUN_ID
+    : `${String(Date.now()).padStart(13, "0")}-${randomBase36(6)}`;
 
 /**
  * Signs in through the secret-gated backdoor (never real Google OAuth) and

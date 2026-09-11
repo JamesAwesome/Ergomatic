@@ -7,6 +7,16 @@
 #
 # Leaves the stack running afterward by default; set E2E_KEEP=0 to tear it
 # down on exit.
+#
+# BOOTS ON A FRESH DATABASE EVERY TIME, unlike scripts/e2e.sh. A capture is
+# only a record if the same tree produces the same pixels, and reusing the
+# previous run's database does not: its users, logs and plan state are still
+# there. The fresh volume is what makes ERGOMATIC_STABLE_RUN_ID below safe,
+# and it retires the "not idempotent across runs on a KEPT stack" class in
+# the same move. Measured cost 2026-09-10: a fresh boot is 17.8s against a
+# warm 14.0s (two rounds, images cached both times) — 3.8s on a run whose
+# test phase is ~85s. See
+# docs/superpowers/specs/2026-09-10-screenshot-churn-design.md.
 set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" # compose.yml lives here
@@ -34,7 +44,15 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$REPO_ROOT"
+# `-v` is the whole point: `down` alone keeps `pgdata`, which is exactly the
+# state we are removing. Runs before the reap/boot so an interrupted previous
+# run cannot leave a half-seeded database behind either.
+docker compose -f compose.yml -f compose.e2e.yml down -v
 docker compose -f compose.yml -f compose.e2e.yml up -d --build --wait --wait-timeout 120
 
 cd app
-pnpm exec playwright test --project=screenshots
+# With a guaranteed-empty database, e2e identities no longer need a unique
+# suffix to avoid colliding with a previous run's — and that suffix was the
+# single largest source of screenshot churn, because it carries `Date.now()`
+# and every capture of an account screen renders it. See helpers.ts's RUN_ID.
+ERGOMATIC_STABLE_RUN_ID=1 pnpm exec playwright test --project=screenshots

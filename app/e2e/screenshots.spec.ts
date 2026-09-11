@@ -1202,6 +1202,12 @@ test("recovery-today-portrait", async ({ page }) => {
   await pinToday(page, { type: "O2", title: "Sea Fret" });
   await page.goto("/today");
   await expect(page.getByText(/UNSAVED WORKOUT/)).toBeVisible();
+  // Same settle wait its landscape sibling carries. It was not needed while
+  // `pnpm screenshots` reused a warm stack; a FRESH database re-seeds the
+  // 300-workout library at boot, so the first captures now race a busier
+  // server and this one caught `LOADING…` (measured 2026-09-10). The race was
+  // always there — the old stack was just reliably fast enough to hide it.
+  await expect(page.getByRole("button", { name: "FILTER ⌄" })).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "recovery-today-portrait.png"),
   });
@@ -1318,6 +1324,11 @@ test("recovery-today-both-sources-and-warning-singular-plural", async ({
     await expect(
       page.getByRole("heading", { name: "UNSAVED WORKOUTS" }),
     ).toBeVisible();
+    // The suggestion settle wait, for the reason the portrait capture above
+    // records: on a FRESH database the library seed makes the first captures
+    // race a busier server, and the recovery heading renders before the
+    // suggestion fetch resolves.
+    await expect(page.getByRole("button", { name: "FILTER ⌄" })).toBeVisible();
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, `recovery-today-both-${name}.png`),
     });
@@ -2658,6 +2669,22 @@ test("you", async ({ page }) => {
   // its read lands, so waiting on the numbers themselves is what keeps this
   // from capturing a bare label and chevron.
   await page.getByText("2K 1:52.0 · 6K 2:02.0").waitFor();
+  // THE SEAM GATE for the stable-identity fix, and it is deliberately an
+  // assertion on the rendered DOM rather than a unit test of `RUN_ID`'s
+  // ternary. What can actually break is the PLUMBING — `screenshots.sh`
+  // exporting ERGOMATIC_STABLE_RUN_ID into the Playwright process — and a
+  // unit test of the constant would stay green through that failure while
+  // every account capture silently went back to rendering a timestamp.
+  // Starts upstream of the producer (RF24). Independent literal on purpose:
+  // it does NOT import RUN_ID, so retuning the constant cannot retune the
+  // assertion with it (RF21). Must sit AFTER the /you navigation — the email
+  // renders at `You.tsx:48` and nowhere on "/", which is where
+  // `signInViaBackdoor` leaves the page; the first draft asserted before the
+  // goto and failed for that reason instead of the one it was testing, which
+  // is RF35's "your gate passed on the wrong arm" in miniature.
+  await expect(
+    page.getByText("screenshots-you-stable0000000-shots0@e2e.test"),
+  ).toBeAttached();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you.png"),
   });
