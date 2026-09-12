@@ -6,6 +6,32 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## Phase MD PR 3 plan pass, 2026-09-12 (one `Sample` shape — /harden lens 1, DELTA)
+
+- **"No compiler crosses `src/` → `server/`; one test does" (spec §3 invariant
+  4).** True about `src/`, falsified by the plan's own Task 1, which moves the
+  declaration into `domain/` — a tree `tsconfig.server.json` includes, that 27
+  server files import from, and that `server/concept2/mapping.ts` already
+  imports `deriveAverageHeartRate` from. The hand-written mirror became a
+  CHOICE; the controller ruled for the derived shape (six declarations → two).
+- **"Every consumer downstream of the store re-serializes, so wrapping both
+  sides of the contract assertions weakens nothing."** Counterexample inside
+  the same PR: the FAKE logs store keeps `stored.series` by reference, and the
+  new seam test runs `Object.keys` over it. Fix: wrap the expected side only
+  and make the fake jsonb-honest (`JSON.parse(JSON.stringify(…))`).
+- **"The spread preserves serialized key order."** The plain literal compiles
+  and serializes identically; Postgres jsonb reorders keys anyway (measured).
+  The spread is right because it keeps `hr` ABSENT in memory.
+- **The seam test's payload assertion had no divergence pin** (131 vs 129 on
+  this capture; nothing asserted they differ). Pinned.
+- **Comment-and-title drift half-swept**; `schema.test.ts`'s now-unused
+  `EndedBy` import under `noUnusedLocals`; three prescribed artifacts living
+  only in the authoring session's scratchpad.
+- **Attacked and could not break:** the `types.ts` home; every consumer call
+  site under the required key; exit criterion 1 red at 7; criterion 5b; the
+  `EndedBy` order safety; the witness's scope; mutation 1 below the seam; no
+  session-scoped state.
+
 ## Wave A PR 1 anchor pass, 2026-09-12 (drop NOT NULL on `users.google_sub` — TRIAD: stored shape, auth-adjacent)
 
 Spec draft attacked at main `deb50b77`. Core design HELD; three spec-level breaks.
