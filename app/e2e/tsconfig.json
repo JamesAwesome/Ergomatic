@@ -10,6 +10,7 @@
     "../playwright.config.ts",
     "../src/vite-env.d.ts",
     "../src/monitor/transports/index.ts",
-    "../src/adapters/appSettings.ts"
+    "../src/adapters/appSettings.ts",
+    "../src/test/gate0LogBodies.ts"
   ]
 }

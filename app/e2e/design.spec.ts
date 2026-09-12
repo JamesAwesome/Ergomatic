@@ -12834,3 +12834,75 @@ test.describe("a half-set baseline pair", () => {
     ).toBeVisible();
   });
 });
+
+// ── Phase PS PR 1: the stats subpage registers here (TESTING.md §8) ────────
+test.describe("/you/stats", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-you-stats@e2e.test",
+      name: "Design Stats Tester",
+    });
+    // A populated screen (RF7): two seeded rows so the filter bar, TOTALS
+    // and the TIME BY TYPE legend all render; the chips are the tap
+    // targets, the CUSTOM inputs the zoom-guard's subjects.
+    for (const body of [
+      {
+        workoutTitle: "Sea Fret",
+        workoutType: "O2",
+        source: "manual",
+        steps: [{ label: "Work", actualMeters: 6000, actualSeconds: 1550 }],
+      },
+      {
+        workoutTitle: "Sea Fret",
+        workoutType: "AT",
+        source: "manual",
+        steps: [{ label: "Work", actualMeters: 2000, actualSeconds: 470 }],
+      },
+    ]) {
+      const res = await page.evaluate(async (b) => {
+        const r = await fetch("/api/logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workoutId: null,
+            held: null,
+            effort: null,
+            notes: null,
+            advancesPlan: false,
+            ...b,
+          }),
+        });
+        return r.status;
+      }, body);
+      expect(res).toBe(201);
+    }
+    await page.goto("/you/stats");
+    await page.getByRole("radio", { name: "CUSTOM" }).click();
+    await expect(page.getByLabel("FROM")).toBeVisible();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("every input on /you/stats computes font-size >= 16px (the two CUSTOM date fields)", async ({
+    page,
+  }) => {
+    const undersized = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("input"))
+        .map((el) => ({
+          id: el.getAttribute("aria-label") ?? el.type,
+          size: parseFloat(getComputedStyle(el).fontSize),
+        }))
+        .filter((e) => e.size < 16),
+    );
+    expect(undersized, JSON.stringify(undersized)).toEqual([]);
+    expect(await page.locator("input[type=date]").count()).toBe(2);
+  });
+});

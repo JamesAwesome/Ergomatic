@@ -214,3 +214,41 @@ export async function stableBoundingBox(
       `The element is still moving — either it genuinely animates, or the caller measured before layout settled.`,
   );
 }
+
+/**
+ * Phase PS PR 1 (career-stats spec §8.5): `POST /api/logs` cannot set
+ * `loggedAt` — the column is `defaultNow()` and the route reads no such
+ * field — so a seeded history is backdated HERE, through the stack's own
+ * published Postgres port, to `instant` (an ISO `…Z` literal; which DATE
+ * that is belongs to the browser's zone). Defaults mirror `compose.yml` and CI's e2e
+ * job (`POSTGRES_PORT` 5433, user/db `ergomatic`, password `devpass`);
+ * `scripts/stack-env.sh` exports the per-worktree port locally. The
+ * caller asserts the backdate took by reading `loggedAt` back through
+ * the API (RF38: a property of how the test got there is an assertion).
+ */
+export async function backdateLog(id: string, instant: string): Promise<void> {
+  const { default: pg } = await import("pg");
+  const client = new pg.Client({
+    host: "127.0.0.1",
+    port: Number(process.env.POSTGRES_PORT ?? "5433"),
+    user: process.env.POSTGRES_USER ?? "ergomatic",
+    password: process.env.POSTGRES_PASSWORD ?? "devpass",
+    database: process.env.POSTGRES_DB ?? "ergomatic",
+  });
+  await client.connect();
+  try {
+    // An explicit instant (`…Z`), never a zone name: what the browser then
+    // reads as the row's date is decided by ITS zone alone (`toCalendarDate`).
+    const res = await client.query(
+      "update session_logs set logged_at = $2::timestamptz where id = $1",
+      [id, instant],
+    );
+    if (res.rowCount !== 1) {
+      throw new Error(
+        `backdateLog: expected 1 row for ${id}, got ${res.rowCount}`,
+      );
+    }
+  } finally {
+    await client.end();
+  }
+}
