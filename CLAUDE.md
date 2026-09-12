@@ -19,8 +19,10 @@ requirements).
   plus other keys pnpm adds during installs) and makes `app/` its own pnpm workspace
   root, so the repo-root `.npmrc` does not apply inside `app/`.
 - `.agents/skills/` holds two populations and both are COMMITTED: our own Codex
-  adapters (`harden`, `close-phase`, `hardware-walk`, `wod-import` — hand-kept
-  copies of `.claude/skills/`), and third-party skills VENDORED from
+  adapters (`harden`, `close-phase`, `hardware-walk`, `wod-import` — ten-line
+  POINTERS at `.claude/skills/`, never copies; Codex follows a pointer, James
+  confirmed 2026-09-12, and `AGENTS.md` forbids copying or translating that
+  guidance), and third-party skills VENDORED from
   `mattpocock/skills` via the vercel-labs `skills` CLI (James, 2026-09-12).
   `skills-lock.json` at the root is that CLI's manifest and is committed as a
   SOURCE-OF-RECORD ONLY — it is not a lock in pnpm's sense and not a drift
