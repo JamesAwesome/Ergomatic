@@ -1,10 +1,8 @@
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { preferences } from "../db/schema.js";
-import type { Difficulty } from "../compat/difficulty.js";
 
 export interface PreferencesRow {
-  difficulties: Difficulty[];
   timeCapMinutes: number;
   countdownSeconds: number;
   paceToleranceSeconds: number;
@@ -15,7 +13,6 @@ export interface PreferencesRow {
 
 // Mirrors the column defaults in app/server/db/schema.ts exactly.
 export const PREFERENCES_DEFAULTS: PreferencesRow = {
-  difficulties: ["easy", "medium", "hard"],
   timeCapMinutes: 60,
   countdownSeconds: 10,
   paceToleranceSeconds: 1,
@@ -36,7 +33,6 @@ export function createPreferencesStore(db: Db) {
       const row = rows[0];
       if (!row) return { ...PREFERENCES_DEFAULTS };
       return {
-        difficulties: row.difficulties as Difficulty[],
         timeCapMinutes: row.timeCapMinutes,
         countdownSeconds: row.countdownSeconds,
         paceToleranceSeconds: row.paceToleranceSeconds,

@@ -125,7 +125,6 @@ function mockHooks() {
     usePreferences: () => ({
       state: "ready",
       preferences: {
-        difficulties: [],
         timeCapMinutes: 60,
         countdownSeconds: 10,
       },

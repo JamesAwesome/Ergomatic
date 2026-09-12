@@ -1,6 +1,5 @@
 import { vi } from "vitest";
 import type { WeightClassFailure } from "../concept2/mapping.js";
-import { derivedDifficulty, type Difficulty } from "../compat/difficulty.js";
 import { isFreeRow } from "../../domain/types.js";
 import type { SessionStore } from "../auth/sessions.js";
 import type { UserStore } from "../auth/users.js";
@@ -51,9 +50,6 @@ import {
 // ---------------------------------------------------------------------------
 
 interface WorkoutRow extends WorkoutInput {
-  // Phase DE PR 1: the real column is NOT NULL and derived from effort at
-  // every write site (server/compat/difficulty.ts); the fake mirrors it.
-  difficulty: Difficulty;
   id: string;
   userId: string | null;
   source: "starter" | "user";
@@ -98,9 +94,6 @@ function newWorkoutRow(
   insertionSeq += 1;
   return {
     ...input,
-    // After the spread on purpose: an old client's `difficulty` in `input`
-    // must never win over the derived word (mirrors the real store).
-    difficulty: derivedDifficulty(input.effort),
     sortOrder: input.sortOrder ?? null,
     seq: insertionSeq,
     id: crypto.randomUUID(),
@@ -246,18 +239,17 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
       if (!existing) return null;
       assertWorkoutType(input.type);
       // Mirror the real store's UPDATE exactly (app/server/stores/
-      // workouts.ts): only title/type/effort/steps/updatedAt (plus the derived difficulty) are
-      // ever set — sortOrder (and every other column) is left alone. Built
-      // from an explicit field list, NOT `{ ...existing, ...input }` (M1):
-      // `input` is the same object reference as the request body at
-      // runtime, so a naive spread would let a client-supplied `sortOrder`
-      // reorder the fake even though the real UPDATE never sets that
-      // column, silently diverging fake from real.
+      // workouts.ts): only title/type/effort/steps/updatedAt are ever set —
+      // sortOrder (and every other column) is left alone. Built from an
+      // explicit field list, NOT `{ ...existing, ...input }` (M1): `input`
+      // is the same object reference as the request body at runtime, so a
+      // naive spread would let a client-supplied `sortOrder` reorder the
+      // fake even though the real UPDATE never sets that column, silently
+      // diverging fake from real.
       const row: WorkoutRow = {
         ...existing,
         title: input.title,
         type: input.type,
-        difficulty: derivedDifficulty(input.effort),
         effort: input.effort,
         steps: input.steps,
         updatedAt: new Date(),
@@ -290,7 +282,6 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
         ...existing,
         title: input.title,
         type: input.type,
-        difficulty: derivedDifficulty(input.effort),
         effort: input.effort,
         steps: input.steps,
         sortOrder: input.sortOrder,

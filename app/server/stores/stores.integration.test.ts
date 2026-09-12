@@ -469,7 +469,6 @@ describe("domain stores against real Postgres", () => {
       });
       const defaults = await s.get(fresh.id);
       expect(defaults).toStrictEqual({
-        difficulties: ["easy", "medium", "hard"],
         timeCapMinutes: 60,
         countdownSeconds: 10,
         paceToleranceSeconds: 1,

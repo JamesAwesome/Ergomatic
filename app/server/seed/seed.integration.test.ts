@@ -356,9 +356,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
     );
 
     const edited = LIBRARY_WORKOUTS.map((w) =>
-      w.title === target.title
-        ? { ...w, difficulty: "hard" as const, effort: 5 }
-        : w,
+      w.title === target.title ? { ...w, effort: 5 } : w,
     );
     await seedGlobalLibrary(db, edited);
 
@@ -366,7 +364,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
       (g) => g.title === target.title,
     )!;
     expect(after.id).toBe(target.id); // the headline: same row survives
-    expect(after).toMatchObject({ difficulty: "hard", effort: 5 });
+    expect(after).toMatchObject({ effort: 5 });
     const logRow = await findLog(user.id, logId);
     expect(logRow!.workoutId).toBe(target.id); // link intact
   });
@@ -662,16 +660,14 @@ describe("seedGlobalLibrary against real Postgres", () => {
 
     // The rename pre-pass lands BEFORE listGlobals(), so the converge sees
     // the row under its NEW title and the ordinary content-diff path
-    // applies the reclassification (2K: AN/hard/5, 6K: AT/hard/4) — a
-    // rename that left the old classification in place fails here.
+    // applies the reclassification (2K: AN/5, 6K: AT/4) — a rename that
+    // left the old classification in place fails here.
     expect(k2After).toMatchObject({
       type: "AN",
-      difficulty: "hard",
       effort: 5,
     });
     expect(k6After).toMatchObject({
       type: "AT",
-      difficulty: "hard",
       effort: 4,
     });
 

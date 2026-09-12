@@ -269,40 +269,6 @@ export function describeStoreContracts(
         expect(seeded!.id).toBe(chosen);
       });
 
-      // Phase DE PR 1 (spec §3.2): the product has no difficulty, but the
-      // NOT NULL column stays for one tag cycle so pre-PR-1 builds (which
-      // render `difficulty.toUpperCase()`) never see NULL. Every write site
-      // derives the word from effort; the caller's own word, if any, never
-      // reaches the row. PR 3 deletes this test with the column.
-      it("writes a difficulty DERIVED from effort at create, createMany, update and updateGlobal; a caller-sent word is never stored", async () => {
-        const stores = await makeStores();
-        const userId = await stores.makeUser();
-        const created = await stores.workouts.create(userId, {
-          ...workoutInput({ title: "Derive create", effort: 2 }),
-          // An old client still sends this; the store must not read it.
-          ...({ difficulty: "hard" } as object),
-        });
-        expect(created.difficulty).toBe("easy");
-        const [many] = await stores.workouts.createMany(userId, [
-          workoutInput({ title: "Derive many", effort: 5 }),
-        ]);
-        expect(many!.difficulty).toBe("hard");
-        const updated = await stores.workouts.update(
-          userId,
-          created.id,
-          workoutInput({ title: "Derive update", effort: 3 }),
-        );
-        expect(updated!.difficulty).toBe("medium");
-        const g = await stores.seedGlobalWorkout(
-          workoutInput({ title: "Derive global", effort: 1, sortOrder: 9001 }),
-        );
-        const gUpdated = await stores.workouts.updateGlobal(g.id, {
-          ...workoutInput({ title: "Derive global", effort: 4 }),
-          sortOrder: 9001,
-        });
-        expect(gUpdated!.difficulty).toBe("hard");
-      });
-
       it("create/list/get round-trip, decorated isGlobal: false", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();

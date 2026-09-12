@@ -376,8 +376,9 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
 ## Phase DE — Difficulty out, effort in
 
 **Status: OPEN 2026-09-05 — spec merged (#308); PR 1 MERGED as #309
-(2026-09-05); PR 2 in flight (worktree `Ergomatic-wt-de2`); release HELD
-until PR 2 merges (one tag for both).** **TRIAD** (stored shape).
+(2026-09-05); PR 2 MERGED as #310 (2026-09-05), shipped as v0.39.0; PR 3
+opened as #400 (2026-09-12), per the Saturday trigger below, awaiting
+review.** **TRIAD** (stored shape).
 **M.** Spec:
 `docs/superpowers/specs/2026-09-05-difficulty-out-effort-in-design.md`.
 
@@ -432,8 +433,8 @@ generation):
       screenshots are refreshed in the PR. (An earlier "waits for AUD-016"
       condition here was void: AUD-016 shipped as #239 and was struck in
       #240; `Ergomatic-wt-aud016` is a stale pre-#239 spec branch.)
-- [ ] **PR 3 — drop compat. SCHEDULED: Saturday 2026-09-12** (James,
-      2026-09-05: "We have like five users let's just schedule the work for
+- [ ] **PR 3 — drop compat. Opened as #400 (2026-09-12), awaiting review.**
+      (James, 2026-09-05: "We have like five users let's just schedule the work for
       Saturday"). **BEFORE generating this PR's migration: Phase RW PR C
       merged `0026` on `preferences` first, so delete any migration written
       off an older main and re-run `pnpm db:generate` against current main.**
