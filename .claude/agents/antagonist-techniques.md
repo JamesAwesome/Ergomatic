@@ -198,6 +198,25 @@ toolkit, not a history.
     recorder as Y", find Y's line, find the recorder's CLOSE, and check which
     side of it your line is on.
 
+14. **A derived type is not automatically a tighter type — probe which DIRECTION
+    it gates.** `Pick<InferInsertModel<table>, …>` makes a nullable column
+    OPTIONAL, so omitting it compiles, and `db.insert().values(input)` already
+    refused an added/renamed/re-typed column under the hand-written type it
+    replaces. The only case derivation catches that the old shape did not is a
+    WIDENED column. Write the four schema changes out and run `tsc` on each;
+    then apply RF33 literally — `Required<Pick<…>>` with `null` meaning absent.
+15. **A migrator that never compares hashes silently accepts a DB that is AHEAD
+    of its folder.** drizzle's `pg-core/dialect.js` reads only
+    `max(created_at)` and applies anything newer, so "code rollback stays valid"
+    after a migration has already run is TRUE — and provable in ninety seconds
+    by migrating a throwaway container forward, then calling `migrate()` again
+    with the OLD folder. Run it; do not reason about it.
+16. **Find the file that OWNS the fact before prescribing an edit.** A rollback
+    floor lives in `docs/RELEASING.md`'s table (which has a "Not a floor"
+    precedent for exactly this case); `docs/deploy.md`'s sentence is a QUOTE of
+    it, and had been stale for six table rows. Adding a new fact beside a stale
+    quote is the partial-reconciliation failure.
+
 ## Things attacked and found sound
 
 - The single-writer discipline on the run record, and its refusal to be

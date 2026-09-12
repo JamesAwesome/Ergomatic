@@ -1874,3 +1874,83 @@ describe("migration 0024: pain → effort, and the article slug", () => {
     expect(reads.rows.some((r) => r.slug === "pain-scale")).toBe(false);
   });
 });
+
+// Wave A PR 1 — migration 0030 drops NOT NULL from `users.google_sub` (spec
+// 2026-09-12-lift-identity-design.md §5). Same staged pre/post shape as the
+// ten suites above, with one difference: the pre-0030 tag list is DERIVED
+// from the real journal (`idx <= 29`) rather than hand-typed — thirty tags is
+// where a positional transcription slip stops being findable by eye, and
+// `readMigrationFiles` throws loudly on a missing file either way.
+describe("migration 0030: users.google_sub becomes nullable, the unique constraint admits distinct NULLs", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+  let tempDir: string;
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:18.4").start();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+
+    const journal = JSON.parse(
+      await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
+    ) as { entries: { idx: number; tag: string }[] };
+    const through29 = journal.entries.filter((e) => e.idx <= 29);
+    if (through29.length !== 30) {
+      throw new Error(
+        `expected 30 pre-0030 journal entries, got ${through29.length}`,
+      );
+    }
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0030-"));
+    await mkdir(path.join(tempDir, "meta"));
+    for (const { idx, tag } of through29) {
+      const paddedIdx = String(idx).padStart(4, "0");
+      await copyFile(
+        path.join("drizzle", `${tag}.sql`),
+        path.join(tempDir, `${tag}.sql`),
+      );
+      await copyFile(
+        path.join("drizzle", "meta", `${paddedIdx}_snapshot.json`),
+        path.join(tempDir, "meta", `${paddedIdx}_snapshot.json`),
+      );
+    }
+    await writeFile(
+      path.join(tempDir, "meta", "_journal.json"),
+      JSON.stringify({ ...journal, entries: through29 }),
+    );
+    await migrate(db, { migrationsFolder: tempDir });
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("pre-0030 refuses a sub-less user (23502); post-0030 admits two of them and still refuses a duplicate sub (23505)", async () => {
+    const insertNull = (email: string) =>
+      pool.query(
+        `insert into users (google_sub, email, name) values (null, $1, 'N')`,
+        [email],
+      );
+    await expect(insertNull("pre@x.com")).rejects.toMatchObject({
+      code: "23502",
+    });
+
+    await migrate(db, { migrationsFolder: "drizzle" });
+
+    await expect(insertNull("post-1@x.com")).resolves.toBeDefined();
+    await expect(insertNull("post-2@x.com")).resolves.toBeDefined();
+    await pool.query(
+      `insert into users (google_sub, email, name) values ('dup-sub', 'd1@x.com', 'D')`,
+    );
+    await expect(
+      pool.query(
+        `insert into users (google_sub, email, name) values ('dup-sub', 'd2@x.com', 'D')`,
+      ),
+    ).rejects.toMatchObject({ code: "23505" });
+    const nulls = await pool.query<{ n: string }>(
+      `select count(*)::text as n from users where google_sub is null`,
+    );
+    expect(nulls.rows[0].n).toBe("2");
+  });
+});

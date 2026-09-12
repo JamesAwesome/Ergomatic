@@ -779,7 +779,12 @@ after being named next; if the front door has not opened by then the north star
 has gone unfunded for a month, and that comes back to James rather than sliding
 another wave.
 
-**PR 1 IS KNOWN AND IS INDEPENDENT OF THE POLICY DECISION.** `users` has one
+**PR 1 LANDED — PR #<n>, 2026-09-12: migration 0030 drops NOT NULL from
+`users.google_sub`; the store's insert type derives from the table with the
+sub key REQUIRED (`null` = no Google identity); a sub-less user is created,
+given a session and resolved by id in a real-Postgres test; NOT a rollback
+floor (RELEASING.md). James ordered it ahead of Phase MD PR 2 at #408's
+hand-back.** Was: **PR 1 IS KNOWN AND IS INDEPENDENT OF THE POLICY DECISION.** `users` has one
 identity column and it is NOT NULL, so lifting identity — `google_sub`
 nullable, or its own table — is the same migration whichever door the gate
 picks. **It is schedulable now, before the policy question is answered**, and
@@ -874,7 +879,11 @@ it lands the stranger on this same denial.
       this **a STORED-SHAPE change and a migration on top of the auth change**
       the row already declared. The row read as auth-only; it is not, and the
       spec sizes the migration before the gate rather than discovering it in
-      the build.
+      the build. **The migration landed in PR 1 (#<n>).** The identity-table
+      option is a SUPERSET of it — a backfill, a `UNIQUE (provider, subject)`,
+      two rewritten store methods, a dual-read window and a later removal
+      migration (`docs/superpowers/audits/2026-09-12-wave-a-pr1-census.md`
+      §4b) — and is priced here with the rest of the option list.
 - [ ] **In-app account deletion.** No DELETE-user route and no UI exist
       anywhere (checked across `app/server` and `app/src`: baselines reset and
       logs delete, but nothing removes a user). The spec enumerates exactly

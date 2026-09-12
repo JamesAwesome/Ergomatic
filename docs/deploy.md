@@ -62,7 +62,9 @@ running them.
 ## Rollback
 
 > **CHECK THE FLOOR FIRST. `docs/RELEASING.md` § "Rollback constraints" names a
-> version you must never roll back past — today v0.16.0.** Crossing it makes the
+> version you must never roll back past — the NEWEST version in that table,
+> which this sentence does not repeat because it has gone stale before
+> (it said v0.16.0 while the table grew six rows).** Crossing it makes the
 > seed DELETE renamed global rows and null every `session_logs.workout_id` that
 > pointed at them. That is unrecoverable link loss, and rolling forward again
 > does not bring the links back. **Recovery is a database backup, and no backup

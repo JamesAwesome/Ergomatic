@@ -220,3 +220,14 @@ older than it inserts and reads the link row unchanged; the one new write,
 non-2xx branch shows _"Couldn't change this. Try again."_ with the mode left on
 whatever the server holds. A rollback past it is a read-only outage on one control, never data
 loss or a save failure.
+
+**Not a floor — migration 0030 (`users.google_sub` DROP NOT NULL, Wave A
+PR 1).** Catalog-only: no data touched, no type change, the UNIQUE constraint
+untouched. A server older than it inserts a sub-bearing user unchanged (a
+nullable column accepts the value), selects by sub unchanged, and never reads
+the column off a row — so `deploy.sh`'s post-migration auto-rollback restores
+a working image, and drizzle's migrator boots the old binary against the
+ahead database without error (it compares only the newest applied
+timestamp; proven against Postgres 18.4 at the spec's antagonist pass). It
+becomes a floor only when a sub-less row exists, which no code can yet
+create; the PR that creates one adds the floor row here.
