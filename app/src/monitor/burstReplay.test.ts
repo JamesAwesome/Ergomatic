@@ -28,15 +28,17 @@
 // transcribed `WorkoutProgram` byte-verified against the recorded
 // programming frames, `createReplayTransport` + `now`/`schedule` bound to
 // the SAME virtual clock) one layer further up the stack than either of
-// them goes: through `useMonitorSession` itself — "the real hook" — via the
-// identical `vi.doMock("../adapters/monitorTransport")` +
-// `vi.resetModules()` + dynamic re-import composition
-// `useMonitorSession.test.ts`'s own "Phase LL Task 4 review fix" describe
-// block already established, so `frameSilence`/the driver's finish-grace
-// clock/the hook's `summary-observations` handler are the genuine
-// production wiring, not a bypass. No test file in `src/monitor/` imports
-// another test file (that describe block's own header names the
-// convention); every helper below is independently re-derived, not shared.
+// them goes: through `useMonitorSession` itself — "the real hook" — via
+// `createTransport`/`registerAppLifecycleListener` passed as deps (Phase MD
+// PR 2; this file used to reach it through a `vi.doMock("../adapters/
+// monitorTransport")` + `vi.resetModules()` + dynamic re-import composition
+// instead), so `frameSilence`/the driver's finish-grace clock/the hook's
+// `summary-observations` handler are the genuine production wiring, not a
+// bypass. `vi.resetModules()` + the dynamic re-import survive here for a
+// DIFFERENT reason now — `runReplay`'s own doc comment says why — never to
+// swap a mocked module. No test file in `src/monitor/` imports another test
+// file (that convention predates this file); every helper below is
+// independently re-derived, not shared.
 //
 // WHAT THIS PROVES, AND WHAT IT DOES NOT (spec §6 criterion 2's own
 // words): decode and fold, on real bytes, through the real stack, into the
@@ -197,24 +199,29 @@ interface ReplayOutcome {
  * the SAME `withLiveness` decorator production's own `defaultTransport`
  * always applies (`useMonitorSession.test.ts`'s "Phase LL Task 4 review
  * fix" describe block, "the genuine production wiring, not a bypass"), into
- * a FRESH `useMonitorSession` instance obtained through
- * `vi.doMock("../adapters/monitorTransport")` + `vi.resetModules()` — that
- * file's own established idiom for reaching the real hook under a replay
- * transport, restated here rather than imported (this repo's own
- * convention: no test file in `src/monitor/` imports another). `driver
- * Options.now`/`.schedule` bind to the SAME `replay.clock` the recorded
- * `t` values replay against, exactly as `registerReplay.test.ts`'s/
+ * a FRESH `useMonitorSession` instance obtained through `vi.resetModules()`
+ * — kept here (Phase MD PR 2) for a reason that has nothing to do with
+ * `../adapters/monitorTransport`/`../adapters/appLifecycle` any more (those
+ * are passed as DEPS below, never `vi.doMock`ed): see the "Called TWICE"
+ * paragraph. `driverOptions.now`/`.schedule` bind to the SAME `replay.clock`
+ * the recorded `t` values replay against, exactly as `registerReplay.test.ts`'s/
  * `connectedMetricsReplay.test.ts`'s own `replaySession` helpers do one
  * layer down — so `FINISH_GRACE_MS`/the liveness watchdog read the
  * identical clock the wire timing is scripted on, never two independent
  * clocks that could drift for no reason.
  *
  * Called TWICE in the one test below (the real burst run, then the
- * burst-stripped control) — `vi.doMock` simply re-registers its factory
- * each call, and `vi.resetModules()` forces a genuinely fresh module graph
- * (a fresh `useMonitorSession`, a fresh `driver.ts`, a fresh `monitorRun.ts`
- * instance) each time, so nothing about the first run's driver/hook state
- * leaks into the second. `loadMonitorRun()` — this FILE's own static
+ * burst-stripped control) — `vi.resetModules()` forces a genuinely fresh
+ * module graph (a fresh `useMonitorSession`, a fresh `driver.ts`, a fresh
+ * `monitorRun.ts` instance) each time, so nothing about the first run's
+ * driver/hook state leaks into the second: the handoffStore module's own
+ * in-memory `current`/`tombstones` would otherwise still hold the real run's
+ * record when the control run tries to create its own under the identical
+ * `FIXED_NOW`-derived sessionKey, and the store's single-unretired-session
+ * invariant would refuse the control's create-commit (found empirically —
+ * `control.record` came back `null`, not the control's own record). This is
+ * the FRESH-MODULE-GRAPH exception, not a mock swap; the mocks themselves
+ * are gone. `loadMonitorRun()` — this FILE's own static
  * import, never the freshly-reimported module's own — is what reads the
  * result back: both module instances read/write the identical
  * `localStorage` key, a shared global neither module graph owns privately,
@@ -246,12 +253,10 @@ async function runReplay(events: RecordedEvent[]): Promise<ReplayOutcome> {
     onRecovery: () => undefined,
   });
 
-  vi.doMock("../adapters/monitorTransport", () => ({
-    defaultTransport: vi.fn(() => transport),
-  }));
-  vi.doMock("../adapters/appLifecycle", () => ({
-    registerAppLifecycleListener: vi.fn(() => (): void => undefined),
-  }));
+  // THE SEAM (Phase MD PR 2): `registerAppLifecycleListener`/`createTransport`
+  // are passed as DEPS now, never `vi.doMock`ed — `vi.resetModules()` +
+  // the dynamic re-import below survive for the FRESH-MODULE-GRAPH reason
+  // this function's own doc comment gives, not to swap a mock.
   vi.resetModules();
 
   const { useMonitorSession: freshUseMonitorSession } =
@@ -260,6 +265,8 @@ async function runReplay(events: RecordedEvent[]): Promise<ReplayOutcome> {
   const { result } = renderHook(() =>
     freshUseMonitorSession({
       now: () => FIXED_NOW,
+      createTransport: () => transport,
+      registerAppLifecycleListener: () => (): void => undefined,
       driverOptions: {
         now: () => replay.clock.now(),
         schedule: releasingSchedule((cb, ms) => replay.clock.schedule(cb, ms)),
@@ -283,8 +290,6 @@ async function runReplay(events: RecordedEvent[]): Promise<ReplayOutcome> {
 
 describe("the walk's own finish, replayed to the byte (storage-spine design spec §2/§6 criterion 2)", () => {
   afterEach(() => {
-    vi.doUnmock("../adapters/monitorTransport");
-    vi.doUnmock("../adapters/appLifecycle");
     vi.resetModules();
     vi.restoreAllMocks();
     localStorage.clear();
