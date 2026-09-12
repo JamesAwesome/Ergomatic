@@ -32,8 +32,18 @@ requirements).
   likely the CLI's server-side blob hash. **The bytes in git are the
   reviewed instructions agents follow; `git diff` is the drift detector.**
   Update by re-running the CLI and reviewing the diff like any dependency
-  bump. Claude Code loads `.claude/skills/`, not `.agents/`; the vendored
-  seven reach Codex only unless deliberately exposed here.
+  bump. **Claude Code loads `.claude/skills/` and Codex loads
+  `.agents/skills/`; neither harness sees the other's directory, and a skill
+  present in only one is invisible to half the agents here with no error
+  anywhere.** So the two roots are kept at PARITY, gated by
+  `scripts/skills-parity.sh` in CI's always-run `scripts` job: every name
+  exists in both with identical `name` / `description` /
+  `disable-model-invocation`. The vendored eight are canonical in `.agents/`
+  and reach Claude Code through SYMLINKS at `.claude/skills/<name>`; the four
+  owned skills are canonical in `.claude/` and reach Codex through the
+  ten-line adapters. Pointers in both directions, copies in neither. **If the
+  `skills` CLI vendors a ninth skill, add its symlink in the same commit** —
+  the gate goes red otherwise, which is the whole point of it.
 
 ## Commands (run in `app/`)
 
