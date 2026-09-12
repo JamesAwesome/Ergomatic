@@ -149,7 +149,19 @@ describe("seedGlobalLibrary against real Postgres", () => {
       title: "Brand New Weather",
       sortOrder: 999,
     };
-    await seedGlobalLibrary(db, [...GLOBAL_LIBRARY_SEED, added]);
+    // ONE existing entry with its content changed, so the incremental seed
+    // takes the `updateGlobal` arm for it. Without this the arm is never
+    // reached — every unchanged row is `contentEqual` and skips it — and a
+    // mutant that rewrites `id` inside `updateGlobal` stayed GREEN against
+    // the first draft of this test (measured 2026-09-12; RF35's shape).
+    const edited = {
+      ...GLOBAL_LIBRARY_SEED[1]!,
+      effort: GLOBAL_LIBRARY_SEED[1]!.effort === 5 ? 4 : 5,
+    };
+    const library = GLOBAL_LIBRARY_SEED.map((w) =>
+      w.title === edited.title ? edited : w,
+    );
+    await seedGlobalLibrary(db, [...library, added]);
 
     const after = new Map(
       (await wk.listGlobals()).map((w) => [w.title, w.id] as const),
@@ -159,8 +171,14 @@ describe("seedGlobalLibrary against real Postgres", () => {
     expect(after.get("Brand New Weather")).toBe(
       seedWorkoutId("Brand New Weather"),
     );
-    // And nothing that already existed moved — this half is what proves
-    // production's first boot after the change is a no-op on identity.
+    // The edited row went through updateGlobal and its content moved…
+    const editedRow = (await wk.listGlobals()).find(
+      (w) => w.title === edited.title,
+    );
+    expect(editedRow?.effort).toBe(edited.effort);
+    // …and NOTHING that already existed changed id — the edited row
+    // included. This half is what proves production's first boot after the
+    // change, and every library edit after it, is a no-op on identity.
     for (const [title, id] of before) expect(after.get(title)).toBe(id);
   });
 
