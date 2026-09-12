@@ -1,28 +1,37 @@
-# Phase MD PR 1 — one stored-run module
+# Phase MD PR 1 — one writer for the stored run
 
 **TRIAD: stored shape.** The record under `ergomatic.monitorRun` is the
 subject, so this carries a full antagonist pass on the spec and a PM
 final-PR gate on the PR.
 
+**Revision 2, 2026-09-12.** The anchor pass blocked revision 1 on four
+findings and James ruled the re-scope. **The merge is gone.** Revision 1
+proposed concatenating `monitorRun.ts` and `handoffStore.ts`; the pass costed
+the cheaper alternative revision 1 had named in a clause and never priced, and
+it reaches the same export target with materially less blast radius (RF30,
+pointed at this spec's own option list). What changed is recorded in §11 rather
+than appended beneath the claims it replaces.
+
 ## What and why
 
 Two modules own one localStorage key. `monitorRun.ts` declares the record,
-builds it, and still carries a writer nothing in production calls;
-`handoffStore.ts` does every production write and read, and cannot import
-back the other way because the dependency already runs in that direction.
-The result is that the key's rules are split across two files that must be
-kept in step by comment, and three of those comments exist only to say so.
+builds it, reads it, and still carries a writer nothing in production calls;
+`handoffStore.ts` does every production write and cannot import back the other
+way, because the dependency already runs in that direction. The key's rules are
+therefore split across two files kept in step by comment, and three of those
+comments exist only to say so.
+
+**This PR moves the persistence half out of `monitorRun.ts` instead of merging
+the two files.** Afterwards `monitorRun.ts` is the record and its pure
+builders, with no storage in it at all, and `handoffStore.ts` is the only
+module that touches the key. The dependency runs one way — persistence imports
+the type — so the cycle that forced the boolean parameter is gone without
+anything being concatenated.
 
 Nothing a rower sees changes. What changes is that the next person who has to
-answer "what happens to the saved run when X" reads one module instead of two,
-and that the 127 test fixtures which currently write the key with a function
-production never calls start writing it the way production does.
-
-**The honest version of the claim, up front:** merging two files is not by
-itself a deepening. Two shallow modules concatenated are one shallow module.
-This PR only earns its name if the INTERFACE shrinks — §6 states the number it
-has to hit and §9 makes it an exit criterion, because "we merged them" is
-exactly the outcome that would look like success and be worth nothing.
+answer "what happens to the saved run when X" reads one module, and that the
+127 test fixtures which currently write the key with a function production
+never calls start writing it the way production does.
 
 ## 1. Research pass and does-it-exist
 
@@ -30,275 +39,340 @@ exactly the outcome that would look like success and be worth nothing.
   platform surface and this PR changes neither the key, the bytes, nor the
   read/write calls. The quota and denial behaviour it must preserve is
   already researched and recorded in `monitorRun.ts:565-598` and the hand-off
-  store design spec §8; this PR cites that work rather than redoing it
-  (RF18 — this project re-researches settled things and the second pass is
-  always the shallower one).
+  store design spec §8; this PR cites that work rather than redoing it.
 - **Is a new mechanism being invented?** One, and it is small: a
-  `RetireReason` union replacing a free-form `reason: string`. Nothing else
-  is new — every function in the merged module exists today.
-- **Does the underlying system have the concept?** The concept in question is
-  "one writer for one key", which is a property of our own code, not of a
-  system we are asserting on behalf of. Nothing here reaches the PM5, the
-  wire, or any number.
-- **Prior art in this repo, read before writing this:** the hand-off store's
-  own design spec and its two open residuals (`ROADMAP.md`, Codebase-audit
-  owners). Residual 1 is this PR's business; §7 put its decision to James and
-  he ruled A on 2026-09-12.
-- **Nothing found** on one point, recorded as a result: no research
-  document under `docs/superpowers/research/` covers module merging or
-  localStorage single-writer discipline. There was nothing to re-read.
+  `RetireReason` union replacing a free-form `reason: string`. Everything else
+  already exists and only changes address.
+- **Does the underlying system have the concept?** "One writer for one key" is
+  a property of our own code, not something we are asserting on a system's
+  behalf. Nothing here reaches the PM5, the wire, or any number.
+- **Prior art in this repo — and revision 1 missed the most important piece.**
+  `app/scripts/handoffStoreBoundary.test.ts` (54 KB, `unit` project per
+  `vitest.config.ts:22`) has enforced this PR's headline invariant since
+  2026-08-30, across four syntactic forms, with its own red/green detector
+  tests. Revision 1 proposed replacing it with a grep pasted into a PR body.
+  §9 now extends that gate instead. RF18's exact shape: the repo solved this
+  once and the spec was re-solving it shallower.
+- **Also prior art:** the hand-off store's own design spec and its two open
+  residuals (`ROADMAP.md`, Codebase-audit owners). Residual 1 is this PR's
+  business; §7 put its decision to James and he ruled A on 2026-09-12.
+- **Nothing found** on one point, recorded as a result: no document under
+  `docs/superpowers/research/` covers module boundaries or localStorage
+  single-writer discipline. There was nothing to re-read.
 
 ## 2. Census — verified, with the command that produced each number
 
-Every figure below was measured in the `phase-md` worktree at
-`576b09e1`. Where the report that opened this phase disagreed, the
-measurement wins and the difference is noted.
+Measured in the `phase-md` worktree. Where the walk that opened this phase
+disagreed, the measurement wins and the difference is noted.
 
 | Claim | Measured | Command |
 | --- | --- | --- |
 | `saveMonitorRun` production callers | **0** | `grep -rn 'saveMonitorRun(' src e2e --include='*.ts' --include='*.tsx' \| grep -v '\.test\.' \| grep -v monitorRun.ts` → empty |
 | `saveMonitorRun` fixture CALL SITES | **127** across **5** files | `grep -rn 'saveMonitorRun(' src e2e --include='*.ts' --include='*.tsx' \| grep '\.test\.\|e2e/'` — `LogSession.test.tsx` 76, `monitorRun.test.ts` 34, `WorkoutDetail.test.tsx` 11, `useStartWorkout.test.tsx` 5, `ConnectAction.test.tsx` 1 |
 | `retire` call sites | **13**, of which **12** wrap an entry in a one-element array | `grep -rnE '(^\|[^A-Za-z])retireHandoff\(\|(^\|[^A-Za-z.])retire\('` non-comment |
+| `RetireReason` distinct production values | **9**, every one a literal; nothing built at runtime | all 13 arguments read individually (anchor pass) |
 | `anyLiveSession()` production call sites | **0** | `grep -rnE '(^\|[^A-Za-z_.])anyLiveSession\('` non-comment, outside its own file → empty |
-| `monitorRunState()` production call sites | **0**; it is PRIVATE (`monitorRun.ts:1515`), called only by `anyLiveSession` | as above |
-| `stripMalformedSeries` / `isMonitorRun` consumers outside `monitorRun.ts` | **`handoffStore.ts` only** (`:501`, `:503`) | as above |
-| `measuredSessionSeconds` | an alias of `interruptedTotalSeconds` (`monitorRun.ts:1484`); the alias has **1** caller (`summaryModel.ts:1008`), the original has **0** | as above |
-| Value exports today | **19** (`monitorRun.ts`) + **16** (`handoffStore.ts`) = **35** | `grep -nE '^export (function\|const)'` |
+| `monitorRunState()` | **0** call sites, and **NOT EXPORTED** (`monitorRun.ts:1515`) — removing it changes the export count by zero | as above |
+| `MONITOR_RUN_KEY` consumers outside the two modules | **tests only** | `grep -rn 'MONITOR_RUN_KEY' src e2e scripts` minus the two files |
+| `loadMonitorRun` production consumers | **1** — `Today.tsx:45`, used at `:464` | as above |
+| `isPlainRecord` / `stripMalformedSeries` / `isMonitorRun` cross-module value consumers | **`handoffStore.ts` only** (`:67`, `:500`, `:501`, `:503`) | as above |
+| `measuredSessionSeconds` | an alias of `interruptedTotalSeconds` (`monitorRun.ts:1484`); the alias has the only PRODUCTION caller (`summaryModel.ts:1008`), the original has none, though it carries 6 test assertions | as above |
+| Value exports today | **19** (`monitorRun.ts`) + **16** (`handoffStore.ts`) = **35** | `grep -nE '^export (function\|const)'`, enumerated |
 
-**The circular-import constraint is real and stated by the code itself.**
-`connectGuardStage`'s doc comment (`monitorRun.ts:1690-1703`) gives the boolean
-parameter's whole reason: *"this function cannot call the store itself:
-`handoffStore.ts` imports `MONITOR_RUN_KEY`/`isMonitorRun` FROM this file
-... so the reverse import would be circular."* That is the constraint the
-merge removes, and it is the merge's only structural justification.
+**The circular-import constraint is real and exactly four values wide.**
+`handoffStore.ts:63-70` imports `MONITOR_RUN_KEY`, `isMonitorRun`,
+`isPlainRecord` and `stripMalformedSeries` from `monitorRun.ts` (plus the
+erased type). `connectGuardStage`'s doc comment (`monitorRun.ts:1690-1703`)
+gives the boolean parameter's whole reason: *"this function cannot call the
+store itself: `handoffStore.ts` imports `MONITOR_RUN_KEY`/`isMonitorRun` FROM
+this file ... so the reverse import would be circular."* Four values is the
+entire cycle, and §4 moves them.
 
-**One thing found in passing and deliberately NOT taken (RF34 says say so
-rather than let it look considered-and-dismissed):** `isPlainRecord` is
-exported from `monitorRun.ts` and independently re-declared in
-`builder/builderDraft.ts:47` and `session/draft.ts:85`. Three copies of a
-four-line predicate in three unrelated module families. It is not this PR's —
-folding it in would mean editing the builder and the timer draft for a
-refactor about the monitor's stored run, which is exactly the scope creep the
-fast-path rule exists to stop. It gets a ROADMAP row at this PR's hand-back
-gate, not a fix here.
+**Found in passing, deliberately NOT taken (RF34 — say so rather than let it
+look considered-and-dismissed):** `isPlainRecord` is re-declared privately in
+**four** other places — `builder/builderDraft.ts:47`, `session/draft.ts:85`,
+and `session/run.ts:75` (revision 1 said three copies; the anchor pass found
+the fourth). Folding them in means editing the builder and two draft modules
+for a refactor about the monitor's stored run. It gets a ROADMAP row at this
+PR's hand-back gate, not a fix here.
 
-## 3. The invariant this owes — not the mechanism (RF27)
-
-The plan for PR #258 specified a mechanism and owed an invariant, and five
-review rounds discovered the invariant a clause at a time. The invariants
-here, stated before any code:
+## 3. The invariants this owes — not the mechanism (RF27)
 
 1. **One writer.** After this PR, exactly one function writes
    `MONITOR_RUN_KEY`, and no exported symbol lets a caller write it another
-   way. A test fixture is a caller.
+   way. A test fixture is a caller. **This is already gated** — see §9.
 2. **The bytes are unchanged.** A record written by the pre-PR code reads
    back identically under the post-PR code, and vice versa. No field is
-   added, removed, renamed or re-typed. There is no migration because there
-   is nothing to migrate — and §5 says how that is gated rather than
-   asserted.
+   added, removed, renamed or re-typed. §5 gates it rather than asserting it.
 3. **The sacrifice ordering survives.** On a thrown write with a `series`
    present, the writer retries once WITHOUT the series and stamps
    `seriesDropped: true`; a record with no series skips the retry; a second
-   throw is swallowed. This is `monitorRun.ts:598-618`'s behaviour and
-   `performDurableWrite`'s, and after the merge there is one copy of it.
+   throw is swallowed. After this PR there is one copy of it, not two.
 4. **A read destroys nothing.** Malformed durable bytes are not cleared
    during a read; the store records the malformed state, treats the key as
    absent, receipts it, and clears at the next retire or accepted commit.
-   This was falsified once already by the legacy loader and fixed at the
-   store's final round; the merge must not re-open it.
-5. **Retire is key-bound.** A retire authorises removal of a specific
-   `{sessionKey, revision}`; a stale entry cannot retire a newer one. The
-   signature changes shape in this PR and the binding does not.
+5. **Retire is key-bound, and a superseded revision is receipted, never
+   refused.** *Corrected in revision 2 — the anchor pass proved the old
+   wording ("a stale entry cannot retire a newer one") FALSE about the code it
+   described.* `handoffStore.ts:876-901`: the lookup matches on `sessionKey`
+   alone, removal is unconditional, and `superseded = entry.revision !==
+   authorizedRevision` is computed and emitted AFTER the removal. This is
+   deliberate — it protects a late burst from a torn-down hook racing the
+   rower on the confirm panel. A gate written for the old wording goes red
+   against correct code, and an implementer "restoring" it deletes a
+   documented protection.
 
-**Lifetime table** — every piece of module state the merged module owns, its
-mint site, its clear sites, and what survives teardown, relaunch and re-arm —
-is owed by the PLAN, not this spec, and the plan does not pass review without
-it. PR #258's three lifetime bugs all lived in state that was minted
-per-attempt, cleared per-teardown, and claimed to be per-session.
+**Lifetime table** — every ref, guard and counter the store owns; its mint
+site; its clear sites; what survives teardown, relaunch and re-arm — is owed by
+the PLAN and the plan does not pass review without it. PR #258's three lifetime
+bugs all lived in state minted per-attempt, cleared per-teardown, and claiming
+to be per-session.
 
-## 4. What moves, in one list
+## 4. What moves — the re-scoped shape
 
-- `handoffStore.ts` absorbs `monitorRun.ts`'s persistence half. The record's
-  TYPE and its pure builders (`createMonitorRun`, `recordActual`,
-  `completeMonitorRun`, `completeInterruptedRun`, `withPartial`,
-  `partialRefusal`, `completeContinuityReset`, `appendSummaryObservations`)
-  stay where they are or move with it — the plan decides one file or two, and
-  either is acceptable as long as §6's count holds. What is NOT acceptable is
-  two files that both write.
-- `saveMonitorRun` is deleted. Its 127 fixture call sites become `commit(...)`,
-  which is what production does. This is the whole point: the fixtures stop
-  seeding past the producer (RF24).
+**`handoffStore.ts` absorbs the persistence half of `monitorRun.ts`:** the key,
+the three validators, `loadMonitorRun`, `clearMonitorRun`, and
+`connectGuardStage`. **`monitorRun.ts` keeps the `MonitorRun` type and the pure
+builders** (`createMonitorRun`, `recordActual`, `completeMonitorRun`,
+`completeInterruptedRun`, `withPartial`, `partialRefusal`,
+`completeContinuityReset`, `appendSummaryObservations`,
+`interruptedTotalSeconds`) and after this PR contains no storage call at all.
+The dependency runs one way — persistence imports the type — so no cycle
+exists and nothing is concatenated.
+
+- `saveMonitorRun` is **deleted**. Its 127 fixture call sites across 5 files
+  become `commit(...)`, which is what production does. This is the bulk of the
+  diff and the point of the PR: the fixtures stop seeding past the producer
+  (RF24).
+- `MONITOR_RUN_KEY`, `isMonitorRun`, `isPlainRecord` and `stripMalformedSeries`
+  become **private to `handoffStore.ts`**. Their only cross-module value
+  consumer is the store itself; the tests that import the key are updated.
+- `loadMonitorRun` and `clearMonitorRun` move and stay exported.
+  **`Today.tsx:45`'s import changes file**, which is budgeted in §7 because a
+  pin asserts on that exact line.
 - `retire(set, reason: string)` becomes `retire(entry, reason: RetireReason)`.
-  Twelve of thirteen call sites stop building a one-element array. The union
-  is closed over the reasons the code actually uses; `deriveClaim` branches on
-  `"save-success"` today and that branch becomes a compiler-checked member
-  rather than a string comparison.
-- A `replaceStale(reason)` covers the four sites that do the identical
-  "retire whatever stale entry exists before starting" — the plan names the
-  four from the census, and if it turns out they are not identical, it says
-  so and drops this bullet rather than forcing them together.
+  The union is closable over nine production literals (§2). Twelve of thirteen
+  sites stop building a one-element array. `deriveClaim`
+  (`handoffStore.ts:596`) branches on `"save-success"` and that comparison
+  becomes compiler-checked.
+  **Two open sub-decisions the plan must rule, not discover:** (a) the
+  thirteenth site (`useMonitorSession.ts:3880`) passes `staged` from
+  `takeStagedRetire`, so `stageRetire`'s array shape is a second interface
+  this change touches; (b) two tests pass reasons no production code uses —
+  `useMonitorSession.test.ts:4405` `"test-simulated-save-while-burst-open"`
+  and `:5002` `"test-simulated-discard"` — and widening the union to admit
+  them un-closes it, while reassigning them is not free because the first
+  asserts a save that must NOT take `deriveClaim`'s consumed branch.
+- **`replaceStale(reason)` covers THREE sites, not four.** *Corrected in
+  revision 2.* The three are `justrow/JustRow.tsx:646-652`,
+  `session/useStartWorkout.ts:117-123` and `workout/WorkoutDetail.tsx:424-430`,
+  byte-identical apart from the reason string. The fourth,
+  `useMonitorSession.ts:3274-3286`, **must not join them**: it branches on
+  `sameKeyStale`, retires only when the key differs, and reuses
+  `stale.revision` so its commit is an update rather than a create. Its own
+  comment (`:3259-3273`) names the defect folding it in produces — *"retiring
+  it here would be self-defeating: `retire()` tombstones unconditionally, so
+  the create-commit two lines below would find its OWN key freshly retired and
+  be refused."* RF23's shape.
 - `connectGuardStage()` loses its boolean parameter and reads the store
-  itself. Its two callers (`ConnectAction.tsx:217`, `JustRow.tsx:664`) stop
-  computing it.
-- `stripMalformedSeries` and `isMonitorRun` stop being exported — after the
-  merge their only consumer is inside the module.
+  itself. **Sold honestly:** its two callers do not stop reading the store —
+  `ConnectAction.tsx:199-217` and `JustRow.tsx:657-663` both call
+  `currentUnretiredHandoff()` for `setUnsavedCount` regardless. Net is −1
+  argument and +1 storage read, so the count the rower sees and the decision
+  to show the panel come from two reads where today they come from one. This
+  is consistency with the existing double-read of `loadRun()`, not a
+  simplification. Note also that `connectGuardStage` reads `session/run.ts`'s
+  `SessionRun`, so the store's dependency set gains the phone-timer record.
+- `anyLiveSession` is deleted per §7's ruling, taking the private
+  `monitorRunState` with it.
 - `measuredSessionSeconds`/`interruptedTotalSeconds`: one name survives. The
-  alias has the only caller, so the alias's NAME is the one to keep and the
-  original's is the one to drop, which is the opposite of what tidying by
-  instinct would do.
+  alias holds the only production caller, so the alias's NAME is the one to
+  keep — the opposite of what tidying by instinct would do.
+- The `handoffStore` namespace object (`handoffStore.ts:1002-1016`) is an exact
+  duplicate of 13 named exports and is deleted. It has three live consumers
+  (`Today.test.tsx:3170`, `LogSession.test.tsx:6363`, `:6482`), so it is a
+  removal with edits, not a free one.
 
-## 5. Stored shape: unchanged, and how that is gated
+## 5. The byte-compatibility gate — rebuilt, because revision 1's could not go red
 
-This is the TRIAD half and it gets a gate, not a sentence. Asserting "the
-bytes do not change" is exactly the claim RF21 says arrives as decoration.
+The anchor pass built revision 1's gate against the real module and ran the two
+mutations it named as its proof. Results:
 
-- **The gate:** a test that writes a record with the PRE-merge writer (pinned
-  as a byte-exact fixture captured before the change, not as a call to the new
-  code), reads it with the POST-merge reader, and asserts the parsed record is
-  deep-equal to the original — and the mirror, new writer to a reader pinned
-  against the old shape.
-- **The mutation that must make it fail:** add one field to the written
-  record, and separately rename `seriesDropped`. Both must go red. If either
-  stays green, the gate is measuring the writer against itself (a mirror,
-  RF11) and does not count.
-- **The fixture is captured from `main`, before the first line of the merge
-  is written.** A fixture generated after the change is the same mirror one
-  step later.
+| | leg 1 (fixture → reader → deep-equal) | leg 2 (new writer → old validator) |
+| --- | --- | --- |
+| mutation 1, writer adds a field | **passed** | red |
+| mutation 2, rename `seriesDropped` | **passed** | **passed** |
+
+**Leg 1 cannot go red for anything**, because `loadMonitorRun` returns the
+parsed object unmodified (`monitorRun.ts:671-674`) — no key whitelist, no
+normalisation. **Mutation 2 escapes both legs** because `isMonitorRun` is a
+positive conjunction whose own comment (`:548-553`) states it has *"no
+unknown-key check anywhere in this validator"*, so a renamed optional collapses
+to `undefined === undefined`. That is RF33's mechanism one layer up, at the
+stored-record validator rather than the compiler — and this repo's own
+antagonist ledger had already recorded `isMonitorRun`'s unknown-key tolerance
+as a BENEFIT without anyone asking what it costs a gate whose reader it is.
+
+The rebuilt gate:
+
+- **Leg 1 is deleted.** A deep-equal against a static fixture through a reader
+  that returns its input unmodified is decoration. What replaces it is a
+  **key-set assertion**: the parsed record's own key set equals a pinned
+  literal list, so an added or renamed field fails on the reader side.
+- **Leg 2 stays, and its fixtures are captured by DRIVING THE WRITER, not
+  hand-written.** The rename is invisible unless the fixture came from the
+  **sacrifice path** — the only writer that STAMPS `seriesDropped` rather than
+  copying it from the caller. Measured by the pass: `main` emits
+  `"seriesDropped":true`, the mutant emits `"seriesTrimmed":true`, and leg 2
+  goes red; a hand-written fixture containing `seriesDropped: true` leaves the
+  rename invisible on both legs.
+- **The fixture set, and what each shape can catch** — the plan states this
+  table and the PR body reproduces it with results: an ordinary write; a
+  **thrown** write with `series` present (the sacrifice — the only shape that
+  catches a `seriesDropped` rename); a series-less thrown write; a `v: 1`
+  record; a `partial`; a `summaryDetail`; a `mode: "justrow"`.
+- **Captured from `main`, before the first line of the change.** A fixture
+  generated afterwards is a mirror one step later (RF11).
 
 ## 6. The number this PR has to hit
 
-35 value exports today. The census makes five removals certain
-(`saveMonitorRun`, `anyLiveSession`, the private `monitorRunState` that dies
-with it, one of the two session-seconds names, and the `handoffStore`
-namespace object if it proves to be a duplicate of its own named exports) and
-two demotions to internal (`stripMalformedSeries`, `isMonitorRun`).
+35 value exports today. **Revision 1's arithmetic was wrong** — it counted the
+private `monitorRunState` as a removal, which changes the export count by zero,
+and pre-committed a removal §7 reserved for James.
 
-**Exit criterion: the merged module exports at most 28 values, and the PR
-body prints the before and after list.** If the plan finds it cannot get
-under that without inventing a facade, it says so and this PR is re-scoped
-rather than shipped as a file move. A facade that re-exports 35 symbols
-through one name is a shallower module than the two it replaced, not a deeper
-one.
+Under §4's shape, 35 − 4 removals (`saveMonitorRun`, `anyLiveSession`, one
+session-seconds name, the `handoffStore` namespace object) − 4 demotions to
+private (`MONITOR_RUN_KEY`, `isMonitorRun`, `isPlainRecord`,
+`stripMalformedSeries`) = **27**.
+
+**Exit criterion: at most 28, with the before and after lists printed in the
+PR body.** The extra one is slack for a demotion the plan finds it cannot take.
+If the plan cannot get under 28 without inventing a facade, it says so and this
+PR is re-scoped — a facade re-exporting 35 symbols through one name is
+shallower than the two modules it replaced.
 
 ## 7. RULED BY JAMES, 2026-09-12: option A
 
-**Delete both, re-home the documentation, rewrite the pin.** The work below is
-therefore in PR 1's scope, and the pin rewrite carries its own mutation
-requirement: the rewritten pin must be proven to go red, because the version it
-replaces would pass forever once the symbol it greps for cannot exist. A pin
-that survives this change without being rewritten is the defect, not the
-leftover.
+**Delete `anyLiveSession` and `monitorRunState`, re-home the anti-pattern
+documentation, and rewrite the pin.**
 
-The option list that produced the ruling is kept below as the record.
+**The pin work is bigger than revision 1 said, in two ways the anchor pass
+found.**
 
-### The question as it was put
+1. **The negative import pin dies with the symbol.**
+   `todayGuard.pin.test.ts:91` asserts
+   `expect(source).not.toMatch(/import\s*\{[^}]*\banyLiveSession\b/)`. Once the
+   symbol does not exist, no file can import it and the assertion can never
+   fail (RF21). It **can** go red today — the pass proved it by adding the
+   import to `Today.tsx` as a separate statement, leaving the pinned import
+   line intact: *"AssertionError: expected 'import { useEffect, useRef,
+   useState …' not to match"*, 1 failed / 2 passed. So a live gate becomes a
+   dead one unless it is rewritten to bind against the RULE (Today's guard
+   reads the record directly).
+2. **The merge-independent half: this PR breaks the pin's OTHER two
+   assertions.** `todayGuard.pin.test.ts:87-92` pins `Today.tsx`'s two monitor
+   imports byte-exactly, and §4 moves `loadMonitorRun` to another file, so
+   assertion 1 breaks by construction. The pin's own header says *"If a LATER
+   phase legitimately changes this guard, update this constant in the same
+   commit and say why in the report. Do not delete the pin."* That is now
+   budgeted.
 
-**`anyLiveSession()` and its private `monitorRunState()` have zero production
-callers, and the code argues in detail for keeping them anyway.**
-`monitorRun.ts:1499-1514` records the 2026-08-30 ruling: the functions are
-cited BY NAME as the documented anti-pattern that a real shipped data-loss bug
-(ROADMAP M-1, the F5 data-loss class) warns every future guard away from, and
-deleting them orphans that documentation.
+**Corrected costs.** Revision 1 said "~5 test cases"; it is **12** —
+`monitorRun.test.ts:1226-1280` is an `it.each` over nine cases plus a
+"all nine cells are covered exactly once" meta-test, plus the two `DISAGREES`
+tests at `:1387` and `:1394`. A 2.4x undercount in the section that invokes
+RF30. Revision 1 also said "eight files, seven outside `monitorRun.ts`"; the
+ruling comment names eight ITEMS, six of them files other than `monitorRun.ts`,
+two being in-file doc comments.
 
-**Measured, because the comment's own count is off and the difference
-matters.** The comment names eight files. Seven cite the pair outside
-`monitorRun.ts`, and they split two ways:
-
-- **Comment-only, 5 files** — `ConnectAction.tsx:67-69`,
-  `useMonitorSession.ts:19-20`, `useStartWorkout.ts:138`, `Today.tsx:407-421`,
-  `WorkoutDetail.test.tsx:856`. Prose edits, no behaviour.
-- **Executable, 2 files** — `monitorRun.test.ts` imports it (`:29`) and asserts
-  on it in a truth table plus three named tests (`:1226`, `:1272`, `:1387-1398`);
-  those die with the function. And `todayGuard.pin.test.ts:51,91`, which is
-  **not a pin on the function at all** — it reads `Today.tsx`'s SOURCE TEXT and
-  asserts it does not `import { anyLiveSession }`.
-
-**That last one is the finding, and it changes the option list.** If
-`anyLiveSession` is deleted, that pin passes forever and can never go red — no
-file can import a symbol that does not exist. It becomes decoration that reads
-as a guard (RF21), on the exact anti-pattern it was written to prevent. So
-option A is not "delete and update comments": it necessarily includes
-rewriting that pin to bind against the RULE (Today's guard reads the record
-directly) rather than against a deleted name. If A is chosen and the pin is
-left alone, this PR ships an RF21 gate.
-
-Two options, costs measured (RF30 — an invented cost picks the design for him):
-
-- **A. Delete both, re-home the documentation, and rewrite the pin.** Cost:
-  5 comment-only edits, ~5 test cases deleted with the function, and one pin
-  rewritten so it still bites — the pin rewrite is the only part carrying
-  risk, and it needs its own mutation proving it goes red. Benefit: two dead
-  functions go, and nothing can accidentally start calling them.
-- **B. Keep both, unchanged.** Cost: the merged module ships a dead export
-  and a dead private function, which is RF29's shape — dead code with no row
-  to remove it — so it needs a row and the question returns later. Benefit:
-  zero risk to the documentation a real data-loss bug paid for, and the pin
-  keeps whatever bite it has today (untested either way: nobody has checked
-  whether that pin can currently go red, and this spec does not claim it can).
-
-**Recommendation: A**, because the documentation's value is the RULE, not the
-function that illustrates it, and a rule stated in the module that enforces it
-is harder to orphan than one attached to a function nobody calls. But this is
-his call, it is the exact decision the ROADMAP residual reserved for "whoever
-next touches these functions", and the work does not start until he rules.
+The option list that produced the ruling is preserved in git history at
+revision 1 rather than reprinted here, per the file's corrections-are-applied
+rule.
 
 ## 8. Tests — replace, don't layer
 
-- `monitorRun.test.ts` (2343 lines) and `handoffStore.test.ts` (1273) become
-  one suite driving commit → read → retire → rehydrate through the merged
-  interface. Old tests that reach past the interface are deleted, not ported;
-  the interface is the test surface.
 - The 127 `saveMonitorRun` fixture seeds become `commit(...)`. This is the
-  change that closes RF24 on this key, and it is the bulk of the diff.
-- **One test must start upstream of the producer**: it commits, then mounts
-  the reader, and asserts what the reader shows — no seeded record, no mocked
+  change that closes RF24 on this key and the bulk of the diff.
+- `monitorRun.test.ts` (2343) loses its persistence half to
+  `handoffStore.test.ts` (1273); what remains tests the builders as pure
+  functions. Tests that reach past an interface are deleted, not ported.
+- **One test starts upstream of the producer**: it commits, then mounts the
+  reader, and asserts what the reader shows — no seeded record, no mocked
   store. Both halves being well tested is exactly the condition that hides a
   broken seam.
-- A refused durable write yields `saved-without-series` **and the fixture
-  path sees it** — today the fixture path cannot, because it does not go
-  through the writer that produces the verdict.
-- `anyLiveSession`'s truth-table suite and three named tests
-  (`monitorRun.test.ts:1226`, `:1272`, `:1387-1398`) are deleted with the
-  function, per §7's ruling.
-- **`todayGuard.pin.test.ts` is rewritten to bind against the rule, not the
-  name**, and the rewrite ships with a mutation proving it goes red — make
-  `Today.tsx`'s guard read through the store instead of reading the record
-  directly, and the pin must fail. Its current form (`:51`, `:91`) greps
-  `Today.tsx`'s source for an `anyLiveSession` import, which no file can
-  contain once the symbol is gone.
+- A refused durable write yields `saved-without-series` **and the fixture path
+  sees it** — today the fixture path cannot, because it does not go through
+  the writer that produces the verdict.
+- `anyLiveSession`'s twelve cases are deleted with the function (§7).
+- **`todayGuard.pin.test.ts` is rewritten** so all three assertions still
+  bite, and ships with a mutation proving it: make `Today.tsx`'s guard read
+  through the store instead of reading the record directly, and the pin must
+  fail.
 
 ## 9. Exit criteria
 
-1. `grep -rn 'saveMonitorRun' app/src app/e2e` returns nothing.
-2. Exactly one function in the repo calls `localStorage.setItem` with
-   `MONITOR_RUN_KEY`, shown by grep in the PR body.
-3. The merged module exports ≤ 28 values; before/after lists in the PR body.
-4. §5's byte-compatibility gate is green, and the PR body states both
-   mutations and what their failures said.
+1. `grep -rn 'saveMonitorRun(' app/src app/e2e` returns nothing. **Call sites,
+   not the bare string** — six comments record real history
+   (`you/concept2Seen.ts:11,42`, `handoffStore.ts:86,537,953`,
+   `useMonitorSession.ts:2408`, `e2e/connected.spec.ts:1616`), two of which
+   predicted this PR: *"Task 3 removes that function's own copy once its
+   callers move onto this store."* Those get reworded, not deleted, and the PR
+   says so.
+2. **`app/scripts/handoffStoreBoundary.test.ts` is EXTENDED, not replaced, and
+   is green.** Specifically: `monitorRun.ts` is removed from `SRC_ALLOWLIST`
+   (`:119-133`) — leaving an exemption for a file that no longer needs one is
+   RF21 and re-opens the invariant this PR closes; the *"monitorRun.ts holds
+   EXACTLY the three sanctioned raw key operations"* count (`:536-551`) is
+   updated to zero or the assertion is moved; and `STORE_FILE` (`:89`) plus the
+   module-scope-binding exemption (`:596`) are reconciled with §4's shape.
+   **A grep in a PR body does not satisfy this** — it is a one-time
+   observation where a standing gate already catches the string-literal form,
+   the `key:`-property indirection and legacy-writer calls.
+3. The merged surface exports ≤ 28 values; before/after lists in the PR body.
+4. §5's rebuilt gate is green, and the PR body prints the fixture-shape table,
+   both mutations, and what each failure said.
 5. `grep -rn 'anyLiveSession\|monitorRunState' app/src` returns nothing, and
-   the rewritten `todayGuard` pin is shown to go red under the mutation §8
-   names — a pin that passes because its subject no longer exists is the
-   failure this criterion exists to catch.
+   the rewritten `todayGuard` pin is shown to go red under §8's mutation — a
+   pin that passes because its subject no longer exists is the failure this
+   criterion exists to catch.
 6. `pnpm test`, `pnpm typecheck`, `pnpm lint`, and a full `pnpm e2e` run whose
    result has been read (RF1 — this diff touches `app/src/`).
-7. No behaviour change: no screenshot in `docs/screenshots/` differs, and the
-   PR says so rather than committing refreshed captures.
+7. No behaviour change, stated the way `docs/TESTING.md` §8 rules it: **no
+   screenshot is committed.** *Corrected in revision 2 — revision 1 required
+   that no capture DIFFER, which the repo measured as impossible on
+   2026-09-12 (a 7-pixel floor with every clock frozen and a fresh database).
+   A criterion nobody can meet teaches people to waive criteria.*
 
-## 10. What an antagonist should attack
+## 10. What the plan must still resolve
 
-- The §6 export count: is 28 achievable, or does the census undercount what
-  the two modules genuinely owe their callers? A number pulled from a census
-  of what is EASY to delete is not a design target.
-- Whether the two files should merge at all, versus keeping `monitorRun.ts` as
-  the record's declaration and moving only the writer. The circular import is
-  removed by moving `MONITOR_RUN_KEY` and `isMonitorRun`, which may not
-  require a merge.
-- The `RetireReason` union: is `reason` genuinely closed, or does some caller
-  pass a string built at runtime? The census counted call sites, not their
-  arguments.
-- §5's fixture: a "pre-merge writer" fixture captured on `main` is only
-  byte-exact for the record shapes it happens to contain. Which shapes must it
-  contain — and is `seriesDropped: true` one of them?
-- Whether `replaceStale` is four identical sites or three plus one that looks
-  similar. RF23's shape: two mechanisms writing one value, where the
-  better-informed one loses silently.
+Carried from the anchor pass as open, not answered here:
+
+- Whether `handoffStore.ts` stays one file once it absorbs the persistence
+  half, or splits — `handoffStoreBoundary.test.ts:89`/`:596` constrains the
+  choice and the cheaper side was not worked out.
+- The two `retire` sub-decisions in §4 (the staged-array shape; the two
+  test-only reasons).
+- The lifetime table (§3).
+
+## 11. What revision 2 changed, and why
+
+Recorded here so the record replaces the claim rather than sitting beneath it.
+
+- **The merge is gone.** Revision 1's §10 named the cheaper option — relocate
+  the four values that form the cycle — and attached no cost to it, then used
+  an export-count argument to justify the merge. The anchor pass costed it:
+  the target is reachable without concatenating a line, while merging
+  additionally breaks two byte-exact import pins and forces a call on the
+  boundary gate's `STORE_FILE`. RF30, pointed at this spec.
+- **§3 invariant 5 was false** about the code it described.
+- **§5's gate could not go red** for either mutation it named; rebuilt.
+- **§9 criterion 2 was weaker than a gate that already exists**; it now
+  extends that gate.
+- **`replaceStale` is three sites, not four.**
+- **§6's arithmetic** counted a private function as an export.
+- **§7's cost was a 2.4x undercount**, and missed that this PR breaks the
+  pin's other assertions regardless of the ruling.
+- **§9 criterion 7 was unsatisfiable.**
+- **The `saveMonitorRun` figure** is 127 call sites across 5 files; the
+  earlier 148/10 was the bare string over test files, 21 of which are imports,
+  comments and source-text pins.

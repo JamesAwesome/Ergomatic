@@ -10021,3 +10021,124 @@ counting the corpus a different way than the spec counted it.
   `pnpm exec` collapsed a signal death to 1, here a pipe collapsed a failure to
   0. **Technique:** never read a gate's exit status through a pipe. Redirect to a
   file and `echo $?`, or use `PIPESTATUS`.
+
+## Phase MD anchor pass, 2026-09-12 (stored-run module, TRIAD: stored shape)
+
+- **"A write-then-read deep-equal round-trip gates a stored shape against
+  renames and added fields."** False, and proven by building the gate. Leg 1
+  (static fixture -> post-merge reader -> deep-equal) cannot go red for
+  ANYTHING, because `loadMonitorRun` returns the parsed object unmodified —
+  there is no key whitelist, no normalisation. Leg 2 (new writer -> old
+  validator) catches an added field, but catches a RENAMED field only when
+  the fixture was produced by the SACRIFICE path, the one writer that STAMPS
+  `seriesDropped` rather than copying it from the caller. A hand-written
+  fixture containing `seriesDropped: true` leaves the rename invisible on
+  both legs, and `isMonitorRun` ACCEPTS the renamed record either way.
+  **Technique: esbuild-bundle the real module, stub `localStorage`, build the
+  gate exactly as the spec words it, and run the spec's own named mutations
+  against it before believing the gate exists.** Corollary, and the reason
+  this class recurs here: **a positive-conjunction validator is blind to a
+  renamed optional in exactly the direction that matters** — RF33's compiler
+  finding, one layer up, at the stored-record validator. This repo's own
+  ledger had already recorded `isMonitorRun`'s unknown-key tolerance as a
+  BENEFIT (LT spec 2 vetted ground); nobody asked what it costs a gate whose
+  reader it is.
+
+- **"Every gate the merge needs has to be built."** False: the invariant it
+  led with was already enforced. `app/scripts/handoffStoreBoundary.test.ts`
+  (1063 lines, `unit` project) had gated "nothing outside the store writes
+  MONITOR_RUN_KEY" across four syntactic forms since 2026-08-30, and the spec
+  proposed replacing it with a grep pasted into a PR body. **Technique:
+  before writing an exit criterion of the form "a grep in the PR body shows
+  X", grep `app/scripts/` and the vitest project globs for a standing gate
+  on X.** A structural gate downgraded to a one-time observation reads as
+  progress. Corollary: an allowlist ENTRY for a file that no longer needs
+  the exemption is RF21 — it re-opens the invariant its own PR closed.
+
+- **"Four call sites do the identical thing, so fold them into one helper."**
+  Three did; the fourth carried a `sameKeyStale` branch whose own comment
+  says folding it in is "self-defeating" (the create-commit two lines below
+  would find its own key freshly retired and be refused). **Technique: when a
+  spec says N sites are identical, print all N with `sed -n` and diff them by
+  eye — and read what each does with the value AFTER the shared fragment.**
+  The fourth here reused `stale.revision` to make its commit an update rather
+  than a create; the shared fragment looked identical and the tail did not.
+
+- **"A stale entry cannot retire a newer one" (a spec's stated invariant).**
+  False about the code it described: `retire` is key-bound, not
+  revision-bound — it removes the current entry regardless of the authorised
+  revision and reports `superseded`, deliberately, to protect a late burst
+  from a torn-down hook. **Technique: for every invariant a spec says the
+  change "must not re-open", find the branch that would REFUSE and check it
+  exists.** A gate written for this one would have gone red against correct
+  code, and "fixing" it would have deleted a documented protection.
+
+- **A count and the command beside it can disagree, in a table headed
+  "measured".** The spec's `saveMonitorRun` row said 148/10 with a
+  paren-anchored grep beside it; that grep yields 127/5, and 148/10 is the
+  bare-string count over test files. **Technique: run the command the table
+  prints, not the number the table prints.** 21 of the 148 were comments and
+  source-text pins, five in non-test files — which mattered, because the exit
+  criterion grepped the bare string and would have deleted comments recording
+  a real audit finding.
+
+- **An export-count target derived from a census can include a symbol that is
+  not exported.** `monitorRunState` was counted as one of five certain
+  removals from a 35-export baseline; it is `function monitorRunState()`,
+  private. The floor was 29, not 28 — and one of the remaining four was
+  contingent on a question the spec itself reserved for James. **Technique:
+  re-run `grep -nE '^export (function|const)'` and tick each claimed removal
+  against the list.** Corollary, RF30: the cheaper option the spec named but
+  did not cost hit the same target — the shrinkage came from deletions and
+  demotions, never from concatenating two files. **James ruled the re-scope
+  on the strength of it; the merge was dropped and the spec reissued as
+  revision 2.**
+
+- **A dead pin's RF21 reading was right, and the same file's OTHER assertions
+  were the finding.** `todayGuard.pin.test.ts`'s negative import pin does die
+  with the symbol — confirmed. But it CAN go red today (proven: add the
+  import as a SEPARATE statement, leaving the pinned import line intact, and
+  it fails), and its two byte-exact import pins on `Today.tsx` are broken by
+  the change itself, which the spec analysing that very file did not notice.
+  **Technique: when a spec quotes one assertion from a test, read the whole
+  `it` block and the whole file — a source-text pin usually pins more than
+  the thing under discussion.**
+
+- **"Renaming a spec silently stops its fixture matching."** False, and it
+  was one of two justifications for a whole PR. Copying the spec to a new
+  filename makes the `import.meta.url` surgery miss, and the module-scope
+  `readFileSync` throws ENOENT with the malformed path printed:
+  `Test Files 1 failed`. **Technique: to test a "silent" claim, produce the
+  condition and read the runner's output.** (`Tests no tests` on that line is
+  the repo's own read-both-summary-lines trap, not silence.)
+
+- **A refactor row can be a stored-shape change nobody labelled.** Phase MD
+  scoped TRIAD to PR 1 while PR 3 proposed making `Sample.r` required with
+  `null` meaning absent — a field inside `MonitorRun.series`, persisted whole
+  to localStorage AND to Postgres. Measured: +9 bytes per WORK sample,
+  +127 KiB / 19.1% at `SERIES_SAMPLE_CAP`, on the record whose size already
+  forced the series-sacrifice mechanism, and whose own comment says the
+  absent idiom exists so "a work sample costs zero extra bytes." **Technique:
+  for any type a phase proposes to tighten, follow the field UP to every
+  `JSON.stringify` that can serialise it, then price the change per record at
+  the corpus cap.** And note the generalisation error underneath: RF33
+  prescribes a required field on a domain FUNCTION'S INPUT INTERFACE; making
+  the shared PERSISTED shape required buys the same compiler gate at 127 KiB.
+  (The PM gate reached the same conclusion by a different route the same day;
+  two independent arrivals is why the ROADMAP now reads "TRIAD on PR 1 and
+  PR 3".)
+
+- **Attacked and could not break (Phase MD vetted ground):** all four ROADMAP
+  line-count figures (`driver.ts` 7493/2152, `monitorRun.ts` 1719/339,
+  `handoffStore.ts` 1016/418, `useMonitorSession.ts` 6474/1936); zero
+  production callers of `saveMonitorRun`; 19+16=35 value exports, enumerated;
+  13 retire call sites with 12 one-element arrays; `RetireReason` closable
+  over nine production literals with nothing built at runtime; the circular
+  import being exactly four values wide (`handoffStore.ts:63-70`); the spec's
+  invariants 1-4 all true today, with `performDurableWrite` a faithful port
+  of `saveMonitorRun`'s sacrifice ordering; `monitorRunState` private and
+  `anyLiveSession` production-callerless; `isMonitorRun`/`stripMalformedSeries`
+  demotable (`handoffStore.ts` sole consumer); the freeze-observer
+  exploration's six test-only exports and 38 `useRef` declarations, both
+  exact; the replay exploration's 36 files and its filename-hardcoded path
+  surgery, both exact.
