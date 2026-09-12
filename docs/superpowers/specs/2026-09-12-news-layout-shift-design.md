@@ -78,7 +78,7 @@ word, the ` · READ` meta suffix, the row's own `data-read`, and the
 `aria-hidden`, colourless, and claims nothing. The `error` state gets the same
 invisible gutter as `loading`.
 
-**Measured (§4 probe, 390×844 and 844×390, current build):** with a 10px
+**Measured (`docs/design/news-shift-gate0/probe-shift.mjs`, `probe-weight.mjs` and `gate0.mjs`, 390×844 and 844×390, against the ergomatic-68485 stack — phase-ps-pr1 at fc02b982, which differs from origin/main only by 206 appended stats CSS rules, none touching News):** with a 10px
 `flex: none` gutter injected on the loading frame, every row's `y` equals the
 settled frame's — portrait `137,252,318,463,551,638,726` both, landscape
 `137,231,298,442,509,597,663` both. Reserving the gutter is the whole vertical
