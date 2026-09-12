@@ -1,4 +1,5 @@
 import type { EnginePhase } from "./engine";
+import { isPlainRecord } from "../isPlainRecord";
 
 /** localStorage key for the session run record — 6B's timer state. A
  *  SEPARATE key from `DRAFT_KEY` (spec: "Run state" decision): the draft
@@ -72,9 +73,6 @@ export interface SessionRun {
 // Loose on purpose, same rationale as draft.ts's isPlainRecord: "shaped
 // enough not to crash the screens that read it immediately," not full
 // per-phase domain validation.
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 // Checks `v` plus every field a screen/engine function reads unconditionally
 // on load — mirrors draft.ts's isSessionDraft exactly (same discipline, same

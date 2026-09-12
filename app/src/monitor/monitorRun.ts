@@ -24,6 +24,7 @@ import type { IntervalActual } from "../../domain/monitor/types.js";
 import type { LogSeed } from "../session/logDraft";
 import type { SeriesData } from "./seriesRecorder";
 import { clearRun, loadRun } from "../session/run";
+import { isPlainRecord } from "../isPlainRecord";
 
 export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
 
@@ -444,17 +445,6 @@ export interface MonitorRun {
 // this wave exists to fix, on the records of the rowers most likely to be
 // mid-session. Do that only together with the version bump or the
 // migration, and price the loss above first.
-// EXPORTED (hand-off store, design spec §8) so `handoffStore.ts`'s hydration
-// path validates raw durable bytes with the IDENTICAL rule `loadMonitorRun`
-// uses, rather than keeping a second, hand-maintained copy — two shape checks
-// for one stored type drifting apart is its own defect class (RF23). Both
-// readers now obey §8's "malformed durable bytes are never cleared during a
-// read": neither this validator nor `loadMonitorRun` clears anything.
-export function isPlainRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /** True when `value.series` is either absent or shaped enough to trust — a
  *  plain record carrying a `samples` array, never a per-sample domain

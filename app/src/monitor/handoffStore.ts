@@ -64,10 +64,10 @@ import type { ConnectionAttemptId } from "../../domain/monitor/types.js";
 import {
   MONITOR_RUN_KEY,
   isMonitorRun,
-  isPlainRecord,
   stripMalformedSeries,
   type MonitorRun,
 } from "./monitorRun.js";
+import { isPlainRecord } from "../isPlainRecord";
 
 /** The store's one entry shape (§1): "{ sessionKey, revision, run }" —
  *  `sessionKey` = `startedAt`, `revision` a monotonic counter the store
