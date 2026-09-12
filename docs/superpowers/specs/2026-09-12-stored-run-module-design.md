@@ -70,7 +70,7 @@ disagreed, the measurement wins and the difference is noted.
 | `saveMonitorRun` production callers | **0** | `grep -rn 'saveMonitorRun(' src e2e --include='*.ts' --include='*.tsx' \| grep -v '\.test\.' \| grep -v monitorRun.ts` → empty |
 | `saveMonitorRun` fixture CALL SITES | **127** across **5** files | `grep -rn 'saveMonitorRun(' src e2e --include='*.ts' --include='*.tsx' \| grep '\.test\.\|e2e/'` — `LogSession.test.tsx` 76, `monitorRun.test.ts` 34, `WorkoutDetail.test.tsx` 11, `useStartWorkout.test.tsx` 5, `ConnectAction.test.tsx` 1 |
 | `retire` call sites | **13**, of which **12** wrap an entry in a one-element array | `grep -rnE '(^\|[^A-Za-z])retireHandoff\(\|(^\|[^A-Za-z.])retire\('` non-comment |
-| `RetireReason` distinct production values | **9**, every one a literal; nothing built at runtime | all 13 arguments read individually (anchor pass) |
+| `RetireReason` distinct production values | **8**, every one a literal; nothing built at runtime (rev 2 said 9, crediting the anchor pass; the plan re-read all 13 arguments and harden lens 1 confirmed 8 — `monitor-discard`, `save-success` and `start-replace` each appear at more than one site) | all 13 arguments read individually |
 | `anyLiveSession()` production call sites | **0** | `grep -rnE '(^\|[^A-Za-z_.])anyLiveSession\('` non-comment, outside its own file → empty |
 | `monitorRunState()` | **0** call sites, and **NOT EXPORTED** (`monitorRun.ts:1515`) — removing it changes the export count by zero | as above |
 | `MONITOR_RUN_KEY` consumers outside the two modules | **tests only** | `grep -rn 'MONITOR_RUN_KEY' src e2e scripts` minus the two files |
@@ -144,9 +144,13 @@ exists and nothing is concatenated.
   become `commit(...)`, which is what production does. This is the bulk of the
   diff and the point of the PR: the fixtures stop seeding past the producer
   (RF24).
-- `MONITOR_RUN_KEY`, `isMonitorRun`, `isPlainRecord` and `stripMalformedSeries`
-  become **private to `handoffStore.ts`**. Their only cross-module value
-  consumer is the store itself; the tests that import the key are updated.
+- `isMonitorRun` and `stripMalformedSeries` become **private to
+  `handoffStore.ts`**; `isPlainRecord` moves to the shared `src/isPlainRecord.ts`
+  (James's rider). **`MONITOR_RUN_KEY` STAYS EXPORTED from the store** (the
+  plan took §6's one unit of slack): 13 files import it by name — 11 tests and
+  2 e2e specs — to seed raw bytes deliberately, and a string literal in 13
+  files is a worse duplication than one export. Their only cross-module VALUE
+  consumers otherwise are tests, updated to import from the store.
 - `loadMonitorRun` moves and stays exported. **`clearMonitorRun` is DELETED, not moved (plan, 2026-09-12; harden lens 1 confirmed):** zero production callers, a raw `removeItem` that would leave the store's `current` disagreeing with the durable tier, and the boundary gate already names it as a legacy writer. Its 12 test call sites became `localStorage.removeItem(MONITOR_RUN_KEY)`.
   **`Today.tsx:45`'s import changes file**, which is budgeted in §7 because a
   pin asserts on that exact line.

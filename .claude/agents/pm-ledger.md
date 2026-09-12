@@ -5,6 +5,49 @@ engagement. **Not read up front** — the bounded, always-read half is
 `pm-techniques.md`, and an entry is proposed to both. Grep this file for the
 detail behind a ruling, or for the history of a phase you are about to judge.
 
+## 2026-09-12 — Phase MD PR 1 final gate (#408, TRIAD: stored shape)
+
+**Verdict:** PASS WITH CONDITIONS. Four blocking, none about behaviour — CI
+in-progress at head, three stale deviation facts in the spec and plan, a
+295-word fold, and one residual with no ROADMAP row. All four discharged on
+the branch before the hand-back.
+
+- **Best-gated stored-shape PR so far, and the check that proved it was
+  arithmetic.** Seven byte fixtures captured by driving the real writer; every
+  byte count in the body's table recomputed from the committed JSON and all
+  seven reproduced exactly. **A fixture table is checkable in one `node -e`;
+  run it.**
+- **A deviation is right in the PR body and wrong in the census table** — see
+  the techniques entry. Three facts, three artefacts, three different numbers.
+- **An exit criterion written as a bare `grep <deleted symbol>` cannot be met,
+  and the sibling criterion already knew.** §9.1 said "call sites, not the bare
+  string"; §9.5 said "returns nothing" and got 20 comment-only hits. **Read
+  such a criterion as "no non-comment reference", and make the PR print the
+  grep and dispose of every survivor.**
+- **"Tester impact: none" on a refactor is checkable, not takeable.** Strip
+  comments from every production file in the diff and read what is left:
+  #408's entire production delta was `retire`'s call shape and import
+  re-pointing, and `connectGuardStage()`'s new self-read takes the same memory
+  tier both callers already passed it. **A body's "closes a hole" is about a
+  future caller until the old call sites prove otherwise.**
+- **A lifetime table is a plan artefact, and a plan is not a record.** The one
+  live residual this PR found — a masked `safeRemoveItem` at retire lets a
+  relaunch rehydrate a retired record — lived only in the plan's RF27 table and
+  the PR body, and the hand-back proposed NO rows. **A plan's table is where a
+  real finding goes to be filed and not registered.** Proposed at the hand-back.
+- **Register:** nothing overdue (earliest `dies` 2026-09-19 vs today). Two
+  strikes correctly proposed and not taken. `isPlainRecord`'s row led DONE and
+  still argued in present tense that it was left out — reconciled.
+- **Release: not needed, no tag.** Phase sequence unchanged. Exploration A
+  closed NO PR and delivered the artifact it was funded for. **Open item for
+  PR 2's gate:** it now absorbs three Exploration A riders on top of the two
+  candidates grouped into it; re-run the one-risk-model test then.
+- Fold-word series: #248 274, #249 225, #258 134, #268 186, #272 153,
+  **#408 295 at first presentation — the worst on record**, cut to six bullets
+  before the hand-back. Regression source: a 50-word "which module got deeper"
+  mechanism paragraph above the bullets, plus census counts inside outcome
+  bullets.
+
 ## Design-gate rulings, 2026-08-15 (Phase CR2 spec 1, "numbers")
 
 - **"The captures don't show X" is a claim about our LOGGING, not the machine.**

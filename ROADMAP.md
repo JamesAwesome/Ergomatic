@@ -596,6 +596,17 @@ an investigation whose honest answer may be "no PR".
       writer — including a thrown write, the only shape that can catch a
       renamed `seriesDropped`.
 - [ ] **PR 2 — a lifecycle seam on `useMonitorSession`, and publish `axes`.**
+      **Carries three one-line riders from Exploration A (2026-09-12):** (1)
+      drop the dead `export` on `ROWING_ACTIVE_FALLBACK_FRAMES` (zero
+      importers); (2) `resumeEdgeArmedRef`'s doc claims to mirror
+      `framesWhileHiddenRef`'s lifetime — five clear sites versus two — correct
+      the comment; (3) `framesEverEmittedRef`'s doc says "cleared at teardown"
+      and no clear site exists — its lifetime is the MOUNT. Plus the RF19
+      finding that `lifecycleUnsubRef`/`lifecycleAttemptRef` emit no ring entry
+      on any path, which the seam PR owns. Spec drafted and antagonist-passed
+      2026-09-12 (rev 2, in the controller's scratchpad until the PR opens);
+      the PM re-runs the one-risk-model grouping test at its gate now that the
+      riders are in.
       *Two candidates grouped into one PR at the PM gate (2026-09-12): both
       change this hook's published interface, both are test-facing, and a
       reviewer holds one risk model rather than two.*
@@ -699,7 +710,7 @@ an investigation whose honest answer may be "no PR".
       remove). Deletion test: **moves, not concentrates.** The artifact the
       row was funded for — the RF27 lifetime table over the refs — is
       delivered: `docs/superpowers/audits/2026-09-12-architecture-walk/exploration-a-freeze-observer.md`.
-      Three one-line riders ride PR 2. Re-open only if PR 2 lands and the
+      Three one-line riders ride PR 2 (named in PR 2's row). Re-open only if PR 2 lands and the
       foreground handler, with lifecycle injected, still reads as a module
       wanting an owner.
 - [ ] **Exploration B — one replay harness. Runs after PR 2, never before.**
@@ -2817,16 +2828,12 @@ Each needs erg time or a deliberate recording session.
   all four bodies are the same line —
   `typeof value === "object" && value !== null && !Array.isArray(value)`. Found
   by the 2026-09-12 architecture walk's PR 1 spec and deliberately left out of
-  that PR: folding it in means editing the builder and two draft modules for a
-  change about the monitor's stored run, which is the scope creep the fast-path
-  rule exists to stop (RF34 — say so rather than let the gap look
-  considered-and-dismissed). **What would fix it now:** one predicate in a
-  shared module, four call sites re-pointed. **Why it is a row instead:** it is
-  a four-line pure type guard with no failure mode — four copies of it cannot
-  disagree about anything, which is exactly why nobody has been bitten and why
-  it does not earn its own branch. Note that Phase MD PR 1 makes the
-  `monitorRun.ts` copy PRIVATE, so after that PR this is four private copies
-  and not three-plus-an-export.
+  that PR as scope creep (RF34). **What fixed it:** James ruled on 2026-09-12
+  that debt paid as a side effect of phase work is welcome, so the shared
+  predicate landed in PR 1 after all — one export, four call sites re-pointed,
+  a six-case test, a biting mutation. The reasoning this row used to carry
+  ("four copies cannot disagree, so it does not earn its own branch") was true
+  and is why it rode a PR rather than getting one.
   · dies 2026-10-13 (filed 2026-09-12, approved by James) · rides the next PR
   touching any of the four files; dated with Phase MD because PR 1 moves one of
   them and is the most likely vehicle
