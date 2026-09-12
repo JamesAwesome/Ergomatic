@@ -518,23 +518,6 @@ describe("workouts CRUD", () => {
     expect(res.body).toStrictEqual([]);
   });
 
-  // Phase DE PR 1 (spec §3.3): old builds send `difficulty` and render the
-  // word they get back with `.toUpperCase()`. The route ignores what they
-  // send and serves the derived word — never NULL, never the client's.
-  it("ignores a client-sent difficulty on create and serves the derived word (old-build compat)", async () => {
-    const app = appFor(makeStores());
-    const created = await asA(request(app).post("/api/workouts")).send({
-      ...validWorkoutBody({ title: "Old client", effort: 2 }),
-      // The old client's own word — must never reach the row.
-      difficulty: "hard",
-    });
-    expect(created.status).toBe(201);
-    expect(created.body.difficulty).toBe("easy");
-    const list = await asA(request(app).get("/api/workouts"));
-    const row = list.body.find((w: { id: string }) => w.id === created.body.id);
-    expect(row.difficulty).toBe("easy");
-  });
-
   it("POST creates a workout and it appears in the list", async () => {
     const app = appFor(makeStores());
     const created = await asA(request(app).post("/api/workouts")).send(
@@ -4438,16 +4421,6 @@ describe("GET/PUT /api/prefs", () => {
     expect(stores.preferences.put).not.toHaveBeenCalled();
   });
 
-  it("rejects an invalid difficulties entry with 400 + field", async () => {
-    const res = await asA(request(appFor(makeStores())).put("/api/prefs")).send(
-      {
-        difficulties: ["easy", "insane"],
-      },
-    );
-    expect(res.status).toBe(400);
-    expect(res.body.field).toBe("difficulties");
-  });
-
   it("rejects a malformed accentColor with 400 + field", async () => {
     const res = await asA(request(appFor(makeStores())).put("/api/prefs")).send(
       { accentColor: "red" },
@@ -4459,7 +4432,6 @@ describe("GET/PUT /api/prefs", () => {
   it("accepts a full valid patch across every field", async () => {
     const res = await asA(request(appFor(makeStores())).put("/api/prefs")).send(
       {
-        difficulties: ["easy"],
         timeCapMinutes: 45,
         countdownSeconds: 5,
         paceToleranceSeconds: 2,
@@ -4469,7 +4441,6 @@ describe("GET/PUT /api/prefs", () => {
     );
     expect(res.status).toBe(200);
     expect(res.body).toStrictEqual({
-      difficulties: ["easy"],
       timeCapMinutes: 45,
       countdownSeconds: 5,
       paceToleranceSeconds: 2,
@@ -4671,9 +4642,10 @@ describe("GET /api/today", () => {
   });
 });
 
-// Phase DE PR 2 (spec §4.3): the store speaks `effort`; the API speaks both
-// for one tag cycle. Every site the census command lists is driven here.
-describe("Phase DE PR 2 dual-field compat", () => {
+// Phase DE PR 3 dropped the `pain`/`effort` dual-field compat this describe
+// used to be named for (spec §4.3's nine-site census, PR 2's #310); these
+// two survivors test invariants that were never about the compat itself.
+describe("effort field edge cases", () => {
   const validLogBody = () => ({
     workoutId: null,
     workoutTitle: "2K Test",
@@ -4686,81 +4658,6 @@ describe("Phase DE PR 2 dual-field compat", () => {
     source: "timer",
   });
 
-  it("serves both pain and effort on every workout and log response (nine sites, both PATCH exits)", async () => {
-    const app = appFor(makeStores());
-    const created = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({ effort: 4 }),
-    );
-    expect(created.body).toMatchObject({ effort: 4, pain: 4 });
-    const list = await asA(request(app).get("/api/workouts"));
-    expect(list.body[0]).toMatchObject({ effort: 4, pain: 4 });
-    const one = await asA(request(app).get(`/api/workouts/${created.body.id}`));
-    expect(one.body).toMatchObject({ effort: 4, pain: 4 });
-    const put = await asA(
-      request(app).put(`/api/workouts/${created.body.id}`),
-    ).send(validWorkoutBody({ effort: 1 }));
-    expect(put.body).toMatchObject({ effort: 1, pain: 1 });
-    const bulk = await asA(request(app).post("/api/workouts/bulk")).send({
-      text: "Bulk Both | AN | 2\nw 10' 6k+4 @20",
-    });
-    expect(bulk.body.created[0]).toMatchObject({ effort: 2, pain: 2 });
-
-    const log = await asA(request(app).post("/api/logs")).send({
-      ...validLogBody(),
-      effort: 3,
-    });
-    expect(log.status).toBe(201);
-    const logs = await asA(request(app).get("/api/logs"));
-    expect(logs.body[0]).toMatchObject({ effort: 3, pain: 3 });
-    const detail = await asA(request(app).get(`/api/logs/${log.body.id}`));
-    expect(detail.body).toMatchObject({ effort: 3, pain: 3 });
-    const patched = await asA(
-      request(app).patch(`/api/logs/${log.body.id}`),
-    ).send({ effort: 5 });
-    expect(patched.body).toMatchObject({ effort: 5, pain: 5 });
-    // The PATCH route's OTHER exit: an empty patch returns the row — aliased too.
-    const noop = await asA(request(app).patch(`/api/logs/${log.body.id}`)).send(
-      { unknownKey: 1 },
-    );
-    expect(noop.body).toMatchObject({ effort: 5, pain: 5 });
-  });
-
-  it("accepts an old client's pain on create, PUT and PATCH, stores it as effort, and logs compat.pain_write once per request that carried the key", async () => {
-    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
-    const app = appFor(makeStores());
-    const { effort: _drop, ...noEffort } = validWorkoutBody();
-    const w = await asA(request(app).post("/api/workouts")).send({
-      ...noEffort,
-      pain: 2,
-    });
-    expect(w.status).toBe(201);
-    expect(w.body).toMatchObject({ effort: 2, pain: 2 });
-    const put = await asA(request(app).put(`/api/workouts/${w.body.id}`)).send({
-      ...noEffort,
-      pain: 5,
-    });
-    expect(put.body).toMatchObject({ effort: 5, pain: 5 });
-    const log = await asA(request(app).post("/api/logs")).send({
-      ...validLogBody(),
-      pain: 3,
-    });
-    expect(log.status).toBe(201);
-    const p = await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({
-      pain: 4,
-    });
-    expect(p.body).toMatchObject({ effort: 4, pain: 4 });
-    // Agreeing keys still CARRY the old key: counted, value not used.
-    await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({
-      pain: 4,
-      effort: 4,
-    });
-    const lines = spy.mock.calls.filter((c) =>
-      String(c[0]).includes("compat.pain_write"),
-    );
-    expect(lines).toHaveLength(5);
-    spy.mockRestore();
-  });
-
   it("a PATCH carrying neither key leaves effort untouched (presence contract)", async () => {
     const app = appFor(makeStores());
     const log = await asA(request(app).post("/api/logs")).send({
@@ -4770,49 +4667,7 @@ describe("Phase DE PR 2 dual-field compat", () => {
     const p = await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({
       held: "held",
     });
-    expect(p.body).toMatchObject({ effort: 3, pain: 3 });
-  });
-
-  it("400s when pain and effort are both non-null and disagree, naming effort; a pain-keyed bad value still names pain", async () => {
-    const app = appFor(makeStores());
-    const log = await asA(request(app).post("/api/logs")).send({
-      ...validLogBody(),
-      effort: 3,
-    });
-    const bad = await asA(request(app).patch(`/api/logs/${log.body.id}`)).send({
-      pain: 2,
-      effort: 4,
-    });
-    expect(bad.status).toBe(400);
-    expect(bad.body.field).toBe("effort");
-    const badOld = await asA(
-      request(app).patch(`/api/logs/${log.body.id}`),
-    ).send({ pain: 9 });
-    expect(badOld.status).toBe(400);
-    expect(badOld.body).toStrictEqual({
-      error: "pain must be an integer 1..5 or null",
-      field: "pain",
-    });
-    const badNew = await asA(
-      request(app).patch(`/api/logs/${log.body.id}`),
-    ).send({ effort: 9 });
-    expect(badNew.body).toStrictEqual({
-      error: "effort must be an integer 1..5 or null",
-      field: "effort",
-    });
-  });
-
-  it("POST /api/logs with a bad pain-keyed value names pain in the error, the way the old client expects", async () => {
-    const app = appFor(makeStores());
-    const res = await asA(request(app).post("/api/logs")).send({
-      ...validLogBody(),
-      pain: 7,
-    });
-    expect(res.status).toBe(400);
-    expect(res.body).toStrictEqual({
-      error: "pain must be an integer 1..5 or null",
-      field: "pain",
-    });
+    expect(p.body).toMatchObject({ effort: 3 });
   });
 
   it("a non-object body on POST /api/workouts is still a 400, not a 500", async () => {
@@ -4821,19 +4676,5 @@ describe("Phase DE PR 2 dual-field compat", () => {
       .set("content-type", "text/plain")
       .send("pain");
     expect(res.status).toBe(400);
-  });
-
-  it("article reads: an old client's pain-scale is listed, marked and unmarked as effort-scale", async () => {
-    const app = appFor(makeStores());
-    await asA(request(app).put("/api/article-reads/pain-scale"));
-    const list = await asA(request(app).get("/api/article-reads"));
-    expect([...list.body.slugs].sort()).toStrictEqual([
-      "effort-scale",
-      "pain-scale",
-    ]);
-    await asA(request(app).delete("/api/article-reads/pain-scale"));
-    const after = await asA(request(app).get("/api/article-reads"));
-    expect(after.body.slugs).not.toContain("effort-scale");
-    expect(after.body.slugs).not.toContain("pain-scale");
   });
 });

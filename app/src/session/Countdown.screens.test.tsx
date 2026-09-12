@@ -22,7 +22,6 @@ import { buildDraft, saveDraft } from "./draft";
 
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const READY_PREFS = {
-  difficulties: [] as never[],
   timeCapMinutes: 60,
   countdownSeconds: 10,
 };

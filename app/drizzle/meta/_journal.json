@@ -204,6 +204,13 @@
       "when": 1788833494981,
       "tag": "0028_amused_union_jack",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1789218488574,
+      "tag": "0029_drop_difficulty_compat",
+      "breakpoints": true
     }
   ]
 }

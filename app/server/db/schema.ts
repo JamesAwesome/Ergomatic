@@ -44,7 +44,6 @@ export const sessions = pgTable(
 // --- Phase 4: domain tables ---------------------------------------------
 
 export const workoutTypeEnum = pgEnum("workout_type", ["AN", "O2", "AT", "TR"]);
-export const difficultyEnum = pgEnum("difficulty", ["easy", "medium", "hard"]);
 export const workoutSourceEnum = pgEnum("workout_source", ["starter", "user"]);
 // UNDER = FASTER than target (under the target NUMBER), OVER = SLOWER
 // (post-workout-summary spec, ruling option B, James 2026-08-17): stored
@@ -125,7 +124,6 @@ export const workouts = pgTable(
     sortOrder: integer("sort_order"),
     title: text("title").notNull(),
     type: workoutTypeEnum("type").notNull(),
-    difficulty: difficultyEnum("difficulty").notNull(),
     effort: integer("effort").notNull(), // renamed from `pain` by 0024 (Phase DE PR 2)
     source: workoutSourceEnum("source").notNull(),
     steps: jsonb("steps").notNull(),
@@ -464,9 +462,6 @@ export const preferences = pgTable("preferences", {
   userId: uuid("user_id")
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
-  difficulties: jsonb("difficulties")
-    .notNull()
-    .default(["easy", "medium", "hard"]),
   timeCapMinutes: integer("time_cap_minutes").notNull().default(60),
   // Phase 9's warmup-setting design (2026-08-09, §2) added a `warmup`
   // column here, replacing the two columns above (warmup_minutes/

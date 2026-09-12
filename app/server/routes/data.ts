@@ -9,14 +9,6 @@ import {
   type LogSource,
 } from "../../domain/types.js";
 import { validateWorkoutInput } from "../../domain/validate.js";
-import {
-  adoptEffortKey,
-  effortError,
-  LEGACY_READ_SLUGS,
-  notePainWrite,
-  withPainAlias,
-} from "./effortCompat.js";
-import { DIFFICULTIES, type Difficulty } from "../compat/difficulty.js";
 import { logSourceContradiction } from "../logSource.js";
 import type { ArticleReadsStore } from "../stores/articleReads.js";
 import {
@@ -139,6 +131,23 @@ function heldError(value: unknown): string | null {
     return "held must be one of held|under|over or null";
   }
   return null;
+}
+
+// Phase DE PR 3: this validator used to live in the now-deleted
+// `routes/effortCompat.ts` (the `pain`/`effort` dual-write compat), but the
+// log routes still need to reject a bad effort value on their own, so the
+// rule survives here in the same shape as `heldError`/`thumbsError` above.
+function effortError(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 5
+  ) {
+    return null;
+  }
+  return "effort must be an integer 1..5 or null";
 }
 
 function thumbsError(value: unknown): string | null {
@@ -1233,9 +1242,7 @@ export function createDataRouter({
       stores.logs.lastDonePerWorkout(userId),
     ]);
     res.json(
-      rows.map((w) =>
-        withPainAlias({ ...w, lastDoneDaysAgo: lastDone[w.id] ?? null }),
-      ),
+      rows.map((w) => ({ ...w, lastDoneDaysAgo: lastDone[w.id] ?? null })),
     );
   });
 
@@ -1272,14 +1279,6 @@ export function createDataRouter({
   }
 
   router.post("/api/workouts", async (req, res) => {
-    // Phase DE PR 2 compat: an old client sends `pain`; the domain reads
-    // `effort`. Runs BEFORE validation, tolerates a non-record body.
-    const adopted = adoptEffortKey(req.body);
-    if (!adopted.ok) {
-      badRequest(res, adopted.error, adopted.field);
-      return;
-    }
-    if (adopted.sawPainKey) notePainWrite("POST /api/workouts");
     const validated = validateWorkoutInput(req.body);
     if (!validated.ok) {
       badRequest(res, validated.errors.join("; "));
@@ -1290,7 +1289,7 @@ export function createDataRouter({
       ...validated.workout,
       source: "user",
     });
-    res.status(201).json(withPainAlias(row));
+    res.status(201).json(row);
   });
 
   router.get("/api/workouts/:id", async (req, res) => {
@@ -1303,7 +1302,7 @@ export function createDataRouter({
       notFound(res);
       return;
     }
-    res.json(withPainAlias(row));
+    res.json(row);
   });
 
   router.put("/api/workouts/:id", async (req, res) => {
@@ -1320,12 +1319,6 @@ export function createDataRouter({
       starterReadonly(res);
       return;
     }
-    const adopted = adoptEffortKey(req.body);
-    if (!adopted.ok) {
-      badRequest(res, adopted.error, adopted.field);
-      return;
-    }
-    if (adopted.sawPainKey) notePainWrite("PUT /api/workouts/:id");
     const validated = validateWorkoutInput(req.body);
     if (!validated.ok) {
       badRequest(res, validated.errors.join("; "));
@@ -1339,7 +1332,7 @@ export function createDataRouter({
     );
     // The store no-ops (returns null) on an id it can't find, but we
     // already confirmed existence above, so this can't happen in practice.
-    res.json(withPainAlias(row ?? existing));
+    res.json(row ?? existing);
   });
 
   router.delete("/api/workouts/:id", async (req, res) => {
@@ -1420,7 +1413,7 @@ export function createDataRouter({
     // strip door; this was the import door's own half, left open until now
     // (task-5-report's Concern #2).
     res.json({
-      created: created.map(withPainAlias),
+      created,
       errors,
       droppedWarmups: parsed.droppedWarmups,
     });
@@ -1477,11 +1470,7 @@ export function createDataRouter({
     }
 
     try {
-      res.json(
-        (await stores.logs.list(req.user!.id, limit, before)).map(
-          withPainAlias,
-        ),
-      );
+      res.json(await stores.logs.list(req.user!.id, limit, before));
     } catch (err) {
       if (err instanceof CursorNotFoundError) {
         badRequest(res, "before does not reference an existing log", "before");
@@ -1508,7 +1497,7 @@ export function createDataRouter({
       notFound(res);
       return;
     }
-    res.json(withPainAlias(row));
+    res.json(row);
   });
 
   // The API's first UPDATE (spec §3). Every key is independently optional;
@@ -1516,7 +1505,7 @@ export function createDataRouter({
   // the identical idiom for the identical reason, before Phase WU removed
   // the setting) so a key that's ABSENT never touches its column, while a
   // key that's PRESENT-and-null clears it. Unknown keys (anything other
-  // than thumbs/held/effort/notes — or the compat `pain`) are silently ignored, matching POST and
+  // than thumbs/held/effort/notes) are silently ignored, matching POST and
   // `PUT /api/prefs` — a 400 on an unknown key would give this API two
   // personalities and break additive-only in the new-client/old-server
   // direction (spec §3, antagonist B6). An empty accepted-key set (an
@@ -1529,12 +1518,6 @@ export function createDataRouter({
       return;
     }
     const body = isRec(req.body) ? req.body : {};
-    const adopted = adoptEffortKey(body);
-    if (!adopted.ok) {
-      badRequest(res, adopted.error, adopted.field);
-      return;
-    }
-    if (adopted.sawPainKey) notePainWrite("PATCH /api/logs/:id");
     const patch: LogPatch = {};
 
     if ("held" in body) {
@@ -1548,12 +1531,7 @@ export function createDataRouter({
     if ("effort" in body) {
       const err = effortError(body.effort);
       if (err) {
-        // An old client sent `pain`; its error handling keys off that word.
-        if (adopted.usedPainKey) {
-          badRequest(res, err.replace(/^effort/, "pain"), "pain");
-        } else {
-          badRequest(res, err, "effort");
-        }
+        badRequest(res, err, "effort");
         return;
       }
       patch.effort = (body.effort as number | null) ?? null;
@@ -1581,7 +1559,7 @@ export function createDataRouter({
         notFound(res);
         return;
       }
-      res.json(withPainAlias(row));
+      res.json(row);
       return;
     }
 
@@ -1590,7 +1568,7 @@ export function createDataRouter({
       notFound(res);
       return;
     }
-    res.json(withPainAlias(row));
+    res.json(row);
   });
 
   // Log-delete spec (2026-08-18), §2: the API's first DELETE. Owner-
@@ -1617,13 +1595,6 @@ export function createDataRouter({
 
   router.post("/api/logs", async (req, res) => {
     const body = isRec(req.body) ? req.body : {};
-    // Phase DE PR 2 compat: `pain` from an old client becomes `effort`.
-    const adoptedLog = adoptEffortKey(body);
-    if (!adoptedLog.ok) {
-      badRequest(res, adoptedLog.error, adoptedLog.field);
-      return;
-    }
-    if (adoptedLog.sawPainKey) notePainWrite("POST /api/logs");
 
     if (
       typeof body.workoutTitle !== "string" ||
@@ -1702,11 +1673,7 @@ export function createDataRouter({
     }
     const effortErr = effortError(body.effort);
     if (effortErr) {
-      if (adoptedLog.usedPainKey) {
-        badRequest(res, effortErr.replace(/^effort/, "pain"), "pain");
-      } else {
-        badRequest(res, effortErr, "effort");
-      }
+      badRequest(res, effortErr, "effort");
       return;
     }
     const thumbsErr = thumbsError(body.thumbs);
@@ -2118,21 +2085,6 @@ export function createDataRouter({
     const body = isRec(req.body) ? req.body : {};
     const patch: Partial<PreferencesRow> = {};
 
-    if (body.difficulties !== undefined) {
-      if (
-        !Array.isArray(body.difficulties) ||
-        body.difficulties.length === 0 ||
-        !body.difficulties.every((d) => DIFFICULTIES.includes(d as Difficulty))
-      ) {
-        badRequest(
-          res,
-          "difficulties must be a non-empty subset of easy|medium|hard",
-          "difficulties",
-        );
-        return;
-      }
-      patch.difficulties = body.difficulties as Difficulty[];
-    }
     if (body.timeCapMinutes !== undefined) {
       if (
         typeof body.timeCapMinutes !== "number" ||
@@ -2249,13 +2201,7 @@ export function createDataRouter({
 
   router.get("/api/article-reads", async (req, res) => {
     const slugs = await stores.articleReads.list(req.user!.id);
-    // Phase DE PR 2 compat: an installed pre-PR-2 build asks about the OLD
-    // slug; serve it beside the new one so its read state survives the
-    // rename. PR 3 deletes this with LEGACY_READ_SLUGS.
-    const aliased = Object.entries(LEGACY_READ_SLUGS)
-      .filter(([, canonical]) => slugs.includes(canonical))
-      .map(([legacy]) => legacy);
-    res.json({ slugs: [...slugs, ...aliased] });
+    res.json({ slugs });
   });
 
   router.put("/api/article-reads/:slug", async (req, res) => {
@@ -2264,10 +2210,7 @@ export function createDataRouter({
       badRequest(res, "slug must match ^[a-z0-9-]{1,64}$", "slug");
       return;
     }
-    await stores.articleReads.markRead(
-      req.user!.id,
-      LEGACY_READ_SLUGS[slug] ?? slug,
-    );
+    await stores.articleReads.markRead(req.user!.id, slug);
     res.status(204).end();
   });
 
@@ -2280,10 +2223,7 @@ export function createDataRouter({
       badRequest(res, "slug must match ^[a-z0-9-]{1,64}$", "slug");
       return;
     }
-    await stores.articleReads.unmarkRead(
-      req.user!.id,
-      LEGACY_READ_SLUGS[slug] ?? slug,
-    );
+    await stores.articleReads.unmarkRead(req.user!.id, slug);
     res.status(204).end();
   });
 

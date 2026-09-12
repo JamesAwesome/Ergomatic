@@ -150,46 +150,6 @@ describe("saveTodayFilters / loadTodayFilters", () => {
     expect(loadTodayFilters().byKey).toStrictEqual({ AT: AT_SET });
   });
 
-  // Phase DE PR 2 (spec §4.2): every installed rower's record carries
-  // `painLevels`. It reads as `effortLevels` when the new key is ABSENT; a
-  // present `effortLevels` wins, and a present-but-null one is malformed.
-  it("reads a pre-PR-2 set's painLevels as effortLevels when effortLevels is absent, and writes only effortLevels", () => {
-    const { effortLevels: _drop, ...legacy } = AT_SET;
-    localStorage.setItem(
-      TODAY_FILTERS_KEY,
-      JSON.stringify({
-        v: 2,
-        byKey: { AT: { ...legacy, painLevels: [2, 4] } },
-      }),
-    );
-    const store = loadTodayFilters();
-    expect(store.byKey.AT).toStrictEqual({ ...legacy, effortLevels: [2, 4] });
-    saveTodayFilters(store);
-    const written = JSON.parse(localStorage.getItem(TODAY_FILTERS_KEY)!) as {
-      byKey: { AT: Record<string, unknown> };
-    };
-    expect(written.byKey.AT).not.toHaveProperty("painLevels");
-    expect(written.byKey.AT.effortLevels).toStrictEqual([2, 4]);
-  });
-  it("prefers effortLevels when both keys are present, and a present-but-null effortLevels fails the set even beside a valid painLevels", () => {
-    localStorage.setItem(
-      TODAY_FILTERS_KEY,
-      JSON.stringify({
-        v: 2,
-        byKey: { AT: { ...AT_SET, effortLevels: [1], painLevels: [5] } },
-      }),
-    );
-    expect(loadTodayFilters().byKey.AT?.effortLevels).toStrictEqual([1]);
-    localStorage.setItem(
-      TODAY_FILTERS_KEY,
-      JSON.stringify({
-        v: 2,
-        byKey: { AT: { ...AT_SET, effortLevels: null, painLevels: [5] } },
-      }),
-    );
-    expect(loadTodayFilters().byKey.AT).toBeUndefined();
-  });
-
   it("ignores unknown top-level fields (the revision-1 rollSuppressed flag James struck reads as nothing)", () => {
     localStorage.setItem(
       TODAY_FILTERS_KEY,
@@ -227,6 +187,14 @@ describe("saveTodayFilters / loadTodayFilters", () => {
       ["effortLevels not an array", { ...AT_SET, effortLevels: 3 }],
       ["out-of-range effort level", { ...AT_SET, effortLevels: [0] }],
       ["non-integer effort level", { ...AT_SET, effortLevels: [4.5] }],
+      [
+        // Phase DE PR 3: the painLevels fallback is gone, so a set with
+        // effortLevels absent and a legacy painLevels value beside it fails
+        // — there is no key left to fall back to, unlike before PR 3, when
+        // this exact shape parsed as effortLevels: [2, 4].
+        "effortLevels absent, painLevels present (pre-PR-2 shape)",
+        { ...AT_SET, effortLevels: undefined, painLevels: [2, 4] },
+      ],
       ["lastDone wrong shape", { ...AT_SET, lastDone: 21 }],
       ["unknown lastDone", { ...AT_SET, lastDone: "recent" }],
       [

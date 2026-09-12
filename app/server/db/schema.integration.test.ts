@@ -230,8 +230,6 @@ describe("migration 0008: the workouts wu-strip", () => {
         userId: u.id,
         title: "No warm-up here",
         type: "O2",
-        // raw Drizzle insert: the NOT NULL column needs a literal (PR 3 drops it)
-        difficulty: "easy",
         effort: 1,
         source: "user",
         steps: steps,
@@ -281,8 +279,6 @@ describe("migration 0008: the workouts wu-strip", () => {
         userId: u.id,
         title: "Legacy wu-only workout",
         type: "O2",
-        // raw Drizzle insert: the NOT NULL column needs a literal (PR 3 drops it)
-        difficulty: "easy",
         effort: 1,
         source: "user",
         steps: [{ k: "wu", minutes: 10 }],
@@ -1853,11 +1849,13 @@ describe("migration 0024: pain → effort, and the article slug", () => {
     ]);
     // The rule survived the rename: 6 is rejected by the renamed constraint
     // (drizzle wraps the pg error; the constraint name rides on `cause`).
+    // No "difficulty" column here: the real folder's migrate() above also
+    // runs 0029 (Phase DE PR 3), which drops it before this insert fires.
     let caught: unknown;
     try {
       await db.execute(
-        sql`insert into "workouts" ("user_id", "title", "type", "difficulty", "effort", "source", "steps")
-            values (${a}, 'Too hard', 'AN', 'hard', 6, 'user', '[]'::jsonb)`,
+        sql`insert into "workouts" ("user_id", "title", "type", "effort", "source", "steps")
+            values (${a}, 'Too hard', 'AN', 6, 'user', '[]'::jsonb)`,
       );
     } catch (e) {
       caught = e;

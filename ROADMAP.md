@@ -376,8 +376,9 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
 ## Phase DE — Difficulty out, effort in
 
 **Status: OPEN 2026-09-05 — spec merged (#308); PR 1 MERGED as #309
-(2026-09-05); PR 2 in flight (worktree `Ergomatic-wt-de2`); release HELD
-until PR 2 merges (one tag for both).** **TRIAD** (stored shape).
+(2026-09-05); PR 2 MERGED as #310 (2026-09-05), shipped as v0.39.0; PR 3
+in flight (this PR), per the Saturday-2026-09-12 trigger below.**
+**TRIAD** (stored shape).
 **M.** Spec:
 `docs/superpowers/specs/2026-09-05-difficulty-out-effort-in-design.md`.
 
