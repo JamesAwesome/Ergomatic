@@ -469,6 +469,173 @@ web build against the post-PR-2 server saves `pain: 3`, reads back
 `effort: 3`, and a workout it creates carries a derived difficulty)
 recorded in PR 2's body; release note in rower words (spec §6.6).
 
+## Phase MD — the monitor cluster's shallow seams
+
+**Status: OPEN 2026-09-12 — six PRs named, none started; PR 1 next.**
+**TRIAD on PR 1 only** (stored shape: the `MONITOR_RUN_KEY` localStorage
+record). **L.** · dies 2026-10-13 · a month from opening; the monitor cluster
+is the repo's hottest area (`driver.ts`, `useMonitorSession.ts`, their tests
+and `surfaceModel.ts` are 6 of the 10 most-touched files of the last 250
+commits), so a phase that improves how it is CHANGED rots faster than most —
+if it has not started by then it is being outvoted by feature work and that is
+James's call to make, not a slide.
+
+**Goal:** the monitor cluster gets fewer, deeper modules — a large amount of
+behaviour behind a small interface, tested through that interface. Nothing a
+rower sees changes in any PR here. The measure is not line count: it is
+whether a test can reach a behaviour without a module mock, whether a renamed
+field becomes a compile error, and whether a fixture seeds through the real
+producer instead of past it.
+
+**Where it came from:** an architecture walk on 2026-09-12 over the hot spots
+of the last 250 commits (three read-only agents, monitor / session-log /
+server). Twelve candidates came back; these six are the monitor half. The
+other six are NOT in this phase and are not being filed as rows here — the
+session-log three (the machine tier derived twice, five copies of the wire
+payload, lifted reflection state) and the server three (the Concept2 send
+workflow as an 840-line route closure, six hand-mirrored enum sets, `data.ts`'s
+imprisoned validators) are a separate slate, and the tier one is a live
+divergence in a number the rower reads rather than a deepening.
+
+**What this phase is NOT.** `driver.ts` was attacked and held: 7493 lines but
+2152 code lines, behind an interface of 7 members, one `Transport` in and one
+11-member event union out, with tests that reach past it nowhere. It is deep,
+not a god-module, and splitting it re-opens settled wire attribution. The
+`Transport` seam held too — four adapters, three decorators, a 23-line
+composer and a CI gate (`scripts/transport-census.sh`). Neither is in scope,
+and a later pass proposing either owes this paragraph an answer.
+
+Six PRs. **1-4 are specified from evidence and can be planned as they come
+up. 5 and 6 are NOT: each opens with an exploration whose result decides
+whether the PR exists at all**, and neither may be planned before its
+exploration reports.
+
+- [ ] **PR 1 — one stored-run module (TRIAD: stored shape).**
+      `monitorRun.ts` (1719 lines / 339 code) and `handoffStore.ts` (1016 /
+      418) both own one localStorage key and neither may import the other, so
+      the constraint is restated as a comment three times
+      (`monitorRun.ts:735`, `:1696`, and `createMonitorRun`'s doc comment).
+      The costs are countable: `saveMonitorRun` (`:600`) has ZERO production
+      callers and 148 test-fixture occurrences across 10 files, so ~150 seeds
+      enter past the real producer — RF24's exact shape — while duplicating
+      `performDurableWrite`'s series-sacrifice ordering verbatim;
+      `connectGuardStage(hasUnretiredMonitorRun: boolean)` (`:1704`) takes a
+      boolean two callers compute from the store purely because the import is
+      circular; and `retire(set, reason)` (`handoffStore.ts:861`) makes 12 of
+      13 call sites wrap an entry they already hold in a one-element array,
+      four of them performing the identical "retire whatever is stale before
+      starting". Deepen to one module owning the record: builders plus
+      commit/read/retire, `retire(entry, RetireReason)` taking the entry and a
+      union instead of a string, a `replaceStale(reason)` for the four
+      identical sites, and `connectGuardStage()` reading its own store.
+      **This PR owns the hand-off store's legacy-reads residual** (below,
+      under Codebase-audit owners) — the "whoever next touches these
+      functions owns the decision" flag fires here. Tests: the two suites
+      (2343 + 1273 lines) become one driving commit → read → retire →
+      rehydrate through the merged interface, and the 148 `saveMonitorRun`
+      seeds become the call production makes.
+- [ ] **PR 2 — a lifecycle seam on `useMonitorSession`.**
+      `MonitorSessionDeps` (`:1112`) carries nine injectable deps and no
+      lifecycle; `registerAppLifecycleListener` is a static import (`:104`,
+      called `:5315`/`:5620`). So the one input this repo has already been
+      burned by (RF19 — a platform-sourced input no instrument could see)
+      is reachable in tests only through `vi.doMock` + `vi.resetModules()` +
+      dynamic import, 29 times across 7 files, which is the population the
+      vitest doMock race fixed in #346 lives in. Meanwhile `replay.ts`
+      already carries `lifecycle` events and an `onLifecycle` hook and cannot
+      reach the hook at all. Add one optional dep defaulting to the adapter.
+      Three adapters then sit at the seam (prod, replay, test emitter), not
+      one. Deletes no suite; deletes 29 mocks.
+- [ ] **PR 3 — one `Sample` shape, in `domain/monitor/`.** Five hand-written
+      declarations of one wire-and-storage shape with no compiler link
+      between producer and any consumer: `seriesRecorder.ts`,
+      `domain/monitor/derivedHeartRate.ts`, `server/stores/logs.ts:128`,
+      `server/routes/data.ts:810-880`, and an inline re-declaration at
+      `server/concept2/mapping.ts:64`. This is where RF33 bit — the rest flag
+      was spelled `rest`, structural typing accepted the real `Sample` with
+      the key absent, and the exclusion was dead on every production path
+      while every test passed. **The landed fix was a comment**
+      (`derivedHeartRate.ts:50-58`); `r?: true` is still optional in both, so
+      the identical rename reproduces the identical defect today. CLAUDE.md's
+      own prescription — required field, `null` means absent, the compiler is
+      the gate — was never built. One declaration in `domain/` (pure data, no
+      framework import), plus the band constants and the deciseconds unit.
+      One new test builds its input by driving `createSeriesRecorder` and
+      never names a field; `MAX_GAP_DECISECONDS` gets a boundary pin with
+      independent literals, since a weighted mean is scale-invariant against
+      the unit error that shipped it at 6.0 s claiming 60.
+- [ ] **PR 4 — publish `axes`, not `phase` plus four booleans.** Five
+      production sites repeat the identical five-field literal to build
+      `AxesInput` (`connectedAxes.ts:103`) out of the session
+      (`JustRowObserver.tsx:39`, `JustRow.tsx:145` and `:152`,
+      `ConnectedSurface.tsx:603`, `ConnectedInterstitial.tsx:919`), and
+      "AXES, NEVER `session.phase`" is enforced by a comment
+      (`JustRow.tsx:138-141`) because nothing structural does. Derive once
+      inside the hook and publish `MonitorSession.axes`; `ConnectedPhase`
+      stops being exported. **`AxesInput.failureLeavesLinkUp` deletes with
+      it** — hardcoded `null` at all five production sites, with the code's
+      own comments (`ConnectedSurface.tsx:596-602`,
+      `ConnectedInterstitial.tsx:922-925`) recording that the axis is never
+      consulted, while 5 test assertions pass it non-null. A parameter with
+      no production producer and a passing suite behind it.
+- [ ] **PR 5 — EXPLORATION FIRST, then maybe the freeze/resume observer.**
+      The hook holds 38 `useRef`s; twelve are one concern (background,
+      frame silence, freeze, resume). Six symbols are exported ONLY so the
+      test can reach them — `defaultLivenessSchedule`,
+      `recordLivenessSilence`, `recordLivenessRecovery`,
+      `handleFrameRecovery`, `nextRowingStreak`,
+      `ROWING_ACTIVE_FALLBACK_FRAMES`, each with `useMonitorSession.test.ts`
+      as its sole non-self consumer. That is the textbook "pure functions
+      extracted for testability while the bugs live in how they are CALLED",
+      at the largest scale in the repo, and RF27 came out of this same file
+      having moved only five fields into `LogicalSession`.
+      **The exploration decides ONE question and nothing else: do the twelve
+      refs move with the observer, or only the pure helpers?** If the refs
+      move, a `createFreezeObserver({now, schedule})` taking
+      onFrame/onLifecycle/onLivenessSnapshot and returning
+      frozen/frameSilence/paused/rowingActive is a real 3-in/4-out interface
+      and complexity concentrates. **If they stay behind, complexity MOVES
+      and this PR does not happen** — the exploration's honest answer may be
+      "no PR", and that is a result, not a failure. Output: a written
+      finding naming each of the twelve refs, its mint site, its clear
+      sites, and what survives teardown, relaunch and re-arm (RF27's
+      lifetime table) — which is the artifact a spec would need anyway.
+      Largest payoff and largest risk in the phase; it moves live
+      wire-adjacent state, so a spec and the TRIAD treatment follow if the
+      answer is yes.
+- [ ] **PR 6 — EXPLORATION FIRST, then maybe one replay harness.** Eight
+      session-level replay specs — the `src/monitor/*Replay*.test.ts` files
+      that drive `renderHook`: `burstReplay`, `lifecycleReplay`,
+      `summaryHoldReplay`, `handoffStoreReplay`, `justRowReplay`,
+      `partialReplay`, `liveDropSeamReplay`, `structureWatchSessionReplay`
+      (`oracleCorpusReplay` and the seven driver-level replay specs are NOT
+      in this set) — each re-hand-roll the same ~45 lines of setup —
+      gunzip + `parseRecording`, `createReplayTransport` + `withLiveness`,
+      two `vi.doMock`s, `resetModules`, a dynamic import, a `renderHook` deps
+      object — where the driver level already has a shared harness
+      (`src/test/statusSubscriptions.ts`). The capture path is worse than
+      duplicated: it is derived by string surgery that hardcodes the test's
+      own filename (`burstReplay.test.ts:22-27` replaces
+      `/src\/monitor\/burstReplay\.test\.ts$/`), so renaming a spec silently
+      stops its fixture matching. 36 test files reference
+      `docs/monitor/sessions`. **The exploration decides two things: how much
+      of the ~45 lines is genuinely IDENTICAL across the eight rather than
+      eight similar-looking setups with load-bearing differences, and how much
+      value survives if PR 2 does not land** (most of it comes from the mocks
+      disappearing, which is PR 2's doing). **Runs after PR 2, never before.**
+      A shared harness built over differences that matter is a worse module
+      than eight honest copies.
+
+**Exit:** every PR that lands states which module got deeper and what its
+interface now is, in one sentence, at the top of its body. Phase close reports:
+the count of `vi.doMock` occurrences under `app/src/monitor/` before and after;
+the count of production callers of `saveMonitorRun` (0 before, and the symbol
+gone after); a grep proving no second declaration of the series sample shape
+survives; and, for PRs 5 and 6, either the PR or the exploration's written
+"no PR, because…". **No hardware walk** — nothing here reaches the wire, the
+pace math, or any number a rower reads, and a PR in this phase that finds
+itself changing one has left the phase.
+
 ## Wave A — The front door
 
 **Status:** Next in the slate; Wave F closed 2026-09-04. Not opened by that
@@ -1882,6 +2049,10 @@ fixed.
      deleting them would orphan the cross-file anti-pattern documentation that
      names them (`todayGuard.pin.test.ts`'s binding pin). **Whoever next
      touches these functions owns the decision**, per the close-out's own flag.
+     **That trigger has FIRED: Phase MD PR 1 merges the two modules and owns
+     this decision** (2026-09-12). It is no longer unscheduled, and it is not
+     a second home — the row stays here as the evidence, and the ruling lands
+     in that PR.
   2. **The store's standing probe is row 11's tier-precedence COMPOUND
      mutation**, not the single-line reorder — that one is a genuine non-bite.
      Remove the `if (hydrated) return` re-entrancy guard together with forcing
