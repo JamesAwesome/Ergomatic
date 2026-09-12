@@ -469,6 +469,252 @@ web build against the post-PR-2 server saves `pain: 3`, reads back
 `effort: 3`, and a workout it creates carries a derived difficulty)
 recorded in PR 2's body; release note in rower words (spec §6.6).
 
+## The free row's rate tile disagrees with itself
+
+**Status: SCHEDULED 2026-09-12 — one small PR, not a phase item and not fast
+path (it changes what a rower reads). S.** · dies 2026-09-19 · a wrong number
+on a screen today with a one-clause fix and no migration; a week is generous
+and anything longer means a refactor phase outranked a defect, which is the
+exact trade the PM gate refused.
+
+**What a rower sees.** Finish a connected free row and the RATE tile reads the
+monitor's own average — 25 spm on the capture we hold. Reopen that same row
+from History and it reads `—`. Same row, same trace, two screens, one number
+present and one gone.
+
+**Why.** The tier is derived twice and the two derivations disagree.
+`summaryModel.ts:1255` (live) sets `finished: run.endedBy === "finished" ||
+run.mode === "justrow"`. `storedSummary.ts:780` (reopened) sets
+`finished = row.endedBy === "finished" || row.endedBy == null` — and `StoredLog`
+has no `mode`. A connected free row's `endedBy` is always `"rower"` and it
+stores `steps: []`, so the reopened door takes the terminated branch with no
+weighable split and `sessionStrokeRate` (`logbookDerived.ts:53-62`) returns
+`undefined`. The per-interval table beside it IS correctly shared by both
+doors; only the hero tile skipped the pattern.
+
+**The fix is one clause.** `StoredLog` already carries `workoutId` and
+`workoutType`, and `domain/types.ts:38` already exports `isFreeRow`. No column,
+no migration, no stored-shape change — which is why this is not TRIAD despite
+touching a number, and why deferring it was never worth what it cost to defer.
+
+**Its gate is the whole point, and neither suite has it.** One test that saves
+a connected free row through the live door and reads it back through the stored
+door, asserting the two RATE values are EQUAL — RF24's producer-to-consumer
+shape. No existing test pairs a `workoutId: null` fixture with a rate
+assertion, which is exactly why three green suites never saw this.
+
+**Evidence status.** The divergence is confirmed in code, read at all four
+sites by the controller and independently at the PM gate. That a saved free row
+carries `endedBy: "rower"` rests on `summaryModel.ts:1247-1249`'s own measured
+comment and the fixture at `storedSummary.test.ts:1866`, not on a run against a
+real row. The test above settles it either way, and if it comes back green the
+row closes with that recorded rather than being quietly dropped.
+
+**Found by** the 2026-09-12 architecture walk
+([findings](docs/superpowers/audits/2026-09-12-architecture-walk/findings.md),
+S1). Left out of Phase MD because it is a defect, not a deepening; scheduled
+here because the PM gate priced the fix and ruled that "out of scope for this
+phase" is not a reason to leave a wrong number on a screen.
+
+## Phase MD — the monitor cluster's shallow seams
+
+**Status: OPEN 2026-09-12 — four PRs and two explorations; PR 1 next.**
+**TRIAD on PR 1 and PR 3** (both change a stored shape: PR 1 the
+`MONITOR_RUN_KEY` localStorage record, PR 3 the series sample persisted to
+BOTH that record and Postgres). **L.** · dies 2026-10-13 · a month from
+opening; the monitor cluster is the repo's hottest area (`driver.ts`,
+`useMonitorSession.ts`, their tests and `surfaceModel.ts` are 6 of the 10
+most-touched files of the last 250 commits), so a phase that improves how it
+is CHANGED rots faster than most — if it has not started by then it is being
+outvoted by feature work and that is James's call to make, not a slide.
+
+**Goal:** the monitor cluster gets fewer, deeper modules — a large amount of
+behaviour behind a small interface, tested through that interface. Nothing a
+rower sees changes in any PR here. The measure is not line count: it is
+whether a test can reach a behaviour without a module mock, whether a renamed
+field becomes a compile error, and whether a fixture seeds through the real
+producer instead of past it.
+
+**Where it came from:** an architecture walk on 2026-09-12 over the hot spots
+of the last 250 commits — [findings](docs/superpowers/audits/2026-09-12-architecture-walk/findings.md),
+which also records the six candidates that are NOT in this phase and the seven
+things that were attacked and held. Opened through a PM slate gate and an
+antagonist anchor pass on the same day; both are folded in below, and the
+anchor pass BLOCKED PR 1's first spec on four findings.
+
+**What this phase is NOT.** `driver.ts` was attacked and held: 7493 lines but
+2152 code lines, behind an interface of 7 members, one `Transport` in and one
+11-member event union out, with tests that reach past it nowhere. It is deep,
+not a god-module, and splitting it re-opens settled wire attribution. The
+`Transport` seam held too — four adapters, three decorators, a 23-line
+composer and a CI gate (`scripts/transport-census.sh`). Neither is in scope,
+and a later pass proposing either owes the findings document an answer.
+
+Four PRs, then two explorations. **The explorations are NOT numbered PRs, on
+purpose (PM gate, 2026-09-12):** a numbered PR reads as owed work to every
+later sweep, and the existence of both of these is undecided. Each opens with
+an investigation whose honest answer may be "no PR".
+
+- [ ] **PR 1 — one writer for the stored run (TRIAD: stored shape).** Spec:
+      `docs/superpowers/specs/2026-09-12-stored-run-module-design.md` (revision
+      2 — the anchor pass blocked revision 1 and James ruled the re-scope).
+      `monitorRun.ts` (1719 lines / 339 code) and `handoffStore.ts` (1016 /
+      418) both own one localStorage key and neither may import the other, so
+      the constraint is restated as a comment three times. The costs are
+      countable: `saveMonitorRun` (`:600`) has ZERO production callers and 127
+      fixture call sites across 5 files, every one of which seeds past the real
+      producer (RF24), while duplicating `performDurableWrite`'s
+      series-sacrifice ordering verbatim; `connectGuardStage(hasUnretired:
+      boolean)` (`:1704`) takes a boolean its callers compute purely because
+      the import is circular; and `retire(set, reason)`
+      (`handoffStore.ts:861`) makes 12 of 13 call sites wrap an entry they
+      already hold in a one-element array.
+      **MOVE, NOT MERGE.** Revision 1 proposed concatenating the two files;
+      the anchor pass costed the alternative revision 1 had named and never
+      priced, and it reaches the same export target with less blast radius
+      (RF30). `handoffStore.ts` absorbs the persistence half — the key, the
+      three validators, `loadMonitorRun`, `clearMonitorRun`,
+      `connectGuardStage` — and `monitorRun.ts` keeps the type and the pure
+      builders with no storage call left in it. The cycle goes because the
+      dependency runs one way, not because anything was merged.
+      **This PR owns the hand-off store's legacy-reads residual** (below,
+      under Codebase-audit owners): James ruled 2026-09-12 that
+      `anyLiveSession` and `monitorRunState` are deleted and the anti-pattern
+      documentation re-homed. `todayGuard.pin.test.ts` is rewritten in the
+      same PR — its negative import pin would otherwise pass forever once the
+      symbol is gone (RF21), and this PR breaks its two byte-exact import
+      pins regardless by moving `loadMonitorRun`.
+      Exit: ≤ 28 value exports (from 35), the pre-existing
+      `scripts/handoffStoreBoundary.test.ts` EXTENDED rather than replaced,
+      and a byte-compatibility gate whose fixtures are captured by driving the
+      writer — including a thrown write, the only shape that can catch a
+      renamed `seriesDropped`.
+- [ ] **PR 2 — a lifecycle seam on `useMonitorSession`, and publish `axes`.**
+      *Two candidates grouped into one PR at the PM gate (2026-09-12): both
+      change this hook's published interface, both are test-facing, and a
+      reviewer holds one risk model rather than two.*
+      **(a) The lifecycle seam.** `MonitorSessionDeps` (`:1112`) carries nine
+      injectable deps and no lifecycle; `registerAppLifecycleListener` is a
+      static import (`:104`, called `:5315`/`:5620`). So the one input this
+      repo has already been burned by (RF19 — a platform-sourced input no
+      instrument could see) is reachable in tests only through `vi.doMock` +
+      `vi.resetModules()` + dynamic import: **29 occurrences across 7 files
+      under `src/monitor/`, or 32 across 9 repo-wide** — the extra two are
+      `justrow/JustRow.test.tsx` (a component test that cannot inject a hook
+      dep) and `adapters/appLifecycle.test.ts` (the adapter's own test), and
+      neither is deleted by this change. Meanwhile `replay.ts` already carries
+      `lifecycle` events and an `onLifecycle` hook and cannot reach the hook at
+      all. Add one optional dep defaulting to the adapter; three adapters then
+      sit at the seam.
+      **(b) Publish `axes`.** Five production sites repeat the identical
+      five-field literal to build `AxesInput` (`connectedAxes.ts:103`) out of
+      the session (`JustRowObserver.tsx:39`, `JustRow.tsx:145` and `:152`,
+      `ConnectedSurface.tsx:603`, `ConnectedInterstitial.tsx:919`), and
+      "AXES, NEVER `session.phase`" is enforced by a comment
+      (`JustRow.tsx:138-141`) because nothing structural does. Derive once
+      inside the hook, publish `MonitorSession.axes`, stop exporting
+      `ConnectedPhase`.
+      **`AxesInput.failureLeavesLinkUp` is dead and its deletion carries PR 1's
+      question, which this row originally failed to ask (PM gate).** It is
+      hardcoded `null` at all five production sites while 5 test assertions
+      pass it non-null, AND `connectedAxes.ts:116-135` is the only written home
+      of the NOT_A_MACHINE_REFUSAL ruling — *"a transport-side failure reads
+      `lost`, a genuine `ProgramRejection` the PM5 itself sent reads `up`"* —
+      whose own comment says *"whoever FIRST passes a real value inherits"* it.
+      Same shape as `anyLiveSession`: deleting is probably right, asking where
+      the ruling lives afterwards is mandatory. **Put it to James before
+      implementation, the way PR 1 did.**
+- [ ] **PR 3 — one `Sample` shape (TRIAD: stored shape).** Five hand-written
+      declarations of one wire-and-storage shape with no compiler link between
+      producer and any consumer: `seriesRecorder.ts`,
+      `domain/monitor/derivedHeartRate.ts`, `server/stores/logs.ts:128`,
+      `server/routes/data.ts:810-880`, and an inline re-declaration at
+      `server/concept2/mapping.ts:64`. This is where RF33 bit — the rest flag
+      was spelled `rest`, structural typing accepted the real `Sample` with the
+      key absent, and the exclusion was dead on every production path while
+      every test passed. **The landed fix was a comment**
+      (`derivedHeartRate.ts:50-58`); `r?: true` is still optional in both, so
+      the identical rename would reproduce it. *Not a live defect — both sides
+      spell it `r` today and the average is correct. The defect is that
+      nothing stops the next rename.*
+      **This is TRIAD and the first draft said it was not.** `Sample` sits
+      inside `SeriesData` inside `MonitorRun.series`, which is
+      `JSON.stringify`'d whole to `MONITOR_RUN_KEY`, and also reaches Postgres
+      via `stores/logs.ts`. Making `r` required with `null` meaning absent —
+      CLAUDE.md's own prescription — writes `"r":null` on every WORK sample:
+      **+9 bytes each, +127 KiB and +19.1% at `SERIES_SAMPLE_CAP` = 14400**, on
+      the record whose size already forced the series-sacrifice mechanism, and
+      whose own comment says the absent idiom exists so *"a work sample costs
+      zero extra bytes."* **The zero-byte reading is what RF33 actually
+      prescribes:** required on the domain FUNCTION'S INPUT INTERFACE, not on
+      the persisted shape. The spec must also engage
+      `stores/logs.ts:120-127`, which states the server mirror is DELIBERATE —
+      *"a server-side MIRROR ... not a shared import"* — rather than treating
+      it as drift.
+      **Orders against PR 1:** whichever runs second inherits or invalidates
+      the other's byte-compatibility fixture.
+      One new test builds its input by driving `createSeriesRecorder` and never
+      names a field. *The `MAX_GAP_DECISECONDS` boundary pin this row
+      originally promised ALREADY SHIPPED in #345 —
+      `derivedHeartRate.replay.test.ts:113`, independent literals, 59 → 100 and
+      60 → null. Half this row's test work is done.*
+- [ ] **Exploration A — the freeze/resume observer.** The hook holds 38
+      `useRef`s; twelve are one concern (background, frame silence, freeze,
+      resume). Six symbols are exported ONLY so the test can reach them —
+      `defaultLivenessSchedule`, `recordLivenessSilence`,
+      `recordLivenessRecovery`, `handleFrameRecovery`, `nextRowingStreak`,
+      `ROWING_ACTIVE_FALLBACK_FRAMES`, each with `useMonitorSession.test.ts` as
+      its sole non-self consumer. That is the textbook "pure functions
+      extracted for testability while the bugs live in how they are CALLED",
+      at the largest scale in the repo, and RF27 came out of this same file
+      having moved only five fields into `LogicalSession`.
+      **Decides ONE question: do the twelve refs move with the observer, or
+      only the pure helpers?** If they move, a `createFreezeObserver({now,
+      schedule})` is a real 3-in/4-out interface and complexity concentrates.
+      If they stay behind, complexity MOVES and there is no PR.
+      **Its output is worth having either way (PM gate):** a lifetime table
+      over the twelve refs — mint site, clear sites, what survives teardown,
+      relaunch and re-arm — is the artifact RF27 says a plan owes anyway, and
+      RF19's blind-instrument defect lived in exactly these refs. Fund it on
+      that basis, not on the PR that may follow.
+- [ ] **Exploration B — one replay harness. Runs after PR 2, never before.**
+      Eight session-level replay specs — the `src/monitor/*Replay*.test.ts`
+      files that drive `renderHook`: `burstReplay`, `lifecycleReplay`,
+      `summaryHoldReplay`, `handoffStoreReplay`, `justRowReplay`,
+      `partialReplay`, `liveDropSeamReplay`, `structureWatchSessionReplay`
+      (`oracleCorpusReplay` and the driver-level replay specs are NOT in this
+      set) — each re-hand-roll the same ~45 lines of setup: gunzip +
+      `parseRecording`, `createReplayTransport` + `withLiveness`, two
+      `vi.doMock`s, `resetModules`, a dynamic import, a `renderHook` deps
+      object. The driver level already has a shared harness
+      (`src/test/statusSubscriptions.ts`); the session level has none. 36 test
+      files reference `docs/monitor/sessions`.
+      **One justification is WITHDRAWN.** This row first claimed that renaming
+      a spec "silently" stops its fixture matching. The anchor pass produced
+      the condition — copy the spec to a new filename so the
+      `import.meta.url` surgery cannot match — and it fails LOUDLY, with the
+      malformed path printed: `ENOENT ... burstReplayRenamed.test.tskeystone-pm5-recording-….jsonl.gz`,
+      `Test Files 1 failed`. The path surgery is ugly and worth fixing; it is
+      not a silent-failure hazard, and the row no longer claims it is.
+      **Decides two things: how much of the ~45 lines is genuinely IDENTICAL
+      across the eight rather than eight similar-looking setups with
+      load-bearing differences, and how much value survives if PR 2 does not
+      land** (most of it comes from the mocks disappearing, which is PR 2's
+      doing). A shared harness built over differences that matter is a worse
+      module than eight honest copies.
+
+**Exit:** every PR that lands states which module got deeper and what its
+interface now is, in one sentence, at the top of its body. Phase close reports:
+the `vi.doMock` count under `app/src/monitor/` before and after; `saveMonitorRun`
+gone with `scripts/handoffStoreBoundary.test.ts` extended and green; a grep
+proving no second declaration of the series sample shape survives; and, for the
+two explorations, either the PR or the written "no PR, because…". **No hardware
+walk** — nothing here reaches the wire, the pace math, or any number a rower
+reads, and a PR in this phase that finds itself changing one has left the
+phase. **One caveat on that claim (PM gate):** it holds for PR 3 only if the
+series shape stays optional on the wire; the 19.1% inflation above is a
+tester-visible failure mode with no screen to show it on.
+
 ## Wave A — The front door
 
 **Status:** Next in the slate; Wave F closed 2026-09-04. Not opened by that
@@ -485,6 +731,13 @@ nullable, or its own table — is the same migration whichever door the gate
 picks. **It is schedulable now, before the policy question is answered**, and
 doing it first means the policy PR is a policy PR rather than a policy PR
 carrying a migration.
+· dies 2026-09-26 (set 2026-09-12, James, at the Phase MD open gate) · the PM
+gate measured this row sitting still for 8 days and 111 commits while the
+reflex explanation — "the new phase is displacing it" — was false: Wave A is
+blocked on a policy question, and THIS PR is not. Two weeks is enough to fit it
+around Phase MD PR 1 and still land a fortnight inside the wave's own
+2026-10-10, so it can never become the reason the wave slipped. **A wave's
+unblocked half gets its own date; that is what this row exists to prove.**
 
 **Goal:** someone you have never met installs the build, gets an account, rows,
 and can delete everything from inside the app.
@@ -1882,6 +2135,13 @@ fixed.
      deleting them would orphan the cross-file anti-pattern documentation that
      names them (`todayGuard.pin.test.ts`'s binding pin). **Whoever next
      touches these functions owns the decision**, per the close-out's own flag.
+     **That trigger has FIRED, and James RULED on 2026-09-12: both go.**
+     Phase MD PR 1 deletes `anyLiveSession` and the private `monitorRunState`,
+     re-homes the anti-pattern documentation, and rewrites
+     `todayGuard.pin.test.ts` — whose negative import pin would otherwise pass
+     forever once the symbol cannot exist (RF21), and whose two byte-exact
+     import pins that PR breaks anyway by moving `loadMonitorRun`. The row
+     stays here as the evidence; the work lands in that PR.
   2. **The store's standing probe is row 11's tier-precedence COMPOUND
      mutation**, not the single-line reorder — that one is a genuine non-bite.
      Remove the `if (hydrated) return` re-entrancy guard together with forcing
@@ -2521,6 +2781,26 @@ Each needs erg time or a deliberate recording session.
   "off Connect Device". (`phase-nf.md`)
 
 ## Small, queued, rides the next PR in its area
+
+- **`isPlainRecord` is declared four times, byte-identically.** Exported from
+  `monitor/monitorRun.ts:453` and re-declared private in
+  `builder/builderDraft.ts:47`, `session/draft.ts:85` and `session/run.ts:75`;
+  all four bodies are the same line —
+  `typeof value === "object" && value !== null && !Array.isArray(value)`. Found
+  by the 2026-09-12 architecture walk's PR 1 spec and deliberately left out of
+  that PR: folding it in means editing the builder and two draft modules for a
+  change about the monitor's stored run, which is the scope creep the fast-path
+  rule exists to stop (RF34 — say so rather than let the gap look
+  considered-and-dismissed). **What would fix it now:** one predicate in a
+  shared module, four call sites re-pointed. **Why it is a row instead:** it is
+  a four-line pure type guard with no failure mode — four copies of it cannot
+  disagree about anything, which is exactly why nobody has been bitten and why
+  it does not earn its own branch. Note that Phase MD PR 1 makes the
+  `monitorRun.ts` copy PRIVATE, so after that PR this is four private copies
+  and not three-plus-an-export.
+  · dies 2026-10-13 (filed 2026-09-12, approved by James) · rides the next PR
+  touching any of the four files; dated with Phase MD because PR 1 moves one of
+  them and is the most likely vehicle
 
 - **PR1.75b leftovers, lifted from Phase PROTO 2026-09-10.** (1) a unit test for
   the empty `?state=` callback (`params.get` answers `""`, which the adapter
