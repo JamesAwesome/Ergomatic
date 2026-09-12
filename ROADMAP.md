@@ -599,9 +599,10 @@ WORK-ONLY TOTALS · NOT IN AVG WATTS`), never corrected.
       `GET /api/stats/rows` (additive, every row of the user, UNORDERED,
       slim per-row projection computed row-side so `steps` never crosses the
       wire; `totalCalories` as a narrow jsonb-path scalar), the adapter with
-      its own `TZ`-pinned test (a negative-offset zone asserted in effect, a
-      23:30-UTC instant landing on the previous local day, getters→`getUTC*`
-      as the mutation), the time-by-type computation and a stacked-bar
+      its own `TZ`-pinned test (a negative-offset zone asserted in effect, an
+      early-UTC instant on the 13th — `02:30Z`, 22:30 EDT — that New York
+      still reads as the 12th, getters→`getUTC*` as the mutation; the first
+      draft's `23:30Z` instant is the 12th in UTC too and could not bite), the time-by-type computation and a stacked-bar
       primitive under `src/charts/` (the hero needs both — Gate 0 ruling
       11), the You HERO as its OWN component `src/you/stats/YouStatsHero.tsx`
       (Gate 0's H3: LIFETIME / SEASON figures over one AN · AT · O2 · TR ·

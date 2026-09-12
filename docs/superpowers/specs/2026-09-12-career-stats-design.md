@@ -747,7 +747,8 @@ the report names which literal went red.
 (§1) and a calendar pin
 that passes in UTC proves nothing about a device in New York. (1) Invariant
 5 at the seam. (2) The file sets `process.env.TZ = "America/New_York"` (a
-NEGATIVE offset, so a late-UTC instant crosses midnight backwards) at the
+NEGATIVE offset, so an early-UTC instant on the 13th is still the 12th
+there) at the
 top, BEFORE any `Date` is constructed, and ASSERTS the offset took —
 `new Date("2026-09-12T12:00:00Z").getTimezoneOffset()` is `240` — because a
 property of how the test got there is an assertion, not a comment (RF38).
