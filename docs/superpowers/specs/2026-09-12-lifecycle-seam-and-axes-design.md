@@ -5,7 +5,7 @@ no PM final-PR gate, no Gate 0 (nothing a rower sees changes), an antagonist
 DELTA pass on this spec (one invented mechanism: an injectable lifecycle
 registrar), and `/harden` on the plan.
 
-**Revision 2.1, 2026-09-12** — plus the plan's paste-test corrections (§4's ring kind now matches §3; 20 hook blocks and 6 replay specs, not 22 and 7; 24 of 26 freed). **Revision 2** folds the antagonist delta pass (4 blocking, 3 major, 4 held-with-additions); §9 records what revision 1 got wrong. Written from the census at
+**Revision 2.2, 2026-09-12** — folds the plan's `/harden` lens-1 findings F4 and F5: every per-BLOCK mock figure is withdrawn (26 is a STATEMENT count, and three of the statements live in shared setup helpers), and invariant 3 names the fixture scaffold that legitimately derives. **Revision 2.1** carried the plan's paste-test corrections (§4's ring kind now matches §3; 20 hook-file statements and 6 replay specs, not 22 and 7). **Revision 2** folds the antagonist delta pass (4 blocking, 3 major, 4 held-with-additions); §9 records what revision 1 got wrong. Written from the census at
 `docs/superpowers/audits/2026-09-12-architecture-walk/pr2-census.md` (every
 number below carries its command there). Five corrections to the ROADMAP row it
 implements are listed in §7 rather than silently absorbed (RF10).
@@ -71,7 +71,7 @@ derivation has one home. Nothing a rower sees changes.
 | Dead branch once the field goes | exactly one: `link: "up"` at `phase === "failed"` | 3 |
 | `ConnectedPhase` importers | 1 production (`connectedAxes.ts`), 5 test files | 4 |
 | `session.phase` raw reads a published `axes` does NOT replace | `ConnectedInterstitial.tsx` 11, `ConnectedSurface.tsx` 3 — allowlisted "migrating debt" in `connectedPhaseReaders.test.ts` | 4 |
-| `lifecycleUnsubRef`/`lifecycleAttemptRef` diagnostic emits | **0** across 22 sites | 6d |
+| `lifecycleUnsubRef`/`lifecycleAttemptRef` diagnostic emits | **0** across **25** sites (the census said 22; re-measured at `3fc49767` with `grep -c`) | 6d |
 
 ## 3. The invariants this owes (RF27 — invariants, not mechanisms)
 
@@ -102,11 +102,16 @@ derivation has one home. Nothing a rower sees changes.
    `App.addListener` can actually reject is unproven; this is hardening on a
    path the seam makes injectable, filed as such.
 3. **One derivation.** `session.axes` and `session.linkLoss` are computed by the
-   hook from the same four fields the five screens used to forward, and no
-   production file outside the hook calls `deriveAxes`/`deriveLinkLoss`. Gated
-   structurally: `connectedPhaseReaders.test.ts` gains a second scan — no
-   non-test file outside `useMonitorSession.ts` and `connectedAxes.ts` matches
-   `/\bderive(Axes|LinkLoss)\(/`.
+   hook from the same four fields the five screens used to forward, and the
+   only files that derive are the hook, `connectedAxes.ts` (which defines
+   them), and ONE named fixture scaffold, `src/test/sessionAxes.ts`, which
+   exists so a hand-built `MonitorSession` cannot carry axes that disagree
+   with its own phase. Gated structurally: `connectedPhaseReaders.test.ts`
+   gains a second scan — no non-test file outside those THREE matches
+   `/\bderive(Axes|LinkLoss)\(/`. **The scaffold is exempted by NAME, never
+   by a `src/test/` prefix** — that directory holds real harnesses a screen
+   could import — and the scan's no-dead-entries case iterates the scaffold
+   entry too, so a skip that stops being needed fails red.
 4. **`failureLeavesLinkUp` is gone and its ruling is not.** The
    NOT_A_MACHINE_REFUSAL ruling (a transport-side failure reads `lost`; a
    genuine `ProgramRejection` the PM5 itself sent would read `up`) lives as a
@@ -146,11 +151,16 @@ derivation has one home. Nothing a rower sees changes.
   injections (a narrower function is assignable), and it is what lets a replay
   spec hand the replay clock to `withLiveness` through the dep instead of
   replacing `../adapters/monitorTransport`. With both deps injectable the
-  six replay specs and all 20 hook-test blocks lose their `resetModules` +
-  dynamic import for THESE two modules; two replay specs (`justRowReplay`,
-  `summaryHoldReplay`) also mock `../api*` and keep `resetModules` for that —
-  so the honest after-count is 24 of 26 blocks freed, and the exit criterion
-  prints the measured figure.
+  six replay specs and all 20 of the hook file's statements lose their
+  `resetModules` + dynamic import for THESE two modules; two replay specs
+  (`justRowReplay`, `summaryHoldReplay`) also mock `../api*` and keep
+  `resetModules` for that, and so may any block that depended on a FRESH
+  MODULE GRAPH rather than on the mock. **No per-BLOCK after-count is
+  claimed**: the 26 are STATEMENTS, three of them inside shared setup helpers
+  (`setupResumeInstrumentSession`, `setupTimingSession`,
+  `setupLatchCountSession`), so "26 blocks" never existed. The exit criterion
+  counts statements; a per-block figure, if anyone wants one, is printed by a
+  script.
 - **The five sites** (`JustRowObserver.tsx`, `JustRow.tsx` ×2,
   `ConnectedSurface.tsx`, `ConnectedInterstitial.tsx`) read `session.axes` /
   `session.linkLoss`. `JustRow.tsx`'s "AXES, NEVER `session.phase`" comment
@@ -232,11 +242,11 @@ derivation has one home. Nothing a rower sees changes.
 
 ## 6. Exit criteria
 
-1. `grep -rn 'vi.doMock("../adapters/appLifecycle"' app/src/monitor | grep -vE ':\s*(//|\*)' | wc -l` → **0** (from 26 statements); repo-wide → **3** (from 29), the PR body names the three; the three prose lines stay, reworded to past tense. And the phase-exit metric the ROADMAP asked for is restated per TEST BLOCK: hook-test blocks and replay specs that reach a lifecycle event or a replay transport WITHOUT `resetModules` + dynamic import — 0 of 26 before, all 26 after (the number is re-measured, not this sentence).
+1. `grep -rn 'vi.doMock("../adapters/appLifecycle"' app/src/monitor | grep -vE ':\s*(//|\*)' | wc -l` → **0** (from 26 statements); repo-wide → **3** (from 29), the PR body names the three; the three prose lines stay, reworded to past tense. **STATEMENTS only.** The phase-exit metric the ROADMAP asked for is this statement count plus the NAMED files that still carry `vi.resetModules()` and the reason each does (`justRowReplay.test.ts` and `summaryHoldReplay.test.ts` for their `../api*` mocks; anything else the port finds). An earlier revision promised a per-TEST-BLOCK figure ("0 of 26 before, all 26 after"); that figure is withdrawn — 26 is a statement count and three of the statements serve shared setup helpers, so the denominator was never a block count.
 2. `grep -rn 'failureLeavesLinkUp' app/src ROADMAP.md` → empty (it catches the two dangling comment references at `ConnectedSurface.tsx` and `ConnectedInterstitial.tsx` and the live ROADMAP row); the re-homed paragraph is pinned by a phrase that is RED on main — `grep -c 'a genuine .ProgramRejection. the PM5 itself sent reads' app/src/monitor/useMonitorSession.ts` → 1 (0 today) — and shown red by deleting the paragraph. (`grep NOT_A_MACHINE_REFUSAL` already hits `:239` on main and proves nothing.)
 3. `grep -rnE '\bderive(Axes|LinkLoss)\(' app/src --include='*.ts' --include='*.tsx' | grep -v '\.test\.' | grep -vE '^app/src/monitor/(useMonitorSession|connectedAxes)\.ts:'` → empty (filter by PATH, not by any line mentioning the filenames; on main it returns exactly the five sites, so it is red today), and the structural test that enforces it is shown red under one mutation (a re-added call in `JustRow.tsx`). The detector strips `/* */` and whole-line `//` only, so JustRow's replacement pointer comment is a leading-line comment, and the detector gets its own "does not fire on prose" case in that shape.
 4. The seam test drives a recording's `lifecycle` track through the dep.
-5. `listener-registration-failed` / `"session lifecycle"` has a test and a
+5. `lifecycle-registration-failed` / `"session"` (one ring entry for a live attempt, none for a cancelled one) has tests and
    biting mutation.
 6. `pnpm test`, `pnpm typecheck`, `pnpm lint`, a full `pnpm e2e` whose result
    was read (RF1); no screenshot committed.
@@ -268,6 +278,11 @@ derivation has one home. Nothing a rower sees changes.
 - `linkLoss`'s justification was the weak one; the collision is the reason.
 - `createTransport` widening added — the doMock win was 6 of 19 blocks without it.
 - The flake hunt is dropped: the prescribed experiment removed the mechanism it hunted.
+
+**Revision 2.2 — what the plan's `/harden` lens 1 found in this spec:**
+
+- **Exit criterion 1's per-block metric was unreproducible (F4).** "0 of 26 before, all 26 after" reads as a block count; 26 is the number of `vi.doMock` STATEMENTS under `src/monitor/`, and three of the twenty in `useMonitorSession.test.ts` live in shared setup helpers (`setupResumeInstrumentSession`, 8 callers; `setupTimingSession`, 4; `setupLatchCountSession`, 2), so those twenty statements serve 17 `it` blocks plus 3 helpers — 31 `it`s. Each replay spec's single statement sits in its own `runReplay` helper. The criterion now counts statements and names the files that keep `resetModules`; §4's "24 of 26" is withdrawn with it.
+- **Invariant 3 forbade a file the plan has to create (F5).** `src/test/sessionAxes.ts` is how every hand-built `MonitorSession` fixture gets axes consistent with its own phase, and it necessarily calls `deriveAxes`/`deriveLinkLoss`. The invariant now names it, and requires the exemption to be by FILE NAME rather than by a `src/test/` prefix — the directory holds real harnesses (`statusSubscriptions.ts`, `renderedCopy.ts`, `cssView.ts`) a screen could import, and a prefix skip would hide a second deriver appearing there. The scan's no-dead-entries case iterates the scaffold entry so an unused skip fails red.
 
 ## 8. Ruled by James, 2026-09-12
 

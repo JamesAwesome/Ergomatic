@@ -10,9 +10,18 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-12-lifecycle-seam-and-axes-design.md` revision 2.1. Census: `docs/superpowers/audits/2026-09-12-architecture-walk/pr2-census.md`. §7 of the spec lists its own ROADMAP deviations; §10 of THIS plan lists the spec's.
 
-**Baseline:** every number here was measured in the throwaway worktree `.claude/worktrees/pr2-plan-scratch` at `deb50b77` (main, `#408`), run from `app/`. **The census and the spec were measured at `4aa3d132`, before PR 1 merged** — re-run anything you rely on. A number without a command beside it is a plan defect.
+**Baseline:** every number here was measured in a throwaway worktree `.claude/worktrees/pr2-plan-scratch`, run from `app/` — revision 1's numbers at `deb50b77` (main, `#408`), revision 2's re-measurements at `3fc49767` (main, `#409`). Every count below was re-run at `3fc49767` and none moved. **The census and the spec were measured at `4aa3d132`, before PR 1 merged** — re-run anything you rely on. A number without a command beside it is a plan defect.
 
 **Not TRIAD.** No PM final-PR gate, no Gate 0. The antagonist delta pass is folded into spec rev 2. `/harden` runs on this plan (two passes max) before Task 1.
+
+**Revision 2 (this document), after `/harden` lens 1.** What changed and why:
+- **Task 2 Step 7's mutation was decoration and is replaced (F1, BLOCKING).** It named `ConnectedSurface.test.tsx` and `JustRow.test.tsx`, neither of which drives the real hook — one builds `session()` as a PROP, the other `vi.doMock`s the hook. And every ported screen fixture goes through `withDerivedAxes`, which calls the same `deriveAxes`/`deriveLinkLoss` the hook calls, so it would agree with any bug (RF11). After the old Task 2 NOTHING asserted `result.current.axes`, and `linkLoss` had no probe at all. Step 7 now adds HAND-WRITTEN literal tuples to two existing real-hook blocks, with two measured mutations.
+- **Task 2 Step 5's `JustRow.test.tsx` fix now annotates the RETURN, not the parameter (F2).** The hazard was the unannotated base literal returned from the doMock factory — which is exactly how `undecodable` went missing.
+- **The lifetime table's ref count and clear-site owners are corrected (F3),** and both the table and the `.catch`'s own comment now say what a mid-session link DROP means for a late rejection.
+- **Task 5's title, rule (i) and rule (iv) are corrected (F4, F7),** and the "0 of 26 / 24 of 26" per-block figure is deleted everywhere — 26 is a STATEMENT count and three of the statements live in shared helpers.
+- **Task 3's scaffold skip is one NAMED FILE, not a directory prefix (F5),** and the no-dead-entries case now iterates it too, so an unused skip fails red.
+- **Task 2's one-commit reason was false and is replaced with the true one (F6),** measured.
+- Bookkeeping: Task 3's comment about why `connectedAxes.ts` matches the detector; "six of six" replay specs; a clause that `axes`/`linkLoss` land on `MonitorSession`, not `MonitorSessionDeps`.
 
 **Ruled by James, 2026-09-12 (do not re-open):** `failureLeavesLinkUp` is deleted and the NOT_A_MACHINE_REFUSAL ruling re-homed at the hook's derivation; `linkLoss` published beside `axes`; `ConnectedPhase` stays exported; the flake row closes without a hunt; Exploration A's three riders ride this PR.
 
@@ -21,7 +30,7 @@
 ## Global Constraints
 
 - **No behaviour change a rower can see. No screenshot is committed.** `git status --short docs/screenshots` must be empty at Task 7; `git checkout -- docs/screenshots/` if not.
-- **Invariants, not mechanisms (spec §3):** (1) each site calls the registrar current at its OWN call time; (2) a failed session registration is one ring entry for a live attempt and silence for a cancelled one; (3) one derivation — no production file outside the hook and `connectedAxes.ts` calls `deriveAxes`/`deriveLinkLoss`; (4) the field is gone and its ruling is not; (5) no new session-scoped state.
+- **Invariants, not mechanisms (spec §3):** (1) each site calls the registrar current at its OWN call time; (2) a failed session registration is one ring entry for a live attempt and silence for a cancelled one; (3) one derivation — no file outside the hook, `connectedAxes.ts` and the named fixture scaffold `src/test/sessionAxes.ts` calls `deriveAxes`/`deriveLinkLoss`; (4) the field is gone and its ruling is not; (5) no new session-scoped state.
 - **Every new assertion gets a mutation that makes it fail**, and the task report states what was mutated and what the failure SAID (RF21). **Commit before every probe** and confirm with `git log -1` (RF22). A mutation must COMPILE (RF12 corollary).
 - **Test invocation:** `pnpm test --project client -- <pattern>` silently runs the whole suite. For one file: `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>` — this collapses signal deaths to exit 1 (RF40); **never re-run a run showing exit ≥128 or `Allocation failed`**. Read BOTH summary lines (`Test Files` and `Tests`).
 - **Run `git rev-parse --show-toplevel` before every commit** and confirm it prints your worktree path. Every subagent reads `.claude/agent-briefing.md` first. Never merge, never remove the worktree.
@@ -46,12 +55,14 @@
 
 ## The lifetime table (RF27) — nothing is minted, and here is the proof
 
-This PR mints NO new session-scoped state. The table below is the two refs the registrar's callbacks and the new `.catch` touch, so a reviewer can check the `.catch`'s `cancelled` guard against the real clear sites rather than trusting the sentence. Line-free: find each by `grep -n 'lifecycleAttemptRef\|lifecycleUnsubRef' src/monitor/useMonitorSession.ts` (22 hits at baseline).
+This PR mints NO new session-scoped state. The table below is the two refs the registrar's callbacks and the new `.catch` touch, so a reviewer can check the `.catch`'s `cancelled` guard against the real clear sites rather than trusting the sentence. Find each by `grep -c 'lifecycleAttemptRef\|lifecycleUnsubRef' src/monitor/useMonitorSession.ts` — **25** at both `deb50b77` and `3fc49767` (revision 1 said 22, carried from the census; re-measured).
 
 | State | Minted | Cleared / reset | Survives hook teardown? | Survives relaunch? | Survives re-arm (new connect, same process)? |
 | --- | --- | --- | --- | --- | --- |
-| `lifecycleAttempt` (the local token) | in `connect()`, immediately before the session registration; also written to `lifecycleAttemptRef.current` | never cleared as a value — a LATER attempt mints a new one and `.cancelled` is set to `true` on the previous by `fail()`/`teardown()`/`cancel()`'s attempt-boundary block | the token object outlives it; the ref may already point at a newer one | NO (module-free, per mount) | NO — a new attempt mints a new token; that is what makes `cancelled` meaningful |
-| `lifecycleUnsubRef.current` | the `.then` arm (async registrar) or the synchronous assignment | the four paired cancel+unsub+null sites in `fail()`/`teardown()`/`cancel()`, plus one bare `= null` in `cancel()`'s attempt-boundary block | NO — teardown unsubscribes and nulls it | NO | NO |
+| `lifecycleAttempt` (the local token) | in `connect()`, immediately before the session registration; also written to `lifecycleAttemptRef.current` | never cleared as a value — a LATER attempt mints a new one, and `.cancelled` is set to `true` on the previous by each of the four paired sites below | the token object outlives it; the ref may already point at a newer one | NO (module-free, per mount) | NO — a new attempt mints a new token; that is what makes `cancelled` meaningful |
+| `lifecycleUnsubRef.current` | the `.then` arm (async registrar) or the synchronous assignment | the FOUR paired `cancelled = true` + unsub + `= null` sites, which live in `handleEvent` (twice — the disconnect and the machine-end arms), `teardown` and `fail`; plus one bare `= null` in **`connect()`**'s attempt-boundary block. **`cancel()` holds none of them** | NO — teardown unsubscribes and nulls it | NO | NO |
+
+**The consequence the `.catch` inherits, said out loud:** two of the four `cancelled = true` sites are in `handleEvent`, so a **mid-session link DROP marks the attempt cancelled**. A registration rejection that lands after a drop is therefore SILENT, deliberately — the session it would have instrumented is already over. That is the intended reading of invariant 2, not a gap in it, and the `.catch`'s own comment says so.
 
 **What the new `.catch` may therefore assume:** exactly what the existing `.then` arm assumes, because it reads the SAME captured `lifecycleAttempt` const (never `lifecycleAttemptRef.current`, which may already belong to a newer attempt). No third state is introduced. **Exploration A's riders (Task 6) correct two comments that describe OTHER refs' lifetimes wrongly; they change no code.**
 
@@ -86,7 +97,7 @@ echo "  of which zero-arg:                 $(grep -rn '^\s*createTransport: () =
 
 **Measured at `deb50b77`:** deps fields **10**; appLifecycle doMock STATEMENTS **26** under `src/monitor/` and **29** repo-wide, distributed `useMonitorSession.test.ts` 20 · six replay specs 1 each · `justrow/JustRow.test.tsx` 2 · `adapters/appLifecycle.test.ts` 1; `createTransport:` injection sites **57**, of which **55** are zero-argument. Three further raw `vi.doMock(".*appLifecycle"` hits are PROSE inside comments (`lifecycleReplay.test.ts`, and two in `useMonitorSession.test.ts`) and are excluded by the `grep -vE` — they stay, reworded to past tense at Task 7.
 
-**Targets:** deps fields **11**; monitor/ statements **0**; repo-wide **3** (`JustRow.test.tsx` ×2 — a component test that cannot inject a hook dep — and the adapter's own test).
+**Targets:** deps fields **11** — the one new field is `registerAppLifecycleListener`; `axes` and `linkLoss` land on `MonitorSession` (the hook's RETURN), not on `MonitorSessionDeps`, and this count never sees them; monitor/ statements **0**; repo-wide **3** (`JustRow.test.tsx` ×2 — a component test that cannot inject a hook dep — and the adapter's own test).
 
 ---
 
@@ -177,7 +188,11 @@ with
               // exactly what RF19 says must be visible rather than silent.
               // Guarded by the same `cancelled` token the `.then` arm reads:
               // an attempt torn down before the native promise settled is not
-              // this session's failure to report. Recorded on the session RING
+              // this session's failure to report — and note that TWO of the
+              // four `cancelled = true` sites are in `handleEvent`, so a
+              // mid-session link DROP silences a late rejection on purpose:
+              // the session it would have instrumented is already over.
+              // Recorded on the session RING
               // (`log`), not the NFC attempt trace — that trace is drained into
               // this ring and `complete()`d above, and is `undefined` on every
               // non-NFC connect, so a `trace?.record` here would reach nothing.
@@ -358,7 +373,7 @@ Expected: `Test Files 1 passed`, `Tests 322 passed` (318 + 4). Then, each agains
 
 ### Task 2: Publish `axes` and `linkLoss`; delete `failureLeavesLinkUp`
 
-**These are ONE commit, not two.** Measured: the derivation does not typecheck until the field is gone (`Property 'failureLeavesLinkUp' is missing in type … but required in type 'AxesInput'`), and deleting the field first leaves 30 lines of `connectedAxes.test.ts` red with nothing publishing yet.
+**These are ONE commit, and revision 1's reason for that was FALSE (RF36 — a commit message is a claim about its own diff).** The field deletion IS a green standalone commit: `connectedAxes.ts` + Step 6's test rewrite + one deleted `failureLeavesLinkUp: null,` line at each of the five sites, measured at `3fc49767` — `pnpm typecheck` clean, `Test Files 26 passed / Tests 924 passed` over `connectedAxes.test.ts`, `src/justrow`, `src/workout` and `JustRowObserver.test.tsx`. **The real reason to keep one commit is that splitting edits the five call sites TWICE** — once to delete the line, once to replace the whole call with `session.axes`. The commit message says what the commit does; it does not claim the split was impossible.
 
 **Files:**
 - Modify: `app/src/monitor/useMonitorSession.ts`, `app/src/monitor/connectedAxes.ts`, `app/src/monitor/connectedAxes.test.ts`
@@ -523,9 +538,38 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
 The other four are variations: `ConnectedSurface.screens.test.tsx` and `you/readyCardSeam.test.tsx` build a literal with no overrides object (wrap the literal in `withDerivedAxes({ … })`); `WorkoutDetail.test.tsx`'s `baseSession` takes `Partial<Session>` and follows the shape above.
 
 **`justrow/JustRow.test.tsx` is the one the compiler cannot catch, and it needs three separate fixes:**
-1. Its `mockSession(overrides: Record<string, unknown>)` types the overrides as `unknown`, so **`pnpm typecheck` stays GREEN while every render throws** `TypeError: Cannot read properties of undefined (reading 'link')`. Retype the parameter `Partial<MonitorSession>` so the compiler becomes the gate (RF33).
-2. Retyping surfaces that the mock has **never carried `undecodable`** — add `undecodable: false`.
-3. **The destructure must live INSIDE the `useMonitorSession: () => …` factory, not above the `vi.doMock` call.** Several tests hand `mockSession` a MUTABLE object and edit it between rerenders; reading `overrides` once freezes the session at its first phase. Measured cost of getting this wrong: **18 failing tests**, all passing again once it moved. Write the comment saying so.
+1. **Annotate the RETURN of the doMock factory, not just the parameter.** `mockSession(overrides: Record<string, unknown>)` is untyped, so `pnpm typecheck` stays GREEN while every render throws `TypeError: Cannot read properties of undefined (reading 'link')`. But retyping the PARAMETER alone leaves the real hazard: the base object literal the factory returns has no contextual type, which is exactly how the mock came to be **missing `undecodable` entirely**. Annotate the return, so every one of the 21 fields is required and the compiler is the gate (RF33).
+2. **The destructure must live INSIDE the factory, not above the `vi.doMock` call.** Several tests hand `mockSession` a MUTABLE object and edit it between rerenders; reading `overrides` once freezes the session at its first phase. Measured cost of getting this wrong: **18 failing tests**, all passing again once it moved.
+
+Both, in one shape — and it goes through `withDerivedAxes` like every other fixture:
+
+```ts
+  function mockSession(overrides: Partial<MonitorSession>) {
+    vi.resetModules();
+    vi.doMock("../adapters/keepAwake", () => ({ keepAwakeOn, keepAwakeOff }));
+    // The destructure happens INSIDE the factory, on every render: several
+    // tests below hand this function a MUTABLE object and then edit it
+    // between rerenders, so reading `overrides` once here would freeze the
+    // session at its first phase. The `: MonitorSession` return annotation is
+    // what makes the base literal's 21 fields REQUIRED — without it the
+    // literal has no contextual type, which is how `undecodable` went
+    // missing (RF33).
+    vi.doMock("../monitor/useMonitorSession", () => ({
+      useMonitorSession: (): MonitorSession => {
+        const { axes, linkLoss, ...rest } = overrides;
+        return withDerivedAxes(
+          {
+            phase: "idle",
+            undecodable: false,
+            /* ...the other 19 existing defaults, unchanged... */
+            ...rest,
+          },
+          { axes, linkLoss },
+        );
+      },
+    }));
+  }
+```
 
 - [ ] **Step 6: `connectedAxes.test.ts`.** Delete the `failureLeavesLinkUp` field from the local `Row` interface; delete the two table rows whose names begin `failed + failureLeavesLinkUp:true` and `…:false`; rename the surviving one to `"failed — always lost; the link-up branch died with its input"`; delete every remaining `failureLeavesLinkUp: …,` line (27 of them) and the name from the `it.each` destructure and its `deriveAxes({…})` argument; replace the `it("failed: frameSilence never overrides failureLeavesLinkUp…")` test with:
 
@@ -544,7 +588,47 @@ The other four are variations: `ConnectedSurface.screens.test.tsx` and `you/read
 
 The `deriveLinkLoss ⇔ deriveLink` contract test stays and still holds (its helper already hardcoded `null`).
 
-- [ ] **Step 7: Gates, commit, mutation**
+- [ ] **Step 7: The two real-hook assertions (F1 — this is where `axes` and `linkLoss` are actually gated)**
+
+**Nothing in Steps 1-6 gates the published values.** Every ported screen fixture runs through `withDerivedAxes`, which calls the SAME `deriveAxes`/`deriveLinkLoss` the hook calls, so it agrees with any bug (RF11); `ConnectedSurface.test.tsx` builds `session()` as a PROP (its only `renderHook` is `useSurfaceSwipe`); and `JustRow.test.tsx` `vi.doMock`s the hook outright. The gate has to be in `useMonitorSession.test.ts`, on the real hook, written as LITERALS by hand.
+
+Two existing blocks already drive the hook to the two states that matter. Add to each, beside its existing assertion:
+
+In the frozen block (the one titled *"four frozen frames publish frozen:true; the next change clears it — phase never leaves live"*), at the transition where it asserts `result.current.frozen).toBe(true)` for the first time:
+
+```ts
+    // THE PUBLISHED TUPLE, written out by hand (Phase MD PR 2). Never
+    // `deriveAxes(...)` in an expectation — that is the same function the
+    // hook calls, so it would agree with any bug (RF11). This is the ONLY
+    // place the real hook's `axes`/`linkLoss` are asserted at a freeze.
+    expect(result.current.axes).toStrictEqual({
+      link: "up",
+      program: "armed",
+      session: "live",
+      activity: "frozen",
+    });
+    expect(result.current.linkLoss).toBe("none");
+```
+
+In the frame-silence block (the one titled *"a suppressed stream trips the REAL watchdog, latching frameSilence while phase stays live — End then stores link-lost, not rower"*), after its `expect(result.current.frameSilence).toBe(true)`:
+
+```ts
+    // The published tuple at frame silence, by hand (Phase MD PR 2): the
+    // watchdog demotes a live-looking link to `"lost"`, and `linkLoss` says
+    // NOBODY TOLD US — the distinction the axes tuple cannot carry, and the
+    // one Phase RN's Gate 0 defect turned on.
+    expect(result.current.axes).toStrictEqual({
+      link: "lost",
+      program: "armed",
+      session: "live",
+      activity: "moving",
+    });
+    expect(result.current.linkLoss).toBe("inferred");
+```
+
+**Both tuples were MEASURED against the real hook, not reasoned** — the axis is called `activity`, not `freeze`. Between them the two literals pin all four axes off two different `link` values, both `linkLoss` answers that a live session can produce, and the two fields (`frozen`, `frameSilence`) that the hook forwards into the derivation.
+
+- [ ] **Step 8: Gates, commit, mutations**
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm format:check
@@ -554,7 +638,16 @@ git rev-parse --show-toplevel && git add -A && git commit -m "Publish axes and l
 
 Expected: green. **`Tests 8119 passed | 1 skipped` across `Test Files 290 passed` was measured on the FINAL scratch tree** (Tasks 1, 2, 3, 4, 6 and three of Task 5's blocks); the count at the end of Task 2 alone is lower by Task 3's four cases. Read both summary lines rather than matching a number.
 
-**Mutation:** in the hook's `axesInput`, swap `frozen: state.frozen` for `frozen: false`. Run `ConnectedSurface.test.tsx` and `JustRow.test.tsx`; both must go red on the frozen/paused surface. Record the message. (RF2: also read the per-file coverage rows for `sessionAxes.ts` and `connectedAxes.ts` at Task 7 — the 90×4 gate is an aggregate and will not notice a new file's uncovered branch.)
+**Two mutations, both against `src/monitor/useMonitorSession.ts`, both RUN and both measured. Run each from the committed tree and revert with `git checkout --` (RF22).**
+
+| # | Mutation | Measured failure |
+| --- | --- | --- |
+| 5 | In `axesInput`, swap `frozen: state.frozen` for `frozen: false` | the frozen block fails: `AssertionError: expected { link: 'up', program: 'armed', …(2) } to strictly equal { … }`, whose diff is exactly `- "activity": "frozen"` / `+ "activity": "moving"` (1 failed \| 317 passed) |
+| 6 | Replace `linkLoss: deriveLinkLoss(axesInput)` with `linkLoss: "reported" as LinkLossAxis` | TWO fail: the silence block `AssertionError: expected 'reported' to be 'inferred'`, the frozen block `expected 'reported' to be 'none'` (2 failed \| 316 passed) |
+
+**If mutation 6 comes back GREEN, the PR does not ship.** `linkLoss` is published on the strength of one argument — that the axes tuple cannot distinguish `pairing`+silence from `disconnected` — and a field with no biting probe is decoration that retires the suspicion (RF21). Fix the gate before Task 3, do not file it.
+
+(RF2: also read the per-file coverage rows for `sessionAxes.ts` and `connectedAxes.ts` at Task 7 — the 90×4 gate is an aggregate and will not notice a new file's uncovered branch.)
 
 ---
 
@@ -569,8 +662,9 @@ Expected: green. **`Tests 8119 passed | 1 skipped` across `Test Files 290 passed
  *  `session.axes`/`session.linkLoss` now, so there is exactly ONE derivation
  *  site; before this PR five screens each rebuilt the input and called
  *  `deriveAxes`/`deriveLinkLoss` themselves. These two files are the only
- *  ones allowed to call either: the hook (which derives) and the module
- *  (which defines them and calls `deriveLink` from `deriveLinkLoss`). */
+ *  ones allowed to match: the hook, which CALLS both, and the module, which
+ *  matches on its own two `export function derive…(` DEFINITIONS — the
+ *  detector cannot tell a definition from a call, and does not need to. */
 const AXES_DERIVERS = new Set([
   "monitor/useMonitorSession.ts",
   "monitor/connectedAxes.ts",
@@ -578,23 +672,25 @@ const AXES_DERIVERS = new Set([
 
 const DERIVE_CALL = /\bderive(Axes|LinkLoss)\(/;
 
-/** `src/test/` is test SCAFFOLDING that `productionSourceFiles()` returns
- *  anyway, because its files do not end in `.test.ts`. `test/sessionAxes.ts`
- *  derives on purpose — it is how every hand-built `MonitorSession` fixture
- *  gets axes that agree with its own phase. Scoped here rather than inside
- *  `productionSourceFiles()` so the ConnectedPhase sweep above keeps the
- *  exact reach it had before this PR. */
-const SCAFFOLD_PREFIX = "test/";
+/** ONE NAMED FILE, never a directory prefix. `productionSourceFiles()`
+ *  returns everything under `src/test/` because those files do not end in
+ *  `.test.ts`, and that directory holds REAL harnesses a screen could import
+ *  (`statusSubscriptions.ts`, `renderedCopy.ts`, `cssView.ts`) — exempting
+ *  the whole prefix would let a second deriver appear there unseen.
+ *  `test/sessionAxes.ts` derives on purpose: it is how every hand-built
+ *  `MonitorSession` fixture gets axes that agree with its own phase. Scoped
+ *  here rather than inside `productionSourceFiles()` so the ConnectedPhase
+ *  sweep above keeps the exact reach it had before this PR. */
+const AXES_SCAFFOLD = new Set(["test/sessionAxes.ts"]);
 ```
 
 - [ ] **Step 2: Four cases**, inserted before the existing "does not fire on ordinary prose" test — the sweep, its no-dead-entries mirror, a positive detector case, and a prose case in the shape Task 2 actually writes:
 
 ```ts
-  it("nothing outside the hook and connectedAxes.ts derives the axes — screens read session.axes", () => {
+  it("nothing outside the hook, connectedAxes.ts and the fixture helper derives the axes", () => {
     const offenders: string[] = [];
     for (const rel of productionSourceFiles()) {
-      if (AXES_DERIVERS.has(rel)) continue;
-      if (rel.startsWith(SCAFFOLD_PREFIX)) continue;
+      if (AXES_DERIVERS.has(rel) || AXES_SCAFFOLD.has(rel)) continue;
       const stripped = commentStrippedSource(
         readFileSync(join(ROOT, rel), "utf-8"),
       );
@@ -603,8 +699,11 @@ const SCAFFOLD_PREFIX = "test/";
     expect(offenders).toStrictEqual([]);
   });
 
-  it("every axes-deriver actually derives — that allowlist has no dead entries either", () => {
-    for (const rel of AXES_DERIVERS) {
+  it("every deriver and the one scaffold entry actually derive — no dead entries", () => {
+    // The scaffold entry is iterated TOO: a skip that stops being needed
+    // must fail red, or it is exactly the silent dead weight the sweep above
+    // exists to prevent.
+    for (const rel of [...AXES_DERIVERS, ...AXES_SCAFFOLD]) {
       const stripped = commentStrippedSource(
         readFileSync(join(ROOT, rel), "utf-8"),
       );
@@ -612,7 +711,7 @@ const SCAFFOLD_PREFIX = "test/";
     }
   });
 
-  it("the derive detector fires on a new caller, not just on the two owners", () => {
+  it("the derive detector fires on a new caller, not just on the owners", () => {
     const newOffender = `
       function draw(session) {
         const axes = deriveAxes({ phase: session.phase });
@@ -639,6 +738,8 @@ const SCAFFOLD_PREFIX = "test/";
 - [ ] **Step 3: Run, commit, mutate.** Expect `Test Files 1 passed`, `Tests 8 passed` (4 existing + 4). Commit, then re-add a `deriveAxes({ phase: session.phase, frozen: session.frozen, runOpen: session.runOpen, frameSilence: session.frameSilence })` call in `JustRow.tsx` in place of `const axes = session.axes;` and re-run.
 
 **Measured:** `AssertionError: expected [ 'justrow/JustRow.tsx' ] to strictly equal []`, 1 failed | 7 passed. Revert with `git checkout -- src/justrow/JustRow.tsx`.
+
+**Second mutation — the scaffold skip must be able to go dead.** In `src/test/sessionAxes.ts`, replace the two `?? deriveAxes(input)` / `?? deriveLinkLoss(input)` expressions with hardcoded literals (`{ link: "up", program: "none", session: "none", activity: "unknown" } as ConnectedAxes` and `"none"`). **Measured:** `AssertionError: expected [ 'test/sessionAxes.ts', false ] to strictly equal [ 'test/sessionAxes.ts', true ]`, 1 failed | 7 passed. Revert.
 
 **Also check the FIRST pin still holds**: `ConnectedSurface.tsx` survives the allowlist's no-dead-entries test on exactly one line (`if (session.phase === "ended")`) and `ConnectedInterstitial.tsx` on eleven. Task 2 removes neither. Green in the scratch tree.
 
@@ -689,11 +790,20 @@ Change `import type { RunIdentity } from "./useMonitorSession";` to `import { us
 
 ---
 
-### Task 5: Port the remaining mocks — 20 hook blocks and 5 replay specs
+### Task 5: Port the remaining mocks — 17 `it` blocks, 3 shared setup helpers, 5 replay specs
+
+**26 is a STATEMENT count, and statements are not blocks.** Three of `useMonitorSession.test.ts`'s twenty statements live in shared setup helpers — `setupResumeInstrumentSession` (8 callers), `setupTimingSession` (4), `setupLatchCountSession` (2) — so the file's twenty statements serve **17 `it` blocks plus 3 helpers, reaching 31 `it`s**; each replay spec's single statement sits in its own `runReplay` helper and serves that spec's blocks (16 in total). Counted with:
+
+```bash
+grep -n 'function setupResumeInstrumentSession\|function setupTimingSession\|function setupLatchCountSession' src/monitor/useMonitorSession.test.ts
+for h in setupResumeInstrumentSession setupTimingSession setupLatchCountSession; do echo "$h: $(grep -c "$h(" src/monitor/useMonitorSession.test.ts)"; done   # decl + callers
+```
+
+**No per-block "N of 26 freed" figure appears in this plan or the spec.** It was a number nobody could reproduce; the exit criterion counts STATEMENTS (Task 7), and anyone who wants a per-block figure prints it with the script above.
 
 **Files:** Modify `app/src/monitor/useMonitorSession.test.ts` (20 statements) and `burstReplay.test.ts`, `handoffStoreReplay.test.ts`, `justRowReplay.test.ts`, `partialReplay.test.ts`, `summaryHoldReplay.test.ts` (1 each). **By hand, test block by test block, never by regex** — every block's `vi.fn((cb) => { … })` body is the dep's value and some return a Promise.
 
-**THE RULE:** for each block, (i) move the mock factory's function body into `registerAppLifecycleListener:` on the `renderHook` deps object; (ii) if the block also mocks `"../adapters/monitorTransport"`, move THAT factory's body into `createTransport: (liveness: LivenessDeps) => …`; (iii) drop `freshUseMonitorSession` for the statically imported `useMonitorSession`; (iv) **keep `vi.resetModules()` + the dynamic import ONLY if a THIRD module is still mocked in that block, and say in the task report which module and which block.** **Measured against main:** a third module IS mocked in exactly two of the seven files — `justRowReplay.test.ts` (`../api`, `../api/useWorkouts`, `../api/useBaselines`, `../api/usePlan`, `../api/usePreferences`, `../api/useRecentLogs`) and `summaryHoldReplay.test.ts` (`../api`, `../api/useWorkouts`, `../api/useBaselines`, `../api/usePlan`) — via
+**THE RULE:** for each block, (i) move the mock factory's function body into `registerAppLifecycleListener:` on the `renderHook` deps object — **and where the mock sits in a SHARED setup helper, port the helper ONCE: the dep goes on that helper's own `renderHook`, and the helper's callers change not at all;** (ii) if the block also mocks `"../adapters/monitorTransport"`, move THAT factory's body into `createTransport: (liveness: LivenessDeps) => …`; (iii) drop `freshUseMonitorSession` for the statically imported `useMonitorSession`; (iv) **keep `vi.resetModules()` + the dynamic import if a THIRD module is still mocked in that block — OR if the block depends on a FRESH MODULE GRAPH rather than on the mock. Say which, per ported block, in the task report, naming whether any assertion turned on the two-instance split.** **Measured against main:** a third module IS mocked in exactly two of the seven files — `justRowReplay.test.ts` (`../api`, `../api/useWorkouts`, `../api/useBaselines`, `../api/usePlan`, `../api/usePreferences`, `../api/useRecentLogs`) and `summaryHoldReplay.test.ts` (`../api`, `../api/useWorkouts`, `../api/useBaselines`, `../api/usePlan`) — via
 
 ```bash
 for f in src/monitor/useMonitorSession.test.ts src/monitor/{burst,handoffStore,justRow,lifecycle,partial,summaryHold}Replay.test.ts; do
@@ -701,7 +811,12 @@ for f in src/monitor/useMonitorSession.test.ts src/monitor/{burst,handoffStore,j
 done
 ```
 
-Those two **keep `vi.resetModules()` + the dynamic import** if the `../api*` mocks share a block with the lifecycle one; the implementer checks and says which. Every other block — all 20 in `useMonitorSession.test.ts` and the other four replay specs — loses the machinery entirely. **Criterion 1 is unaffected either way**: it counts appLifecycle statements, and those reach 0 in `src/monitor` regardless. The spec's "all 26 after" phase-exit metric is therefore an OVERCOUNT and is restated as "24 of 26 blocks reach a lifecycle event or a replay transport with no `resetModules`; two keep it for `../api*` and are named".
+Those two **keep `vi.resetModules()` + the dynamic import** if the `../api*` mocks share a block with the lifecycle one; the implementer checks and says which. **Criterion 1 is unaffected either way**: it counts appLifecycle statements, and those reach 0 in `src/monitor` regardless.
+
+**The fresh-graph half of rule (iv), and why it is not hypothetical.** Dropping `resetModules` means the block now shares module singletons with its neighbours instead of getting its own copies. For `handoffStore.ts` that is already handled — the file's global `beforeEach` calls `resetHandoffStore()` and its own comment says it exists precisely because blocks without `resetModules` leak. **`nfc/connectionAttemptTrace.ts`'s `latest` is reset by nothing there**: `grep -n 'resetConnectionAttemptTraceForTests' src/monitor/useMonitorSession.test.ts` returns exactly two hits at `3fc49767`, an import and a call, BOTH inside one `it`. So:
+
+- **Add `resetConnectionAttemptTraceForTests()` to the file's global `beforeEach`**, beside `localStorage.clear()` and `resetHandoffStore()`, as a static import. (The symbol exists — `src/monitor/nfc/connectionAttemptTrace.ts` exports it, verified.) Do this BEFORE porting any block, so a port that starts leaking a stale trace fails on its own assertion rather than on a neighbour's.
+- For every block whose assertions read `loadMonitorRun`, the hand-off store or a trace, say in the report whether the port changed what it observed.
 
 Three worked examples, each ported and run in the scratch tree:
 
@@ -744,12 +859,13 @@ Three worked examples, each ported and run in the scratch tree:
 
   This exact head (`mockDefaultTransport` + both doMocks + reset + dynamic import) occurs **three times verbatim** in `useMonitorSession.test.ts` and in a near-identical form at fourteen more `mockDefaultTransport` sites — port each one, do not sed them.
 
-- **A replay spec** — Task 4's `lifecycleReplay.test.ts`. The other five follow it; six of the seven replay-spec mocks are a bare `vi.fn(() => (): void => undefined)` stub that was paying `resetModules` for nothing.
+- **A replay spec** — Task 4's `lifecycleReplay.test.ts`. The other five follow it; six of the SIX replay specs that carry an appLifecycle mock hold it in their own `runReplay` helper, and five of those six use a bare `vi.fn(() => (): void => undefined)` stub that was paying `resetModules` for nothing (`lifecycleReplay` is the one that actually uses the callback).
 
+- [ ] **Step 0: the `beforeEach` addition named above, first and in its own commit** — so a port that starts leaking fails on its own assertion, not a neighbour's.
 - [ ] **Step 1-25:** one commit per file is fine; `useMonitorSession.test.ts` may be one commit. After each file: `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>`, read BOTH summary lines.
 - [ ] **Step 26: The count.** Re-run Task 0's census. `src/monitor` must read **0**; repo-wide **3**. Name the three in the report.
 
-**Measured partial result** (3 hook blocks + `lifecycleReplay.test.ts` ported in the scratch tree): monitor/ `26 → 22`, repo-wide `29 → 25`, `Tests 322 passed` in the hook file and `3 passed` in the replay spec. The remaining delta is 17 hook blocks + 5 replay specs.
+**Measured partial result** (3 statements + `lifecycleReplay.test.ts` ported in the scratch tree): monitor/ `26 → 22`, repo-wide `29 → 25`, `Tests 322 passed` in the hook file and `3 passed` in the replay spec. The remaining delta is 17 statements in the hook file and 5 replay specs.
 
 ---
 
@@ -777,6 +893,10 @@ Three worked examples, each ported and run in the scratch tree:
 # 1. the mocks
 grep -rn 'vi.doMock("../adapters/appLifecycle"' app/src/monitor | grep -vE ':\s*(//|\*)' | wc -l   # → 0
 grep -rn 'vi.doMock(".*appLifecycle"' app/src | grep -vE ':\s*(//|\*)' | awk -F: '{print $1}' | sort | uniq -c   # → 3, in 2 files, both named in the PR body
+# STATEMENTS only. No per-`it`-block figure is claimed anywhere — 26 statements
+# serve 17 blocks plus 3 shared helpers in the hook file (Task 5). The PR body
+# also NAMES the files that keep `vi.resetModules()` and why:
+# justRowReplay.test.ts and summaryHoldReplay.test.ts, for their `../api*` mocks.
 
 # 2. the field is gone; the ruling is not
 grep -rn 'failureLeavesLinkUp' app/src ROADMAP.md | grep -vE ':\s*(//|\*)'   # → EMPTY
@@ -822,16 +942,20 @@ Every item below was measured in the scratch tree; each changed a prescribed blo
 6. **`src/test/sessionAxes.ts` is a new file the spec does not name.** Without it every fixture can assert a phase and an axes tuple that disagree.
 7. **Exit criterion 2 as written cannot be satisfied** — see Task 7 Step 2. Its phrase pin also cannot match a wrapped comment line: the spec's proposed phrase greps to 0 against the exact comment the spec asks for.
 8. **Exit criterion 3's path filter misses the new helper**; `app/src/test/` must be excluded, and the structural scan needs the same skip with its reason written down (scoped to the NEW scan only, so the existing `ConnectedPhase` sweep keeps its exact reach).
-9. **The derivation and the field deletion cannot be separate commits** — the publication does not typecheck until the field is gone.
+9. **The derivation and the field deletion CAN be separate commits** — revision 1 said they could not, and that was wrong. Measured at `3fc49767`: the deletion plus its test rewrite plus five one-line site edits typechecks clean and passes 26 files / 924 tests on its own. They stay in one commit because splitting edits the five call sites twice, and the plan now says that (RF36).
 10. **A ring assertion cannot use `toStrictEqual` on `{kind, detail}`** — entries carry `seq` and `atMs`. Map to `detail` first (cost: one red test).
 11. **`DiscoveredMonitor` has no `rssi`** — the two-sites test's scan result is `{ id, name }`.
 12. **The hook imports `connectedAxes.ts`, which type-imports `ConnectedPhase` back.** The cycle is type-only and erased; `pnpm typecheck`, `pnpm lint` and the full client+unit suite are clean. Say so in the PR rather than leaving a reviewer to find it.
 13. **Two replay specs mock a THIRD module** (`justRowReplay.test.ts` and `summaryHoldReplay.test.ts`, both `../api*`), so the spec's "all 26 blocks after" exit metric is an overcount — 24, with the two named. Criterion 1 is unaffected.
-14. **`createTransport` has 57 injection sites, 55 zero-argument**, and all compile unchanged under the widened signature (the spec's figure of 41 predates PR 1).
+14. **Nothing in the screen tests can gate the published values** (revision 2, F1). `withDerivedAxes` calls the same functions the hook calls — a mirror, not an oracle (RF11) — `ConnectedSurface.test.tsx` builds `session()` as a prop, and `JustRow.test.tsx` mocks the hook. Revision 1's Task 2 mutation named exactly those two files and could not have bitten; `linkLoss` had no probe at all. The gate is now two hand-written literal tuples in `useMonitorSession.test.ts`, and the axis is called `activity`, not `freeze`.
+15. **The lifetime table's ref count was 22, carried from the census; it is 25**, and the four paired clear sites live in `handleEvent` ×2, `teardown` and `fail` — not in `cancel()`, which holds none. Two of them being in `handleEvent` means a mid-session DROP silences a late registration rejection, which is now stated rather than left for a reviewer to derive.
+16. **`src/test/` holds real harnesses**, so a directory-prefix skip in the derive scan would hide a second deriver. One named file, iterated by the no-dead-entries case.
+17. **`useMonitorSession.test.ts` resets `handoffStore` globally but never the connection-attempt trace** (two hits, both inside one `it`). Dropping `resetModules` shares that singleton across blocks, so the reset moves into the global `beforeEach` before any port.
+18. **`createTransport` has 57 injection sites, 55 zero-argument**, and all compile unchanged under the widened signature (the spec's figure of 41 predates PR 1).
 
 ## Self-review (done by the author before /harden)
 
 - **Spec coverage:** §1 nothing to build; §2 census re-measured against `deb50b77` (Task 0, with corrections in §10); §3 invariants 1-5 → Task 1 Step 5's four tests (1, 2), Task 3's scan (3), Task 2 Step 2's comment plus Task 7's phrase pin (4), the lifetime table (5); §4 every bullet → Tasks 1, 2, 5, 6, with the ring-kind contradiction ruled; §5 every test → Tasks 1, 3, 4, 5; §6 criteria 1-7 → Task 7 Steps 2-4, three of them corrected; §7 deviations carried into Task 7 Step 1; §8 James's rulings honoured, none re-opened.
-- **Paste-testing:** every block above was extracted to its real path and run. `pnpm typecheck`, `pnpm lint` and `pnpm format:check` are clean; `--project client --project unit` is `290 files / 8119 passed, 1 skipped`. Six mutations were RUN, not predicted, and their measured messages are in the tables.
-- **Not paste-tested:** the 17 remaining hook blocks and 5 replay specs of Task 5 (three representatives were ported instead, and the rule is written from them), `pnpm e2e`, and `pnpm test:coverage`.
+- **Paste-testing:** every block above was extracted to its real path and run. `pnpm typecheck`, `pnpm lint` and `pnpm format:check` are clean; `--project client --project unit` is `290 files / 8119 passed, 1 skipped`. **Eight mutations were RUN, not predicted** — Task 1's four, Task 2's 5 and 6, Task 3's two — and every measured message is in the tables. Revision 2's re-measurements (the two new mutations, the ref count, the helper counts, the standalone-commit check, the scaffold shape) were taken at `3fc49767`.
+- **Not paste-tested:** the 17 remaining statements and 5 replay specs of Task 5, and Task 5 Step 0's `beforeEach` addition (three representatives were ported instead, and the rule is written from them), `pnpm e2e`, and `pnpm test:coverage`.
 - **No line-number citations into this document, and no self-describing bookkeeping** — every count carries its command.
