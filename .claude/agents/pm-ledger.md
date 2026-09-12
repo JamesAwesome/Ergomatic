@@ -5,6 +5,40 @@ engagement. **Not read up front** — the bounded, always-read half is
 `pm-techniques.md`, and an entry is proposed to both. Grep this file for the
 detail behind a ruling, or for the history of a phase you are about to judge.
 
+## 2026-09-12 — Phase PS open gate (career stats on the You tab)
+
+**Verdict:** PASS WITH CONDITIONS (6). Spec
+`docs/superpowers/specs/2026-09-12-career-stats-design.md`, branch
+`phase-ps-spec` at `93b91d66`. The three falsifiable claims all HELD: the RC
+photograph obligation stays with LP (a sum has no PM5 screen; `phase-rc.md:1072`
++ `ROADMAP.md:1814`), the MD collision is nil at file level (MD never names
+`storedSummary.ts`), and the promotion left one home (the "After the strangers"
+PS line was deleted in the same diff).
+
+- **A phase can forbid a thing in its invariants and delegate the decision to
+  open it in the same document.** §7 invariant 11 says "no column, no
+  migration"; §11 and §4.3 let the DBA's measurement open a generated column.
+  When a spec hands a gate the power to rule, check the rule against the
+  invariant list — and remember a measurement measures, it does not rule; a
+  stored shape is James's call (TRIAD).
+- **A phase with no external oracle should say so.** Every PS figure is a sum of
+  our own numbers; invariant 12 forbids reading Concept2 (James's ruling) and
+  the phase takes no hardware walk, so nothing outside the app can contradict a
+  LIFETIME total. RF11's question ("what authority could disagree, and did
+  anyone ask?") has an answer here — James's own logbook page, by eye, once —
+  and the spec had not asked it. (James scheduled it as an exit criterion the
+  same day.)
+- **The per-COLUMN empty state is the one a spec forgets.** §5 defined four
+  whole-page empty states and none for a MACHINE column with zero rows, which is
+  what every tester who has not connected a monitor sees: a column of zeros
+  reading `0 OF 0 CARRY THE MONITOR'S OWN TOTALS`.
+- **A new standing agent needs its CLAUDE.md paragraph in the same PR** — PR 0
+  added `dba.md` + two memory files while CLAUDE.md still read "Two standing
+  agents". Raised as a condition; James accepted the rule into `CLAUDE.md`.
+- Backstop dates: PS `dies 2026-10-12` and MD `dies 2026-10-13` land 24 hours
+  apart, so neither can discriminate which phase outvoted the other. Flagged to
+  James, not ruled.
+
 ## 2026-09-12 — Wave A PR 1 final gate (#409, TRIAD: stored shape, auth-adjacent)
 
 **Verdict:** PASS WITH CONDITIONS. Five blocking, none about behaviour — a
