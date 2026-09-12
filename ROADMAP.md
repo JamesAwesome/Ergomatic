@@ -614,7 +614,7 @@ an investigation whose honest answer may be "no PR".
       writer — including a thrown write, the only shape that can catch a
       renamed `seriesDropped`.
 - [x] **PR 2 — a lifecycle seam on `useMonitorSession`, and publish `axes`. LANDED
-      as PR #<n> (2026-09-12) — one dep (`registerAppLifecycleListener`, plus
+      as PR #413 (2026-09-12) — one dep (`registerAppLifecycleListener`, plus
       `createTransport` widened to take the liveness deps), one derivation
       site (`session.axes` and `session.linkLoss`), 26 appLifecycle doMock
       STATEMENTS retired under `src/monitor/` (29 → 3 repo-wide, in the
@@ -2437,7 +2437,7 @@ fixed.
   entry, RF27's own territory) fired once during PR1.75b's coverage runs,
   reported 2026-09-02, and passed on three isolated re-runs plus the very
   next full coverage run. Not in that PR's diff (last touched at a prior
-  commit, `10b8aa94`). **CLOSED 2026-09-12 by Phase MD PR 2 (#<n>):**
+  commit, `10b8aa94`). **CLOSED 2026-09-12 by Phase MD PR 2 (#413):**
   mechanism bounded to cross-test leakage through the suite's single
   `beforeEach` reset (INFERENCE — the only producer consistent with three
   green isolated re-runs); unreproduced; NO hunt was run, because a filtered
