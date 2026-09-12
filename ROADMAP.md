@@ -659,7 +659,7 @@ an investigation whose honest answer may be "no PR".
       Same shape as `anyLiveSession`: deleting is probably right, asking where
       the ruling lives afterwards is mandatory. **Put it to James before
       implementation, the way PR 1 did.**
-- [x] **PR 3 — one `Sample` shape (TRIAD: stored shape). LANDED as PR #<n>
+- [x] **PR 3 — one `Sample` shape (TRIAD: stored shape). LANDED as PR #412
       (2026-09-12) — with four corrections to this row's own claims (RF10):
       SIX declarations, not five (`server/routes/concept2.ts`'s cast is a
       sixth, UPSTREAM of the mapping); the +19.1% belongs to `r: null`, which
@@ -2305,7 +2305,7 @@ fixed.
   the gate is the approval, not the presentation. Evidence:
   `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`
   (§AUD-006, §V4).
-- **DONE — landed in Phase MD PR 3 (#<n>, 2026-09-12).** Two corrections on
+- **DONE — landed in Phase MD PR 3 (#412, 2026-09-12).** Two corrections on
   the way past: there were FOUR mirrors, not three (the error-message prose in
   `routes/data.ts` was the fourth, now derived), and the gate this row named
   ("the POST seam test") was not the gate — `schema.test.ts`'s `EXHAUSTIVE`
