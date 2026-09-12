@@ -772,7 +772,11 @@ hero component's import list by reading `YouStatsHero.tsx`'s
 `import` lines and checking each specifier against the same list, so the
 one new file `You.tsx` renders is covered even though `You.tsx` itself
 (which imports `Concept2Row`, `:7`) is not. A type-level test asserts
-`keyof StatsRow` equals the §4.3 literal list. (4) Mutation: add `verified:
+`keyof StatsRow` equals the §4.3 literal list — **a COMPILE-time gate:**
+only `tsc` (`pnpm typecheck`, the pre-commit hook) bites on
+`expectTypeOf`, and vitest runs the file green whatever the type says; the
+runtime `it` beside it is kept as documentation of the ten keys, not as
+the gate. (4) Mutation: add `verified:
 boolean | null` to `StatsRow` → the key-set assertion fails naming the key;
 add `import { useConcept2Link } from "../../api/useConcept2Link"` to
 `YouStatsHero.tsx` → the text scan fails naming the file. (5) "No
@@ -902,8 +906,9 @@ behaviour (RF26).
 
 1. §8.1–8.5 green with each mutation's failure text in the PR body,
    including the ESLint rule's (§4.1) and the `TZ` test's (§8.3).
-2. `grep -rin "verified\|c2ResultId\|c2UserId\|concept2" app/domain/stats
-   app/src/you/stats app/src/api/useStatsRows.ts` returns nothing (the §8.4
+2. `grep -rin --exclude='*.test.ts' "verified\|c2ResultId\|c2UserId\|concept2"
+   app/domain/stats app/src/you/stats app/src/api/useStatsRows.ts` returns
+   nothing — the exclusion drops the §8.4 test's own needle list (the §8.4
    gate's grep — case-insensitive, or it cannot see `useConcept2Link` —
    pasted).
 3. The DBA verdict is attached to PR 1 with the §9 protocol's numbers at
