@@ -560,8 +560,8 @@ an investigation whose honest answer may be "no PR".
 - [x] **PR 1 — one writer for the stored run (TRIAD: stored shape). LANDED
       as PR #<n> (2026-09-12): one file, 27 exports (from 35),
       `clearMonitorRun` deleted rather than moved (zero production callers —
-      plan, "The export count"), `MONITOR_RUN_KEY` kept exported (11
-      test-file importers by name).** Spec:
+      plan, "The export count"), `MONITOR_RUN_KEY` kept exported (13
+      files import it by name: 11 tests, 2 e2e specs).** Spec:
       `docs/superpowers/specs/2026-09-12-stored-run-module-design.md` (revision
       2 — the anchor pass blocked revision 1 and James ruled the re-scope).
       `monitorRun.ts` (1719 lines / 339 code) and `handoffStore.ts` (1016 /
