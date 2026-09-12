@@ -19,8 +19,17 @@
 # which varies by skill and does not matter here. What matters is that both
 # harnesses discover the same skills on the same terms.
 #
-# WHAT IT DOES NOT CHECK: that a pointer's body names a path that resolves.
-# A pointer is prose an agent reads, not a link this script can follow.
+# WHAT THE FRONTMATTER CHECK IS WORTH, precisely: for a symlinked name the two
+# paths are the SAME INODE, so comparing them is cmp(x, x) and cannot go red
+# (`stat -f %i` on both sides says so). That check earns its place only on the
+# four owned skills, which are genuinely distinct files that can drift. The
+# work done for the symlinked names is the set-membership check and the
+# pointer check below.
+#
+# WHAT IT DOES NOT CHECK: that a prose pointer's body names a path that
+# RESOLVES. It checks that the body names the path at all; whether the target
+# exists is the set-membership check's job, and whether an agent obeys the
+# prose is not mechanisable.
 set -uo pipefail
 
 ROOT="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -85,6 +94,18 @@ while IFS= read -r name; do
   [ -f "$c" ] || { fail "$c is missing"; continue; }
   [ -f "$a" ] || { fail "$a is missing"; continue; }
 
+  # AGENTS.md forbids resolving the two-root asymmetry by flattening a pointer
+  # into a second copy of the instructions, and stating that invariant without
+  # gating it is RF34. Every pair is therefore held together by one of two
+  # mechanisms: the .claude entry is a SYMLINK at the .agents skill, or the
+  # .agents file is a PROSE POINTER naming the canonical .claude path. A plain
+  # directory on both sides is two independent copies free to drift, which is
+  # the state this rejects.
+  if [ ! -L "$CLAUDE_DIR/$name" ] \
+    && ! grep -qF ".claude/skills/$name/SKILL.md" "$a"; then
+    fail "$name: neither a symlink at .claude/skills/$name nor a pointer in .agents/skills/$name/SKILL.md naming .claude/skills/$name/SKILL.md — two independent copies will drift"
+  fi
+
   for key in name description disable-model-invocation; do
     cv="$(frontmatter_value "$c" "$key")"
     av="$(frontmatter_value "$a" "$key")"
@@ -92,8 +113,12 @@ while IFS= read -r name; do
       || fail "$name: frontmatter '$key' differs — .claude has '$cv', .agents has '$av'"
   done
 
-  # The `name` frontmatter is what a harness invokes; a directory whose skill
-  # answers to a different name is discoverable only by accident.
+  # For a project skill the DIRECTORY name is the command and `name:` is only
+  # the label shown in listings (Claude Code's skills doc says so in as many
+  # words), so a mismatch does not break invocation — it makes the listing
+  # advertise a name that invoking does not use. Kept because it is what
+  # catches a symlink retargeted at the wrong skill, which is a real way to
+  # silently swap one skill for another.
   cv="$(frontmatter_value "$c" name)"
   [ "$cv" = "$name" ] || fail "$name: frontmatter name is '$cv', not the directory name"
 done <<< "$CLAUDE_NAMES"

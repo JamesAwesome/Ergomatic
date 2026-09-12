@@ -20,6 +20,11 @@ setup() {
 teardown() { rm -rf "$TMP"; }
 
 # write_skill <root> <name> [extra frontmatter line]
+#
+# A .agents file gets the adapter's pointer line, because that is one of the
+# two shapes the gate accepts and it is the one that lets the two sides be
+# separate files — which the frontmatter-drift cases below need, and which a
+# symlinked pair cannot give them. write_vendored_pair covers the other shape.
 write_skill() {
   mkdir -p "$TMP/$1/skills/$2"
   {
@@ -30,7 +35,23 @@ write_skill() {
     echo "---"
     echo
     echo "body for $2"
+    [ "$1" = ".agents" ] && echo "Read \`.claude/skills/$2/SKILL.md\` completely."
   } > "$TMP/$1/skills/$2/SKILL.md"
+}
+
+# The vendored shape: canonical in .agents with NO pointer line, reached from
+# .claude by symlink. The gate must accept this and reject it being flattened.
+write_vendored_pair() {
+  mkdir -p "$TMP/.agents/skills/$1"
+  {
+    echo "---"
+    echo "name: $1"
+    echo "description: does the $1 thing"
+    echo "---"
+    echo
+    echo "canonical vendored body for $1"
+  } > "$TMP/.agents/skills/$1/SKILL.md"
+  ln -s "../../.agents/skills/$1" "$TMP/.claude/skills/$1"
 }
 
 ask() { bash "$SCRIPT" "$TMP" > /dev/null 2>&1; echo $?; }
@@ -94,6 +115,22 @@ check "$(ask)" 1 "frontmatter name that is not the directory name fails"
 write_skill .claude zeta
 write_skill .agents zeta
 check "$(ask)" 0 "restoring the name passes"
+
+# AGENTS.md forbids flattening a pointer or symlink into a second copy of the
+# instructions. Stating that and gating none of it is RF34, so these are the
+# cases that hold the sentence up. Probe B is the flattening itself; C is the
+# drift it then permits; D is the legitimate adapter shape, which must still
+# pass or the four owned skills would fail their own gate.
+write_vendored_pair theta
+check "$(ask)" 0 "symlinked pair passes before flattening"
+rm "$TMP/.claude/skills/theta"
+cp -R "$TMP/.agents/skills/theta" "$TMP/.claude/skills/theta"
+check "$(ask)" 1 "PROBE B: a symlink flattened into a real copy fails"
+echo "entirely different body" >> "$TMP/.claude/skills/theta/SKILL.md"
+check "$(ask)" 1 "PROBE C: the flattened copy's drifted body still fails"
+printf 'Read `.claude/skills/theta/SKILL.md` completely.\n' >> "$TMP/.agents/skills/theta/SKILL.md"
+check "$(ask)" 0 "PROBE D: a prose adapter naming the canonical path is the other legal shape"
+rm -rf "$TMP/.claude/skills/theta" "$TMP/.agents/skills/theta"
 
 # A directory with no SKILL.md is not a skill; saying so beats letting the
 # frontmatter reader return empty strings that happen to match each other.

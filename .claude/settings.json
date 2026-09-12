@@ -10,5 +10,8 @@
       "Bash(pnpm dist:grep)",
       "Bash(git merge-base *)"
     ]
+  },
+  "skillOverrides": {
+    "domain-modeling": "user-invocable-only"
   }
 }

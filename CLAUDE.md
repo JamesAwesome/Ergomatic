@@ -44,6 +44,14 @@ requirements).
   ten-line adapters. Pointers in both directions, copies in neither. **If the
   `skills` CLI vendors a ninth skill, add its symlink in the same commit** —
   the gate goes red otherwise, which is the whole point of it.
+  **`domain-modeling` is pinned `user-invocable-only` in `.claude/settings.json`**
+  (the vendor's own mechanism for a skill whose `SKILL.md` you do not want to
+  edit, which keeps the vendored bytes unforked). Its trigger is "discussing
+  codebase terminology" — most of a session here — and on firing it CREATES
+  `CONTEXT.md` and `docs/adr/`, neither of which exists: a fourth
+  decision-record system, unprompted repo writes, no `dies` date, no gate.
+  James still has `/domain-modeling`. Verified 2026-09-12: the listing drops
+  37 → 36 and the slash command still loads the whole skill.
 
 ## Commands (run in `app/`)
 
