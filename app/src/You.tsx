@@ -5,6 +5,7 @@ import { signOut as authSignOut } from "./adapters/auth";
 import BaselinesRow from "./you/BaselinesRow";
 import { clearConcept2Seen } from "./you/concept2Seen";
 import Concept2Row from "./you/Concept2Row";
+import YouStatsHero from "./you/stats/YouStatsHero";
 
 function initials(name: string): string {
   return name
@@ -85,6 +86,12 @@ export default function You({
           Sign out
         </button>
       </section>
+      {/* THE CAREER HERO (Phase PS, Gate 0 H3, §14 rulings 9-10): its own
+          component, fetching and computing on its own — this file passes
+          it NOTHING, so the Concept2-free surface is a file the §8.4 scan
+          covers. It IS the door to /you/stats; `.you-doors` below gains no
+          STATS row. */}
+      <YouStatsHero />
       {/* THE DOORS (Wave E PR A, spec 2026-09-04-concept2-walk-fixes §5.1,
           Gate 0 amendment §8 approved 2026-09-04; THIRD ROW added by the
           baselines-subpage Gate 0, 2026-09-05): the foot of You is one
