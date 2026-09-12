@@ -8,7 +8,7 @@
 
 **Tech Stack:** React 19 + Vite, TypeScript, Vitest (`client` = jsdom, `unit` = node), Playwright e2e.
 
-**Spec:** `pr2-spec-draft.md` revision 2 (controller's scratchpad until the PR opens). Census: `pr2-census.md`. §7 of the spec lists its own ROADMAP deviations; §10 of THIS plan lists the spec's.
+**Spec:** `docs/superpowers/specs/2026-09-12-lifecycle-seam-and-axes-design.md` revision 2.1. Census: `docs/superpowers/audits/2026-09-12-architecture-walk/pr2-census.md`. §7 of the spec lists its own ROADMAP deviations; §10 of THIS plan lists the spec's.
 
 **Baseline:** every number here was measured in the throwaway worktree `.claude/worktrees/pr2-plan-scratch` at `deb50b77` (main, `#408`), run from `app/`. **The census and the spec were measured at `4aa3d132`, before PR 1 merged** — re-run anything you rely on. A number without a command beside it is a plan defect.
 
