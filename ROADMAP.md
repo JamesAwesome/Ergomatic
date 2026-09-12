@@ -769,6 +769,120 @@ phase. **One caveat on that claim (PM gate):** it holds for PR 3 only if the
 series shape stays optional on the wire; the 19.1% inflation above is a
 tester-visible failure mode with no screen to show it on.
 
+## Phase PS — career stats on the You tab
+
+**Status: OPEN 2026-09-12 — spec approved by James the same day; PR 0
+next.** **TRIAD on PR 1** (a number's meaning: every figure is a SUM over
+stored rows whose metres already mean two things — fused before RC-5,
+work-only after, no marker). **M.** · dies 2026-10-12 · a month from
+opening; this phase was deferred once already ("after the strangers") and
+its trigger — a tester with enough history for a trend to be honest — has
+fired for James himself, so if PR 1 has not opened by then the phase is
+being outvoted and that is his call to make, not a slide. Spec:
+`docs/superpowers/specs/2026-09-12-career-stats-design.md`. Promoted from
+the "After the strangers" list, whose PS line this section replaces (one
+home per body of work); the 6J sketch and `docs/history/phase-ps.md` are
+inputs, not the design.
+
+**Goal:** a rower sees their career — lifetime and season metres on You,
+and a STATS subpage with a date filter, totals in two columns (ALL ROWS and
+MACHINE), rest, calories and average watts, time by Erg Book type, average
+metres per day this season, weekly streaks, and the 2k/6k test trend.
+Every number equals the sum of what the log already shows per row, computed
+by ONE domain function (`app/domain/stats/`'s `rowContribution`) that the
+log's own `buildHeroes` is refactored to call, so You and the log cannot
+disagree. Nothing new is stored; nothing is imported from Concept2.
+
+**What this phase deliberately does NOT do (James, 2026-09-12):** PBs,
+the Million Metre Club, Concept2 import or catch-up metres, storing the
+machine type (Wave E's "We never check WHICH Concept2 machine is
+attached" row owns it), generated columns or any migration until the DBA's
+measurement says so. **The Concept2 integration
+is not production yet, so no number, label or empty state here reads
+`verified`, `c2ResultId`, `c2UserId`, the link state or any Concept2 API;
+the MACHINE column keys on `source = 'pm5'` only, and Concept2 contributes
+only the season's calendar (May 1 to Apr 30, named by end year) and
+vocabulary** — spec §7 invariant 12, gated by a key-set test on the
+projection type and a text scan over the stats code (§8.4). The RC-5 seam
+is accepted and named on the surface (`k ROWS PREDATE WORK-ONLY TOTALS`),
+never corrected.
+
+- [ ] **PR 0 — the spec, this section, and the DBA agent**
+      (`.claude/agents/dba.md` + `dba-techniques.md` + `dba-ledger.md`;
+      proposes, never writes; every verdict carries measured numbers).
+      Gates: antagonist ANCHOR pass on the spec (riskiest: the tier
+      transcription in §3.1 and invariant 12), PM phase-OPEN gate, DBA first
+      pass on the `GET /api/stats/rows` query shape and growth. Docs-only.
+- [ ] **PR 1 (TRIAD) — `rowContribution` + the `buildHeroes` refactor,
+      `GET /api/stats/rows` (additive, every row of the user, slim per-row
+      projection computed row-side so `steps` never crosses the wire), the
+      You headline (LIFETIME / SEASON, ALL column, work metres), the STATS
+      door above BASELINES, `/you/stats` with the filter bar (ALL · SEASON ·
+      YEAR · MONTH · 30 DAYS · CUSTOM), the whole TOTALS group — METRES /
+      TIME / SESSIONS in both columns, then REST METRES / CALORIES (Σ stored
+      `totalCalories`, `n OF m ROWS CARRY IT`) / AVG WATTS (`logbookWatts`
+      of the RANGE's Σseconds ÷ Σmetres, never a mean of per-row watts)
+      under MACHINE, with `n OF m CARRY THE MONITOR'S OWN TOTALS` under that
+      heading — and the empty states.** No pagination: **the DBA measures
+      payload and p95 at 1k / 100k / 1M rows on seeded data and RULES
+      whether a cursor, a server
+      roll-up, the missing `(user_id, logged_at desc, id desc)` index or
+      the deferred generated-columns item (both rows under Wave E) opens.**
+      Gates: Gate 0 (rendered You + subpage, both orientations, ratios as
+      numbers, ≥ 12 seeded rows incl. two free rows and one pre-RC-5 row)
+      BEFORE the first implementation commit; `/harden` on the plan; DBA
+      gate; the contract test `rowContribution ≡ buildHeroes` over every
+      stored-log fixture against output captured from `main` before the
+      refactor; one test seeding through `POST /api/logs` and reading the
+      new route (RF24); e2e with a hand-computed headline literal (RF7);
+      PM final gate.
+- [ ] **PR 2 — MOTIVATION (avg m/day this season, C2's Honor Board
+      definition; current + longest streak of Monday-start weeks, labelled
+      ERGOMATIC because Concept2 has no streak), TIME BY TYPE (AN/O2/AT/TR +
+      an honest NO TYPE bucket for free rows, one stacked bar on
+      `charts/scale` + `axis`), TEST TREND (2k and 6k split seconds over date
+      from the existing `GET /api/test-history` — the ONE figure that keeps
+      a point whose log row was deleted, because `test_history.session_log_id`
+      is `ON DELETE SET NULL` on purpose; its caption says so).** Gates:
+      antagonist DELTA pass on the watts and streak/avg-per-day definitions
+      only; DBA SKIP said aloud unless a query changes; no
+      per-PR PM gate (non-triad UI); Gate 0 rides PR 1's artifact, which
+      renders all five groups.
+
+**Rows this phase files (dated; the hand-back list at PR 2):**
+
+- [ ] **Concept2 season/lifetime totals: work-only or work+rest? Live check
+      on log-dev.** A 2021 non-staff forum post (SECONDARY) says the
+      logbook's headline counts rest while a row's `distance` is work-only
+      (PRIMARY). James ruled work-only for us regardless, and spec invariant
+      12 means the answer can never change a number here — it only decides
+      whether the caption says `CONCEPT2 COUNTS REST, WE DO NOT`. What would
+      fix it now: running the check — not done because log-dev needs
+      James's client credentials, which rotate his live link. **S** · dies
+      2026-10-12 · needs James's credentials and a rowed upload, neither of
+      which a desk session can supply.
+
+**Inherited, stated and not discharged:** the RC ruling that the first
+surface showing any `summaryDetail` field owes a photograph against the
+PM5's screen (`docs/history/phase-rc.md:1072`) — PS shows a SUM, which no
+PM5 screen shows, so the obligation stays with Phase LP's per-session
+surface and its parity-photograph row under Wave E. RC-16's doubled
+`avgStrokeRate` warning is irrelevant here (not displayed).
+
+**Ruled by James, 2026-09-12 (spec §14), applied in the spec:** MACHINE is
+BY DOOR — every `source = 'pm5'` row, link-lost ones included, with `n OF m
+CARRY THE MONITOR'S OWN TOTALS` under the column; rest is the stored RC-1
+pair (`machineSummary.totalRestMeters` stays provenance, unread); the
+avg-m/day divisor counts today (May 1 → 1); the test trend SHOWS points
+whose log was deleted; CALORIES & WATTS are rows of TOTALS, not a group.
+
+**Exit:** a rower with ≥ 2 rows sees real totals on You and `/you/stats`
+that equal the log's own heroes summed (the contract test and the e2e
+literal both green, mutations named); below two rows, the honest empty
+states; the DBA verdict with numbers attached to PR 1; `grep -rn
+"verified\|c2ResultId\|c2UserId\|concept2" app/domain/stats app/src/you/stats`
+empty, pasted. **No hardware walk** — nothing here reaches the wire.
+
 ## Wave A — The front door
 
 **Status:** Next in the slate; Wave F closed 2026-09-04. Not opened by that
@@ -3472,13 +3586,6 @@ an iceboxed item is not a phase-close requirement.
 
 Deferred, not killed. One line and one trigger each. No exits and no sizes — a
 trigger is the whole entry.
-- **Phase PS — personal stats.** The app's stated purpose, and it matters most
-  at day 30 and least at day 1: a stranger has no history to trend. **Trigger:**
-  a tester has enough history for a trend to be honest. Carries a live hazard
-  already measured — `session_logs.distance_meters` means FUSED before RC-5 and
-  WORK-ONLY after, **with no stored marker saying which** — so any "metres per
-  week" arithmetic sums two definitions unless it re-derives a consistent
-  population per row or explicitly accepts the seam and says so.
 - **The plan calendar** (was Phase 8B's first item). Spec written and merged
   (`docs/superpowers/specs/2026-08-22-plan-calendar-design.md`). James's rulings
   stand: **the grid is a RECORD** — dates for done sessions only, future days
