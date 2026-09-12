@@ -647,6 +647,34 @@ async function resolveNewestPlanLink(
   }));
 }
 
+// Phase PS PR 1 (career-stats spec §4.3): `GET /api/stats/rows`'s
+// projection — the thirteen scalars the tier rule needs, `totalCalories`
+// as a NARROW jsonb-path scalar (the `machineAvgPaceSecondsPer500m` idiom
+// above, `jsonb_typeof`-gated so one bad value cannot 500 a whole
+// history), and `steps` WHOLE because the `steps` tier is decided in Node
+// (`domain/stats/rowContribution.ts`). Deliberately NOT `machineSummary`
+// (the blob) and NOT `series`. Nothing Concept2 (`c2ResultId`, `c2UserId`,
+// `verified`) — invariant 12; the route's key-set test pins it.
+export const STATS_ROW_COLUMNS = {
+  id: sessionLogs.id,
+  loggedAt: sessionLogs.loggedAt,
+  source: sessionLogs.source,
+  workoutType: sessionLogs.workoutType,
+  endedBy: sessionLogs.endedBy,
+  machineWorkSeconds: sessionLogs.machineWorkSeconds,
+  machineWorkMeters: sessionLogs.machineWorkMeters,
+  workSeconds: sessionLogs.workSeconds,
+  workMeters: sessionLogs.workMeters,
+  restSeconds: sessionLogs.restSeconds,
+  restMeters: sessionLogs.restMeters,
+  distanceMeters: sessionLogs.distanceMeters,
+  timeSeconds: sessionLogs.timeSeconds,
+  steps: sessionLogs.steps,
+  totalCalories: sql<
+    number | null
+  >`case when jsonb_typeof(${sessionLogs.machineSummary}->'totalCalories') = 'number' then (${sessionLogs.machineSummary}->>'totalCalories')::double precision else null end`,
+};
+
 export function createLogsStore(db: Db) {
   return {
     // From-the-log spec (2026-08-18), §3: two changes from the pre-spec
@@ -880,6 +908,19 @@ export function createLogsStore(db: Db) {
 
         return { deleted: true, unCounted: conditionalUpdate.length === 1 };
       });
+    },
+
+    // Phase PS PR 1 (spec §4.3): every row of the caller, UNORDERED — the
+    // client sums a set and nothing consumes an order, so no `ORDER BY`
+    // and no composite index owed (DBA, 2026-09-12: a full-history read
+    // ignores `(user_id, logged_at desc, id desc)`; `WHERE user_id` uses
+    // `session_logs_user_id_idx`). Unpaginated BY DESIGN up to the
+    // measured trigger (any user > 5,000 rows; ROADMAP register row).
+    async statsRows(userId: string) {
+      return db
+        .select(STATS_ROW_COLUMNS)
+        .from(sessionLogs)
+        .where(eq(sessionLogs.userId, userId));
     },
 
     async count(userId: string): Promise<number> {

@@ -9,6 +9,7 @@ import type { UserStore } from "./auth/users.js";
 import type { C2Client } from "./concept2/client.js";
 import { createConcept2Router } from "./routes/concept2.js";
 import { createDataRouter, type Stores } from "./routes/data.js";
+import { createStatsRouter } from "./routes/stats.js";
 import type { Concept2Store } from "./stores/concept2.js";
 
 export interface AppDeps {
@@ -140,6 +141,14 @@ export function createApp(deps: AppDeps) {
     app.use(
       createDataRouter({
         stores: deps.stores,
+        requireUser: requireUser(deps.sessions),
+      }),
+    );
+    // Phase PS PR 1 (career-stats spec §4.3): its own file, mounted
+    // beside the data router under the same session guard. Additive.
+    app.use(
+      createStatsRouter({
+        logs: deps.stores.logs,
         requireUser: requireUser(deps.sessions),
       }),
     );
