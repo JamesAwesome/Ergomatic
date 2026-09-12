@@ -2782,6 +2782,26 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **`isPlainRecord` is declared four times, byte-identically.** Exported from
+  `monitor/monitorRun.ts:453` and re-declared private in
+  `builder/builderDraft.ts:47`, `session/draft.ts:85` and `session/run.ts:75`;
+  all four bodies are the same line —
+  `typeof value === "object" && value !== null && !Array.isArray(value)`. Found
+  by the 2026-09-12 architecture walk's PR 1 spec and deliberately left out of
+  that PR: folding it in means editing the builder and two draft modules for a
+  change about the monitor's stored run, which is the scope creep the fast-path
+  rule exists to stop (RF34 — say so rather than let the gap look
+  considered-and-dismissed). **What would fix it now:** one predicate in a
+  shared module, four call sites re-pointed. **Why it is a row instead:** it is
+  a four-line pure type guard with no failure mode — four copies of it cannot
+  disagree about anything, which is exactly why nobody has been bitten and why
+  it does not earn its own branch. Note that Phase MD PR 1 makes the
+  `monitorRun.ts` copy PRIVATE, so after that PR this is four private copies
+  and not three-plus-an-export.
+  · dies 2026-10-13 (filed 2026-09-12, approved by James) · rides the next PR
+  touching any of the four files; dated with Phase MD because PR 1 moves one of
+  them and is the most likely vehicle
+
 - **PR1.75b leftovers, lifted from Phase PROTO 2026-09-10.** (1) a unit test for
   the empty `?state=` callback (`params.get` answers `""`, which the adapter
   treats as a MISMATCH and refuses — fails safe, untested); (2)
