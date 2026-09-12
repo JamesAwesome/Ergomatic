@@ -88,7 +88,7 @@
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import {
   PARTIAL_STEP_LEG_A,
@@ -103,6 +103,8 @@ import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
 import { releasingSchedule } from "../test/statusSubscriptions";
 import { withLiveness } from "./transports/liveness";
+import { resetForTests as resetHandoffStore } from "./handoffStore";
+import { resetConnectionAttemptTraceForTests } from "./nfc/connectionAttemptTrace";
 
 /** Same path-surgery idiom as `lifecycleReplay.test.ts`/`burstReplay.test.ts`
  *  (jsdom resolves `new URL(...)` against `http://localhost:3000/`, so string
@@ -368,6 +370,16 @@ async function runReplay(
 }
 
 describe("door spec §8.2 — the in-flight pair, from the wire bytes to the built step", () => {
+  // Phase MD PR 2 dropped this file's `vi.resetModules()` (its mocks are
+  // deps now); these two resets are the isolation it used to give — the
+  // store's in-memory `current`/`tombstones` and the attempt trace's
+  // `latest` survive `localStorage.clear()`, and four of the five legs share
+  // one identity and one sessionKey (branch review, M2).
+  beforeEach(() => {
+    resetHandoffStore();
+    resetConnectionAttemptTraceForTests();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     localStorage.clear();

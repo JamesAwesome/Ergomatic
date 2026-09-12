@@ -4535,9 +4535,11 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
   // above (the SAME `verifyHandoffWritable()` call, at a third call
   // site). Reaching it at the hook level requires latching `frameSilence`
   // first, which this file's own existing tests only ever do via the
-  // heavier `vi.doMock("../adapters/appLifecycle")` + `Date.now()`-spoofing
-  // resume-gap harness (`resumeAfterGap`, further down this file) — the
-  // simple `harness()`/fake-timeline composition this describe block uses
+  // `Date.now()`-spoofing resume-gap harness (`resumeAfterGap`, further down
+  // this file — it used to need `vi.doMock("../adapters/appLifecycle")` too;
+  // since Phase MD PR 2 it injects the registrar as a dep, but its clock
+  // spoofing is still a separate harness from) the simple
+  // `harness()`/fake-timeline composition this describe block uses
   // has no injection point for the REAL watchdog clock `frameSilence`
   // latches on, confirmed by trying (`tick()` only advances the FAKE's own
   // scripted wire time, never real wall-clock milliseconds). Judged not
@@ -11226,9 +11228,10 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
 // replaces the new attempt's unsub with the stale one, leaking the new
 // listener forever. Driven with a CONTROLLABLE (deferred) promise per
 // attempt so this test can resolve them in the exact adversarial order —
-// same `vi.doMock("../adapters/appLifecycle")` idiom the "NATIVE arm" test
-// above uses, but with the resolution under this test's own control
-// instead of resolving eagerly.
+// same injected-registrar shape the "NATIVE arm" test above uses (both
+// pass `registerAppLifecycleListener` as a dep since Phase MD PR 2; the
+// `vi.doMock` idiom they shared before is gone), but with the resolution
+// under this test's own control instead of resolving eagerly.
 // ---------------------------------------------------------------------------
 
 describe("Whole-branch review minor 1: the native lifecycle unsub race, driven with a controllable promise", () => {

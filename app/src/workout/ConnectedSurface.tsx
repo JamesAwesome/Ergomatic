@@ -586,7 +586,9 @@ export default function ConnectedSurface({
   //
   // `status` is now activity only, in the surviving precedence: `armed`
   // beats `paused` (the freeze predicate fired) beats `live` (everything
-  // else). `ended` is handled above, before axes are even derived.
+  // else). `ended` is handled above by the early return, so the hook's
+  // axes for it (derived on every phase since Phase MD PR 2) never reach
+  // this precedence.
   //
   // The axes are the hook's now (Phase MD PR 2): it derives them once from
   // the same four fields this component used to forward by hand.

@@ -5786,8 +5786,13 @@ export function useMonitorSession(
           if (latch && hasMarkSuspect(transport)) transport.markSuspect();
         });
         if (lifecycleResult instanceof Promise) {
-          void lifecycleResult
-            .then((unsub) => {
+          // `.then(onFulfilled, onRejected)`, NOT `.then(...).catch(...)`: a
+          // chained `.catch` would also catch a throw from the fulfilled
+          // arm's own `unsub()` and record a registration that SUCCEEDED as
+          // a failed one (branch review, L1). The rejection handler is scoped
+          // to the registration alone.
+          void lifecycleResult.then(
+            (unsub) => {
               if (lifecycleAttempt.cancelled) {
                 // `fail()`/`teardown()` already ran for this attempt before the
                 // native promise settled — the ref may already belong to a
@@ -5797,8 +5802,8 @@ export function useMonitorSession(
                 return;
               }
               lifecycleUnsubRef.current = unsub;
-            })
-            .catch((err: unknown) => {
+            },
+            (err: unknown) => {
               // A rejected registration for a LIVE attempt is one ring entry
               // and nothing else: the session is already connected and every
               // other path through it still works — only the
@@ -5818,12 +5823,17 @@ export function useMonitorSession(
               // that rejects on a device is a platform-sourced failure with
               // nothing else observing it (RF19), and an entry that says only
               // WHERE it happened sends the next reader back to the phone.
+              // A SYNCHRONOUS throw from the registrar is out of this arm's
+              // scope: it lands in `connect()`'s own catch and fails the
+              // connect, as it always did (the web arm cannot throw; the
+              // native arm returns a promise).
               if (lifecycleAttempt.cancelled) return;
               log.record(
                 "lifecycle-registration-failed",
                 `session: ${String(err)}`,
               );
-            });
+            },
+          );
         } else {
           lifecycleUnsubRef.current = lifecycleResult;
         }
