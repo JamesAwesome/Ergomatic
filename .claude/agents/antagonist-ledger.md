@@ -6,6 +6,39 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## 2026-09-12 — Phase MD exit pass (close-out, main `b2e26701`)
+
+Attacked the seven exit-criteria claims in `docs/closeouts/close-MD.md` and the
+`**Exit:**` paragraph of ROADMAP's Phase MD span. Read-only; two production
+mutations run and reverted, worktree clean.
+
+- **HELD (PROVEN) — the hand-off boundary gate can go red.** Re-added a
+  `saveMonitorRun` writer to `monitorRun.ts`: 2 failures (the offender scan and
+  the zero-storage pin). Added a bare legacy-writer CALL to `ConnectAction.tsx`:
+  the scan named the file. Both arms bite; the header's named evasions
+  (`app/scripts/**`, a non-`key` variable) stand and are disclosed.
+- **HELD — the doMock counting rule is the same on both sides.** 29 grep lines
+  at `3e7978b9` minus 3 comments = 26 statements → 0 (HEAD's 2 lines are both
+  comments); `vi.doMock(` total 82 → 30, comments included on both sides.
+- **BROKEN (oracle) / HELD (conclusion) — the `r\??: true` grep.** A decoy
+  `rest?: true` declaration left the count at 3. The real guard is
+  `logs.ts:152`'s mapped type, `mapping.ts:68`'s `Pick`, and
+  `SERIES_SAMPLE_FIELDS satisfies Record<keyof LogSeriesSample, true>`.
+- **COULD NOT ESTABLISH — Exploration B's 109/59.** Re-extracted the eight
+  cores at `bed5c1e4`: the census's two stated boundaries give 161/8/101 and
+  80/8/40. The 8/8 row reproduces exactly (same eight lines, four punctuation)
+  and the unique fraction is 50-63% either way, so NO HARNESS holds.
+- **HELD (PROVEN) — the wire kept `r` optional.** `data.ts:877-879` accepts an
+  absent `r`; `JSON.stringify` drops the `undefined`-valued required key
+  (measured). The PM's PR-3 caveat on "no hardware walk" is discharged.
+- **One `- [x]` overstated its scope (RF10/RF36), corrected in the close PR.**
+  Exploration B's row said "the last two transport `vi.doMock`s under
+  `src/monitor/`"; six remain there, all in `useMonitorSession.test.ts`. True
+  scope: the last two in the eight.
+- **One RF14 residual with no row.** The suite-level integration flake (3 of 5
+  full runs, three different files, exit 0) lived only in #412's body and PR 3's
+  plan — proposed at #412's hand-back, never ruled. Re-presented at the close.
+
 ## Phase MD PR 2 plan pass, 2026-09-12 (/harden lens 1, DELTA on the plan)
 
 - **"Swap `frozen: state.frozen` for `frozen: false`; `ConnectedSurface.test.tsx`

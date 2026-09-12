@@ -5,6 +5,56 @@ engagement. **Not read up front** — the bounded, always-read half is
 `pm-techniques.md`, and an entry is proposed to both. Grep this file for the
 detail behind a ruling, or for the history of a phase you are about to judge.
 
+## 2026-09-12 — Phase MD close gate (four PRs, two explorations): PASS WITH CONDITIONS
+
+Verdict: PASS WITH CONDITIONS. Every written exit criterion met and verified
+on the tree at `b2e26701`, not from the PR bodies:
+
+- doMock under `app/src/monitor/`: `vi.doMock(` lines **82 → 30**
+  (`git grep -c 'vi\.doMock(' 3e7978b9 -- app/src/monitor` vs HEAD);
+  `appLifecycle` doMock statements **26 → 0** (two surviving grep hits are
+  comments in `lifecycleReplay.test.ts` and `useMonitorSession.test.ts`).
+- `saveMonitorRun`: zero code references; all hits are comments or the boundary
+  test's own `LEGACY_WRITER_CALL` regex. `scripts/handoffStoreBoundary.test.ts`
+  **27 → 28 `it(`** — extended, not replaced, as the row required.
+- The `r\??: true` grep prints exactly the three named lines. The only other
+  `interface Sample` is `continuity.test.ts:496`, an unrelated `{t, reading}`.
+- Both explorations answered in writing ("no PR" / "no harness"), each with the
+  artifact the PM gate funded them for.
+- **No criterion verified at the wrong layer (RF24):** the byte-compat fixtures
+  are captured by driving the real writer, which is the upstream start RF24
+  asks for.
+
+**The PR-3 caveat is DISCHARGED.** Read `domain/monitor/types.ts:797-826`: `r`
+is a REQUIRED key valued `true | undefined`, `JSON.stringify` drops it, and no
+`"r":null` appears anywhere under `app/src/monitor/fixtures/`. The +19.1%
+inflation was a `::text` figure for a shape nobody wrote. The comment also
+names the condition that would invert it (`exactOptionalPropertyTypes`, set in
+no tsconfig here) — the right way to write a caveat down.
+
+**"Tester impact: none" holds in all four**, with one INFERRED item recorded:
+#413 moved axes derivation out of five screens into the hook, and nothing
+rendered was compared. The claim rests on the identical-literal census plus
+green e2e. If a derivation diverged, the connected link-loss banner misreports.
+No walk owed (no wire, no number); the next connected session is the check.
+
+**Release: no tag for MD; cut `v0.46.0` for the backlog.** `v0.45.0` is
+2026-09-09 and 38 commits back, carrying #385, #387, #402 (all tester-visible),
+#400's compat drop and #409's migration. Notes PR first, then James tags.
+
+**Conditions:** (1) `b2e26701`'s post-merge run on main was still `in_progress`
+at this gate — read it to `success` before close or tag (RF28) — DISCHARGED:
+run 34722809211 completed success, deploy included; (2) the surviving ROADMAP
+ledger row carries the three receipts above — `docs/history/phase-md.md`
+carries only PR 2's figure, and `docs/closeouts/` is not where a future sweep
+looks.
+
+**Deploy latency ruled NOISE.** #413's deploy started 37m50s after its gates
+(20:50:15 → 21:28:05) and ran green in 95s; #412's, 13 minutes earlier on the
+same runner, started in 0s. Fix-now would be reading the runner's queue logs —
+a session's work for a green anomaly. Trigger recorded instead: a second
+occurrence, or any non-green deploy, files the row that day.
+
 ## 2026-09-12 — Phase PS open gate (career stats on the You tab)
 
 **Verdict:** PASS WITH CONDITIONS (6). Spec

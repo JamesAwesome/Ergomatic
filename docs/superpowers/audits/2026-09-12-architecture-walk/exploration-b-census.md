@@ -597,6 +597,12 @@ core lines appear in exactly one file.
 
 - No tests were run. Every number above comes from `wc`, `grep`, `git show` or the
   line-set script below; nothing rests on a passing or failing suite.
+- **Exit pass (antagonist, 2026-09-12): the 109/59 totals are NOT quotable.** This
+  document states two core boundaries (§0's cited spans; "`createReplayTransport`
+  → the `run()` act block"); re-extracting at `bed5c1e4` under each gives
+  161/8/101 and 80/8/40. The 8-in-all row reproduces exactly under all three
+  (same eight lines, four punctuation) and the unique fraction is 50-63% either
+  way, so NO HARNESS holds; cite the 8/8 row.
 - **The line-set counts (109 / 8 / 59), reproduced by the controller 2026-09-12**
   from the eight extracted cores (each core = the runner span cited in §0's table,
   blank lines, `//` lines and `/** */` blocks stripped, per-file constant names

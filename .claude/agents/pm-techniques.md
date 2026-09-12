@@ -104,6 +104,27 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   hand-back. **Grep every ROADMAP/spec/ledger reference a PR's new comments
   make, against the file it names, before the gate passes.**
 
+- **The fold-word rule is only enforced where a gate runs, so the drift moves
+  to the PRs that have no gate.** Phase MD (2026-09-12): the two TRIAD PRs came
+  in at 188 and 150 words above the fold; the two non-TRIAD ones, which the
+  phase-grouped triggers exempt from a PM verdict, came in at 169 and **240**
+  (#414, bullets at 55/40/33 against a ~25 bar) — the worst since #408's 295.
+  At every phase CLOSE, count the fold words of the PRs nobody gated; that is
+  where the presentation rule rots, and the close gate is the only thing that
+  reads them.
+- **A phase can meet every exit criterion and still be closing on top of a
+  release backlog older than itself.** MD closed with four tester-invisible PRs
+  while `v0.45.0` sat **38 commits and 3 days** back carrying three
+  tester-visible fixes. Check `git log <last-tag>..main` at every phase close,
+  not just the phase's own tester impact — a phase with nothing to ship is
+  exactly when nobody thinks to look.
+- **A one-off CI latency is not a row; name the trigger instead.** MD close:
+  one deploy job on main started 38 minutes after its gates and ran green,
+  while the neighbouring merge's deploy started instantly. Ruled NOISE with a
+  trigger (second occurrence, or any non-green deploy, files it that day).
+  Filing a row for a single green anomaly is the filing-as-deferral pattern
+  wearing a process hat.
+
 ## Recommendations that turned out wrong
 
 - **2026-08-13 — the CR2 item 0 hypothesis and its oracle.** Both written into
