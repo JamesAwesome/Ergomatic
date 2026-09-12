@@ -5,7 +5,7 @@ no PM final-PR gate, no Gate 0 (nothing a rower sees changes), an antagonist
 DELTA pass on this spec (one invented mechanism: an injectable lifecycle
 registrar), and `/harden` on the plan.
 
-**Revision 2.2, 2026-09-12** — folds the plan's `/harden` lens-1 findings F4 and F5: every per-BLOCK mock figure is withdrawn (26 is a STATEMENT count, and three of the statements live in shared setup helpers), and invariant 3 names the fixture scaffold that legitimately derives. **Revision 2.1** carried the plan's paste-test corrections (§4's ring kind now matches §3; 20 hook-file statements and 6 replay specs, not 22 and 7). **Revision 2** folds the antagonist delta pass (4 blocking, 3 major, 4 held-with-additions); §9 records what revision 1 got wrong. Written from the census at
+**Revision 2.3, 2026-09-12** — folds the plan's `/harden` lens-2 finding F9: the ring entry NAMES THE SITE AND THE CAUSE, not the site alone (invariant 2, §4, exit criterion 5). **Revision 2.2** folds the plan's `/harden` lens-1 findings F4 and F5: every per-BLOCK mock figure is withdrawn (26 is a STATEMENT count, and three of the statements live in shared setup helpers), and invariant 3 names the fixture scaffold that legitimately derives. **Revision 2.1** carried the plan's paste-test corrections (§4's ring kind now matches §3; 20 hook-file statements and 6 replay specs, not 22 and 7). **Revision 2** folds the antagonist delta pass (4 blocking, 3 major, 4 held-with-additions); §9 records what revision 1 got wrong. Written from the census at
 `docs/superpowers/audits/2026-09-12-architecture-walk/pr2-census.md` (every
 number below carries its command there). Five corrections to the ROADMAP row it
 implements are listed in §7 rather than silently absorbed (RF10).
@@ -90,7 +90,13 @@ derivation has one home. Nothing a rower sees changes.
    entry; for a cancelled attempt it is silent.** The promise arm of the
    session registration gains a `.catch` that opens with the same
    `if (lifecycleAttempt.cancelled) return;` the `.then` arm already has, then
-   `log.record("lifecycle-registration-failed", "session")` — into the session
+   `log.record("lifecycle-registration-failed", \`session: ${String(err)}\`)` —
+   **the entry names the SITE and the CAUSE**, because a registration that
+   rejects on a device is a platform-sourced failure with no other instrument
+   watching it (RF19), and an entry saying only WHERE it happened sends the
+   next reader back to the phone. Its test matches the detail by PREFIX
+   (`/^session: /`), never by equality, so the assertion pins our record
+   rather than a platform's message text. Into the session
    RING (`log`, created before GATT and already closed over by this handler),
    NOT the NFC attempt trace: that trace is drained into the ring and
    `complete()`d before the session registration runs, and is `undefined` on
@@ -130,7 +136,7 @@ derivation has one home. Nothing a rower sees changes.
   registerAppLifecycleListener`. The static import stays (it IS the default).
 - **The session registration gets its `.catch`** (invariant 2): the promise arm
   opens with `if (lifecycleAttempt.cancelled) return;` and records
-  `lifecycle-registration-failed` / `"session"` into the session ring via
+  `lifecycle-registration-failed` / `` `session: ${String(err)}` `` into the session ring via
   `log.record` (the NFC attempt trace is drained and closed by then — §3.2);
   it does not rethrow. The synchronous arm is unchanged.
 - **`MonitorSession.axes: ConnectedAxes` and `MonitorSession.linkLoss:
@@ -217,11 +223,12 @@ derivation has one home. Nothing a rower sees changes.
   the adapter export — `vi.spyOn` on the import namespace, in a test with no
   `resetModules` (a reset gives a different registry's namespace).
 - **The failure tests** (invariant 2): a dep returning a rejected promise for
-  a live attempt yields exactly one `lifecycle-registration-failed` /
-  `"session"` ring entry and a session that continues; the same for an attempt
-  cancelled before the promise settles yields NONE. Mutations: remove the
-  `.catch` (first test red on the missing entry, vitest reports the unhandled
-  rejection); remove the `cancelled` guard (second test red).
+  a live attempt yields exactly ONE `lifecycle-registration-failed` ring
+  entry, whose detail is matched by the PREFIX `session: ` rather than by
+  equality, and a session that continues; an attempt cancelled before the
+  promise settles yields NONE. Mutations: remove the `.catch` (first test red
+  on the missing entry, vitest reports the unhandled rejection); remove the
+  `cancelled` guard (second test red).
 - **The two-sites test** (invariant 1): rerender with a fresh dep between the
   scan lease and the session registration; assert each site called the value
   current at its time, and nothing else changed.
@@ -246,7 +253,7 @@ derivation has one home. Nothing a rower sees changes.
 2. `grep -rn 'failureLeavesLinkUp' app/src ROADMAP.md` → empty (it catches the two dangling comment references at `ConnectedSurface.tsx` and `ConnectedInterstitial.tsx` and the live ROADMAP row); the re-homed paragraph is pinned by a phrase that is RED on main — `grep -c 'a genuine .ProgramRejection. the PM5 itself sent reads' app/src/monitor/useMonitorSession.ts` → 1 (0 today) — and shown red by deleting the paragraph. (`grep NOT_A_MACHINE_REFUSAL` already hits `:239` on main and proves nothing.)
 3. `grep -rnE '\bderive(Axes|LinkLoss)\(' app/src --include='*.ts' --include='*.tsx' | grep -v '\.test\.' | grep -vE '^app/src/monitor/(useMonitorSession|connectedAxes)\.ts:'` → empty (filter by PATH, not by any line mentioning the filenames; on main it returns exactly the five sites, so it is red today), and the structural test that enforces it is shown red under one mutation (a re-added call in `JustRow.tsx`). The detector strips `/* */` and whole-line `//` only, so JustRow's replacement pointer comment is a leading-line comment, and the detector gets its own "does not fire on prose" case in that shape.
 4. The seam test drives a recording's `lifecycle` track through the dep.
-5. `lifecycle-registration-failed` / `"session"` (one ring entry for a live attempt, none for a cancelled one) has tests and
+5. `lifecycle-registration-failed`, detail `` `session: ${String(err)}` `` (one ring entry for a live attempt, none for a cancelled one; the detail matched by the prefix `session: `) has tests and
    biting mutation.
 6. `pnpm test`, `pnpm typecheck`, `pnpm lint`, a full `pnpm e2e` whose result
    was read (RF1); no screenshot committed.
@@ -282,6 +289,10 @@ derivation has one home. Nothing a rower sees changes.
 **Revision 2.2 — what the plan's `/harden` lens 1 found in this spec:**
 
 - **Exit criterion 1's per-block metric was unreproducible (F4).** "0 of 26 before, all 26 after" reads as a block count; 26 is the number of `vi.doMock` STATEMENTS under `src/monitor/`, and three of the twenty in `useMonitorSession.test.ts` live in shared setup helpers (`setupResumeInstrumentSession`, 8 callers; `setupTimingSession`, 4; `setupLatchCountSession`, 2), so those twenty statements serve 17 `it` blocks plus 3 helpers — 31 `it`s. Each replay spec's single statement sits in its own `runReplay` helper. The criterion now counts statements and names the files that keep `resetModules`; §4's "24 of 26" is withdrawn with it.
+**Revision 2.3 — what the plan's `/harden` lens 2 found in this spec:**
+
+- **The ring entry threw the cause away, and nobody had chosen that (F9).** Invariant 2 prescribed a bare `"session"` detail, so a rejected `App.addListener` would have produced an entry that says only where it happened. That is the shape RF19 exists about: a platform-sourced failure with no other instrument watching it. The detail now carries `String(err)` behind a `session: ` prefix, and the test matches the prefix rather than the text — pinning a platform's own message would be pinning someone else's string.
+
 - **Invariant 3 forbade a file the plan has to create (F5).** `src/test/sessionAxes.ts` is how every hand-built `MonitorSession` fixture gets axes consistent with its own phase, and it necessarily calls `deriveAxes`/`deriveLinkLoss`. The invariant now names it, and requires the exemption to be by FILE NAME rather than by a `src/test/` prefix — the directory holds real harnesses (`statusSubscriptions.ts`, `renderedCopy.ts`, `cssView.ts`) a screen could import, and a prefix skip would hide a second deriver appearing there. The scan's no-dead-entries case iterates the scaffold entry so an unused skip fails red.
 
 ## 8. Ruled by James, 2026-09-12

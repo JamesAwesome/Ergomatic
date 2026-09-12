@@ -8,7 +8,7 @@
 
 **Tech Stack:** React 19 + Vite, TypeScript, Vitest (`client` = jsdom, `unit` = node), Playwright e2e.
 
-**Spec:** `docs/superpowers/specs/2026-09-12-lifecycle-seam-and-axes-design.md` revision 2.1. Census: `docs/superpowers/audits/2026-09-12-architecture-walk/pr2-census.md`. §7 of the spec lists its own ROADMAP deviations; §10 of THIS plan lists the spec's.
+**Spec:** `docs/superpowers/specs/2026-09-12-lifecycle-seam-and-axes-design.md` revision 2.3. Census: `docs/superpowers/audits/2026-09-12-architecture-walk/pr2-census.md`. §7 of the spec lists its own ROADMAP deviations; §10 of THIS plan lists the spec's.
 
 **Baseline:** every number here was measured in a throwaway worktree `.claude/worktrees/pr2-plan-scratch`, run from `app/` — revision 1's numbers at `deb50b77` (main, `#408`), revision 2's re-measurements at `3fc49767` (main, `#409`). Every count below was re-run at `3fc49767` and none moved. **The census and the spec were measured at `4aa3d132`, before PR 1 merged** — re-run anything you rely on. A number without a command beside it is a plan defect.
 
@@ -22,6 +22,15 @@
 - **Task 3's scaffold skip is one NAMED FILE, not a directory prefix (F5),** and the no-dead-entries case now iterates it too, so an unused skip fails red.
 - **Task 2's one-commit reason was false and is replaced with the true one (F6),** measured.
 - Bookkeeping: Task 3's comment about why `connectedAxes.ts` matches the detector; "six of six" replay specs; a clause that `axes`/`linkLoss` land on `MonitorSession`, not `MonitorSessionDeps`.
+
+**Revision 3 (this document), after `/harden` lens 2 — the LAST fold; the hardening loop stops here.** What changed and why:
+- **Task 3's `DERIVE_CALL` was too narrow (F1).** `connectedAxes.ts` exports SIX derivers over `AxesInput`, not two; a screen calling `deriveLink` or `deriveActivity` directly would have walked straight past the scan. The regex now covers all six, and exit criterion 3's raw grep gains the comment filter it now needs.
+- **`withDerivedAxes` failed open on a HALF override (F2).** It now throws, with a test and a measured mutation.
+- **Two prescribed gate commands could not be run (F3, F7).** `src/test/**` is in vitest's coverage `exclude`, so "read `sessionAxes.ts`'s per-file coverage" was unrunnable; and Task 3's second mutation cast to a type `sessionAxes.ts` does not import.
+- **Task 4 dropped isolation without replacing it (F4).** Losing `vi.resetModules()` leaves each replay writing hand-off receipts through the module singleton; a `beforeEach` with two real resets goes in.
+- **Task 2 Step 3's `ConnectedSurface.tsx` comment claimed a single parent (F5).** `JustRow.tsx` is a second, with no phase gate. The unreachability sentence goes; the case is unconditional now and needs no argument.
+- **`.catch` discarded the rejection's cause, and that was never a decision anyone made (F9).** RULED: record it. The detail becomes `session: <cause>` and the expectation a prefix match; mutation 1 re-measured.
+- **Stale citations and counts (F6, F8, bookkeeping):** the spec's ring kind is reconciled at rev 2.2, so this plan's contradiction instructions go; `MonitorSession` has 22 members; `ConnectedInterstitial.tsx` has 10 comment-stripped `session.phase ===` reads, not 11.
 
 **Ruled by James, 2026-09-12 (do not re-open):** `failureLeavesLinkUp` is deleted and the NOT_A_MACHINE_REFUSAL ruling re-homed at the hook's derivation; `linkLoss` published beside `axes`; `ConnectedPhase` stays exported; the flake row closes without a hunt; Exploration A's three riders ride this PR.
 
@@ -49,9 +58,9 @@
 | `ConnectedPhase` | still exported, unchanged | `useMonitorSession.ts` |
 | `ROWING_ACTIVE_FALLBACK_FRAMES` | `export` dropped (rider a) | `useMonitorSession.ts` |
 | `withDerivedAxes(session, overrides?)`, `type SessionWithoutAxes` | new test helper — the ONE place a hand-built `MonitorSession` fixture gets axes | `app/src/test/sessionAxes.ts` (new) |
-| ring kind `lifecycle-registration-failed`, detail `"session"` | the session-registration failure record | `useMonitorSession.ts` |
+| ring kind `lifecycle-registration-failed`, detail `` `session: ${String(err)}` `` | the session-registration failure record — it names the SITE and the CAUSE (spec rev 2.3's invariant 2) | `useMonitorSession.ts` |
 
-**The ring kind is `lifecycle-registration-failed` / `"session"`, on `log`, not `trace`.** The spec's §4 bullet and its exit criterion 5 still carry revision 1's `listener-registration-failed` / `"session lifecycle"` / `trace?.record`; §3 invariant 2 and §9 supersede them (the trace is drained and `complete()`d before the session registration, and is `undefined` on every non-NFC connect). **Use §3's form.** RF10: this is a stated contradiction inside the spec, not a silent choice.
+**The ring kind is `lifecycle-registration-failed`, the detail is `` `session: ${String(err)}` ``, and it goes on `log`, not `trace`.** The trace is drained and `complete()`d before the session registration and is `undefined` on every non-NFC connect, so a `trace?.record` there would reach nothing. Spec rev 2.2 reconciled this wording in §4 and exit criterion 5; there is no longer a form to choose between.
 
 ## The lifetime table (RF27) — nothing is minted, and here is the proof
 
@@ -61,6 +70,8 @@ This PR mints NO new session-scoped state. The table below is the two refs the r
 | --- | --- | --- | --- | --- | --- |
 | `lifecycleAttempt` (the local token) | in `connect()`, immediately before the session registration; also written to `lifecycleAttemptRef.current` | never cleared as a value — a LATER attempt mints a new one, and `.cancelled` is set to `true` on the previous by each of the four paired sites below | the token object outlives it; the ref may already point at a newer one | NO (module-free, per mount) | NO — a new attempt mints a new token; that is what makes `cancelled` meaningful |
 | `lifecycleUnsubRef.current` | the `.then` arm (async registrar) or the synchronous assignment | the FOUR paired `cancelled = true` + unsub + `= null` sites, which live in `handleEvent` (twice — the disconnect and the machine-end arms), `teardown` and `fail`; plus one bare `= null` in **`connect()`**'s attempt-boundary block. **`cancel()` holds none of them** | NO — teardown unsubscribes and nulls it | NO | NO |
+
+**One shape neither arm covers, recorded and NOT changed here:** a registrar promise that never settles at all. At the SCAN lease the call is `await`ed, so `connect()` hangs there; at the session registration neither `.then` nor `.catch` ever runs, so `lifecycleUnsubRef.current` stays `null` and that attempt's listener is never unsubscribed on teardown. Both are pre-existing — the `await` and the un-awaited promise are unchanged by this PR — and the new dependency makes the shape *reachable in a test* for the first time without making it more likely in production. Named so the next reader does not think the `.catch` closed it.
 
 **The consequence the `.catch` inherits, said out loud:** two of the four `cancelled = true` sites are in `handleEvent`, so a **mid-session link DROP marks the attempt cancelled**. A registration rejection that lands after a drop is therefore SILENT, deliberately — the session it would have instrumented is already over. That is the intended reading of invariant 2, not a gap in it, and the `.catch`'s own comment says so.
 
@@ -180,7 +191,7 @@ with
             .then((unsub) => {
               // ... existing body, verbatim ...
             })
-            .catch(() => {
+            .catch((err: unknown) => {
               // A rejected registration for a LIVE attempt is one ring entry
               // and nothing else: the session is already connected and every
               // other path through it still works — only the
@@ -196,8 +207,15 @@ with
               // (`log`), not the NFC attempt trace — that trace is drained into
               // this ring and `complete()`d above, and is `undefined` on every
               // non-NFC connect, so a `trace?.record` here would reach nothing.
+              // The CAUSE rides the detail (`String(err)`): a registration
+              // that rejects on a device is a platform-sourced failure with
+              // nothing else observing it (RF19), and an entry that says only
+              // WHERE it happened sends the next reader back to the phone.
               if (lifecycleAttempt.cancelled) return;
-              log.record("lifecycle-registration-failed", "session");
+              log.record(
+                "lifecycle-registration-failed",
+                `session: ${String(err)}`,
+              );
             });
         } else {
           lifecycleUnsubRef.current = lifecycleResult;
@@ -206,7 +224,7 @@ with
 
 The SYNCHRONOUS arm is deliberately unchanged: a registrar that THROWS lands in `connect()`'s existing `catch` → `fail(mapRadioFailure(err))`.
 
-- [ ] **Step 5: The four tests.** Append to `useMonitorSession.test.ts`, after the last `describe`. They use the file's existing `DEVICE_NAME`, `TWO_INTERVALS`, `createFakeTransport`, `stubRadio`, `releasingSchedule` and `flush`.
+- [ ] **Step 5: The five tests.** Append to `useMonitorSession.test.ts`, after the last `describe`. They use the file's existing `DEVICE_NAME`, `TWO_INTERVALS`, `createFakeTransport`, `stubRadio`, `releasingSchedule` and `flush`. The fifth (`withDerivedAxes`'s half-override refusal) lands here because this is where the helper is imported anyway, and it needs Task 2 Step 4's file — write it in Task 1 and let it be RED until then, or move it into Task 2; say which in the report.
 
 ```ts
 // THE LIFECYCLE SEAM (Phase MD PR 2). `MonitorSessionDeps.
@@ -247,7 +265,7 @@ describe("the lifecycle registrar dependency", () => {
     spy.mockRestore();
   });
 
-  it("a rejected SESSION registration on a LIVE attempt is exactly one ring entry, and the session carries on", async () => {
+  it("a rejected SESSION registration on a LIVE attempt is exactly one ring entry naming the cause, and the session carries on", async () => {
     let rejectRegistration!: (err: unknown) => void;
     const fake = createFakeTransport({
       deviceName: DEVICE_NAME,
@@ -277,11 +295,14 @@ describe("the lifecycle registrar dependency", () => {
       kind: string;
       detail: string;
     }[];
-    expect(
-      ring
-        .filter((e) => e.kind === "lifecycle-registration-failed")
-        .map((e) => e.detail),
-    ).toStrictEqual(["session"]);
+    // A PREFIX match, not an equality: the detail carries the rejection's
+    // own `String(err)` after `session: `, and pinning that text would pin a
+    // platform's message rather than our own record.
+    const details = ring
+      .filter((e) => e.kind === "lifecycle-registration-failed")
+      .map((e) => e.detail);
+    expect(details).toHaveLength(1);
+    expect(details[0]).toMatch(/^session: /);
     // Not a failure of the session: everything but the background/foreground
     // instruments still works.
     expect(result.current.phase).toBe("pairing");
@@ -294,6 +315,26 @@ describe("the lifecycle registrar dependency", () => {
   // the connect and the rejection; and the final assertion becomes
   // `expect(ring.filter((e) => e.kind === "lifecycle-registration-failed"))
   // .toStrictEqual([])`. Everything else is identical.
+
+  it("withDerivedAxes refuses a HALF override — axes and linkLoss travel together", () => {
+    // The helper's one enforced rule, gated where the helper is already
+    // imported. `base` is any complete `SessionWithoutAxes` — reuse this
+    // file's own fixture shape rather than inventing another.
+    expect(() =>
+      withDerivedAxes(base, {
+        axes: {
+          link: "up",
+          program: "armed",
+          session: "live",
+          activity: "moving",
+        },
+      }),
+    ).toThrow(/override axes and linkLoss together or neither/);
+    expect(() => withDerivedAxes(base, { linkLoss: "reported" })).toThrow(
+      /override axes and linkLoss together or neither/,
+    );
+    expect(() => withDerivedAxes(base)).not.toThrow();
+  });
 
   it("each site calls the registrar current at ITS OWN call time — a rerender between the scan lease and the session registration is harmless", async () => {
     const calls: string[] = [];
@@ -350,7 +391,7 @@ describe("the lifecycle registrar dependency", () => {
 });
 ```
 
-- [ ] **Step 6: Gates, commit, then the four mutations**
+- [ ] **Step 6: Gates, commit, then the mutations**
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm format:check
@@ -364,10 +405,11 @@ Expected: `Test Files 1 passed`, `Tests 322 passed` (318 + 4). Then, each agains
 
 | # | Mutation | Measured failure |
 | --- | --- | --- |
-| 1 | In the `.catch`, replace `if (lifecycleAttempt.cancelled) return;` + the `log.record(...)` line with a bare `return;` | `a rejected SESSION registration on a LIVE attempt…` → `AssertionError: expected [] to strictly equal [ 'session' ]` (1 failed, 3 passed) |
+| 1 | In the `.catch`, replace `if (lifecycleAttempt.cancelled) return;` + the whole `log.record(...)` call with `void err; return;` (keeps the parameter used under `noUnusedParameters`) | `a rejected SESSION registration on a LIVE attempt…` → `AssertionError: expected [] to have a length of 1 but got +0` (1 failed, 3 passed). **The detail this test's green path actually produced, measured: `session: Error: addListener refused`.** |
 | 2 | Delete only `if (lifecycleAttempt.cancelled) return;` from the `.catch` | `…for a CANCELLED attempt is silent` → `AssertionError: expected [ { seq: 4, …(3) } ] to strictly equal []` (1 failed, 3 passed) |
 | 3 | Revert site (c) to the bare `registerAppLifecycleListener((event) => {` | THREE fail; the two-sites one says `AssertionError: expected [ 'first' ] to strictly equal [ 'first', 'second' ]` |
 | 4 | At site (c) replace the `?? registerAppLifecycleListener` fallback with `?? ((): (() => void) => () => undefined)` | `omitted, the hook calls the ADAPTER's own export` → `AssertionError: expected "registerAppLifecycleListener" to be called at least once` (1 failed, 3 passed) |
+| 4b | Delete the half-override `throw` from `src/test/sessionAxes.ts` (Task 2 Step 4 writes it; run this once that step has landed) | `withDerivedAxes refuses a HALF override` → `AssertionError: expected [Function] to throw an error` |
 
 ---
 
@@ -483,7 +525,7 @@ and inside the returned literal, after `phase: state.phase,`:
 
 - [ ] **Step 3: the five sites.** Each becomes `const axes = session.axes;` (and, in `JustRow.tsx`, `const linkLoss = session.linkLoss;`), and each file drops its now-unused `import … from "…/connectedAxes"`. Sweep the surrounding comments in the same edit — three of them argue about `failureLeavesLinkUp: null` and are now false:
   - `JustRow.tsx`'s "AXES, NEVER `session.phase`" paragraph → `// AXES, NEVER \`session.phase\` — and the hook derives them now (Phase MD` / `// PR 2), so this screen reads them rather than rebuilding the input.` **A LEADING-line comment, deliberately** (Task 3's detector strips whole-line `//` and `/* */` only; a trailing `// …` on a code line survives and would trip the scan).
-  - `ConnectedSurface.tsx`'s eleven-line `failureLeavesLinkUp: null` paragraph → four lines: the axes are the hook's now, and `"failed"` still never reaches this component because `ConnectedInterstitial.tsx`'s phase gate renders its own screen.
+  - `ConnectedSurface.tsx`'s eleven-line `failureLeavesLinkUp: null` paragraph → **two lines saying only that the axes are the hook's now**. **Do NOT re-assert that `"failed"` cannot reach this component.** The old paragraph credited `ConnectedInterstitial.tsx`'s phase gate as if it were the only parent; `JustRow.tsx` renders `ConnectedSurface` too and has no phase gate (there it is `axes.session === "none"` plus `program === "failed"` that keep a failed session out). Naming one parent and one reason is the false half. And the argument is moot: `deriveLink`'s `failed` case is unconditional after Step 1, so there is no branch left whose unreachability needs defending.
   - `ConnectedInterstitial.tsx`'s three-line "Always `null` here" comment is deleted outright.
 
 - [ ] **Step 4: the fixture helper** — `app/src/test/sessionAxes.ts`, verbatim:
@@ -497,7 +539,13 @@ and inside the returned literal, after `phase: state.phase,`:
 // breath — a session no production code can produce. Every `session()`
 // builder under `src/` runs its own defaults through this helper instead, so
 // the two halves cannot drift; a test that genuinely wants an impossible
-// pairing passes it explicitly as an override and says why.
+// pairing passes BOTH explicitly and says why.
+//
+// "Every builder goes through this" is a CONVENTION, not something this
+// module can enforce — nothing stops a new fixture writing `axes:` by hand.
+// What IS enforced is that a caller cannot override HALF the pair: the two
+// fields are one answer about one session, and a hand-written `axes` beside a
+// derived `linkLoss` is a combination the hook cannot publish.
 import { deriveAxes, deriveLinkLoss } from "../monitor/connectedAxes";
 import type { MonitorSession } from "../monitor/useMonitorSession";
 
@@ -507,6 +555,11 @@ export function withDerivedAxes(
   session: SessionWithoutAxes,
   overrides: Partial<Pick<MonitorSession, "axes" | "linkLoss">> = {},
 ): MonitorSession {
+  if ((overrides.axes === undefined) !== (overrides.linkLoss === undefined)) {
+    throw new Error(
+      "withDerivedAxes: override axes and linkLoss together or neither — a half-override is a pair the hook cannot publish",
+    );
+  }
   const input = {
     phase: session.phase,
     frozen: session.frozen,
@@ -538,7 +591,7 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
 The other four are variations: `ConnectedSurface.screens.test.tsx` and `you/readyCardSeam.test.tsx` build a literal with no overrides object (wrap the literal in `withDerivedAxes({ … })`); `WorkoutDetail.test.tsx`'s `baseSession` takes `Partial<Session>` and follows the shape above.
 
 **`justrow/JustRow.test.tsx` is the one the compiler cannot catch, and it needs three separate fixes:**
-1. **Annotate the RETURN of the doMock factory, not just the parameter.** `mockSession(overrides: Record<string, unknown>)` is untyped, so `pnpm typecheck` stays GREEN while every render throws `TypeError: Cannot read properties of undefined (reading 'link')`. But retyping the PARAMETER alone leaves the real hazard: the base object literal the factory returns has no contextual type, which is exactly how the mock came to be **missing `undecodable` entirely**. Annotate the return, so every one of the 21 fields is required and the compiler is the gate (RF33).
+1. **Annotate the RETURN of the doMock factory, not just the parameter.** `mockSession(overrides: Record<string, unknown>)` is untyped, so `pnpm typecheck` stays GREEN while every render throws `TypeError: Cannot read properties of undefined (reading 'link')`. But retyping the PARAMETER alone leaves the real hazard: the base object literal the factory returns has no contextual type, which is exactly how the mock came to be **missing `undecodable` entirely**. Annotate the return, so every one of `MonitorSession`'s **22** members is required and the compiler is the gate (RF33). The mock carries 21 today; `undecodable` is the missing one.
 2. **The destructure must live INSIDE the factory, not above the `vi.doMock` call.** Several tests hand `mockSession` a MUTABLE object and edit it between rerenders; reading `overrides` once freezes the session at its first phase. Measured cost of getting this wrong: **18 failing tests**, all passing again once it moved.
 
 Both, in one shape — and it goes through `withDerivedAxes` like every other fixture:
@@ -551,7 +604,7 @@ Both, in one shape — and it goes through `withDerivedAxes` like every other fi
     // tests below hand this function a MUTABLE object and then edit it
     // between rerenders, so reading `overrides` once here would freeze the
     // session at its first phase. The `: MonitorSession` return annotation is
-    // what makes the base literal's 21 fields REQUIRED — without it the
+    // what makes the base literal's 22 members REQUIRED — without it the
     // literal has no contextual type, which is how `undecodable` went
     // missing (RF33).
     vi.doMock("../monitor/useMonitorSession", () => ({
@@ -561,7 +614,7 @@ Both, in one shape — and it goes through `withDerivedAxes` like every other fi
           {
             phase: "idle",
             undecodable: false,
-            /* ...the other 19 existing defaults, unchanged... */
+            /* ...the other 20 existing defaults, unchanged... */
             ...rest,
           },
           { axes, linkLoss },
@@ -647,7 +700,7 @@ Expected: green. **`Tests 8119 passed | 1 skipped` across `Test Files 290 passed
 
 **If mutation 6 comes back GREEN, the PR does not ship.** `linkLoss` is published on the strength of one argument — that the axes tuple cannot distinguish `pairing`+silence from `disconnected` — and a field with no biting probe is decoration that retires the suspicion (RF21). Fix the gate before Task 3, do not file it.
 
-(RF2: also read the per-file coverage rows for `sessionAxes.ts` and `connectedAxes.ts` at Task 7 — the 90×4 gate is an aggregate and will not notice a new file's uncovered branch.)
+(RF2: read the per-file coverage row for `connectedAxes.ts` at Task 7 — the 90×4 gate is an aggregate and will not notice an uncovered branch in a file you touched. **There is no coverage row for `sessionAxes.ts` and asking for one is an unrunnable instruction**: `vitest.config.ts`'s coverage `exclude` lists `"src/test/**"`, so the helper is never instrumented. Its gate is the half-override test and its mutation, not a percentage.)
 
 ---
 
@@ -662,15 +715,24 @@ Expected: green. **`Tests 8119 passed | 1 skipped` across `Test Files 290 passed
  *  `session.axes`/`session.linkLoss` now, so there is exactly ONE derivation
  *  site; before this PR five screens each rebuilt the input and called
  *  `deriveAxes`/`deriveLinkLoss` themselves. These two files are the only
- *  ones allowed to match: the hook, which CALLS both, and the module, which
- *  matches on its own two `export function derive…(` DEFINITIONS — the
- *  detector cannot tell a definition from a call, and does not need to. */
+ *  ones allowed to match: the hook, which CALLS them, and the module, which
+ *  matches on its own `export function derive…(` DEFINITIONS — the detector
+ *  cannot tell a definition from a call, and does not need to. */
 const AXES_DERIVERS = new Set([
   "monitor/useMonitorSession.ts",
   "monitor/connectedAxes.ts",
 ]);
 
-const DERIVE_CALL = /\bderive(Axes|LinkLoss)\(/;
+/** ALL SIX derivers `connectedAxes.ts` exports over `AxesInput` —
+ *  `deriveLink`, `deriveProgram`, `deriveSession`, `deriveActivity`,
+ *  `deriveAxes`, `deriveLinkLoss` — not just the composed pair. The four
+ *  sub-derivations are exported so each `never` guard is independently
+ *  reachable from a test (that module's own comment says why), which also
+ *  means a screen could call one directly and walk straight past a narrower
+ *  pattern. Measured at `3fc49767`: outside the two owners and the five call
+ *  sites this PR removes, the widened pattern's only hits are two PROSE
+ *  mentions, both stripped by `commentStrippedSource`. */
+const DERIVE_CALL = /\bderive(?:Axes|Link(?:Loss)?|Program|Session|Activity)\(/;
 
 /** ONE NAMED FILE, never a directory prefix. `productionSourceFiles()`
  *  returns everything under `src/test/` because those files do not end in
@@ -739,9 +801,11 @@ const AXES_SCAFFOLD = new Set(["test/sessionAxes.ts"]);
 
 **Measured:** `AssertionError: expected [ 'justrow/JustRow.tsx' ] to strictly equal []`, 1 failed | 7 passed. Revert with `git checkout -- src/justrow/JustRow.tsx`.
 
-**Second mutation — the scaffold skip must be able to go dead.** In `src/test/sessionAxes.ts`, replace the two `?? deriveAxes(input)` / `?? deriveLinkLoss(input)` expressions with hardcoded literals (`{ link: "up", program: "none", session: "none", activity: "unknown" } as ConnectedAxes` and `"none"`). **Measured:** `AssertionError: expected [ 'test/sessionAxes.ts', false ] to strictly equal [ 'test/sessionAxes.ts', true ]`, 1 failed | 7 passed. Revert.
+**Second mutation — the scaffold skip must be able to go dead.** In `src/test/sessionAxes.ts`, replace the two `?? deriveAxes(input)` / `?? deriveLinkLoss(input)` expressions with hardcoded literals: `{ link: "up", program: "none", session: "none", activity: "unknown" }` and `"none"`. **No `as ConnectedAxes` cast** — that name is not imported there (`sessionAxes.ts` imports only `deriveAxes`, `deriveLinkLoss` and the `MonitorSession` type), and adding one would leave the two function imports unused under `noUnusedLocals`, so the probe would fail to COMPILE rather than fail the test (RF12's corollary). The `MonitorSession` return type types both literals contextually; verified with `pnpm typecheck`. **Measured:** `AssertionError: expected [ 'test/sessionAxes.ts', false ] to strictly equal [ 'test/sessionAxes.ts', true ]`, 1 failed | 7 passed. Revert.
 
-**Also check the FIRST pin still holds**: `ConnectedSurface.tsx` survives the allowlist's no-dead-entries test on exactly one line (`if (session.phase === "ended")`) and `ConnectedInterstitial.tsx` on eleven. Task 2 removes neither. Green in the scratch tree.
+**Also check the FIRST pin still holds**: on comment-stripped source `ConnectedSurface.tsx` matches `session.phase === "` on exactly **1** line and `ConnectedInterstitial.tsx` on **10** (measured at `3fc49767` by running `commentStrippedSource`'s own two regexes over both files — an earlier "eleven" counted a raw-text hit). Task 2 removes neither. Green in the scratch tree.
+
+**And say in the mirror's own comment that one of its three rows cannot go red:** `connectedAxes.ts` matches `DERIVE_CALL` on its own `export function derive…(` definitions, so that row is true by construction as long as the module exists. Two of the three rows — the hook's and the scaffold's — are genuinely falsifiable, and the scaffold row is the one the Step 3 mutation drives.
 
 ---
 
@@ -780,7 +844,33 @@ const AXES_SCAFFOLD = new Set(["test/sessionAxes.ts"]);
   );
 ```
 
-Change `import type { RunIdentity } from "./useMonitorSession";` to `import { useMonitorSession, type RunIdentity } from "./useMonitorSession";`, and cut the `afterEach` down to `vi.restoreAllMocks(); localStorage.clear();` — both `doUnmock`s and the `resetModules` go.
+Change `import type { RunIdentity } from "./useMonitorSession";` to `import { useMonitorSession, type RunIdentity } from "./useMonitorSession";`.
+
+- [ ] **Step 1b: replace the isolation that `vi.resetModules()` was providing.** Losing it is not free: each replay drives a full session that writes `store-receipt:commit-accepted`, `handoff-hold` and `handoff-released` through `handoffStore.ts`'s module SINGLETON, and today every test in this file got its own copy of that module. `localStorage.clear()` alone does not reset the store's in-memory `current`/`tombstones` (`resetForTests`'s own doc comment says so, and `useMonitorSession.test.ts`'s global `beforeEach` exists for exactly this reason). The connection-attempt trace's `latest` has no reset here at all. So:
+
+```ts
+import { resetForTests as resetHandoffStore } from "./handoffStore";
+import { resetConnectionAttemptTraceForTests } from "./nfc/connectionAttemptTrace";
+```
+
+and inside the `describe`, beside the trimmed `afterEach`:
+
+```ts
+  beforeEach(() => {
+    // The isolation `vi.resetModules()` used to give this file (Phase MD
+    // PR 2): every replay writes hand-off receipts through `handoffStore`'s
+    // module singleton, and the connection-attempt trace's `latest` is
+    // process-wide. Both are reset per test now, explicitly.
+    resetHandoffStore();
+    resetConnectionAttemptTraceForTests();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+```
+
+Both symbol names are real (`handoffStore.ts` exports `resetForTests`; `nfc/connectionAttemptTrace.ts` exports `resetConnectionAttemptTraceForTests`), the alias matches `useMonitorSession.test.ts`'s own import, and `beforeEach` joins the `vitest` import list. The old `afterEach`'s two `doUnmock`s and its `resetModules` go. **Paste-tested: `Test Files 1 passed`, `Tests 3 passed`.**
 
 - [ ] **Step 2: The file's header.** Its bullet "unit tests — they `vi.doMock(...)`, replacing the very seam that was wrong" and its "Harness idiom follows `burstReplay.test.ts` … `vi.doMock` + `vi.resetModules()` + dynamic re-import" sentence both become past tense, naming the dep. These are two of the three PROSE hits Task 0's `grep -vE` excludes.
 
@@ -904,9 +994,15 @@ grep -rn 'failureLeavesLinkUp' app/src | grep -E ':\s*(//|\*)'               # �
 grep -c 'NOT_A_MACHINE_REFUSAL RULING, re-homed here' app/src/monitor/useMonitorSession.ts   # → 1  (0 on main — verified)
 
 # 3. one derivation site
-grep -rnE '\bderive(Axes|LinkLoss)\(' app/src --include='*.ts' --include='*.tsx' \
+grep -rnE '\bderive(Axes|Link(Loss)?|Program|Session|Activity)\(' app/src --include='*.ts' --include='*.tsx' \
   | grep -v '\.test\.' \
-  | grep -vE '^app/src/(monitor/(useMonitorSession|connectedAxes)\.ts:|test/)'   # → EMPTY on this branch; FIVE hits on main (JustRowObserver, JustRow ×2, ConnectedInterstitial, ConnectedSurface)
+  | grep -vE '^app/src/(monitor/(useMonitorSession|connectedAxes)\.ts:|test/)' \
+  | grep -vE ':\s*(//|\*)'   # → EMPTY on this branch; FIVE code hits on main
+# ALL SIX derivers, and the comment filter is REQUIRED at this width: without
+# it the widened pattern also returns two PROSE lines — `JustRow.tsx`'s
+# `deriveProgram("ended")` note and `surfaceModel.ts`'s `deriveLink() === "lost"`
+# sentence — neither of which is a call. The structural scan needs no such
+# filter because it reads `commentStrippedSource`.
 ```
 
 **All three criteria as the spec wrote them are WRONG and are corrected here (RF10), each measured:** (1) the spec's count is right but its `wc -l` on the repo-wide form hides WHICH files survive — print the distribution; (2) the spec's `grep … → empty` cannot be satisfied, because the re-homed ruling and `deriveLink`'s new comment both NAME the field they replaced (that is what "prefixed with when and why it moved" requires), so the criterion is "no non-comment occurrence, and exactly two comment ones"; and the spec's phrase pin `'a genuine .ProgramRejection. the PM5 itself sent reads'` **returns 0 against the prescribed comment** because the phrase wraps across two lines — the one-line `NOT_A_MACHINE_REFUSAL RULING, re-homed here` replaces it; (3) the spec's path filter misses `app/src/test/sessionAxes.ts`, the new fixture helper, which derives on purpose.
@@ -916,7 +1012,9 @@ grep -rnE '\bderive(Axes|LinkLoss)\(' app/src --include='*.ts' --include='*.tsx'
 ```bash
 pnpm typecheck && pnpm lint && pnpm format:check
 pnpm test                 # all three projects; integration needs Docker
-pnpm test:coverage        # read the per-file rows for sessionAxes.ts, connectedAxes.ts, useMonitorSession.ts (RF2)
+pnpm test:coverage        # read the per-file rows for connectedAxes.ts and useMonitorSession.ts (RF2).
+                          # NOT sessionAxes.ts — `vitest.config.ts`'s coverage
+                          # `exclude` carries "src/test/**", so it has no row.
 pnpm e2e                  # the full suite locally; READ the result. Then read the e2e job on the PR.
 git status --short docs/screenshots   # must be EMPTY
 gh run list --branch phase-md-pr2 --limit 1 --json headSha,conclusion   # headSha == git rev-parse HEAD, conclusion == success (RF39)
@@ -926,7 +1024,7 @@ gh run list --branch phase-md-pr2 --limit 1 --json headSha,conclusion   # headSh
 
 Re-run Task 1's four mutations, Task 3's and Task 4's against the FINAL tree (RF31/RF35) and record the outputs.
 
-- [ ] **Step 4: The PR.** `gh pr create` from `phase-md-pr2`. Line one: **"This PR makes the app going to the background an input tests can pass in, and gives the four axes one home."** Then ≤6 bullets: what a test can now do that it could not; the five screens that stopped deriving; the dead field that went and where its ruling lives; the three comment riders; tester impact = **none**; how to try it = there is nothing to try. Then a collapsed `<details>` **"Record (for agents and audits)"** with: the Task 0 base-vs-head counts; every mutation verbatim; the three corrected exit-criterion commands and their real output; the lifetime table's headline (no new state); the spec §4-versus-§3 ring-kind contradiction and which was used; the e2e run URL and conclusion; per-file coverage. Then the hand-back: **Proposed to add** and **Now overdue** (`grep -n 'dies 20' ROADMAP.md`, oldest first) in ONE message, and STOP.
+- [ ] **Step 4: The PR.** `gh pr create` from `phase-md-pr2`. Line one: **"This PR makes the app going to the background an input tests can pass in, and gives the four axes one home."** Then ≤6 bullets: what a test can now do that it could not; the five screens that stopped deriving; the dead field that went and where its ruling lives; the three comment riders; tester impact = **none**; how to try it = there is nothing to try. Then a collapsed `<details>` **"Record (for agents and audits)"** with: the Task 0 base-vs-head counts; every mutation verbatim; the three corrected exit-criterion commands and their real output; the lifetime table's headline (no new state); the e2e run URL and conclusion; per-file coverage. Then the hand-back: **Proposed to add** and **Now overdue** (`grep -n 'dies 20' ROADMAP.md`, oldest first) in ONE message, and STOP.
 
 ---
 
@@ -937,7 +1035,7 @@ Every item below was measured in the scratch tree; each changed a prescribed blo
 1. **The census and spec were measured at `4aa3d132`; main is `deb50b77`** (PR 1 landed in between). The appLifecycle counts survive unchanged; re-run anything else.
 2. **`useMonitorSession.test.ts` has 20 doMock STATEMENTS, not 22** (the census's 22 includes two prose lines). 20 + six replay specs = the spec's correct 26.
 3. **SIX replay specs carry an appLifecycle mock, not seven.** `liveDropSeamReplay` and `structureWatchSessionReplay` carry none, and neither do `captureReplay`, `connectedMetricsReplay`, `oracleCorpusReplay`, `recordReplay.roundtrip`, `registerReplay`, `structureWatchReplay`.
-4. **The spec contradicts itself on the ring record.** §4 and exit criterion 5 say `listener-registration-failed` / `"session lifecycle"` via `trace?.record`; §3 invariant 2 and §9 say `lifecycle-registration-failed` / `"session"` via `log.record`. The plan uses §3's.
+4. *(Withdrawn at revision 3.* Revision 1 recorded that the spec contradicted itself on the ring record. Spec rev 2.2 reconciled §4 and exit criterion 5 with §3, and rev 2.3 added the cause to the detail. Nothing is left to choose.)
 5. **Adding two REQUIRED fields to `MonitorSession` breaks NINE hand-built fixtures, which the spec does not mention.** Eight are caught by `pnpm typecheck`. **`justrow/JustRow.test.tsx` is not**, because its mock's overrides are typed `Record<string, unknown>` — the suite compiled green and 18 tests threw at render. It also turned out to be missing `undecodable` entirely, and to depend on reading its overrides object LAZILY (tests mutate it between rerenders). Task 2 Step 5 carries all three.
 6. **`src/test/sessionAxes.ts` is a new file the spec does not name.** Without it every fixture can assert a phase and an axes tuple that disagree.
 7. **Exit criterion 2 as written cannot be satisfied** — see Task 7 Step 2. Its phrase pin also cannot match a wrapped comment line: the spec's proposed phrase greps to 0 against the exact comment the spec asks for.
@@ -951,11 +1049,17 @@ Every item below was measured in the scratch tree; each changed a prescribed blo
 15. **The lifetime table's ref count was 22, carried from the census; it is 25**, and the four paired clear sites live in `handleEvent` ×2, `teardown` and `fail` — not in `cancel()`, which holds none. Two of them being in `handleEvent` means a mid-session DROP silences a late registration rejection, which is now stated rather than left for a reviewer to derive.
 16. **`src/test/` holds real harnesses**, so a directory-prefix skip in the derive scan would hide a second deriver. One named file, iterated by the no-dead-entries case.
 17. **`useMonitorSession.test.ts` resets `handoffStore` globally but never the connection-attempt trace** (two hits, both inside one `it`). Dropping `resetModules` shares that singleton across blocks, so the reset moves into the global `beforeEach` before any port.
-18. **`createTransport` has 57 injection sites, 55 zero-argument**, and all compile unchanged under the widened signature (the spec's figure of 41 predates PR 1).
+18. **`connectedAxes.ts` exports SIX derivers, not two** (revision 3, F1) — `deriveLink`, `deriveProgram`, `deriveSession`, `deriveActivity` are exported so each `never` guard is testable, and a screen could call any of them. The scan's pattern and exit criterion 3's grep both widen; at that width the raw grep needs a comment filter it did not need before (two prose hits: `JustRow.tsx`'s `deriveProgram("ended")` note, `surfaceModel.ts`'s `deriveLink() === "lost"` sentence).
+19. **`withDerivedAxes` failed open on a half override** (F2) — a fixture could hand-write `axes` and take a derived `linkLoss`, a pair the hook cannot publish. It throws now.
+20. **Two prescribed commands could not be run** (F3, F7): `src/test/**` is in vitest's coverage `exclude`, so `sessionAxes.ts` has no per-file coverage row to read; and Task 3's second mutation cast to `ConnectedAxes`, a name `sessionAxes.ts` does not import — the cast would have broken the build instead of the test.
+21. **Task 4 dropped `vi.resetModules()` and replaced it with nothing** (F4). Every replay writes hand-off receipts through a module singleton; the file has no reset of its own today because `resetModules` was the reset.
+22. **The `ConnectedSurface.tsx` replacement comment named one parent** (F5). `JustRow.tsx` renders it too, with no phase gate — and the `failed` case is unconditional after this PR, so the unreachability argument is moot as well as incomplete.
+23. **`.catch` discarded the rejection's cause** (F9). Nobody chose that; a platform-sourced failure with no other observer (RF19) is exactly the one whose cause you want. Ruled: record it, and match the detail by prefix so the test pins our record rather than a platform's message text.
+24. **`createTransport` has 57 injection sites, 55 zero-argument**, and all compile unchanged under the widened signature (the spec's figure of 41 predates PR 1).
 
 ## Self-review (done by the author before /harden)
 
 - **Spec coverage:** §1 nothing to build; §2 census re-measured against `deb50b77` (Task 0, with corrections in §10); §3 invariants 1-5 → Task 1 Step 5's four tests (1, 2), Task 3's scan (3), Task 2 Step 2's comment plus Task 7's phrase pin (4), the lifetime table (5); §4 every bullet → Tasks 1, 2, 5, 6, with the ring-kind contradiction ruled; §5 every test → Tasks 1, 3, 4, 5; §6 criteria 1-7 → Task 7 Steps 2-4, three of them corrected; §7 deviations carried into Task 7 Step 1; §8 James's rulings honoured, none re-opened.
-- **Paste-testing:** every block above was extracted to its real path and run. `pnpm typecheck`, `pnpm lint` and `pnpm format:check` are clean; `--project client --project unit` is `290 files / 8119 passed, 1 skipped`. **Eight mutations were RUN, not predicted** — Task 1's four, Task 2's 5 and 6, Task 3's two — and every measured message is in the tables. Revision 2's re-measurements (the two new mutations, the ref count, the helper counts, the standalone-commit check, the scaffold shape) were taken at `3fc49767`.
+- **Paste-testing:** every block above was extracted to its real path and run. `pnpm typecheck`, `pnpm lint` and `pnpm format:check` are clean; `--project client --project unit` is `290 files / 8119 passed, 1 skipped`. **Ten mutations were RUN, not predicted** — Task 1's four plus 4b, Task 2's 5 and 6, Task 3's two, and mutation 1 re-measured against the cause-carrying detail — and every measured message is in the tables. Revision 2's and revision 3's re-measurements were taken at `3fc49767`: the two axes mutations, the ref count, the helper counts, the standalone-commit check, the scaffold shape, the widened regex (green in the scan, two prose hits in the raw grep), the coverage `exclude` line, `MonitorSession`'s 22 members, the 10 comment-stripped interstitial reads, both reset symbol names, and the un-cast Task 3 mutation's typecheck.
 - **Not paste-tested:** the 17 remaining statements and 5 replay specs of Task 5, and Task 5 Step 0's `beforeEach` addition (three representatives were ported instead, and the rule is written from them), `pnpm e2e`, and `pnpm test:coverage`.
 - **No line-number citations into this document, and no self-describing bookkeeping** — every count carries its command.
