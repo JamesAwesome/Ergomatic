@@ -19,3 +19,8 @@ One hit outside the span: ROADMAP 2426 (`adapters/appLifecycle.ts`'s web arm in 
 
 ## Pull-ins
 none (`grep -c "pulled in, close-MD" ROADMAP.md` → 0)
+
+## Close (2026-09-12)
+Main's run for `b2e26701`: 34722809211 completed success (deploy included).
+Antagonist exit pass: every substantive claim HELD; two record corrections applied in the span before archiving (Exploration B's "under src/monitor" → "among the eight"; the `r\??: true` grep measures a spelling — derivation cited); Exploration B's 109/59 marked not quotable (8/8 row reproduces). PM close gate: PASS WITH CONDITIONS — condition 1 (RF28) discharged by the run above; condition 2 (receipts in the ledger row) done. Release: no tag for MD; PM recommends v0.46.0 for the 38-commit backlog since v0.45.0. Anchor diff at close: only this PR's own corrections. CARRY rows: none. Archived to docs/history/phase-md.md; ledger row landed.
+Hand-back re-presented (never ruled): the suite-level testcontainers flake row proposed at #412 (dies 2026-10-10).

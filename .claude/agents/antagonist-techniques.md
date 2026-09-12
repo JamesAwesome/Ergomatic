@@ -285,6 +285,20 @@ toolkit, not a history.
     `handleEvent` being an owner is the lifetime fact the table existed to
     surface (a mid-session drop marks the attempt cancelled).
 
+28. **A text grep offered as an exit oracle measures a SPELLING, not an
+    invariant — drop a decoy declaration in and watch it stay silent.** Phase
+    MD's "no second declaration of the sample shape survives" gate greps
+    `r\??: true`; a decoy interface spelling the flag `rest?: true` under
+    `src/monitor/` left the count at exactly 3. What actually held was
+    structural (a `-readonly [K in keyof Sample]` mapped type and a `Pick`),
+    so cite the derivation, not the grep.
+29. **When a census's numbers rest on an intermediate artifact that was not
+    committed, re-derive them from the document's own method BEFORE citing
+    them at a phase exit.** Exploration B's 109/8/59 states two incompatible
+    core boundaries in one file; the two readings give 161/8/101 and 80/8/40.
+    The 8/8 row and the ~half-unique conclusion reproduce under both, so the
+    decision was safe and the figures are not quotable — which is the
+    distinction to report.
 ## Things attacked and found sound
 
 - The single-writer discipline on the run record, and its refusal to be
