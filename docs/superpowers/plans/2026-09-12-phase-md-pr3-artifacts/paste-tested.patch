@@ -318,7 +318,7 @@ index 96a1a3fd..f1ea742b 100644
          : null,
      source: row.source,
 diff --git a/app/server/routes/data.ts b/app/server/routes/data.ts
-index c1380c6c..1cc3cd02 100644
+index c1380c6c..558f4534 100644
 --- a/app/server/routes/data.ts
 +++ b/app/server/routes/data.ts
 @@ -18,6 +18,7 @@ import {
@@ -382,7 +382,7 @@ index c1380c6c..1cc3cd02 100644
  const SERIES_SPM_MAX = 255;
  
  function validateSeriesSample(
-@@ -889,9 +884,33 @@ function validateSeriesSample(
+@@ -889,9 +884,34 @@ function validateSeriesSample(
    // input" discipline `validateLogStepEntry` above already uses — any
    // extra keys the client sent (the POST idiom: unknown sample keys are
    // ignored, never rejected) are silently dropped, not persisted.
@@ -394,9 +394,10 @@ index c1380c6c..1cc3cd02 100644
 +  // domain's `Sample` (which `LogSeriesSample` now maps from) and not added
 +  // here never reaches the column, and no band check would be missing to
 +  // notice. `SERIES_SAMPLE_FIELDS` (the `Record<keyof LogSeriesSample,
-+  // true>` witness beside that type) is asserted against a fully-populated
-+  // sample built by this function in `seriesSeam.test.ts`, which is what
-+  // makes the omission red.
++  // true>` witness beside that type) is asserted in `seriesSeam.test.ts`
++  // against the KEY UNION over every sample this function rebuilt on the far
++  // side of a real POST — the union, because no single stored sample carries
++  // every field.
 +  //
 +  // `hr` is SPREAD rather than assigned, and that is load-bearing: the
 +  // spread leaves the key genuinely ABSENT in memory when there is no
@@ -654,7 +655,7 @@ index 0de29f28..3efbdc38 100644
  export interface LogInput {
    workoutId: string | null;
 diff --git a/app/server/testing/fakes.ts b/app/server/testing/fakes.ts
-index 37d9a09a..cb0c0437 100644
+index 37d9a09a..f611508c 100644
 --- a/app/server/testing/fakes.ts
 +++ b/app/server/testing/fakes.ts
 @@ -15,6 +15,7 @@ import {
@@ -665,7 +666,7 @@ index 37d9a09a..cb0c0437 100644
    type LogPatch,
    type LogsStore,
    type PlanLink,
-@@ -682,7 +683,28 @@ function makeFakeLogsStore(
+@@ -682,7 +683,34 @@ function makeFakeLogsStore(
        // all), so the real store's `list` can never return it. Spreading the
        // whole `input` here used to leak it into this fake's `list` (and thus
        // `GET /api/logs`) — a shape production can never produce.
@@ -685,6 +686,12 @@ index 37d9a09a..cb0c0437 100644
 +      // today, so the infidelity is unobservable, and widening this to every
 +      // jsonb column is a change with no failing case behind it. The
 +      // ROADMAP carries the row.
++      // The cast below is deliberately WIDER than the value it produces: on
++      // the read side `r` is absent, exactly as it is off a real jsonb read,
++      // and `LogSeries` says the key is required. That is the shape's own
++      // stated posture (`domain/monitor/types.ts`: the required key is a
++      // CONSTRUCTION-SITE gate, and `s.r === true` is correct either way),
++      // not a hole this fake opens.
 +      const stored = {
 +        ...rest,
 +        series:
@@ -1027,7 +1034,7 @@ index b9a2f813..4038934c 100644
      );
      const run: MonitorRun = {
 diff --git a/app/src/monitor/seriesRecorder.test.ts b/app/src/monitor/seriesRecorder.test.ts
-index 412e00a2..abdc2c21 100644
+index 412e00a2..7ca2fdf2 100644
 --- a/app/src/monitor/seriesRecorder.test.ts
 +++ b/app/src/monitor/seriesRecorder.test.ts
 @@ -15,7 +15,11 @@ import { fromHexString, parseRecording } from "./transports/recording.js";
@@ -1043,7 +1050,7 @@ index 412e00a2..abdc2c21 100644
  
  // ---------------------------------------------------------------------
  // Real-wire replay helper (the oracle grounding, same idiom as
-@@ -1074,10 +1078,64 @@ describe("createSeriesRecorder — trace-truth Task 2: rests are marked (real ca
+@@ -1074,10 +1078,74 @@ describe("createSeriesRecorder — trace-truth Task 2: rests are marked (real ca
      expect(samples).toHaveLength(419);
      const rested = samples.filter((s) => s.r === true);
      expect(rested).toHaveLength(21);
@@ -1063,23 +1070,27 @@ index 412e00a2..abdc2c21 100644
 +  });
 +
 +  it("serializes a work sample and a rest sample to exactly these bytes", () => {
-+    // INDEPENDENT literals, not built from `Sample` or from the recorder's
-+    // own constants (RF21): these are the bytes the store, the POST body and
-+    // the jsonb column carry, written out by hand so a change to either type
-+    // cannot retune them. The work sample has NO `r` key at all even though
-+    // the type now REQUIRES one.
-+    const work = { t: 1, d: 4, p: 121, spm: 25, hr: 140, r: undefined };
-+    const rest = { t: 2, d: 8, p: 122, spm: 25, hr: 141, r: true as const };
++    // INDEPENDENT literals for the BYTES (RF21): the expected strings are
++    // written out by hand, so a change to `Sample` or to the recorder's
++    // constants cannot retune them. The literals themselves are ANNOTATED
++    // `Sample`, deliberately — untyped, this test would only have been
++    // exercising `JSON.stringify`, and a field added to or renamed on
++    // `Sample` would have left it green. With the annotation the same edit
++    // reds `pnpm typecheck` here.
++    const work: Sample = { t: 1, d: 4, p: 121, spm: 25, hr: 140, r: undefined };
++    const rest: Sample = { t: 2, d: 8, p: 122, spm: 25, hr: 141, r: true };
 +    expect(JSON.stringify(work)).toBe(
 +      '{"t":1,"d":4,"p":121,"spm":25,"hr":140}',
      );
 +    expect(JSON.stringify(rest)).toBe(
 +      '{"t":2,"d":8,"p":122,"spm":25,"hr":141,"r":true}',
 +    );
-+    // And the recorder's own output obeys the same rule: the sample it just
-+    // built from a rowing frame carries no `r` in its JSON.
-+    const rec = createSeriesRecorder();
-+    rec.onFrame({
++
++    // And the RECORDER's own output obeys the same rule on both arms. A
++    // rowing frame's sample carries no `r` in its JSON; a resting frame's
++    // carries `"r":true`. The second leg is what stops the first from
++    // passing against a recorder that simply never writes the flag.
++    const frame = (state: MonitorFrame["state"]): MonitorFrame => ({
 +      elapsedSeconds: 1,
 +      distanceMeters: 5,
 +      sessionElapsedSeconds: 1,
@@ -1087,16 +1098,22 @@ index 412e00a2..abdc2c21 100644
 +      currentSplit: 120,
 +      spm: 22,
 +      heartRateBpm: 140,
-+      rowingActive: true,
++      rowingActive: state === "rowing",
 +      splitAvgPace: null,
 +      restSeconds: 0,
 +      intervalIndex: null,
 +      intervalRemaining: null,
 +      intervalAccrued: null,
-+      state: "rowing",
++      state,
 +    });
-+    const produced = rec.snapshot()!.samples[0]!;
-+    expect(JSON.stringify(produced)).not.toContain('"r"');
++    const rowing = createSeriesRecorder();
++    rowing.onFrame(frame("rowing"));
++    expect(JSON.stringify(rowing.snapshot()!.samples[0]!)).not.toContain('"r"');
++    const resting = createSeriesRecorder();
++    resting.onFrame(frame("resting"));
++    expect(JSON.stringify(resting.snapshot()!.samples[0]!)).toContain(
++      '"r":true',
++    );
 +  });
 +
 +  it("refuses to compile a Sample built without spelling `r`", () => {

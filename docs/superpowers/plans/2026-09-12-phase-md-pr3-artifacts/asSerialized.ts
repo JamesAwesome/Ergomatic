@@ -16,10 +16,20 @@
  *  red. `server/stores/contracts/storeContracts.ts` declares its own copy
  *  under the same name, because server code never imports from `src/`.
  *
- *  NEVER use it in `handoffStoreBytes.test.ts`. That gate compares STRINGS
- *  against captured bytes, so it is already immune to the present-vs-absent
- *  distinction — and putting a JSON round-trip anywhere near it would be a
- *  way to make a byte assertion stop being about bytes. */
+ *  `undefined` passes through UNTOUCHED rather than round-tripping:
+ *  `JSON.stringify(undefined)` is `undefined`, and `JSON.parse` of that
+ *  throws `SyntaxError: "undefined" is not valid JSON`. `MonitorRun.series`
+ *  is optional, so a caller wrapping `run.series` would otherwise crash on
+ *  every run that has no trace.
+ *
+ *  WRAP A `series`, NEVER A WHOLE ROW. A round trip turns every `Date` into
+ *  a string, so an assertion over a value carrying one fails for a reason
+ *  that has nothing to do with the rest flag.
+ *
+ *  And NEVER use it in `handoffStoreBytes.test.ts`. That gate compares
+ *  STRINGS against captured bytes, so it is already immune to the
+ *  present-vs-absent distinction — and putting a JSON round-trip anywhere
+ *  near it would be a way to make a byte assertion stop being about bytes. */
 export function asSerialized<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
+  return value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
 }

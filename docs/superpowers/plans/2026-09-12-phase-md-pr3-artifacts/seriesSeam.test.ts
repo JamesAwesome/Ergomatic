@@ -38,9 +38,13 @@ import { createSeriesRecorder } from "../../src/monitor/seriesRecorder.js";
 // built through the real route, and reads the Concept2 payload back out the
 // far end.
 //
-// It can go red on exactly the defect RF33 recorded, one layer up: rename `r`
-// in `toMappingRow`'s cast and the rest samples stop being excluded, so the
-// posted heart-rate average changes. Both mutations are in the PR body.
+// It can go red on exactly the defect RF33 recorded, one layer up. The
+// RENAME itself no longer compiles (the store's type derives from the
+// domain's, so `Pick<LogSeriesSample, "r">` cannot spell a field that does
+// not exist) — which is the protection working — so the mutation that proves
+// this test is to STRIP the mark inside `toMappingRow`: map each sample to
+// `{ t, hr, r: undefined }` there, and the posted heart-rate average changes.
+// All three mutations are in the PR body.
 //
 // Cross-tree import (this file reaches into `src/` for the recorder itself),
 // and the precedent for it: `server/routes/data.test.ts` already imports
@@ -255,8 +259,12 @@ describe("the series seam: the recorder's own samples, across the POST, to the C
     // missing to notice. Compare the KEY UNION over every stored sample
     // against the exhaustiveness witness beside `LogSeriesSample` — and the
     // same union over what the CLIENT recorder emitted, which is the only
-    // comparison in the repo that crosses the `src/` -> `server/` boundary
-    // the mirror cannot cross with a compiler.
+    // comparison in the repo that crosses `src/` -> `server/` at RUNTIME.
+    // The compiler crosses it too since PR 3; what it cannot see is a field
+    // the rebuild list drops.
+    //
+    // The union, not a single sample: `hr` and `r` are each absent from most
+    // samples individually, so only the union can see a dropped field.
     const keyUnion = (samples: readonly object[]) =>
       [...new Set(samples.flatMap((x) => Object.keys(x)))].sort();
     const expectedFields = [...SERIES_SAMPLE_FIELDS].sort();

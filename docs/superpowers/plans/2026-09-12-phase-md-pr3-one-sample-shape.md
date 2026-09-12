@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Revision 3 (harden lens 2).** Eight findings folded, all in the gates rather than the design. The two that mattered: **Task 5 Step 2's byte literals were untyped**, so only `JSON.stringify` was under test — they are now annotated `Sample`, and the recorder leg gained a RESTING arm so the work arm cannot pass against a recorder that never writes the flag. And **`asSerialized(undefined)` threw** (`MonitorRun.series` is optional and one call site passes it straight through), so the helper now passes `undefined` untouched. The rest are wording that had gone stale against revision 2 (Task 5 Step 4's header, the `keyUnion` comment, `data.ts`'s witness sentence), a miscount (six client sites, not five — Task 4), and two comment clauses (Task 4 Step 1, Task 4 Step 2).
+
 **Revision 2 (harden lens 1).** Six findings folded. The largest: **the server no longer hand-copies the shape at all.** `logs.ts`'s "server code never imports from `src/`" reason stopped covering this case the moment `Sample` moved to `domain/`, so `LogSeriesSample`/`LogSeries` become `-readonly` mapped types of `Sample`/`SeriesData` and six declarations become **TWO** (Task 3 Step 1). The fake logs store is fixed rather than worked around (Task 4). The `hr` spread keeps a new reason and loses a false one (Task 3 Step 2). The seam test gains a divergence pin (Task 5 Step 4). `schema.test.ts`'s replacement pin is stated honestly (Task 6 Step 3). The three artifacts now live in the repo (Task 5 Step 4, Task 4 Step 1).
 
 **Goal:** the series sample is declared ONCE, in the domain. `domain/monitor/types.ts` owns `Sample`/`SeriesData`; every other type that names `t`/`d`/`p`/`spm`/`hr`/`r` — the recorder's re-export, the domain's heart-rate input, the server store's two types, and the two Concept2 sites — derives from it. The rest flag `r` becomes a REQUIRED key valued `true | undefined`, so a sample built without spelling it is a compile error — and zero bytes change on disk or on the wire.
@@ -12,7 +14,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-12-one-sample-shape-design.md` revision 3. Census: `docs/superpowers/audits/2026-09-12-architecture-walk/pr3-census.md`.
 
-**Artifacts (paste-tested, committed with this plan):** `docs/superpowers/plans/2026-09-12-phase-md-pr3-artifacts/` — `seriesSeam.test.ts`, `asSerialized.ts`, `paste-tested.patch`. The implementer copies the first two to their real paths; the patch is the whole paste-tested tree, for reference when a block below is ambiguous.
+**Artifacts (paste-tested, committed with this plan):** `docs/superpowers/plans/2026-09-12-phase-md-pr3-artifacts/` — `seriesSeam.test.ts`, `asSerialized.ts`, `paste-tested.patch`. The implementer copies the first two to their real paths (`app/server/routes/` and `app/src/test/`). **`paste-tested.patch` carries MODIFICATIONS ONLY** — `git diff` against `3fc49767`, so the two NEW files are not in it; they are the two sibling artifacts, and the three together are the whole paste-tested tree.
 
 **Baseline:** every number and every failure message below was MEASURED by the plan author in a throwaway worktree at `3fc49767` (main, `#409`), run from `app/`, and RE-MEASURED after revision 2's changes. Every code block below was pasted to its real path there and taken through `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and the named vitest files. Blocks that changed under that test are recorded inline as **RF10**. A number here without a command beside it is a plan defect.
 
@@ -81,7 +83,7 @@ Measured: one producer (`seriesRecorder.ts:425`) and two consumers (`derivedHear
 
 - [ ] **Step 3: the hand-built typed sites — the COMPILER lists them, not this plan**
 
-After Task 1 lands the required key, `pnpm typecheck` prints every construction site that omits `r`. Do not pre-enumerate them: work the list the compiler gives, then re-run until it is empty. **Measured, for a sanity check only:** the first pass listed sites in `src/justrow/totals.test.ts`, `src/log/FromTheLog.test.tsx`, `src/log/storedSummary.test.ts`, `src/log/traceModel.test.ts`, `src/monitor/fixtures/monitorRunShapes.ts`, `src/monitor/handoffStore.test.ts`, `src/monitor/monitorRun.test.ts`, `src/session/LogSession.test.tsx`, `src/session/PostWorkoutSummary.test.tsx`; later passes added `src/monitor/derivedHeartRate.replay.test.ts`, `server/concept2/mapping.test.ts`, `server/routes/concept2.test.ts`, `server/stores/contracts/storeContracts.ts`. **`tsc -b` stops at the first failing project, so the list arrives in waves — an empty run is the only proof you are done.** The whole edit is **24 files changed, +488/−237** including the two new files (revision 2 figure — `server/testing/fakes.ts` joined at Task 4).
+After Task 1 lands the required key, `pnpm typecheck` prints every construction site that omits `r`. Do not pre-enumerate them: work the list the compiler gives, then re-run until it is empty. **Measured, for a sanity check only:** the first pass listed sites in `src/justrow/totals.test.ts`, `src/log/FromTheLog.test.tsx`, `src/log/storedSummary.test.ts`, `src/log/traceModel.test.ts`, `src/monitor/fixtures/monitorRunShapes.ts`, `src/monitor/handoffStore.test.ts`, `src/monitor/monitorRun.test.ts`, `src/session/LogSession.test.tsx`, `src/session/PostWorkoutSummary.test.tsx`; later passes added `src/monitor/derivedHeartRate.replay.test.ts`, `server/concept2/mapping.test.ts`, `server/routes/concept2.test.ts`, `server/stores/contracts/storeContracts.ts`. **`tsc -b` stops at the first failing project, so the list arrives in waves — an empty run is the only proof you are done.** The whole edit is **24 files changed, +505/−237** plus the two new files (revision 3 figure; `server/testing/fakes.ts` joined at Task 4).
 
 - [ ] **Step 4: which captures reach the recorder** (input for Task 5)
 
@@ -90,7 +92,7 @@ grep -rln 'createSeriesRecorder' src --include='*.test.*'
 grep -rn 'docs/monitor/sessions' src/monitor/derivedHeartRate.replay.test.ts
 ```
 
-Task 5 uses `walk-2026-08-16/session-2-wu-4unequal.jsonl` — the capture `derivedHeartRate.replay.test.ts` already drives the recorder over, and the one whose rest stretch makes the derived average DIFFER from the rest-included one.
+Task 5 uses `walk-2026-08-16/session-2-wu-4unequal.jsonl` — the capture `derivedHeartRate.replay.test.ts`'s FINAL describe ("over the RECORDER's own samples") already drives the recorder over; that file's other legs decode samples directly without a recorder. It is also the capture whose rest stretch makes the derived average DIFFER from the rest-included one (21 resting samples), which is what Task 5's divergence pin rests on.
 
 ---
 
@@ -322,7 +324,7 @@ Keep `SERIES_SAMPLE_FIELDS` exactly as spec §4 prescribes — it now gates the 
   return { ok: true, sample };
 ```
 
-Extend the existing "explicit field list" comment to say three things. (1) This is the list that drops a field SILENTLY — a field added to the domain's `Sample` and not added here never reaches the column, and no band check would be missing to notice; `SERIES_SAMPLE_FIELDS` asserted in `seriesSeam.test.ts` is what makes that red. (2) **`hr` is SPREAD rather than assigned, and that is load-bearing: the spread leaves the key genuinely ABSENT in memory when there is no reading, which is what keeps every `toStrictEqual` comparing a stored sample against a hand-built one honest. `r` cannot do the same — it is a required key, and its present-but-undefined value is exactly what the compile gate buys.** (3) Key ORDER is NOT load-bearing: Postgres normalizes jsonb keys by length then bytewise on ingest (measured on 18.4 — the Global Constraints carry the reading), so no ordering here survives the column. **The six per-field predicates, their order and their pinned messages are UNCHANGED.**
+Extend the existing "explicit field list" comment to say three things. (1) This is the list that drops a field SILENTLY — a field added to the domain's `Sample` and not added here never reaches the column, and no band check would be missing to notice; `SERIES_SAMPLE_FIELDS` is asserted in `seriesSeam.test.ts` **against the KEY UNION over every sample this function rebuilt** (harden lens 2 — revision 2 said "a fully-populated sample", and no single stored sample carries every field), which is what makes that red. (2) **`hr` is SPREAD rather than assigned, and that is load-bearing: the spread leaves the key genuinely ABSENT in memory when there is no reading, which is what keeps every `toStrictEqual` comparing a stored sample against a hand-built one honest. `r` cannot do the same — it is a required key, and its present-but-undefined value is exactly what the compile gate buys.** (3) Key ORDER is NOT load-bearing: Postgres normalizes jsonb keys by length then bytewise on ingest (measured on 18.4 — the Global Constraints carry the reading), so no ordering here survives the column. **The six per-field predicates, their order and their pinned messages are UNCHANGED.**
 
 **RF10 ×2:** the spec said the rebuild keeps its two post-assignment `if`s — it cannot, a required key must be present at construction. And revision 1 of this plan justified the spread by byte order, which the jsonb measurement falsifies; the spread is right for a different reason, stated above (harden lens 1).
 
@@ -359,17 +361,22 @@ pnpm test --project unit
 
 **The three contract cases passed against the in-memory fake and failed only against real Postgres** — the one thing a contract suite must not do. Revision 1 of this plan wrapped BOTH sides and left the fake alone; harden lens 1 ruled that wrong. **The fake is fixed here**, and the helper wraps the EXPECTED side only, so these cases keep their ability to see a backend returning a key the column cannot hold.
 
-**Files:** Create `app/src/test/asSerialized.ts`; modify `app/server/testing/fakes.ts`, `app/server/stores/contracts/storeContracts.ts` (3 assertions), `app/src/monitor/handoffStore.test.ts`, `app/src/session/LogSession.test.tsx` (3 assertions), `app/src/workout/WorkoutDetail.postReleaseCommit.test.tsx`.
+**Files:** Create `app/src/test/asSerialized.ts`; modify `app/server/testing/fakes.ts`, `app/server/stores/contracts/storeContracts.ts` (3 assertions), `app/src/monitor/handoffStore.test.ts` (1), `app/src/session/LogSession.test.tsx` (**4**), `app/src/workout/WorkoutDetail.postReleaseCommit.test.tsx` (1) — **SIX client sites**, not five. (Revision 1 said five; `grep -n 'asSerialized' src/session/LogSession.test.tsx` finds four, at 4302, 4372, 4590 and 4594.)
 
 - [ ] **Step 1: the helper** — copy `docs/superpowers/plans/2026-09-12-phase-md-pr3-artifacts/asSerialized.ts` to `app/src/test/asSerialized.ts`. `src/test/**` is excluded from coverage (`vitest.config.ts`), so it adds no coverage burden.
 
 ```ts
 export function asSerialized<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
+  return value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
 }
 ```
 
-Its doc comment states: why the in-memory and serialized sides differ; that `toEqual` does NOT distinguish them but `toStrictEqual` does; that you wrap the IN-MEMORY side; that a missing field, a changed number and a renamed key all still red, and only an `undefined`-valued key becomes invisible. **And the one place it must never go:** `handoffStoreBytes.test.ts` compares STRINGS against captured bytes, so it is already immune to the distinction, and a JSON round-trip near it would be a way to make a byte assertion stop being about bytes.
+**The `undefined` guard is load-bearing, not defensive** (harden lens 2): `JSON.stringify(undefined)` is `undefined` and `JSON.parse` of that throws `SyntaxError: "undefined" is not valid JSON` (measured with `node -e`). `MonitorRun.series` is optional and Step 4's `WorkoutDetail` site passes `atRelease!.run.series` straight through, so without the guard every run with no trace crashes the assertion.
+
+Its doc comment states: why the in-memory and serialized sides differ; that `toEqual` does NOT distinguish them but `toStrictEqual` does; that you wrap the IN-MEMORY side; that a missing field, a changed number and a renamed key all still red, and only an `undefined`-valued key becomes invisible; and the `undefined` pass-through with the reason above. Plus **two prohibitions**:
+
+- **Wrap a `series`, never a whole row.** A round trip turns every `Date` into a string (measured: `{ completedAt: new Date(…) }` comes back as `{"completedAt":"2026-08-25T21:42:03.110Z"}`), so an assertion over a value carrying one fails for a reason that has nothing to do with the rest flag.
+- **Never in `handoffStoreBytes.test.ts`.** That gate compares STRINGS against captured bytes, so it is already immune to the distinction, and a JSON round-trip near it would be a way to make a byte assertion stop being about bytes.
 
 - [ ] **Step 2: the fake logs store round-trips `series`**
 
@@ -400,7 +407,7 @@ In `fakes.ts`'s logs `create`, destructure `series` out alongside `advancesPlan`
       };
 ```
 
-Add `type LogSeries` to this file's existing `../stores/logs.js` import.
+Add `type LogSeries` to this file's existing `../stores/logs.js` import. **And one sentence above the cast, because it is deliberately wider than the value** (harden lens 2): on the read side `r` is absent, exactly as it is off a real jsonb read, and `LogSeries` says the key is required — that mismatch is the shape's own stated posture (the required key is a CONSTRUCTION-SITE gate; `s.r === true` is correct either way), not a hole this fake opens.
 
 - [ ] **Step 3: `storeContracts.ts` — EXPECTED side only**
 
@@ -411,14 +418,18 @@ expect(row).toMatchObject({ series: asSerialized(series) });   // "get still ret
 expect(row!.series).toStrictEqual(asSerialized(series));       // ×2, the two round-trip cases
 ```
 
-- [ ] **Step 4: the five client assertions** — wrap the in-memory side:
+- [ ] **Step 4: the six client assertions** — wrap the in-memory side:
 
 ```
-handoffStore.test.ts           expect(store.loadMonitorRun()!.series).toStrictEqual(asSerialized(SERIES));
-LogSession.test.tsx  ×3        expect(body.series).toStrictEqual(asSerialized(series));   (and bodies[0], bodies[1])
-WorkoutDetail.postReleaseCommit.test.tsx
+handoffStore.test.ts  ×1       expect(store.loadMonitorRun()!.series).toStrictEqual(asSerialized(SERIES));
+LogSession.test.tsx   ×4       expect(body.series).toStrictEqual(asSerialized(series));       (:4302)
+                               expect(bodies[0]!.series).toStrictEqual(asSerialized(series)); (:4372, :4590)
+                               expect(bodies[1]!.series).toStrictEqual(asSerialized(series)); (:4594)
+WorkoutDetail.postReleaseCommit.test.tsx  ×1
                                expect(body.series).toStrictEqual(asSerialized(atRelease!.run.series));
 ```
+
+**That last one is why the helper guards `undefined`** (Step 1): `MonitorRun.series` is optional, and `JSON.parse(JSON.stringify(undefined))` throws `SyntaxError: "undefined" is not valid JSON` (measured with `node -e`).
 
 - [ ] **Step 5: prove the fake fix is load-bearing (red-then-green), then gate**
 
@@ -465,31 +476,41 @@ Measured failure before the fix: `AssertionError: expected [ 't', 'd', 'p', 'spm
     ).not.toContain('"r"');
 ```
 
-- [ ] **Step 2: the byte-identity test, with independent literals**
+- [ ] **Step 2: the byte-identity test — independent literals, ANNOTATED, both arms**
 
-Added to the same describe. The literals are written out by hand, not built from `Sample` or the recorder's constants, so a change to either type cannot retune them (RF21).
+Added to the same describe. The expected STRINGS are written out by hand, so a change to `Sample` or to the recorder's constants cannot retune them (RF21). **The literals themselves carry a `: Sample` annotation** — harden lens 2: untyped, this test exercised `JSON.stringify` and nothing else, and a field added to or renamed on `Sample` left it green.
 
 ```ts
   it("serializes a work sample and a rest sample to exactly these bytes", () => {
-    const work = { t: 1, d: 4, p: 121, spm: 25, hr: 140, r: undefined };
-    const rest = { t: 2, d: 8, p: 122, spm: 25, hr: 141, r: true as const };
+    const work: Sample = { t: 1, d: 4, p: 121, spm: 25, hr: 140, r: undefined };
+    const rest: Sample = { t: 2, d: 8, p: 122, spm: 25, hr: 141, r: true };
     expect(JSON.stringify(work)).toBe('{"t":1,"d":4,"p":121,"spm":25,"hr":140}');
     expect(JSON.stringify(rest)).toBe(
       '{"t":2,"d":8,"p":122,"spm":25,"hr":141,"r":true}',
     );
-    // And the recorder's own output obeys the same rule: the sample it just
-    // built from a rowing frame carries no `r` in its JSON.
-    const rec = createSeriesRecorder();
-    rec.onFrame({ /* a full rowing MonitorFrame, state: "rowing" */ });
-    expect(JSON.stringify(rec.snapshot()!.samples[0]!)).not.toContain('"r"');
+
+    // And the RECORDER's own output obeys the same rule on BOTH arms.
+    const frame = (state: MonitorFrame["state"]): MonitorFrame => ({ /* … */ });
+    const rowing = createSeriesRecorder();
+    rowing.onFrame(frame("rowing"));
+    expect(JSON.stringify(rowing.snapshot()!.samples[0]!)).not.toContain('"r"');
+    const resting = createSeriesRecorder();
+    resting.onFrame(frame("resting"));
+    expect(JSON.stringify(resting.snapshot()!.samples[0]!)).toContain('"r":true');
   });
 ```
 
-**RF10: this describe block has no `frame()` helper in scope** (the two in this file are private to earlier describes), so the frame literal is written out in full — 15 fields, `state: "rowing"`, `heartRateBpm: 140`. Copy it from `docs/superpowers/plans/2026-09-12-phase-md-pr3-artifacts/paste-tested.patch`.
+**The resting arm is the point** (harden lens 2): the work arm alone passes against a recorder that never writes the flag at all, which is precisely the thing this PR must not ship.
+
+**RF10: this describe block has no `frame()` helper in scope** (the two in this file are private to earlier describes), so one is declared locally, parameterised on `state` with `rowingActive: state === "rowing"`. Copy it from `docs/superpowers/plans/2026-09-12-phase-md-pr3-artifacts/paste-tested.patch`.
+
+**Both new gates MEASURED to bite.** Add `readonly z: number` to `Sample` → `src/monitor/seriesRecorder.test.ts(1101,11): error TS2741: Property 'z' is missing in type '{ t: number; d: number; p: number; spm: number; hr: number; r: undefined; }' but required in type 'Sample'.` and the same on line 1102 — the annotation, doing its job. Change the producer to `r: undefined` unconditionally → `AssertionError: expected '{"t":10,"d":50,"p":1200,"spm":22,"hr"…' to contain '"r":true'` (plus the real-capture rest count, `expected [] to have a length of 21 but got +0`), `2 failed | 44 passed`.
+
+Run: `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/monitor/seriesRecorder.test.ts` → measured **46 passed** (44 before).
 
 - [ ] **Step 3: the compile gate**
 
-Add `type Sample` to this file's `./seriesRecorder.js` import, then:
+Add `type Sample` to this file's `./seriesRecorder.js` import (Step 2's annotations need it too), and `MonitorFrame` is already imported. Then:
 
 ```ts
   it("refuses to compile a Sample built without spelling `r`", () => {
@@ -505,13 +526,13 @@ Add `type Sample` to this file's `./seriesRecorder.js` import, then:
 
 **Both directions measured.** Delete the directive line → `src/monitor/seriesRecorder.test.ts(1136,11): error TS2741: Property 'r' is missing in type '{ t: number; d: number; p: number; spm: number; }' but required in type 'Sample'.` Restore the OLD shape (`readonly r?: true` in `types.ts`), keeping the directive → `src/monitor/seriesRecorder.test.ts(1136,5): error TS2578: Unused '@ts-expect-error' directive.` **That second one is the RF33 direction**: it is the compiler saying the omission compiles again.
 
-Run: `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/monitor/seriesRecorder.test.ts` → measured **46 passed** (44 before).
-
 - [ ] **Step 4: the seam test (RF24)**
 
 **File: `app/server/routes/seriesSeam.test.ts`** — 278 lines, paste-tested verbatim at `docs/superpowers/plans/2026-09-12-phase-md-pr3-artifacts/seriesSeam.test.ts`; the implementer copies that file to its real path and reads it. It is NOT `*.integration.test.ts` (that suffix routes to the Docker-only `integration` project) and needs no database. Precedent for the cross-tree import — this file DOES reach into `src/`, for the recorder itself: `server/routes/data.test.ts:15` already imports `../../src/session/partialGateFixture.js` in this same `unit` project.
 
-**Its header does not say the compiler cannot cross this seam** (harden lens 1): after Task 3 the compiler DOES cross it and catches a renamed field. What it cannot catch is a field the validator's rebuild list quietly drops, or a value that fails to survive the POST — and that is what this file is the runtime gate for.
+**Its header does not say the compiler cannot cross this seam** (harden lens 1): after Task 3 the compiler DOES cross it and catches a renamed field. What it cannot catch is a field the validator's rebuild list quietly drops, or a value that fails to survive the POST — and that is what this file is the runtime gate for. **The header also names the right mutation and the right number of them** (harden lens 2): the `rest` RENAME no longer compiles, so what proves this test is the STRIP inside `toMappingRow`, and there are THREE mutations, not two. Same correction in the `keyUnion` comment, which now reads "…crosses `src/` → `server/` at RUNTIME. The compiler crosses it too since PR 3; what it cannot see is a field the rebuild list drops."
+
+**It shares its capture, its recorder and its divergence pin with `derivedHeartRate.replay.test.ts`'s last describe, deliberately.** They are not duplicates: that one is the CLIENT-side upstream-of-producer gate (recorder → domain function, one tree), this one is the CROSS-TREE gate (recorder → POST → store → mapping → payload). Neither covers the other, and a reviewer who reads them side by side should see the same capture and conclude they are the same test — say so in the PR body.
 
 What it does, in order:
 
@@ -678,7 +699,7 @@ git status --short docs/screenshots   # must be EMPTY
 
 **Measured:** `unit` 69 files / 2167 pass + 1 skip; `client` 222 files / 5949 pass; `integration` 25 files / 402 pass.
 
-**A SUITE-LEVEL integration flake, which goes in the PR BODY and not only here (RF14).** Across four full-`integration` runs, two showed one file failing at SUITE level rather than on an assertion — `contracts.real.integration.test.ts` on one run, `testHistoryDecouple.integration.test.ts` on another — and each passed when re-run alone and on the next full run. Two different files points at container startup under parallel load, not at either file. **Exit code was 0 every time, so it is NOT RF40**; if it recurs, capture the suite-level error text before re-running.
+**A SUITE-LEVEL integration flake, which goes in the PR BODY and not only here (RF14).** Across FIVE full-`integration` runs, three showed one file failing at SUITE level rather than on an assertion — `contracts.real.integration.test.ts`, then `testHistoryDecouple.integration.test.ts`, then `schema.integration.test.ts` — and every one passed when re-run alone and on the next full run. **Three different files** points at container startup under parallel load, not at any of them. **Exit code was 0 every time, so it is NOT RF40**; if it recurs, capture the suite-level error text before re-running.
 
 `pnpm e2e` was NOT run by the plan author — `e2e/seriesStorage.spec.ts` and `e2e/connected.spec.ts` are the named specs.
 
@@ -686,17 +707,18 @@ git status --short docs/screenshots   # must be EMPTY
 
 `gh pr create` from `phase-md-pr3`. **Line one is the OUTCOME** (CLAUDE.md "Write for James first"): "This PR makes the series sample one declaration instead of six, so the next rename of the rest flag is a compile error rather than a silently wrong heart rate in a rower's logbook." Then ≤6 bullets: six declarations → two, and the server stopped hand-copying the shape; zero bytes changed and the byte gate proves it with its original fixtures; the chain the compiler still cannot check now has a test that starts at the real recorder; the in-memory store fake was hiding a difference from real Postgres and no longer does; four copies of `endedBy` became one; tester impact = none.
 
-Then a collapsed `<details>` "Record (for agents and audits)" carrying: **which module got deeper and what its interface now is** (one sentence — it belongs here, not in line one); the exit-criteria table with its before/after column and criterion 1's three lines printed; all three seam mutations with their verbatim failure text, including mutation 2's second assertion, and both compile-gate directions; the fake's red-then-green measurement; the five client `toStrictEqual` sites; every RF10 deviation named in this plan; the jsonb key-order measurement; **the suite-level integration flake and its two files**; the per-file coverage rows; the e2e run URL and conclusion.
+Then a collapsed `<details>` "Record (for agents and audits)" carrying: **which module got deeper and what its interface now is** (one sentence — it belongs here, not in line one); the exit-criteria table with its before/after column and criterion 1's three lines printed; all three seam mutations with their verbatim failure text, including mutation 2's second assertion, and both compile-gate directions; the fake's red-then-green measurement; the **six** client `toStrictEqual` sites; the byte test's two bite-proofs (the `Sample` annotation's `TS2741` and the resting arm's failure text); the note that the seam test and `derivedHeartRate.replay.test.ts`'s last describe share a capture on purpose and gate different things; every RF10 deviation named in this plan; the jsonb key-order measurement; **the suite-level integration flake and its two files**; the per-file coverage rows; the e2e run URL and conclusion.
 
 Then the hand-back, in ONE message, and STOP: **Proposed to add** (the OTHER-jsonb-columns row, with its `dies 2026-11-14` and its why-not-now clause) and **Now overdue** (`grep -n 'dies 2026' ROADMAP.md`, oldest first, re-checked on the day).
 
 ---
 
-## Self-review (revision 2, after harden lens 1)
+## Self-review (revision 3, after harden lens 2)
 
 - **Spec coverage.** §3 invariants 1-5 → Tasks 1+3 (1), Task 2 Step 2 + Task 7 criterion 2 (2), Tasks 1-3 + Task 5 (3), **Task 5 Step 4 as the RUNTIME gate over a chain the compiler now partly covers** (4), untouched validator predicates in Task 3 Step 2 (5). §4's bullets → Tasks 1, 2, 3, 6. §5's four tests → Task 5. §6's criteria → Task 7 Step 2, with criterion 1 re-measured. §7's deviations → Task 7 Step 1's ROADMAP text.
+- **What revision 3 changed** (harden lens 2, all in the gates — no design moved): Task 5 Step 2's byte literals are annotated `Sample` and its recorder leg gained a RESTING arm, both proved to bite; `asSerialized` passes `undefined` through and its doc gains the Date and byte-gate prohibitions (Task 4 Step 1); Task 5 Step 4's header names the strip-at-`toMappingRow` mutation and says THREE; the `keyUnion` comment stops claiming the compiler cannot cross the seam; `data.ts`'s witness sentence says key union, not "fully-populated sample" (Task 3 Step 2); the client-site count is SIX (Task 4); the fake's cast gets its one sentence (Task 4 Step 2). Bookkeeping: the two tests that share a capture say so, `paste-tested.patch` says it carries modifications only, and Task 0 Step 4 names the one describe that drives the recorder.
 - **What revision 2 changed**, all six foldable to a task: the server derives instead of mirroring (Task 3 Step 1); the fake is fixed and `asSerialized` wraps the expected side only (Task 4 Steps 2-3); the `hr` spread keeps a true reason and loses a false one (Task 3 Step 2); the seam test gains a divergence pin and loses the "no compiler crosses this" claim (Task 5 Step 4); `derivedHeartRate.replay.test.ts`'s title and comment stop claiming the test avoids naming the field (Task 2 Step 3); `schema.test.ts`'s replacement pin is described honestly (Task 6 Step 3). Plus: artifacts moved into the repo, and exit criterion 1 re-measured from 4 to 3.
-- **Blocks changed under paste-test, recorded inline as RF10:** the `HeartRateSample` unit comment's new home; the validator rebuild's spread form (the spec's two `if`s cannot compile) AND revision 1's wrong reason for it; the seam test's `steps` array, its `LogSeries` cast and its lint-forbidden message argument; the byte test's inline frame literal; exit criterion 1's after-count and composition, twice; Task 4 in its entirety, which the spec does not contain.
+- **Blocks changed under paste-test, recorded inline as RF10:** the `HeartRateSample` unit comment's new home; the validator rebuild's spread form (the spec's two `if`s cannot compile) AND revision 1's wrong reason for it; the seam test's `steps` array, its `LogSeries` cast and its lint-forbidden message argument; the byte test's local `frame()` helper; exit criterion 1's after-count and composition, twice; Task 4 in its entirety, which the spec does not contain; and revision 3's `asSerialized` guard, which was a latent crash rather than a wording problem.
 - **The one thing a reviewer should probe hardest** (revised): Task 3 Step 1 makes the server import a type from `domain/`. The evidence that this is allowed is a `tsconfig` include plus 28 existing importers, and the argument that it is RIGHT is that a copy cannot make a rename a compile error. If a reviewer holds that the store's type must be able to diverge from the domain's on purpose — a version skew between a deployed server and an older stored row, say — that is the case against, and it should be argued from a row the column actually holds.
-- **Placeholders:** the seam test and `asSerialized.ts` are handed as files under `docs/superpowers/plans/2026-09-12-phase-md-pr3-artifacts/`, not reprinted — 303 lines whose transcription is where an error would hide. The full paste-tested diff is `paste-tested.patch` beside them.
+- **Placeholders:** the seam test (286 lines) and `asSerialized.ts` (35) are handed as files under `docs/superpowers/plans/2026-09-12-phase-md-pr3-artifacts/`, not reprinted — transcription is where an error would hide. `paste-tested.patch` beside them carries every MODIFIED file; those two new ones are not in it.
 - **Type consistency:** `Sample`, `SeriesData`, `HeartRateSample`, `LogSeriesSample`, `LogSeries`, `SERIES_SAMPLE_FIELDS`, `ENDED_BY_VALUES`, `asSerialized` are used with the same names and signatures in every task that names them.
