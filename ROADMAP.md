@@ -659,7 +659,19 @@ an investigation whose honest answer may be "no PR".
       Same shape as `anyLiveSession`: deleting is probably right, asking where
       the ruling lives afterwards is mandatory. **Put it to James before
       implementation, the way PR 1 did.**
-- [ ] **PR 3 — one `Sample` shape (TRIAD: stored shape).** Five hand-written
+- [x] **PR 3 — one `Sample` shape (TRIAD: stored shape). LANDED as PR #<n>
+      (2026-09-12) — with four corrections to this row's own claims (RF10):
+      SIX declarations, not five (`server/routes/concept2.ts`'s cast is a
+      sixth, UPSTREAM of the mapping); the +19.1% belongs to `r: null`, which
+      the PR does not write — a required KEY valued `undefined` is ZERO bytes,
+      measured on four serializers; the promised recorder-driven test already
+      existed on the CLIENT and the missing one was the SERVER seam
+      (`server/routes/seriesSeam.test.ts`); and the caveat below about
+      `stores/logs.ts:120-127`'s deliberate mirror is ANSWERED, not honoured —
+      that comment's reason ("server code never imports from `src/`") stopped
+      covering the case the moment `Sample` moved to `domain/`, which the
+      server already compiles and imports, so the mirror is gone and six
+      declarations became TWO.** Was: Five hand-written
       declarations of one wire-and-storage shape with no compiler link between
       producer and any consumer: `seriesRecorder.ts`,
       `domain/monitor/derivedHeartRate.ts`, `server/stores/logs.ts:128`,
@@ -761,7 +773,11 @@ an investigation whose honest answer may be "no PR".
 interface now is, in one sentence, at the top of its body. Phase close reports:
 the `vi.doMock` count under `app/src/monitor/` before and after; `saveMonitorRun`
 gone with `scripts/handoffStoreBoundary.test.ts` extended and green; a grep
-proving no second declaration of the series sample shape survives; and, for the
+proving no second declaration of the series sample shape survives —
+`grep -rnE '(^|[^a-zA-Z])r\??: true' app/src app/domain app/server --include='*.ts' --include='*.tsx' | grep -v '\.test\.'`
+prints exactly three lines (the domain declaration, the server witness's
+`r: true`, PR 1's hand-authored rest fixture) and no declaration outside
+`domain/monitor/types.ts`; and, for the
 two explorations, either the PR or the written "no PR, because…". **No hardware
 walk** — nothing here reaches the wire, the pace math, or any number a rower
 reads, and a PR in this phase that finds itself changing one has left the
@@ -2289,7 +2305,14 @@ fixed.
   the gate is the approval, not the presentation. Evidence:
   `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`
   (§AUD-006, §V4).
-- **The server's `EndedBy` mirror can be derived, not hand-copied.**
+- **DONE — landed in Phase MD PR 3 (#<n>, 2026-09-12).** Two corrections on
+  the way past: there were FOUR mirrors, not three (the error-message prose in
+  `routes/data.ts` was the fourth, now derived), and the gate this row named
+  ("the POST seam test") was not the gate — `schema.test.ts`'s `EXHAUSTIVE`
+  pin was, and it became tautological once the type derives, so it is replaced
+  by a six-literal ordered pin. · dies 2026-09-19 (campsite: given a date on
+  the way past; it lands, so the date is the strike backstop) ·
+  **The server's `EndedBy` mirror can be derived, not hand-copied.**
   `server/stores/logs.ts` already imports `../db/schema.js`, so
   `export type EndedBy = (typeof endedByEnum.enumValues)[number]` plus
   deriving `ENDED_BY_VALUES` from `endedByEnum.enumValues` would collapse
