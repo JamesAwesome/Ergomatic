@@ -170,24 +170,16 @@ a value where they agree).
   host `APP_PORT`/`POSTGRES_PORT`, and `playwright.config.ts`'s baseURL —
   derives deterministically from the worktree's own absolute path, so the
   same checkout always reuses its own stack (including its own `pgdata`
-  volume) and two checkouts can never share one. Two sessions running
-  browser gates from different worktrees no longer stomp each other's
-  fixtures or serve each other's bundle — that used to be a real failure
-  mode (duplicate `.workout-row` matches, a served bundle from the wrong
-  branch reading as ~70 phantom failures) and is why this section used to
-  carry a `down -v`/bundle-identity workaround; the workaround is gone
-  because the collision it guarded against no longer exists. Explicit env
-  still wins (every assignment is `:-` guarded), so you can still pin a
-  port or project name by exporting it first.
-  Two things from that era still apply generally, not just to the old
-  shared-stack case: (1) **verify bundle identity before trusting any
-  browser-gate result** is still good belt-and-braces practice whenever a
-  result looks impossible — curl the served page's hashed asset and grep
-  it for a string distinctive to your latest source; (2) Docker's LAYER
-  CACHE can still serve a stale image after a real source change even
-  inside your own per-worktree stack (not a multi-session artifact) — if
-  the served bundle doesn't match your latest source, `docker compose -f
-compose.yml -f compose.e2e.yml build --no-cache` before `up`.
+  volume) and two checkouts can never share one. Explicit env still wins
+  (every assignment is `:-` guarded), so you can pin a port or project
+  name by exporting it first.
+  Two habits still apply: (1) **when a browser-gate result looks
+  impossible, verify bundle identity** — curl the served page's hashed
+  asset and grep it for a string distinctive to your latest source;
+  (2) Docker's LAYER CACHE can serve a stale image after a real source
+  change even inside your own stack — if the served bundle doesn't match
+  your latest source, `docker compose -f compose.yml -f compose.e2e.yml
+  build --no-cache` before `up`.
 - **Never override the e2e env contract**: `scripts/e2e.sh` and
   `e2e/helpers.ts` hardcode their shared `TEST_AUTH_SECRET`
   (`e2e-secret`); forcing your own value into the compose env 401s every
@@ -244,9 +236,10 @@ commit SHA(s), a one-line test summary, gate results, and concerns.
 ## Test invocation (a trap that has bitten three agents)
 
 NEVER run bare `vitest run` / `pnpm vitest run`: Node 26's experimental
-webStorage global collides with jsdom's `localStorage` and ~445 client
-tests fail with `localStorage.clear()` errors that look like a real
-regression. Always `pnpm test` / `pnpm test:coverage` (their scripts set
+webStorage global collides with jsdom's `localStorage` and client tests
+fail with `localStorage.clear()` errors that look like a real regression
+(measured 2026-09-02: 1582 false failures across client+unit against a
+green HEAD). Always `pnpm test` / `pnpm test:coverage` (their scripts set
 `NODE_OPTIONS=--no-experimental-webstorage`), or export that flag
 yourself if you must invoke vitest directly.
 
