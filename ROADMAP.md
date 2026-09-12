@@ -2846,6 +2846,15 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **Move the PM5 NFC fixture loader (`loadPm5NfcFixture`, `FIXTURE_PM5_NAME`
+  and the capture they read) out of `src/monitor/nfc/fixtures` so
+  `domain/monitor/nfc.test.ts` needs no ESLint exemption.** Phase PS PR 1's
+  `domain/** → src/**` import ban (`app/eslint.config.js`) exempts exactly
+  that one file by name; it is the only `src/` import under `domain/`
+  (`grep -rn 'from "[./]*/src/' app/domain --include='*.ts'`, 2026-09-12).
+  What would fix it now: move the loader under `domain/monitor/nfc/`; not
+  done in PS because nothing in that PR touches NFC.
+  · dies 2026-10-12 · one test-file import, moving it is a test refactor outside PS
 - **PR1.75b leftovers, lifted from Phase PROTO 2026-09-10.** (1) a unit test for
   the empty `?state=` callback (`params.get` answers `""`, which the adapter
   treats as a MISMATCH and refuses — fails safe, untested); (2)

@@ -143,7 +143,11 @@ export default tseslint.config(
     // ONE file is exempt, by name: `domain/monitor/nfc.test.ts` reads its
     // fixture from `src/monitor/nfc/fixtures` (the rule is red on main
     // without this line — measured), and moving that fixture is a ROADMAP
-    // row, not this PR's. Every other domain test is under the rule.
+    // register row ("Move the PM5 NFC fixture loader…", dies 2026-10-12),
+    // not this PR's. It is the ONLY `src/` import under `domain/`:
+    // `grep -rn 'from "[./]*/src/' domain --include='*.ts'` returns that
+    // one line and nothing else (2026-09-12). Every other domain test is
+    // under the rule.
     files: ["domain/**/*.ts"],
     ignores: ["domain/monitor/nfc.test.ts"],
     rules: {
