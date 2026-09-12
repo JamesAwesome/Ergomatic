@@ -375,10 +375,12 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
 
 ## Phase DE — Difficulty out, effort in
 
-**Status: OPEN 2026-09-05 — spec merged (#308); PR 1 MERGED as #309
-(2026-09-05); PR 2 MERGED as #310 (2026-09-05), shipped as v0.39.0; PR 3
-opened as #400 (2026-09-12), per the Saturday trigger below, awaiting
-review.** **TRIAD** (stored shape).
+**Status: all three PRs merged — spec (#308) 2026-09-05, PR 1 (#309)
+2026-09-05, PR 2 (#310) 2026-09-05 (shipped as v0.39.0), PR 3 (#400)
+2026-09-12, per the Saturday trigger below and James's explicit merge
+approval. Phase functionally done; `/close-phase` not yet run** (the
+exit-criteria walk, PM close gate and moving this spec to
+`docs/history/` are separate work). **TRIAD** (stored shape).
 **M.** Spec:
 `docs/superpowers/specs/2026-09-05-difficulty-out-effort-in-design.md`.
 
@@ -433,7 +435,7 @@ generation):
       screenshots are refreshed in the PR. (An earlier "waits for AUD-016"
       condition here was void: AUD-016 shipped as #239 and was struck in
       #240; `Ergomatic-wt-aud016` is a stale pre-#239 spec branch.)
-- [ ] **PR 3 — drop compat. Opened as #400 (2026-09-12), awaiting review.**
+- [x] **PR 3 — drop compat. MERGED as #400 (2026-09-12).**
       (James, 2026-09-05: "We have like five users let's just schedule the work for
       Saturday"). **BEFORE generating this PR's migration: Phase RW PR C
       merged `0026` on `preferences` first, so delete any migration written
@@ -455,13 +457,29 @@ generation):
       the API and the log line; delete the three localStorage fallbacks.
       Legacy bulk headers are kept on purpose. Own RELEASING.md floor row.
 
-      **OPEN QUESTION: none. This is the ONLY order in the file whose trigger
-      is a calendar date**, and it is the one order the Phase OD sweep found
-      that is not at risk. Recorded here as the contrast case: eleven other
-      live orders carry a wave, a PR, or him asking, and every one of those has
-      slipped. **NEXT: nothing owed before Saturday** — but the migration
-      warning above is a PRECONDITION, not a footnote: a migration written off
-      an older main is skipped SILENTLY and `/api/prefs` 500s for every rower.
+      **This order is DONE, not at risk** — the ONLY order in the file whose
+      trigger was a calendar date, and the Saturday it named is the day it
+      merged. Recorded here as the contrast case: eleven other live orders
+      carried a wave, a PR, or him asking, and every one of those slipped;
+      this one didn't. **Migration precondition verified**: the 0029 migration
+      was regenerated off current main (0028 was the tip) before this PR
+      opened, and CI's own `app` job ran the full migration chain against a
+      real ephemeral Postgres (via `pnpm test:coverage`'s integration suite)
+      before this merge. **AND the merge's own deploy ran clean**: the
+      `deploy` job (self-hosted runner, `scripts/deploy.sh` over SSH) on
+      commit `13adce4` completed successfully
+      (github.com/JamesAwesome/Ergomatic/actions/runs/34699658452,
+      job 103570288978) — its health-gated wait passed against the real
+      production database with 0029 applied, which is the actual event the
+      "curl the deployed `/api/prefs`" line above exists to catch a failure
+      of. **Not independently re-verified by this session's own authenticated
+      request**: `GET /api/prefs` requires a session this sandbox holds no
+      production credentials for, AND its network egress to
+      `ergomatic.waffle.haus` is itself blocked (`curl` fails with
+      `CONNECT tunnel failed, response 403` — an organization proxy policy,
+      not a server-side failure) — a by-hand authenticated curl is still
+      James's to run if he wants the stronger check; the clean deploy is
+      strong evidence on its own.
 **Exit:** the two phase-close greps in spec §6 (no `pain`/`difficult`; and
 `effort` means one thing) pasted into the close gate; e2e and screenshots
 green with refreshed captures; the by-hand stale-build check (a `v0.38.1`
