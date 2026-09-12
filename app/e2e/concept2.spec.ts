@@ -986,7 +986,7 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     }
   }
 
-  /** Saves ONE row through the manual door's real form — HELD, Pain 3, Save —
+  /** Saves ONE row through the manual door's real form — HELD, Effort 3, Save —
    *  and returns once Today has rendered. This is the producer every
    *  automatic-send assertion below must start upstream of. */
   async function saveThroughTheForm(page: Page): Promise<void> {

@@ -1,80 +1,9 @@
 # PM ledger
 
-Accumulated rulings, precedents and recurring patterns. Read by the
-`product-manager` agent before every engagement; appended to at the end of one.
-
-Keep entries short and dated. Append what a future PM would otherwise re-derive.
-Do not append narration.
-
-## Where the rules live — do not copy them here
-
-**The rules are `CLAUDE.md`'s and `docs/RELEASING.md`'s. Read them there.** You
-already do: they are items 3 and 4 of your reading list.
-
-This section used to restate the fast path and the no-merge rule, and **the
-fast-path copy went stale inside 24 hours** — it was written on 2026-08-14 and
-was already missing that same day's tightening (zero files under `domain/`, the
-wrong-number test, "if uncertain it is not fast path"). A PM reading the stale
-copy would have waved through work the real rule forbids. That is recurring
-failure #9 with a different filename, and it is why this section is a pointer
-now.
-
-**This ledger holds only what those files do not:** precedents, counted
-patterns, product principles with no other home, and recommendations that turned
-out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
-`CLAUDE.md` and say so in your report.
-
-## Product principles (no other home)
-
-- **2026-08-13 — "let the erg drive."** The PM5 is authoritative. Match the
-  machine, including in pre-row states. Do not invent a reading, a verdict or a
-  state the monitor does not itself show. Generalises past the PM5: when a real
-  system owns a concept, mirror it rather than modelling our own version beside
-  it.
-- **2026-08-13 — no new phase for work that finishes an existing one.** CR2 was
-  scoped as the close-out of CR rather than a fresh phase, and Phase CP was
-  folded into it rather than kept as a second home for the same work. Pairs with
-  the filing-as-deferral pattern below.
-
-## Precedents
-
-- **Notes before the tag.** v0.8.0 and v0.9.0 both merged the in-app release
-  notes PR first, then tagged. The Releases screen names the version testers are
-  about to receive, and three e2e pins force a deliberate touch when it changes.
-- **A TestFlight build from a branch is a mistake.** `BUILD` is
-  `rev-list --count`, so a branch upload burns the number the merge commit would
-  have taken, and internal testers auto-update with no canary. Rejected
-  2026-08-13.
-- **Splitting a wave's PR is usually impossible.** Type changes compile-couple
-  the tasks; `CLAUDE.md` failure #10 records this repo being burned by exactly
-  that split.
-
-## Patterns that recur (check for these every time)
-
-- **Filing as deferral.** 2026-08-13 audit: 24 unchecked items across 8 phases,
-  5 phases not started, 13 triggered follow-ons, and two new phases filed in two
-  days with zero checkboxes between them. Filing is fine; filing as the ONLY
-  disposal mechanism is the failure. Count before endorsing another.
-- **The roadmap outruns reality.** Five status lines were factually wrong on
-  main simultaneously (7D, FF, CL, CL2, CR), some for over a week. Verify any
-  phase status against `git log` and the PRs before trusting it.
-- **The unreviewed tail.** PR #89 passed a whole-branch review, an integrity
-  sweep and a re-review, then took five more commits inline — 42 files, +764,
-  including `app/domain/`, which the fast path forbids. Two independent
-  adversarial reviews named that tail, not the known defects, as the only place
-  an unknown could hide. **Always ask what landed after the last review.**
-- **Sequencing inversions read as scope creep.** Phase CR's exit said a fix
-  round comes BEFORE the PR; the PR opened first, and every subsequent finding
-  felt like creep to everyone involved. When someone reports scope creep, check
-  the phase's own exit for an inversion before accepting the framing.
-
-## Recommendations that turned out wrong
-
-- **2026-08-13 — the CR2 item 0 hypothesis and its oracle.** Both written into
-  the ROADMAP with confidence, both measured false within a day (work→rest never
-  drops the clock; the prescribed boundary-sum oracle fails a correct fold).
-  Lesson: a written hypothesis in a roadmap is load-bearing — an investigator
-  will follow it and stop. Mark speculation as speculation, or measure first.
+The dated per-engagement record for the `product-manager` agent, one section per
+engagement. **Not read up front** — the bounded, always-read half is
+`pm-techniques.md`, and an entry is proposed to both. Grep this file for the
+detail behind a ruling, or for the history of a phase you are about to judge.
 
 ## Design-gate rulings, 2026-08-15 (Phase CR2 spec 1, "numbers")
 
@@ -6489,3 +6418,89 @@ the second reason the skill belongs on the close.
   gate converts silent-wrong into loud-dead, ask what the person reading the log at
   2am sees: "loud" is only better if the noise names its own cause. (Ruled and
   built in the same round: `assertDistinctSeedTitles` throws naming the title.)
+
+## 2026-09-12 — Phase MD open gate: the wave that is not blocked, and the PR number that books work nobody agreed to
+
+**PASS WITH CONDITIONS** on a monitor-refactor slate. Best-evidenced
+phase-open artefact so far; the conditions were sequencing and census, not shape.
+
+**THE SEQUENCING FINDING, and it is the one that generalises. Wave A has been
+"next" since 2026-09-04 — 8 days, 111 commits to main, zero of them Wave A —
+and the reflex explanation ("the new phase is displacing it") is FALSE and
+worth refusing.** Wave A is blocked on a policy question that needs James. But
+`ROADMAP.md` itself says its PR 1 (lift `google_sub` out of NOT NULL) is
+"schedulable now, before the policy question is answered". So the north star
+had one unblocked, specified, decision-free piece of work sitting still while a
+new L phase opened around it. **Phase OD's rule applies to WAVES, not just
+orders: schedule the unblocked half before the blocked half becomes the reason
+nothing moved.** Tell for next time — a new phase's `dies` date landing AFTER
+the death date of the wave it queues ahead of (MD 2026-10-13 vs Wave A
+2026-10-10). The file wrote down what it expected to happen.
+
+**A NUMBERED PR IS A COMMITMENT; AN EXPLORATION IS NOT.** Two of the six were
+honestly framed as "exploration first, and the answer may be no PR" — the best
+sentence in the phase and worth protecting. But they were booked as **PR 5** and
+**PR 6**, and every later sweep reads a numbered PR as owed work. Ruled: keep the
+framing, kill the numbers — they are Exploration A and Exploration B, and the
+phase has four PRs. **Applied same day.** Cheap fix, and it stops two undecided
+items becoming furniture with a head start.
+
+**RUN THE SPEC'S OWN STATED CENSUS COMMAND BEFORE ACCEPTING ITS NUMBER.** The
+spec printed a command beside every figure (exactly what the briefing asks) and
+one figure did not reproduce from it: `saveMonitorRun` "148 occurrences across
+10 files" measures **127 across 5** by the stated grep, and no variant produces
+148/10 — the closest counts comments in three PRODUCTION files as "test
+fixtures". Every other cell reproduced exactly. So the check is not "is the
+table sourced" but "does the command print the number", and it took four greps.
+It mattered because the same pass produced the phase's only quantitative exit
+criterion. (The anchor pass reached this independently the same day.)
+
+**DELETING DEAD CODE ALSO DELETES THE ONLY WRITTEN HOME OF A RULING — ask it
+EVERY time, not once.** PR 1 handled this well: it found that deleting
+`anyLiveSession` would make a source-text pin pass forever (RF21 decoration on
+the exact anti-pattern the pin guards) and put the decision to James rather than
+taking it. James ruled A. **PR 4 of the same phase proposed an identical
+deletion and asked nothing** — `AxesInput.failureLeavesLinkUp` is hardcoded
+`null` at all five production sites and its doc comment is the sole record of
+the NOT_A_MACHINE_REFUSAL ruling ("a transport-side failure reads `lost`, a
+genuine `ProgramRejection` reads `up`"). Being alert to a pattern in PR 1 is no
+protection against committing it in PR 4. **The standing PM question: for any
+proposed deletion of unreachable code, where does the ruling it documents live
+afterwards, and is anything else the sole home of a decision?**
+
+**A "PARITY" DEFECT DESERVES ITS PRICE CHECKED BEFORE IT IS LEFT UNSCHEDULED.**
+The walk that produced this phase also found a live divergence and it was left
+unfiled as "not a deepening": a connected free row's RATE tile reads a number
+live (`summaryModel.ts:1255`, `mode === "justrow"` counts as finished) and a
+DASH when reopened (`storedSummary.ts:780`, which only admits `endedBy` of
+`"finished"` or null — a free row is always `"rower"`, and it stores
+`steps: []`, so `sessionStrokeRate` weights nothing and returns undefined).
+**The fix is one clause: `StoredLog` already carries `workoutId`/`workoutType`
+and `domain/types.ts` already exports `isFreeRow`.** No column, no migration.
+Ruled at the gate: schedule it as a small PR, whose gate is one test that saves
+through the live door and reads back through the stored door asserting the two
+values are EQUAL (RF24's producer-to-consumer shape; neither suite does it
+today). **Generalises: before accepting "out of scope for this phase" on a
+divergence, price the fix. A one-line fix to a wrong number a rower reads is
+never the thing you defer to keep a refactor tidy** (RF34's shape, applied to a
+slate instead of a function).
+
+**AND: a REFACTOR can be TRIAD.** The phase declared "TRIAD on PR 1 only". Its
+PR 3 unifies the series-sample shape and CLAUDE.md's own prescription for the
+defect it closes (RF33) is "required field, `null` means absent" — applied to
+`LogSeriesSample`, that writes `"r":null` on up to `SERIES_SAMPLE_CAP` = 14,400
+samples of a `session_logs.series` jsonb whose client write already has a
+quota-sacrifice path. **A refactor that touches a stored shape's TYPE is a
+stored-shape change until its spec proves the bytes do not move.** Applied: the
+status line now reads "TRIAD on PR 1 and PR 3", and the anchor pass priced it
+at +19.1% / +127 KiB the same day.
+
+**Also conditioned, and all applied same day:** PRs 2 and 4 grouped into one
+(one risk model — both change `useMonitorSession`'s published interface); PR 3's
+row dropped a promise that already shipped (the `MAX_GAP_DECISECONDS` boundary
+pin landed in #345 at `derivedHeartRate.replay.test.ts:113`); and the
+2026-09-12 architecture walk's findings were **committed** to
+`docs/superpowers/audits/2026-09-12-architecture-walk/findings.md` — twelve
+candidates, six of them outside this phase, had existed only in the session
+that produced them, which made the phase's own provenance a dangling citation
+(RF16) and the walk a second backlog.

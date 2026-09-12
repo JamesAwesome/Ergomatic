@@ -196,7 +196,7 @@ name reachable on that path is `loadLastDevice()`, a best-effort LAST-USED
 name, and posting it was already rejected in writing at the site
 (`storedSummary.ts:69-72`: _"would have the row assert that a named erg
 supplied numbers that came off nothing"_) and by a recorded PM ruling
-(`pm-ledger.md:2710-2716`: _"Prefer the false negative."_). Requiring it would
+(`pm-ledger.md`, "PM final-PR gate, PR #198": _"prefer the false negative"_). Requiring it would
 also 400 the save through `logSourceContradiction` with no client retry — the
 row lost on the exact arrival the member exists to serve (RF25's shape).
 

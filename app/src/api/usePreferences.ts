@@ -15,9 +15,8 @@ import { api } from "../api";
 // 6I's START HERE block) went the same way on 2026-08-23 — James removed
 // the teaching surfaces, and with them this hook's only write (`save`);
 // the server column stays, dormant (server/db/schema.ts's own comment).
-// Phase DE PR 1: the server still serves `difficulties` (compat for
-// pre-PR-1 builds, server/compat/difficulty.ts); this build does not type
-// or read it.
+// Phase DE PR 3: the server dropped `preferences.difficulties` outright —
+// this build never typed or read it, so nothing here changes.
 export interface PreferencesData {
   timeCapMinutes: number;
   countdownSeconds: number;

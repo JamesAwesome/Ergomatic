@@ -64,8 +64,6 @@ describe("domain schema against real Postgres", () => {
         userId: u.id,
         title: "Bad effort",
         type: "AN",
-        // raw Drizzle insert: the NOT NULL column needs a literal here (PR 3 drops it)
-        difficulty: "easy",
         effort: 6,
         source: "user",
         steps: [],
@@ -158,8 +156,6 @@ describe("domain schema against real Postgres", () => {
         userId: u.id,
         title: "Cascade workout",
         type: "AN",
-        // raw Drizzle insert: the NOT NULL column needs a literal here (PR 3 drops it)
-        difficulty: "easy",
         effort: 3,
         source: "user",
         steps: [],
@@ -222,8 +218,6 @@ describe("domain schema against real Postgres", () => {
         userId: u.id,
         title: "To be deleted",
         type: "O2",
-        // raw Drizzle insert: the NOT NULL column needs a literal (PR 3 drops it)
-        difficulty: "easy",
         effort: 2,
         source: "user",
         steps: [],

@@ -118,20 +118,14 @@ function parseFilterSet(value: unknown, version: 1 | 2): FilterSet | null {
     if (!isRangeShape(o.durationRange)) return null;
     durationRange = clampRange(o.durationRange);
   }
-  // Phase DE PR 2 (spec §4.2): a pre-PR-2 record carries `painLevels`. Read
-  // `effortLevels` when the key exists (a present `null` is MALFORMED, not
-  // absent — it fails this set like any other bad field), fall back to the
-  // old key only when the new one is absent, write only the new key. PR 3
-  // deletes the fallback.
-  const levels = o.effortLevels !== undefined ? o.effortLevels : o.painLevels;
-  if (!Array.isArray(levels) || !levels.every(isEffortLevel)) {
+  if (!Array.isArray(o.effortLevels) || !o.effortLevels.every(isEffortLevel)) {
     return null;
   }
   if (o.lastDone !== null && !isLastDone(o.lastDone)) return null;
   if (o.source !== null && !isSource(o.source)) return null;
   return {
     durationRange,
-    effortLevels: [...new Set(levels)].sort((a, b) => a - b),
+    effortLevels: [...new Set(o.effortLevels)].sort((a, b) => a - b),
     lastDone: o.lastDone,
     source: o.source,
   };

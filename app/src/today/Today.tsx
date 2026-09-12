@@ -931,10 +931,9 @@ function TodayView({
 
   // A key the memory has never seen reads as the preference-seeded set —
   // the same values a fresh day used to start with before PR1 (the cap's
-  // buckets, effort/recency/source off). Phase DE PR 1: `preferences.
-  // difficulties` no longer seeds anything — the server still serves it
-  // for pre-PR-1 builds (server/compat/difficulty.ts), and this build
-  // ignores it.
+  // buckets, effort/recency/source off). Phase DE PR 1 stopped seeding
+  // anything from `preferences.difficulties`; Phase DE PR 3 dropped the
+  // column outright.
   const seedSet: FilterSet = {
     // `[0, cap]` with the cap rounded down to the step (spec I-12).
     durationRange: rangeForCap(preferences.timeCapMinutes),

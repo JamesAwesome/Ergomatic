@@ -85,6 +85,7 @@ import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import { PLANS } from "../../domain/plans.js";
 import type { LogSource, WorkoutType } from "../../domain/types.js";
+import { isFreeRow } from "../../domain/types.js";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import { NAMELESS_MONITOR_CAPTION } from "../monitor/deviceCaption.js";
 import type { CloseReason } from "../monitor/monitorRun";
@@ -777,7 +778,26 @@ function storedMachineTier(
 ): MachineTier {
   const ms = row.machineSummary;
   const calories = ms?.totalCalories;
-  const finished = row.endedBy === "finished" || row.endedBy == null;
+  // A FREE ROW COUNTS AS FINISHED, the same way the live door counts it
+  // (`summaryModel.ts`'s `machineTierFromRun`, which reads `run.mode ===
+  // "justrow"`). `StoredLog` carries no `mode`, and inferring one from
+  // `endedBy` alone got this wrong in exactly one direction: a connected
+  // free row always closes `"rower"` — the machine goes straight to
+  // TERMINATE because there is no defined end to fall short of — and it
+  // stores `steps: []`, so the terminated branch's time-weighted fallback
+  // had nothing to weigh and `sessionStrokeRate` returned undefined. The
+  // rower saw the monitor's own average on the live screen and a dash when
+  // they reopened the same row.
+  //
+  // `isFreeRow` is the repo's one home for this question and it reads the
+  // two columns that DO survive the save, so nothing new is stored to
+  // answer it. The terminated branch is untouched for programmed pieces,
+  // where 0x0039's average really is doubled (pm5-interface-notes §27.6)
+  // and the splits really are the honest source.
+  const finished =
+    row.endedBy === "finished" ||
+    row.endedBy == null ||
+    isFreeRow(row.workoutId, row.workoutType);
   return {
     avgWatts: logbookWatts(timeSeconds, distanceMeters),
     calories,
