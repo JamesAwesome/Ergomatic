@@ -144,6 +144,21 @@ toolkit, not a history.
   appears; only `Record<keyof T, true>` errors (`TS2741`). To test an
   exhaustiveness pin, delete one member and run `tsc` — silence means
   decoration (RF21).
+- **"`StoredLog` is structurally assignable to a domain input with every field
+  REQUIRED, so the refactor is a call, not a mapping."** False on exactly one
+  field, and it is the load-bearing one: `endedBy` is declared `endedBy?: … |
+  null`, so TS2322 fires and the `steps`-tier gate's own input needs a `??
+  null`. **Technique:** paste the spec's prescribed interface into a scratch
+  file at a REAL path and run the project's tsc — and check WHICH tsconfig
+  covers that path first (`tsconfig.json` here compiles no `src/` file at all;
+  the probe silently passed until a deliberate `const bite: number = "x"`
+  proved the file was never in the program).
+- **"A structural text scan gates `no Concept2 dependency`."** The scan's own
+  grep is case-sensitive and the module is `useConcept2Link` — a file importing
+  it matches nothing. **Technique:** for any identifier-scan gate, take the
+  REAL name of the thing it forbids, paste an import of it into a scratch file,
+  and run the gate's literal command. The spec's own mutation named a module
+  (`concept2Link`) that does not exist.
 
 ## Attacked and NOT broken
 
@@ -216,8 +231,23 @@ toolkit, not a history.
     precedent for exactly this case); `docs/deploy.md`'s sentence is a QUOTE of
     it, and had been stale for six table rows. Adding a new fact beside a stale
     quote is the partial-reconciliation failure.
+17. **A date gate that never pins `TZ` is green by environment.** Nothing in
+    `vitest.config.ts` or the workflows sets it, so Actions runs UTC and every
+    `new Date("YYYY-MM-DD")`-plus-local-getter bug is invisible. Only pins on a
+    week/season BOUNDARY day can move at all, and only at a non-zero offset.
+18. **`Record<string, unknown>` assigns BOTH WAYS to an all-optional narrowed
+    view.** The compiler is never the gate on a jsonb blob's values — find the
+    runtime validator (here `validateMachineSummary`, the route, not the view)
+    before crediting a type with the guard.
+19. **A structural gate scoped to NEW directories cannot go red in the OLD file
+    the change edits.** `You.tsx` already imports `Concept2Row`; the scan
+    covered `src/you/stats/` and missed it.
+20. **Ask which fixture the prescribed mutation can actually MOVE.** A spec
+    named "swap the work-pair and steps gates" against a fixture with
+    `workMeters: null` and a declining `endedBy` — nothing to reorder, result
+    identical both ways. Read the fixture's fields, not its name.
 
-17. **When a design MOVES a type into a shared tree, re-derive the seam claim
+21. **When a design MOVES a type into a shared tree, re-derive the seam claim
     from the tsconfig `include` lists and the existing import graph — never
     from the comment that predates the move.** `logs.ts`'s "server code never
     imports from `src/`" is true and stops covering the case the moment the
@@ -225,19 +255,19 @@ toolkit, not a history.
     server files already import from it, and `concept2/mapping.ts` already
     imports the very module in question. "No compiler can cross this seam" is
     a claim about a build graph, so read the build graph.
-18. **A normaliser applied to the SUBJECT of an assertion converts an oracle
+22. **A normaliser applied to the SUBJECT of an assertion converts an oracle
     into a mirror; apply it only to the EXPECTED value.** Wrapping a store's
     OUTPUT in `JSON.parse(JSON.stringify(…))` makes the in-memory fake and
     real Postgres agree by construction on exactly the property the contract
     suite exists to compare. Wrap the constructed side; let the fake go red.
-19. **Before believing "everything downstream re-serializes", grep for the
+23. **Before believing "everything downstream re-serializes", grep for the
     in-memory FAKE of the store.** A fake that keeps the object it was handed
     is a consumer with no serializer between it and the caller.
-20. **Postgres `jsonb` does not preserve object key order** (sorts by length
+24. **Postgres `jsonb` does not preserve object key order** (sorts by length
     then bytewise; measured on `postgres:18.4`). Any "the stored bytes are the
     bytes we sent" claim about a jsonb column is false; settle it with one
     `psql -c`.
-21. **A payload assertion that depends on two derivations DIFFERING must
+25. **A payload assertion that depends on two derivations DIFFERING must
     assert that they differ.** Pin the divergence, or a capture swap silently
     retires every assertion beneath it (RF21).
 
