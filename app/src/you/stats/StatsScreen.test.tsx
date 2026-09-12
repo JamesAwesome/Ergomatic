@@ -155,6 +155,26 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
     ).toStrictEqual(["6%", "27%", "43%", "10%", "15%"]);
   });
 
+  // Invariant 17's other half on THIS list: the seed above fills all five
+  // buckets, so a legend that iterated every key would print the same five
+  // rows and pass — the "render every bucket" mutant was measured green
+  // against the case above alone. The manual fixture has AN = 0 and
+  // NO TYPE = 0, so it is the one that can go red.
+  it("TIME BY TYPE on the manual fixture (R2 · R9 · R10): AT · O2 · TR only — no AN row, no NO TYPE row", async () => {
+    await renderScreen(GATE0_ROWS.filter((r) => r.source === "manual"));
+    const legend = screen.getByRole("list");
+    expect(
+      Array.from(legend.querySelectorAll("li")).map((li) =>
+        li.getAttribute("data-bucket"),
+      ),
+    ).toStrictEqual(["AT", "O2", "TR"]);
+    expect(
+      Array.from(legend.querySelectorAll("li")).map(
+        (li) => li.querySelector(".stats-legend-pct")?.textContent,
+      ),
+    ).toStrictEqual(["40%", "51%", "9%"]);
+  });
+
   it("two rows in range with metres and no work seconds: TOTALS reads 1,000 / 0:00 / 2 and TIME BY TYPE reads NO WORK TIME TO DRAW YET with no list", async () => {
     await renderScreen([
       {
