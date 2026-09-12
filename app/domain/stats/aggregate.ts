@@ -124,9 +124,12 @@ export function timeByType(
     seconds[r.workoutType ?? "NO TYPE"] += s;
     total += s;
   }
+  // Inside the map `seconds[key] > 0`, so `total >= seconds[key] > 0`: no
+  // zero-divisor arm exists here (one did, and `domain/**`'s 100% branch
+  // gate named it unreachable — measured at fc02b982).
   return TYPE_BUCKET_ORDER.filter((key) => seconds[key] > 0).map((key) => ({
     key,
     seconds: seconds[key],
-    share: total > 0 ? seconds[key] / total : 0,
+    share: seconds[key] / total,
   }));
 }

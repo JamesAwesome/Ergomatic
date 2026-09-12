@@ -239,6 +239,39 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
     expect(screen.getByText("TWO ROWS MAKE A CHART")).toBeInTheDocument();
   });
 
+  // Ruling 6's dash: MACHINE rows exist but every one is stored-tier, so
+  // the watts sum has nothing to feed it and the row reads a dash — the
+  // arm the seed never reaches (R1 is its only stored-tier pm5 row and the
+  // other nine feed the figure).
+  it("R1 alone: MACHINE has one row, 0 OF 1 carry the monitor's own totals, and AVG WATTS is a dash", async () => {
+    await renderScreen(GATE0_ROWS.filter((r) => r.id === "R1"));
+    expect(rowValue("METRES", 2)).toBe("6,240");
+    expect(
+      screen.getByText("0 OF 1 CARRY THE MONITOR'S OWN TOTALS"),
+    ).toBeInTheDocument();
+    expect(rowValue("AVG WATTS", 2)).toBe("—");
+  });
+
+  it("a failed fetch renders the alert with Try again, and the retry fetches again", async () => {
+    let calls = 0;
+    vi.doMock("../../api", () => ({
+      api: vi.fn(async () => {
+        calls += 1;
+        return new Response("nope", { status: 500 });
+      }),
+    }));
+    const { default: StatsScreen } = await import("./StatsScreen");
+    render(
+      <MemoryRouter initialEntries={["/you/stats"]}>
+        <StatsScreen />
+      </MemoryRouter>,
+    );
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Couldn't load your stats.");
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    await vi.waitFor(() => expect(calls).toBe(2));
+  });
+
   it("the chips are one roving-tabindex radiogroup: ArrowRight moves selection and focus", async () => {
     await renderScreen(GATE0_ROWS);
     chip("ALL").focus();
