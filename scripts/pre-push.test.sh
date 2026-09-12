@@ -87,13 +87,15 @@ case "$client_line" in *" src/theme/customPropertyCensus.test.ts"*) r=0 ;; *) r=
 check "the selection names the index.css census suite" "0" "$r"
 
 # CENSUS, on a needle INDEPENDENT of the hook's own. The hook enumerates on
-# the `node:fs` IMPORT; this enumerates on the readFileSync/readdirSync/
-# statSync CALL. Measured 2026-09-08: both return the same 46 files. The
+# the `node:fs` IMPORT (and, since 2026-09-12, the `test/captures` import);
+# this enumerates on the readFileSync/readdirSync/statSync CALL (and the
+# readCapture/capturePath CALL). Measured 2026-09-08: both return the same
+# 46 files; 2026-09-12, after the loader landed: both return 47. The
 # moment they stop agreeing, the hook's enumeration has gone stale for a
 # suite that reads the tree, and this goes red naming it -- which is the
 # whole reason the hook enumerates instead of carrying a list.
 missing=""
-for f in $( cd "$ROOT/app" && grep -rlE 'readFileSync|readdirSync|statSync' src \
+for f in $( cd "$ROOT/app" && grep -rlE 'readFileSync|readdirSync|statSync|readCapture\(|capturePath\(' src \
               --include='*.test.ts' --include='*.test.tsx' | sort ); do
   case "$client_line" in *" $f"*) ;; *) missing="$missing $f" ;; esac
 done
@@ -109,6 +111,9 @@ check "every file-reading client suite is selected" "" "$missing"
 # closing quote, so `node:fs/promises` importers drop out -- the census stays
 # green because no client test imports that form today, which is exactly why
 # the census needle is the CALL and not a second spelling of the import.
+# Mutation run 2026-09-12: drop `|test/captures"` from the hook's needle --
+#   FAIL  every file-reading client suite is selected -- expected '' got ' src/...'
+#     (the migrated capture suites, by name; 22 of them plus captures.test.ts)
 
 # Docker-free: the integration project must never be admitted.
 case "$out" in *"--project integration"*) r=1 ;; *) r=0 ;; esac

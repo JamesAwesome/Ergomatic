@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -10,6 +9,7 @@ import { createSubscribedDriver } from "../test/statusSubscriptions";
 import { createEventLog } from "../monitor/eventLog.js";
 import { createSeriesRecorder } from "../monitor/seriesRecorder.js";
 import type { Sample, SeriesData } from "../monitor/seriesRecorder.js";
+import { readCapture } from "../test/captures";
 import { buildTrace } from "./traceModel.js";
 import TraceChart from "./TraceChart";
 
@@ -24,20 +24,17 @@ import TraceChart from "./TraceChart";
 // minimum (recurring failure #3).
 // ---------------------------------------------------------------------
 
-const REPO_ROOT = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(/app\/src\/log\/TraceChart\.test\.tsx$/, "");
-
 async function loadCaptureFrames(
-  repoRelativePath: string,
+  walkDir: string,
+  file: string,
   programOverride?: WorkoutProgram,
 ): Promise<MonitorFrame[]> {
-  const text = readFileSync(`${REPO_ROOT}${repoRelativePath}`, "utf-8");
+  const text = readCapture(walkDir, file);
   const parsed = parseRecording(text);
   const program = programOverride ?? parsed.header.program;
   if (!program) {
     throw new Error(
-      `loadCaptureFrames: ${repoRelativePath} carries no header.program and no programOverride was given`,
+      `loadCaptureFrames: ${walkDir}/${file} carries no header.program and no programOverride was given`,
     );
   }
 
@@ -75,7 +72,8 @@ function seriesFromFrames(frames: MonitorFrame[]): SeriesData {
 async function realSeries(): Promise<SeriesData> {
   return seriesFromFrames(
     await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+      "walk-2026-08-17",
+      "step-3-pm5-recording-second-rest-1786973713929.jsonl",
     ),
   );
 }
@@ -150,7 +148,8 @@ const SESSION_2_PROGRAM: WorkoutProgram = {
 async function realSeriesWithRest(): Promise<SeriesData> {
   return seriesFromFrames(
     await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      "walk-2026-08-16",
+      "session-2-wu-4unequal.jsonl",
       SESSION_2_PROGRAM,
     ),
   );

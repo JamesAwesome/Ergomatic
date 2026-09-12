@@ -59,8 +59,6 @@
 // `src/monitor/` imports another (that convention is stated in
 // `connectedMetricsReplay.test.ts`'s own header).
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -77,16 +75,7 @@ import { releasingSchedule } from "../test/statusSubscriptions";
 import { withLiveness, type LivenessDeps } from "./transports/liveness";
 import { resetForTests as resetHandoffStore } from "./handoffStore";
 import { resetConnectionAttemptTraceForTests } from "./nfc/connectionAttemptTrace";
-
-/** Same path-surgery idiom as `burstReplay.test.ts`/`registerReplay.test.ts`
- *  (jsdom resolves `new URL(...)` against `http://localhost:3000/`, so string
- *  surgery on `import.meta.url` is used instead). */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/lifecycleReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-23/",
-  );
+import { readCapture } from "../test/captures";
 
 const CAPTURE_FILE = "keystone-pm5-recording-1787491974452.jsonl.gz";
 
@@ -98,7 +87,7 @@ const CAPTURE_FILE = "keystone-pm5-recording-1787491974452.jsonl.gz";
  *  assertions below extend that from "it parses" to "it still REPLAYS,
  *  unchanged, through the real driver". */
 const KEYSTONE_CAPTURE: ParsedRecording = parseRecording(
-  gunzipSync(readFileSync(`${SESSIONS_DIR}${CAPTURE_FILE}`)).toString("utf8"),
+  readCapture("walk-2026-08-23", CAPTURE_FILE),
 );
 
 /** HAND-TRANSCRIBED from the capture's own `ce060021` programming tx bytes

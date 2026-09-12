@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   parseAdditionalStatus1,
@@ -20,6 +19,7 @@ import {
   SERIES_SAMPLE_CAP,
   type Sample,
 } from "./seriesRecorder.js";
+import { readCapture } from "../test/captures";
 
 // ---------------------------------------------------------------------
 // Real-wire replay helper (the oracle grounding, same idiom as
@@ -40,25 +40,14 @@ import {
 // a completeness nicety, not a load-bearing choice.
 // ---------------------------------------------------------------------
 
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/seriesRecorder\.test\.ts$/,
-    "../docs/monitor/sessions/",
-  );
-
-/** Repo-root resolution (same plain-string-surgery idiom as `SESSIONS_DIR`
- *  above and `registerReplay.test.ts`'s own `SESSIONS_DIR` — this project's
- *  jsdom environment resolves `new URL(...)` against `http://localhost:3000/`
- *  rather than the given `file://` base). `loadCaptureFrames` below takes
- *  paths VERBATIM from the plan/spec, rooted at the repo root (e.g.
- *  `docs/monitor/sessions/...`), not `SESSIONS_DIR`-relative. */
-const REPO_ROOT = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(/app\/src\/monitor\/seriesRecorder\.test\.ts$/, "");
-
+/** `relativePath` is `walkDir/file` — split once and handed to the shared
+ *  loader. */
 function readSessionFile(relativePath: string): string {
-  return readFileSync(`${SESSIONS_DIR}${relativePath}`, "utf-8");
+  const slash = relativePath.indexOf("/");
+  return readCapture(
+    relativePath.slice(0, slash),
+    relativePath.slice(slash + 1),
+  );
 }
 
 /** Drives a committed `.jsonl` capture through the PRODUCTION parser and
@@ -84,15 +73,16 @@ function readSessionFile(relativePath: string): string {
  *  approach `registerReplay.test.ts` established for the walk-2026-08-16
  *  pair — see `STEP_2_PROGRAM` below for that decode. */
 async function loadCaptureFrames(
-  repoRelativePath: string,
+  walkDir: string,
+  file: string,
   programOverride?: WorkoutProgram,
 ): Promise<MonitorFrame[]> {
-  const text = readFileSync(`${REPO_ROOT}${repoRelativePath}`, "utf-8");
+  const text = readCapture(walkDir, file);
   const parsed = parseRecording(text);
   const program = programOverride ?? parsed.header.program;
   if (!program) {
     throw new Error(
-      `loadCaptureFrames: ${repoRelativePath} carries no header.program and no programOverride was given`,
+      `loadCaptureFrames: ${walkDir}/${file} carries no header.program and no programOverride was given`,
     );
   }
 
@@ -284,7 +274,8 @@ describe("createSeriesRecorder — §6.1 oracle, decoded from the committed reco
   // wire bytes, same decode.
   it("step-2 (walk-2026-08-17, 2×250m r0 no wu — itself a restSeconds:0 boundary, distance-interval shaped): exactly 139 samples; the boundary's exact fold VALUE; real d/p/spm at named samples; the interval's own terminal gap under one second", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+      "walk-2026-08-17",
+      "step-2-pm5-recording-1786973078979.jsonl",
       STEP_2_PROGRAM,
     );
     const resetIndex = findResetIndex(frames);
@@ -359,7 +350,8 @@ describe("createSeriesRecorder — §6.1 oracle, decoded from the committed reco
   // step-3 carries its own `header.program`, so no override is needed.
   it("step-3 (walk-2026-08-17, wu 1:00 r0 + 1:00 r30 + ...): exactly 243 samples; BOTH boundaries' exact fold VALUE and segment-end gap; the 30s rest contributes ZERO samples", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+      "walk-2026-08-17",
+      "step-3-pm5-recording-second-rest-1786973713929.jsonl",
     );
 
     const resetIndices = findAllResetIndices(frames);
@@ -501,7 +493,8 @@ describe("createSeriesRecorder — S7 dual-rate decimation is platform-independe
   // real.
   it("a synthetic 10 Hz stream (the real ~2 Hz recording's own frames, each held/repeated 5×) decimates to the identical series", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+      "walk-2026-08-17",
+      "step-2-pm5-recording-1786973078979.jsonl",
       STEP_2_PROGRAM,
     );
 
@@ -596,7 +589,8 @@ describe("createSeriesRecorder — hr presence (§1's Shape row: absent, never p
   // presence contract against a capture that DOES cross two boundaries.
   it("real leg: every sample from the first 0x0032 arrival onward decoded from step-3 (a belted walk) carries a numeric hr", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+      "walk-2026-08-17",
+      "step-3-pm5-recording-second-rest-1786973713929.jsonl",
     );
     const rec = createSeriesRecorder();
     for (const f of frames) rec.onFrame(f);
@@ -862,7 +856,8 @@ describe("createSeriesRecorder — trace-truth Task 1: the register map, driven 
   // kept verbatim.
   it("replays step-3 to the same 243 samples the shipped recorder produced (t and d in TENTHS)", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+      "walk-2026-08-17",
+      "step-3-pm5-recording-second-rest-1786973713929.jsonl",
     );
     const rec = createSeriesRecorder();
     for (const f of frames) rec.onFrame(f);
@@ -891,7 +886,8 @@ describe("createSeriesRecorder — trace-truth Task 1: the register map, driven 
     "loses NOTHING when %i frames are dropped across an interval boundary",
     async (n) => {
       const frames = await loadCaptureFrames(
-        "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+        "walk-2026-08-17",
+        "step-3-pm5-recording-second-rest-1786973713929.jsonl",
       );
       const rec = createSeriesRecorder();
       for (const f of dropAfterBoundary(frames, n)) rec.onFrame(f);
@@ -1061,7 +1057,8 @@ const SESSION_2_PROGRAM: WorkoutProgram = {
 describe("createSeriesRecorder — trace-truth Task 2: rests are marked (real capture, non-frozen rest)", () => {
   it("marks every sample recorded while the machine was resting (real capture, non-frozen rest)", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      "walk-2026-08-16",
+      "session-2-wu-4unequal.jsonl",
       SESSION_2_PROGRAM,
     );
     const rec = createSeriesRecorder();
@@ -1556,7 +1553,8 @@ describe("createSeriesRecorder — series-truth Task 3: the two committed captur
 
   it("session-1-keystone-2x250r0.jsonl: attribution is populated and monotonic (proving old/new equivalence), and the pinned totals are unchanged from the pre-this-task recorder", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-16/session-1-keystone-2x250r0.jsonl",
+      "walk-2026-08-16",
+      "session-1-keystone-2x250r0.jsonl",
       SESSION_1_PROGRAM,
     );
     assertConsumptionRanAndIsMonotonic(frames);
@@ -1580,7 +1578,8 @@ describe("createSeriesRecorder — series-truth Task 3: the two committed captur
 
   it("session-2-wu-4unequal.jsonl: attribution is populated and monotonic (proving old/new equivalence), and the pinned totals are unchanged from the pre-this-task recorder", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      "walk-2026-08-16",
+      "session-2-wu-4unequal.jsonl",
       SESSION_2_PROGRAM,
     );
     assertConsumptionRanAndIsMonotonic(frames);

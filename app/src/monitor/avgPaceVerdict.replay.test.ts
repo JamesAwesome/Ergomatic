@@ -54,24 +54,13 @@
 // `useMonitorSession.ts`'s own teardown calls, to settle the one still-open
 // question a genuinely torn-down session would have settled for it anyway.
 
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { createEventLog } from "./eventLog";
 import { createSubscribedDriver } from "../test/statusSubscriptions";
 import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
-
-/** Same path-surgery idiom as `connectedMetricsReplay.test.ts`/
- *  `burstReplay.test.ts` (both cite the same jsdom `new URL(...)` base
- *  reason). `docs/monitor/sessions/` lives three directories above
- *  `app/src/monitor/`. */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/avgPaceVerdict\.replay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-16/",
-  );
+import { readCapture } from "../test/captures";
 
 /** Hand-transcribed, byte-identical to `connectedMetricsReplay.test.ts`'s
  *  own `SESSION_2_PROGRAM` — that file's own header comment carries the
@@ -125,10 +114,7 @@ const SESSION_2_PROGRAM: WorkoutProgram = {
 
 describe("createPm5Driver: the live average-pace verdict, replayed off a real rest-bearing capture (RC-9a exit criterion 1)", () => {
   it("session-2-wu-4unequal.jsonl: avg-pace-verdict compares the last work-state 0x0032 averageSplit (129.78, NOT the terminal frame's 128.76) against our own quotient (129.77), delta 0.01s — well inside the 1.0s band", async () => {
-    const text = readFileSync(
-      `${SESSIONS_DIR}session-2-wu-4unequal.jsonl`,
-      "utf8",
-    );
+    const text = readCapture("walk-2026-08-16", "session-2-wu-4unequal.jsonl");
     const parsed: ParsedRecording = parseRecording(text);
 
     const replay = createReplayTransport(parsed);
@@ -194,10 +180,7 @@ describe("createPm5Driver: the live average-pace verdict, replayed off a real re
   // the door settles from the capture's OWN numbers; it proves nothing about
   // whether a rower can create the ordering.
   it("session-2-wu-4unequal.jsonl: beginFreeRow() settles the outgoing run at the door — the same 129.78-vs-129.77 verdict is filed before the free row opens", async () => {
-    const text = readFileSync(
-      `${SESSIONS_DIR}session-2-wu-4unequal.jsonl`,
-      "utf8",
-    );
+    const text = readCapture("walk-2026-08-16", "session-2-wu-4unequal.jsonl");
     const parsed: ParsedRecording = parseRecording(text);
 
     const replay = createReplayTransport(parsed);

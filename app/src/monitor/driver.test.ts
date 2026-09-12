@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { compileProgram } from "../../domain/monitor/program.js";
@@ -62,6 +61,7 @@ import {
 } from "./driver";
 import { createFakeTransport, type FakeTimelineEvent } from "./transports/fake";
 import { createSubscribedDriver } from "../test/statusSubscriptions";
+import { readCapture } from "../test/captures";
 
 // TIMER HYGIENE, file-wide (fix round 1, review Minor-4). The driver grew
 // its first real timer with the summary-fallback gate — one `setTimeout` at
@@ -193,20 +193,6 @@ const THREE_INTERVAL_PROGRAM: WorkoutProgram = {
     restSeconds: 30,
   })),
 };
-
-/** Repo-root recordings, resolved relative to THIS file — the same idiom
- *  `registerReplay.test.ts` uses (`captureReplay.test.ts:112-117`'s own
- *  reasoning: plain string surgery on `import.meta.url`, never the global
- *  `URL` constructor, since this project's jsdom environment resolves
- *  `new URL(...)` against `http://localhost:3000/` instead of the given
- *  `file://` base). `docs/monitor/sessions/walk-2026-08-16/` lives three
- *  directories above `app/src/monitor/`. */
-const RC1_SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/driver\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-16/",
-  );
 
 // Plan Task 2: `program()` now sends `buildTerminate()` as its own
 // best-effort prepare step BEFORE the real programming sequence — every
@@ -4777,10 +4763,7 @@ describe("createPm5Driver: RC-1 — Interval Rest Time and Split/Interval Type (
   });
 
   it("a rest-bearing committed capture's boundary folds restSeconds/type off the wire's own bytes — walk-2026-08-16 session 2 (wu+4unequal), seq 1666, decoded independently in THIS test, never via parseSplitIntervalData", async () => {
-    const raw = readFileSync(
-      `${RC1_SESSIONS_DIR}session-2-wu-4unequal.jsonl`,
-      "utf8",
-    );
+    const raw = readCapture("walk-2026-08-16", "session-2-wu-4unequal.jsonl");
     const line = raw
       .split("\n")
       .find(
@@ -5172,9 +5155,9 @@ describe("createPm5Driver: storage-spine PR3 Task 1 — the machine's raw interv
   });
 
   it("capture replay: session-2-wu-4unequal.jsonl seq 245 and seq 601's 0x0033 bytes, decoded independently in THIS test (offset 3, interface-notes.md §10), match the frame's rawIntervalCount", async () => {
-    const contents = readFileSync(
-      `${RC1_SESSIONS_DIR}session-2-wu-4unequal.jsonl`,
-      "utf8",
+    const contents = readCapture(
+      "walk-2026-08-16",
+      "session-2-wu-4unequal.jsonl",
     );
     const lines = contents.split("\n");
     const as2BytesForSeq = (seq: number): Uint8Array => {

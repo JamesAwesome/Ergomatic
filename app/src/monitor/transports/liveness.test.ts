@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
 import type {
   DiscoveredMonitor,
@@ -18,6 +16,7 @@ import {
   type ParsedRecording,
   type RecordedEvent,
 } from "./recording";
+import { readCapture } from "../../test/captures";
 
 // ============================================================================
 // PART 1 — the decorator against a hand-built fake transport: the arming
@@ -577,19 +576,13 @@ const CORPUS_FILES = [
   "walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz",
 ];
 
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/transports\/liveness\.test\.ts$/,
-    "../docs/monitor/sessions/",
-  );
-
+/** `fileName` is `walkDir/file` (the shape `CORPUS_FILES` above lists them
+ *  in) — split once and handed to the shared loader. */
 function loadCapture(fileName: string): ParsedRecording {
-  const path = `${SESSIONS_DIR}${fileName}`;
-  const text = fileName.endsWith(".gz")
-    ? gunzipSync(readFileSync(path)).toString("utf8")
-    : readFileSync(path, "utf8");
-  return parseRecording(text);
+  const slash = fileName.indexOf("/");
+  return parseRecording(
+    readCapture(fileName.slice(0, slash), fileName.slice(slash + 1)),
+  );
 }
 
 function preloadWrites(transport: Transport, recording: ParsedRecording): void {

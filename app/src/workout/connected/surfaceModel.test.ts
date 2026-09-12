@@ -11,8 +11,6 @@
 // interval (so `METERS LEFT` is exercised against a genuine program rather
 // than a synthetic one).
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   compileProgram,
@@ -38,6 +36,7 @@ import { createEventLog } from "../../monitor/eventLog";
 import { createSubscribedDriver } from "../../test/statusSubscriptions";
 import { parseRecording } from "../../monitor/transports/recording";
 import { createReplayTransport } from "../../monitor/transports/replay";
+import { readCapture } from "../../test/captures";
 import {
   buildSurfaceModel,
   connectedNextText,
@@ -2979,19 +2978,6 @@ const SESSION_2_PHASES: EnginePhase[] = [
 
 const SESSION_2_DEVICE = "PM5 432331249";
 
-/** Repo-root resolution, `registerReplay.test.ts`'s own idiom (plain
- *  string surgery on `import.meta.url` — this project's jsdom environment
- *  resolves `new URL(...)` against `http://localhost:3000/`, not the given
- *  `file://` base). Three directories up from `src/workout/connected/`
- *  (out of `connected/`, `workout/`, `src/`) then into `app/`, matching
- *  every other replay harness's own path arithmetic one level further. */
-const SESSION_2_PATH = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/workout\/connected\/surfaceModel\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
-  );
-
 interface DriverFrameSample {
   tMs: number;
   frame: MonitorFrame;
@@ -3004,7 +2990,7 @@ interface DriverFrameSample {
  *  with the virtual-clock timestamp it arrived on, so a test can measure
  *  WALL time between two frames, not just read their own wire fields. */
 async function replaySession2(): Promise<DriverFrameSample[]> {
-  const text = readFileSync(SESSION_2_PATH, "utf8");
+  const text = readCapture("walk-2026-08-16", "session-2-wu-4unequal.jsonl");
   const parsed = parseRecording(text);
 
   const replay = createReplayTransport(parsed);
@@ -3416,13 +3402,6 @@ const PYRAMID_PHASES: EnginePhase[] = [
   },
 ];
 
-const PYRAMID_PATH = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/workout\/connected\/surfaceModel\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz",
-  );
-
 /** Same harness as `replaySession2`, on the gzipped capture (decompressing
  *  at test time rather than committing a second, uncompressed duplicate —
  *  `session/summaryModel.test.ts`'s own precedent for this same file), and
@@ -3431,7 +3410,10 @@ const PYRAMID_PATH = import.meta.url
 async function replayPyramid(): Promise<
   { tMs: number; frame: MonitorFrame; actuals: IntervalActual[] }[]
 > {
-  const text = gunzipSync(readFileSync(PYRAMID_PATH)).toString("utf8");
+  const text = readCapture(
+    "walk-2026-08-18-metrics",
+    "pyramid-pm5-recording-1787090555458.jsonl.gz",
+  );
   const parsed = parseRecording(text);
   const replay = createReplayTransport(parsed);
   const [dev] = await replay.transport.scan();

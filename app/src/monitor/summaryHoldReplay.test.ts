@@ -133,8 +133,6 @@
 // mutation evidence (below) reverts that and confirms leg 2 goes red on
 // it again.
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { createElement } from "react";
 import { act, render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -173,35 +171,14 @@ import type { SessionStore, SessionUser } from "../../server/auth/sessions.js";
 import { makeFakeStores } from "../../server/testing/fakes.js";
 import { createDataRouter } from "../../server/routes/data.js";
 import { buildMonitorLogSteps } from "../session/logDraft";
+import { readCapture } from "../test/captures";
 
-/** Same path-surgery idiom as `burstReplay.test.ts` (jsdom resolves
- *  `new URL(...)` against `http://localhost:3000/`, so string surgery on
- *  `import.meta.url` stands in for it). `docs/monitor/sessions/` lives
- *  three directories above `app/src/monitor/`. Shared by every leg in
- *  this file — each leg's own walk directory joins underneath it. */
-const MONITOR_SESSIONS_ROOT = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/summaryHoldReplay\.test\.ts$/,
-    "../docs/monitor/sessions/",
-  );
-
-function loadCapture(walkDir: string, file: string): ParsedRecording {
-  return parseRecording(
-    gunzipSync(
-      readFileSync(`${MONITOR_SESSIONS_ROOT}${walkDir}/${file}`),
-    ).toString("utf8"),
-  );
-}
-
-const SMOKE_CAPTURE: ParsedRecording = loadCapture(
-  "walk-2026-08-25",
-  "smoke-terminated-recording.jsonl.gz",
+const SMOKE_CAPTURE: ParsedRecording = parseRecording(
+  readCapture("walk-2026-08-25", "smoke-terminated-recording.jsonl.gz"),
 );
 
-const END_CAPTURE: ParsedRecording = loadCapture(
-  "walk-2026-08-28",
-  "end-on-interval-1-recording.jsonl.gz",
+const END_CAPTURE: ParsedRecording = parseRecording(
+  readCapture("walk-2026-08-28", "end-on-interval-1-recording.jsonl.gz"),
 );
 
 /** HAND-TRANSCRIBED, byte-verified against seq 15/16's own assembled tx
