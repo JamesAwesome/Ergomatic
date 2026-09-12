@@ -105,6 +105,36 @@ describe("seedGlobalLibrary against real Postgres", () => {
     expect(idsAfterSecond).toStrictEqual(idsAfterFirst);
   });
 
+  it("seeds the SAME ids on two separate fresh databases — a library row is the same row in every environment", async () => {
+    // The existing "twice from empty" case above runs on ONE database, so
+    // it proves convergence is a no-op and nothing about identity: it passes
+    // with `defaultRandom()` ids because the second run finds the first
+    // run's rows by title and inserts nothing. This case is the one that
+    // can go red on random ids — a second CONTAINER has never seen the
+    // first's rows, so every id is freshly minted unless the seed decides
+    // them itself.
+    const other = await new PostgreSqlContainer("postgres:18.4").start();
+    const { pool: otherPool, db: otherDb } = createDb(other.getConnectionUri());
+    try {
+      await migrate(otherDb, { migrationsFolder: "drizzle" });
+      await db.delete(workouts);
+      await seedGlobalLibrary(db);
+      await seedGlobalLibrary(otherDb);
+
+      const here = (await wk.listGlobals())
+        .map((w) => [w.title, w.id] as const)
+        .sort();
+      const there = (await createWorkoutsStore(otherDb).listGlobals())
+        .map((w) => [w.title, w.id] as const)
+        .sort();
+      expect(there).toHaveLength(GLOBAL_LIBRARY_SEED.length);
+      expect(there).toStrictEqual(here);
+    } finally {
+      await otherPool.end();
+      await other.stop();
+    }
+  });
+
   it("is visible to any user (new or old) via list(), without per-user seeding", async () => {
     const before = await users.createUser({
       googleSub: "seed-before",
