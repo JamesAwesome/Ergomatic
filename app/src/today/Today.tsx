@@ -404,18 +404,21 @@ export default function Today() {
   // never-started draft sitting here while the erg is mid-workout is
   // exactly the case the FIRST condition (`draft.startedAt === null`)
   // would otherwise let straight through to a wipe. Checked here directly
-  // rather than through `anyLiveSession()` (`monitorRun.ts`): that
-  // function's own truth table treats a completed-but-unlogged monitor run
-  // the same as absent (nothing LIVE), which is right for a resume-style
+  // rather than through a live-only collapsing helper (the deleted
+  // `anyLiveSession()` — `connectGuardStage`'s doc comment in
+  // `handoffStore.ts` keeps the anti-pattern's record): that
+  // function's own truth table treated a completed-but-unlogged monitor run
+  // the same as absent (nothing LIVE), which was right for a resume-style
   // caller but wrong here — this guard is answering "is the erg possibly
   // still running", not "should a resume card show." 7B's own guard
-  // rewiring is expected to consume `anyLiveSession()` mechanically where
-  // that distinction doesn't matter; this one 7A-owned line does not.
+  // rewiring consumed `anyLiveSession()` mechanically where that
+  // distinction didn't matter, before Phase MD PR 1 deleted it; this one
+  // 7A-owned line never did.
   //
   // Task 6 close-out ruling (hand-off store plan, 2026-08-30; reworded at
-  // fix round 1/5, L-2): this is the THIRD legacy `loadMonitorRun()` read
-  // the review named alongside `monitorRunState()`/`anyLiveSession()`
-  // (ROADMAP.md's AUD-016 item) — swept and LEFT AS-IS, not rerouted onto
+  // fix round 1/5, L-2): this is the ONE surviving raw `loadMonitorRun()`
+  // read (its two legacy siblings, `monitorRunState()`/`anyLiveSession()`,
+  // were deleted in Phase MD PR 1) — swept and LEFT AS-IS, not rerouted onto
   // `handoffStore`. The load-bearing reason is `todayGuard.pin.test.ts`'s
   // own stated one (its "still reads the monitor record DIRECTLY, never
   // through anyLiveSession()" test): "this guard needs a synchronous,

@@ -680,11 +680,11 @@ function ensureHydrated(): void {
 }
 
 /**
- * §3's sacrifice ordering, ported verbatim from `monitorRun.ts`'s retired
- * `saveMonitorRun` (Task 3 removes that function's own copy once its
- * callers move onto this store): try the full write; on a throw, retry
- * ONCE without `series` (stamping `seriesDropped: true`) IF a series was
- * present at all; a series-less record that fails skips the retry outright
+ * §3's sacrifice ordering, ported verbatim from `monitorRun.ts`'s
+ * `saveMonitorRun`, which Phase MD PR 1 deleted — this is now the ONLY
+ * copy of the sacrifice ordering (spec §3 invariant 3): try the full write;
+ * on a throw, retry ONCE without `series` (stamping `seriesDropped: true`)
+ * IF a series was present at all; a series-less record that fails skips the retry outright
  * ("there is nothing smaller to try" — the original comment's own words).
  * Updates `durableStateByKey` on success only (§8).
  */
@@ -1180,8 +1180,9 @@ export type ConnectGuardStage = "unlogged" | "in-progress" | null;
  * For Connect the answer is **YES, it cares about unlogged specifically**:
  * the action behind it is `createMonitorRun` above, whose `clearRun()` is
  * unconditional, and a finished-but-unlogged `SessionRun` is precisely the
- * record 6B's F5 fix exists to protect — `anyLiveSession()`'s own pinned
- * table returns `"none"` for it (rows 7 and 9), so a Connect guard wired
+ * record 6B's F5 fix exists to protect — `anyLiveSession()` (deleted in
+ * Phase MD PR 1), whose own pinned table returned `"none"` for it (rows 7
+ * and 9), so a Connect guard wired
  * that way would walk straight past the one case it is FOR. This is the
  * same direct-read pattern `Today.tsx`'s cold-start guard already uses, and
  * for the same reason its own comment gives.

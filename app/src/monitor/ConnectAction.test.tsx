@@ -113,10 +113,11 @@ function liveSessionRun(): SessionRun {
  * and its one production caller, `useMonitorSession.ts`'s hook, is what
  * commits the result through the store) two calls instead of one, so the
  * guard can still be proven against a REAL localStorage round trip rather
- * than a "was the callback called" assertion — `saveMonitorRun` is the
- * SAME general-purpose writer `Today.tsx`/`LogSession.tsx`/
- * `useStartWorkout.ts` still call directly today, not a re-introduction of
- * anything this task removed. Task 5's own proof that its real wiring
+ * than a "was the callback called" assertion — `commitHandoff` below
+ * drives the SAME store writer (`handoffStore.ts`'s `commit`) that
+ * `useMonitorSession.ts`'s hook uses in production; the deleted
+ * `saveMonitorRun` served this role before Phase MD PR 1, so this is not
+ * a re-introduction of anything this task removed. Task 5's own proof that its real wiring
  * defers this destruction lives in `WorkoutDetail.test.tsx` and
  * `e2e/session.spec.ts`, not here.
  */
@@ -561,10 +562,11 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     );
 
     // `connectAsTaskFiveWill` (this test's `onProceed`) writes a fresh
-    // MonitorRun of its own via `saveMonitorRun`/`createMonitorRun`
-    // directly — never through the store — so no COMMIT receipt is
-    // expected here either; the point is specifically the absence of any
-    // RETIRE receipt, which only the hook's own "armed" handler may emit.
+    // MonitorRun of its own via `createMonitorRun`/`commitHandoff` (the
+    // store's `commit`) BEFORE the receipt channel above is wired, so no
+    // receipt fires for that write either way; the point is specifically
+    // the absence of any RETIRE receipt from this press, which only the
+    // hook's own "armed" handler may emit.
     expect(receipts.filter((r) => r.kind === "retire")).toStrictEqual([]);
     // The staged set from the press above is still sitting in the store,
     // exactly where `useMonitorSession.ts`'s own "armed" handler expects

@@ -65,9 +65,11 @@ import {
  * history — WILL be gone once a connected session gets underway, 6B's F5
  * incident's shape, once removed from the trigger by however long pairing
  * and programming take. `connectGuardStage()` reads that record directly
- * rather than through `anyLiveSession()`; its own doc comment quotes
- * ROADMAP M-1 on why, and that choice is what the "route it through
- * `anyLiveSession()`" mutation targets.
+ * rather than through a live-only collapsing helper (the deleted
+ * `anyLiveSession()` — `connectGuardStage`'s doc comment in
+ * `handoffStore.ts` keeps the anti-pattern's record); its own doc comment
+ * quotes ROADMAP M-1 on why, and that choice is what the "route it through
+ * `anyLiveSession()`" mutation used to target.
  *
  * **CORRECTED (Task 5 review fix round, 2026-08-30): the paragraph above
  * describes `SessionRun` truthfully but is no longer the whole picture

@@ -5340,10 +5340,11 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
 
   // Mirrors "leaves an unrelated live run/draft byte-identical in storage
   // after the monitor-mode discard fires" above, one door over: this
-  // branch's own qualified exception (`clearMonitorRun()` directly, never
-  // `discard.fire()`) must never touch an unrelated phone-timer session
-  // sitting in `./draft`/`./run` while this door clears its own fallen-
-  // through record.
+  // branch's own qualified exception (the key-bound `retireHandoff()`
+  // directly, never `discard.fire()` — the legacy `clearMonitorRun()` did
+  // this before Phase MD PR 1) must never touch an unrelated phone-timer
+  // session sitting in `./draft`/`./run` while this door clears its own
+  // fallen-through record.
   it("leaves an unrelated live draft/run byte-identical after the plain-manual door's discard clears a fallen-through MonitorRun", async () => {
     buildSessionFixture();
     const draftBefore = localStorage.getItem(DRAFT_KEY);

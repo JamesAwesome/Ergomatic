@@ -4396,9 +4396,10 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     expect(result.current.holdError).toBeNull();
 
     // THE RACE: retire the key directly through the store WHILE the burst
-    // hold is still open — the shape a Save/Discard produces once Task 4
-    // routes those doors through `retire()` instead of the legacy
-    // `clearMonitorRun()` (ROADMAP's own AUD-016 open condition on Task 4).
+    // hold is still open — the shape a Save/Discard produces now that
+    // Task 4 routes those doors through `retire()` instead of the legacy,
+    // since-deleted `clearMonitorRun()` (ROADMAP's own AUD-016 open
+    // condition, closed by Task 4).
     const current = currentUnretiredHandoffForTest();
     expect(current).not.toBeNull();
     retireHandoffForTest(
@@ -4945,18 +4946,19 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
 
   it("(d) THE RESURRECTION RACE, RETARGETED (hand-off store design spec §1, plan Task 3): the run is RETIRED (tombstoned) during the linger — the burst's own commit is refused by the store, and nothing reappears in storage", async () => {
     // RETARGETED from `clearMonitorRun()` (the legacy raw key-removal
-    // `LogSession.tsx`/`Today.tsx` still call today, Tasks 4/5's own scope)
-    // to `handoffStore.retire()` — the mechanism THIS hook's own commits
-    // actually answer to (spec §1's tombstone). `clearMonitorRun()` alone no
-    // longer has this effect under the new design: `appendSummaryObservations`
+    // `LogSession.tsx`/`Today.tsx` called before Phase MD PR 1, Tasks 4/5's
+    // own scope) to `handoffStore.retire()` — the mechanism THIS hook's own
+    // commits actually answer to (spec §1's tombstone). `clearMonitorRun()`
+    // alone never had this effect under the new design: `appendSummaryObservations`
     // is pure and builds on the hook's own `runRef.current`, never a
     // storage re-read (`stillLive` is deleted), so a raw physical removal
-    // the store's own bookkeeping never hears about would NOT stop the
-    // hook's own late-burst commit from landing (a real, but TEMPORARY,
-    // gap this branch's own sequencing closes: Task 4 retargets
+    // the store's own bookkeeping never heard about would not have stopped
+    // the hook's own late-burst commit from landing (a real, but TEMPORARY,
+    // gap this branch's own sequencing closed: Task 4 retargeted
     // `LogSession.tsx`'s save-success/monitor-discard onto
     // `handoffStore.retire()`, at which point this exact door produces the
-    // tombstone this test now simulates directly).
+    // tombstone this test now simulates directly — the gap is closed, not
+    // hypothetical).
     const driverTimer = manualSchedule();
     const burstTimer = manualSchedule();
     const boundaryWithBurst: FakeBoundaryEvent = {
@@ -9297,7 +9299,9 @@ describe("useMonitorSession: exportLog", () => {
 // Phase LT spec 2, Task 2. `docs/superpowers/specs/
 // 2026-08-19-series-capture-design.md` §2 (the flush policy), §3 (the
 // localStorage sacrifice — this file's own share of it lives in
-// `monitorRun.test.ts`, inside `saveMonitorRun`'s own catch), §4 (S1/S6).
+// `handoffStore.test.ts`'s durable-bookkeeping suite, driving
+// `performDurableWrite`'s sacrifice, the deleted `saveMonitorRun`'s own
+// catch before Phase MD PR 1), §4 (S1/S6).
 // ---------------------------------------------------------------------------
 
 /** A hand-driven stand-in for `setInterval`, matching `manualSchedule()`'s

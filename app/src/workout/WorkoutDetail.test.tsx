@@ -851,8 +851,8 @@ describe("WorkoutDetail", () => {
   // would lose it to one unwarned Start press. That record is 7C's entire
   // prefill input; losing it is the F5 shape exactly, so `handleStart`'s
   // guard is WIDENED to read it — the same direct-read pattern on a second
-  // record, never rerouted onto `anyLiveSession()` (ROADMAP M-1, quoted at
-  // the site).
+  // record, never rerouted onto a live-only collapsing helper (the deleted
+  // `anyLiveSession()` — ROADMAP M-1, quoted at the site).
   describe("a MonitorRun from a connected session", () => {
     // Realistic fixture (repo convention): a REAL seeded library workout
     // compiled through the real assembly, not a hand-built program.

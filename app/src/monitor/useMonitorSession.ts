@@ -16,10 +16,10 @@
 //   `SessionRun` `createMonitorRun`'s unconditional `clearRun()` is about
 //   to destroy. Do not add a second guard here, and do not remove that one:
 //   the destruction is real and this hook performs it (at `live`).
-// - **`anyLiveSession()`.** Task 2's review recorded M-2 against exactly
-//   this file: `anyLiveSession()` has no production consumer, and the first
-//   one inherits a live/live tie-break that a DEEP-LINKED `SessionRun` can
-//   now reach — `Countdown.tsx` constructs one with no cross-clear (only
+// - **`anyLiveSession()` (deleted in Phase MD PR 1).** Task 2's review
+//   recorded M-2 against exactly this file: `anyLiveSession()` had no
+//   production consumer, and the first one inherited a live/live tie-break
+//   that a DEEP-LINKED `SessionRun` can now reach — `Countdown.tsx` constructs one with no cross-clear (only
 //   destruction is guarded, in both directions), so a rower who deep-links
 //   to `/session/countdown` mid-connected-session leaves two live records
 //   standing. This hook therefore never asks that question. It tracks ITS

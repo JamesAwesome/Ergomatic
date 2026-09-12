@@ -2768,9 +2768,11 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
 // two describe blocks side by side and see exactly where they diverge: the
 // copy ("interrupted connected session." vs "unlogged session."), Log it's
 // target (a stamp-then-navigate button, not a bare `<Link>`), the discard
-// body (`clearMonitorRun()` only — the session/draft records are a
-// DIFFERENT rower's-in-progress-phone-timer concern this row must never
-// touch), and the null-`workoutId` latent (no Log it at all).
+// body (`retireHandoff()` only, key-bound to the `MonitorRun` entry — the
+// legacy `clearMonitorRun()` did this before Phase MD PR 1; the
+// session/draft records are a DIFFERENT rower's-in-progress-phone-timer
+// concern this row must never touch), and the null-`workoutId` latent (no
+// Log it at all).
 describe("Today (2b): the interrupted connected session row", () => {
   it("a refused interrupted close opens unavailable without claiming or changing the newer open revision", async () => {
     const run = makeMonitorRun({ completedAt: null });
@@ -3011,10 +3013,11 @@ describe("Today (2b): the interrupted connected session row", () => {
   it("discard is staged: first tap arms in place, second tap clears ONLY the monitor record", async () => {
     // A completed-but-unlogged SessionRun AND a draft, both real fixtures —
     // the exact records `useStagedDiscard().fire()` would clear (wrongly,
-    // for this row) if `handleDiscardClick` ever called it instead of
-    // `clearMonitorRun()` directly. Both rows render at once (Task 3's
-    // UnloggedRow beside this one), which is why every query below is
-    // scoped with `within()` on the row under test.
+    // for this row) if `UnsavedWorkouts`'s `handleDiscard` ever called it
+    // instead of the key-bound `retireHandoff()` (the legacy
+    // `clearMonitorRun()` did this before Phase MD PR 1). Both rows render
+    // at once (Task 3's UnloggedRow beside this one), which is why every
+    // query below is scoped with `within()` on the row under test.
     const sessionRun = unloggedRunFor(
       new Date("2026-08-01T11:00:00.000Z"),
       new Date("2026-08-01T11:40:00.000Z"),

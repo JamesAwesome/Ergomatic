@@ -2496,9 +2496,10 @@ test.describe("today screen (interrupted connected session row)", () => {
   });
 
   // arm -> tap -> gone: the row disappears in place with no navigation,
-  // and clears ONLY the monitor record — `clearMonitorRun()`, never
-  // `useStagedDiscard().fire()` (the phone-timer row's own body, which
-  // would clear the WRONG records for a `MonitorRun`).
+  // and clears ONLY the monitor record — the key-bound `retireHandoff()`,
+  // never `useStagedDiscard().fire()` (the phone-timer row's own body,
+  // which would clear the WRONG records for a `MonitorRun`) — the legacy
+  // `clearMonitorRun()` did this before Phase MD PR 1.
   test("a second press while armed fires the discard — the row disappears in place, no navigation, and clears only the monitor record", async ({
     page,
   }) => {
