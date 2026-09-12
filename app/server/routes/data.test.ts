@@ -628,6 +628,29 @@ describe("workouts CRUD", () => {
     expect(list.body[0]).toMatchObject({ title: "Global Leader" });
   });
 
+  // G3 (design spec 2026-09-12, deterministic seed ids). `NewWorkoutInput`
+  // now carries an optional `id` so the SEED can choose one; the guard that
+  // kept a client from doing the same used to be a type error and is now
+  // this test. `validateWorkoutInput` is a pass-through cast, so
+  // `req.body.id` reaches the route at runtime — `create()`'s explicit
+  // column list is the only thing between it and the primary key. The
+  // stakes: a signed-in user squats `v5(title)` for an unshipped library
+  // title, and the next library addition's multi-row insert rolls back at
+  // boot for everyone.
+  it("POST ignores a client-supplied id rather than honoring it — the seed is the only chooser of ids", async () => {
+    const app = appFor(makeStores());
+    const chosen = "96fa2455-b89b-5c2b-81fb-6c96d412fd44";
+    const created = await asA(request(app).post("/api/workouts")).send({
+      ...validWorkoutBody(),
+      id: chosen,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.id).not.toBe(chosen);
+    // And the chosen id resolves to nothing — it was never written.
+    const res = await asA(request(app).get(`/api/workouts/${chosen}`));
+    expect(res.status).toBe(404);
+  });
+
   it("GET /:id returns the workout", async () => {
     const app = appFor(makeStores());
     const created = await asA(request(app).post("/api/workouts")).send(

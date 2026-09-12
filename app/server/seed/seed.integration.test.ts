@@ -11,6 +11,7 @@ import { createUserStore, type UserStore } from "../auth/users.js";
 import { createWorkoutsStore, type WorkoutsStore } from "../stores/workouts.js";
 import { createLogsStore, type LogsStore } from "../stores/logs.js";
 import { seedGlobalLibrary, SEED_LOCK_KEY } from "./seed.js";
+import { seedWorkoutId } from "./seedId.js";
 import { GLOBAL_LIBRARY_SEED, LIBRARY_WORKOUTS } from "./library/index.js";
 import {
   ONBOARDING_TITLES,
@@ -133,6 +134,34 @@ describe("seedGlobalLibrary against real Postgres", () => {
       await otherPool.end();
       await other.stop();
     }
+  });
+
+  it("G5 — the INCREMENTAL path: a title added to the library after a seed gets its derived id, and every pre-existing id is byte-identical (the only path production will ever take)", async () => {
+    await db.delete(workouts);
+    await seedGlobalLibrary(db);
+    const before = new Map(
+      (await wk.listGlobals()).map((w) => [w.title, w.id] as const),
+    );
+    expect(before.size).toBe(GLOBAL_LIBRARY_SEED.length);
+
+    const added = {
+      ...LIBRARY_WORKOUTS[0]!,
+      title: "Brand New Weather",
+      sortOrder: 999,
+    };
+    await seedGlobalLibrary(db, [...GLOBAL_LIBRARY_SEED, added]);
+
+    const after = new Map(
+      (await wk.listGlobals()).map((w) => [w.title, w.id] as const),
+    );
+    expect(after.size).toBe(GLOBAL_LIBRARY_SEED.length + 1);
+    // The new row's id is the derivation, not a mint.
+    expect(after.get("Brand New Weather")).toBe(
+      seedWorkoutId("Brand New Weather"),
+    );
+    // And nothing that already existed moved — this half is what proves
+    // production's first boot after the change is a no-op on identity.
+    for (const [title, id] of before) expect(after.get(title)).toBe(id);
   });
 
   it("is visible to any user (new or old) via list(), without per-user seeding", async () => {

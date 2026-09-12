@@ -1,8 +1,7 @@
 # Deterministic ids for the seeded library
 
-**Date:** 2026-09-12. **Status:** rev 2 — antagonist pass APPLIED (theory
-held; five corrections, two load-bearing, listed in §Revision). Awaiting
-James's approval. **TRIAD:** yes — a stored identity. PM final-PR gate. No
+**Date:** 2026-09-12. **Status:** HARDENED 2026-09-12 (lens 1 = the TRIAD antagonist pass,
+folded; lens 2 skipped, no prescribed blocks). Approved by James for build. **TRIAD:** yes — a stored identity. PM final-PR gate. No
 design gate: nothing a rower reads or sees changes.
 
 ## What and why
@@ -240,21 +239,9 @@ diffs. `createMany` ignores `input.id` — same.
 **not fast path.** Antagonist pass: DONE (this rev). PM final-PR gate owed.
 No Gate 0.
 
-## Revision
+## Owed elsewhere, found on the way
 
-- **rev 2 (2026-09-12), from the antagonist pass.** B1: the uniqueness
-  gate was over the wrong array (`LIBRARY_WORKOUTS`, 300) — the seed
-  converges `GLOBAL_LIBRARY_SEED` (302) and the two onboarding rows were
-  invisible to the grep that "proved" uniqueness. B2: the boot-failure
-  consequence of a derived-id collision was unnamed. B3: the rename
-  collision was unenumerated. B4: the headline claimed "every environment"
-  when production is exactly the one that never gets the property. B5: the
-  RFC vector was attributed to RFC 4122, which does not contain it and is
-  obsoleted. Also: "five captures" was six (never re-counted); the
-  no-hardcoded-ids grep needed its command and its non-counting hits
-  named; no conditional spread is needed in `createMany`.
-- **A stale CLAUDE.md line found on the way, owed on the next PR that
-  touches it:** the SDLC bullet says _"`e2e.sh:31` and `screenshots.sh:31`
-  both run `docker compose ... down` with no `-v`"_. True of
-  `screenshots.sh`'s `cleanup()` trap at `:41` only; `:50` is an
-  unconditional `down -v` since #395.
+A stale CLAUDE.md line, owed on the next PR that touches that bullet: the
+SDLC bullet says _"`e2e.sh:31` and `screenshots.sh:31` both run `docker
+compose ... down` with no `-v`"_. True of `screenshots.sh`'s `cleanup()`
+trap only; its boot path has been an unconditional `down -v` since #395.

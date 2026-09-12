@@ -5,6 +5,7 @@ import type { WorkoutInput } from "../../domain/types.js";
 import { createWorkoutsStore } from "../stores/workouts.js";
 import { GLOBAL_LIBRARY_SEED } from "./library/index.js";
 import { LEGACY_TITLE_RENAMES } from "../../domain/onboarding.js";
+import { seedWorkoutId } from "./seedId.js";
 
 // Arbitrary but fixed application-wide key for the seed advisory lock. Any
 // constant works; it only has to be the same in every process. Exported so
@@ -119,7 +120,15 @@ export async function seedGlobalLibrary(
     if (toInsert.length > 0)
       await workouts.createMany(
         null,
-        toInsert.map((w) => ({ ...w, source: "starter" as const })),
+        toInsert.map((w) => ({
+          ...w,
+          source: "starter" as const,
+          // The only place an id is ever chosen rather than minted: a fresh
+          // database seeds the same ids as every other (seedId.ts). Rows
+          // that already exist never reach this branch, so production's
+          // pre-existing ids are untouched.
+          id: seedWorkoutId(w.title),
+        })),
       );
   });
 }

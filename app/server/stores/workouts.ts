@@ -13,6 +13,15 @@ export type WorkoutSource = "starter" | "user";
 export type NewWorkoutInput = WorkoutInput & {
   source: WorkoutSource;
   sortOrder?: number | null;
+  /** Set ONLY by `seedGlobalLibrary` (`seed/seedId.ts`), so a fresh
+   *  database seeds the same library ids as every other. Absent means the
+   *  column default (`gen_random_uuid()`), which is every personal row and
+   *  every pre-existing global row — Drizzle emits `default`, never NULL,
+   *  for an undefined value here (measured on drizzle-orm 0.45.2 via
+   *  `.toSQL()`, design spec 2026-09-12 fact 4). `create()` deliberately
+   *  does not read it: `routes/data.test.ts` pins that a client-supplied
+   *  `id` on POST is ignored. */
+  id?: string;
 };
 
 // user_id NULL marks a global starter-library row (seeded once at boot,
@@ -97,6 +106,7 @@ export function createWorkoutsStore(db: Db) {
           .insert(workouts)
           .values(
             inputs.map((input) => ({
+              id: input.id,
               userId,
               sortOrder: input.sortOrder ?? null,
               title: input.title,
