@@ -8,6 +8,91 @@ the history of a table you are about to judge again. Every number here
 carries the command that produced it; a section without commands is not a
 DBA entry.
 
+## 2026-09-12 — Phase PS PR 1 plan pass, the prescribed `statsRows()` (plan Task 4 / Task 10)
+
+**Verdict: PASS.** Scale that ruled: the household — 1k rows/user (≈4 years at
+5/week) costs 9.5 ms and 225 KB per fetch. Both plan literals hold; the plan's
+two departures from the spec's sketch are improvements, measured.
+
+| Environment | |
+| --- | --- |
+| Postgres | `PostgreSQL 18.4 (Debian 18.4-1.pgdg13+1) aarch64`, `docker run --rm -d --name erg-dba-pg -p 5434:5432 -e POSTGRES_PASSWORD=dev postgres:18.4` |
+| Settings | `work_mem` 4 MB · `shared_buffers` 128 MB · `jit` on · `set max_parallel_workers_per_gather=0` on every timing |
+| Machine | Apple M5, 10 cores, 16 GB; Docker 29.4.1; Node v26.5.0 |
+| Tree | worktree `ps-pr1` at `68d0653e` (route NOT implemented — the plan's blocks were run verbatim from a scratchpad script) |
+| Schema | all 31 `app/drizzle/*.sql` via `psql -v ON_ERROR_STOP=1`; `\d session_logs` → `session_logs_user_id_idx` only |
+| Seed | 2026-09-07 `dba_gen_a` retargeted at `session_logs`, users at 1k/10k/100k + filler → 1,000,000 rows, 1411 MB, 50.5 s |
+| Runs | medians of 5 after a discarded run 1, one psql session; HTTP p95 over n=25 |
+
+**The SQL measured** is drizzle's own `.toSQL()` for the prescribed
+`STATS_ROW_COLUMNS`:
+
+    select "id", "logged_at", "source", "workout_type", "ended_by",
+      "machine_work_seconds", "machine_work_meters", "work_seconds",
+      "work_meters", "rest_seconds", "rest_meters", "distance_meters",
+      "time_seconds", "steps",
+      case when jsonb_typeof("machine_summary"->'totalCalories') = 'number'
+           then ("machine_summary"->>'totalCalories')::double precision
+           else null end
+    from "session_logs" where "session_logs"."user_id" = $1
+
+The `case` column ships UNALIASED; drizzle maps by position and read
+`totalCalories` numeric in 700/1000, 7000/10000, 70000/100000 rows.
+
+| rows/user | psql | EXPLAIN exec | drizzle warm | raw `pg` | HTTP median | payload |
+|---|---|---|---|---|---|---|
+| 1k | 8.38 ms | 0.91 ms | 7.8 ms | 6.7 ms | 9.5 ms | 224,781 B |
+| 10k | 75.23 ms | 4.19 ms | 80.2 ms | 70.6 ms | 86.3 ms (p95 90.8) | 2,248,115 B |
+| 100k | 943.40 ms | 56.37 ms | 832.4 ms | 766.6 ms | 939.2 ms | 22,481,319 B |
+
+**Plan literals.** 224.8 B/row ≤ 240 → PASS (identical at all three scales —
+`steps` is genuinely dropped). 10k p95 90.8 ms ≤ 150 ms → PASS.
+
+**Deltas vs the spec pass (same box, same seed).**
+1. **No `ORDER BY` kills the sort.** Spec shape: Bitmap Heap Scan + `Sort
+   Method: external merge Disk: 73680kB`, exec 129 ms at 100k. Plan shape:
+   `Index Scan using session_logs_user_id_idx … Buffers: shared hit=174
+   read=17580`, **no Sort node**, exec 56.37 ms. `rows=` estimate within 3%
+   at 10k/100k (30% low at 1k, sampling).
+2. **Drizzle's mapper is +9-15%** over raw `pg` (`driver.ts`); the spec-pass
+   Node figure was raw `pg` and was that much low. At 10k it moved 71.8 → 80.2.
+3. **The `jsonb_typeof` guard closes the ledger's poison-value hazard.** In a
+   rolled-back tx, two rows with `totalCalories` `"thirty-seven"` and `37.5`:
+   guarded → `null` / `37.5`; the spec's bare cast → `ERROR: invalid input
+   syntax for type double precision: "thirty-seven"`, which would 500 that
+   user's entire history. Cost is noise (75.2 guarded vs 77.6 unguarded at 10k).
+4. **gzip measured, was UNTESTED.** `curl -H 'Accept-Encoding: gzip'` returned
+   byte-identical bodies at every scale — no compression middleware, confirmed
+   on the wire rather than from `package.json`.
+
+**Queries per request.** `log_statement='all'` → exactly ONE
+`execute <unnamed>: select "id", "logged_at", …` per `GET`. No N+1; `pg.Pool`'s
+default `max` 10 is not in play. Reset after.
+
+**Migration / lock / index.** None owed and none prescribed: no schema hit in
+the plan; `session_logs_user_id_idx` is 6376 kB at 1M and serves every scale;
+the `(user_id, logged_at desc, id desc)` composite stays unowed because there
+is no `ORDER BY`.
+
+**Correctness (the spec pass's open note, now closed).** Task 4 Step 5 seeds
+`machineFused` with the fused `distanceMeters: 500 + FUSED_REST_METERS` = 620
+and `preRc5` as an explicit pre-RC-5 fused row, and asserts **three**
+stored-tier rows — so the `k ROWS PREDATE` count can go red, and Step 6's
+mutation (`workMeters: r.distanceMeters`) bites on exactly the fusion
+(`expected 620 to be 500`).
+
+**Plan corrections (folded at `b4bddbdf`).** Task 10 Step 1's `payload.sh`
+cannot exist before the route does — `payload.ts` plus `http-bench.sh`
+replace it. `bench.sh` must drop `BENCH_PRE`'s own `Time:` line in ORDER
+before sorting, or it discards the fastest run rather than the cold one.
+
+**Untested.** Prod host CPU/RAM (`docs/deploy.md` states neither); prod row
+count (last dated figure 16 rows, 2026-08-28); a single user at 1M rows;
+production TLS/tunnel transfer. Container torn down (`docker ps -a` → 0).
+
+**Scripts:** `docs/superpowers/research/2026-09-12-stats-rows/` (landed with
+the plan fold, `b4bddbdf`).
+
 ## 2026-09-12 — Phase PS spec pass, `GET /api/stats/rows` shape and growth
 
 **Verdict: PASS WITH ROWS** (one row; the two Wave E rows do NOT open from

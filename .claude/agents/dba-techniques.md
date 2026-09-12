@@ -123,6 +123,29 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
   (no middleware in `app/package.json`). **A full-history read ignores the
   `(user_id, logged_at desc, id desc)` composite** (planner keeps Bitmap
   Heap Scan + Sort at 100k; 743 vs 726 ms) — it pays only under `LIMIT`.
+- **(2026-09-12, Phase PS PR 1) Dropping `ORDER BY` from a full-history read
+  turns a Bitmap Heap Scan + external-merge Sort into a plain Index Scan**:
+  at 100k rows/user the spec's ordered shape spilled `Disk: 73680kB` for
+  129 ms exec; the same projection unordered is `Index Scan using
+  session_logs_user_id_idx`, no Sort node, **56.4 ms** — and `work_mem`
+  stops mattering. A route whose client sums an unordered set should say so.
+- **Drizzle's row mapper costs 9-15% over raw `pg` for the same SQL** (10k
+  rows: 80.2 vs 70.6 ms; 100k: 832 vs 767) — measure the ORM, not `pg`, when
+  the shipped store is drizzle. `db.select(COLS)…toSQL()` gives the exact
+  text; an expression column ships UNALIASED (`case … end`) and drizzle still
+  reads it, because it maps by position.
+- **Guard every jsonb→numeric cast with `jsonb_typeof(… ) = 'number'`.**
+  `(machine_summary->>'totalCalories')::double precision` on one string value
+  errors `invalid input syntax for type double precision: "thirty-seven"` and
+  500s that user's WHOLE history; the guarded `case` returns null for the
+  string and 37.5 for a float, at no measurable cost.
+- **Express sends uncompressed even when the client asks (2026-09-12, now
+  MEASURED, previously UNTESTED):** `curl -H 'Accept-Encoding: gzip'` returned
+  byte-identical payloads at 1k/10k/100k rows. Any "gzip would cut it 6.4×"
+  claim is about a middleware that does not exist.
+- **`bench.sh` must discard `BENCH_PRE`'s own `Time:` line IN ORDER before
+  sorting**, or `tail -n +2 | sort -n` drops the fastest run and keeps the
+  cold one.
 
 ## Where the dated record lives
 

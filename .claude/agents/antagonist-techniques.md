@@ -247,6 +247,34 @@ toolkit, not a history.
     `workMeters: null` and a declining `endedBy` — nothing to reorder, result
     identical both ways. Read the fixture's fields, not its name.
 
+21. **A refactor's capture-before contract is only as good as its TIER COVERAGE
+    — enumerate the fixtures by the branch each one LANDS ON, not by its name.**
+    Six "one per tier" fixtures covered machine ×2, work-pair ×2, stored ×2 and
+    the `steps` tier ZERO times — the one branch with a nullable field and a
+    hand-written key mapping (RF33). The tell: a fixture named for a tier it
+    only reaches under the mutation.
+22. **A zone pinned to the DEVELOPER'S OWN zone is green by environment twice
+    over** — the "did the pin take" assertion is vacuous locally, and any
+    Node-side `new Date("…T09:00:00")` or `resolvedOptions().timeZone` parses in
+    the RUNNER's zone while `test.use({timezoneId})` only moves the BROWSER.
+    Recompute the expected instant under UTC before believing a local pass.
+23. **Diff the prescribed CSS class list against the prescribed JSX.** Rules
+    with no element (`.stats-legend-row`, `.stats-legend-pct`) are invisible to
+    jsdom, to `textContent` assertions, and to the a11y sweep — only a capture
+    sees them. RF5 in the other direction.
+24. **Lens 2 — the zero-total surface.** When a chart's layout function
+    handles `total = 0` by returning `[]`, render the SURFACE with ≥ 2 rows
+    whose summed field is all-null and read what the rower sees: PS PR 1's bar
+    and legend both rendered EMPTY with a caption underneath, while every unit
+    test of the layout was green. The unit is right; the seam above it has no
+    sentence for "rows, but nothing to draw".
+25. **Lens 2 — a hand-rolled input map beside the ONE builder.** Grep every
+    test for the field-by-field `?? null` mapping the domain builder exists to
+    own; a test that maps by hand cannot see the builder's key-rename
+    mutation.
+26. **Lens 2 — `page.goto` after a delete proves reload, not remount.** A "no
+    cache outlives the screen" invariant needs one same-document leg.
+
 ## Things attacked and found sound
 
 - The single-writer discipline on the run record, and its refusal to be

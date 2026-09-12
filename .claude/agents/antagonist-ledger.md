@@ -6,6 +6,66 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## Phase PS PR 1 delta pass, 2026-09-12 (the implementation plan — /harden lens 1)
+
+Target: `docs/superpowers/plans/2026-09-12-career-stats-pr1-plan.md` at
+`68d0653e`, against the PS anchor's vetted ground. DELTA + premise, folded.
+All seven MECHANISM findings folded at `b4bddbdf`.
+
+- **BROKEN — the §8.1 capture had no `steps`-tier row.** Walked the six
+  fixtures by their own fields: machine ×2, work-pair ×2, stored ×2. The
+  `steps` tier is the only union member with `workSeconds: number | null` and
+  the only branch where the hand-written step keys are load-bearing; rename
+  one and case (c) stays green. `storedSummary.test.ts:662` is the production
+  case. **Technique: count fixtures by the branch they LAND on.**
+- **BROKEN — `StatsRowInput` was built twice by hand** (client and route) and
+  invariant 1 requires them equal; §8.1 tested only the client one, and every
+  field is `number | null`, so the compiler catches omission but never
+  transposition. RF24 seam — now one builder in `domain/stats/` + a two-path
+  seam test.
+- **BROKEN — `.stats-legend-row` / `.stats-legend-pct` had no JSX.** Case (7)
+  asserted a concatenated `textContent` that could not distinguish.
+- **BROKEN — the e2e backdate was green by environment.** `16:00:00.000Z` was
+  measured on a runner whose local zone is `America/New_York`; CI (UTC) would
+  write `12:00:00.000Z`. `test.use({timezoneId})` moves the browser, not Node.
+- **BROKEN — `.you-doors > *` === 3** pinned an env fact (no C2 availability in
+  the e2e stack) and never named STATS. `You.tsx:153-168`: four children.
+- **BROKEN — `--type-tr` exists** (`tokens.css:185`, aliased to `--ink`); the
+  CSS wrote `var(--ink)` twice.
+- **BROKEN — the domain→src ESLint exemption** `domain/**/*.test.ts` was wider
+  than its one cause (`domain/monitor/nfc.test.ts:11`).
+- **HELD, attacked hard.** The calendar transcription over 73,414 days
+  (1900-2100) vs `Date.UTC`: zero mismatches, epoch 0, 2100-02-28+1 → 03-01.
+  Node 26 re-reads `TZ` after Dates exist (240 → −840, measured); vitest
+  4.1.11 gives each file its own PID, so no leak. Every seed figure recomputed
+  from `seed.mjs`, delete-R13 included (54,752 / 34,752 / 7 OF 9).
+  `rowContribution` ≡ `buildHeroes` gate-for-gate (`storedSummary.ts:626-648`).
+  `POST /api/logs` reads no `loggedAt` (`schema.ts:184` `defaultNow()`), so
+  the raw-SQL backdate bypasses no supported producer.
+- **Could not establish:** a stored `actualMeters: null` diverges the two
+  implementations, but the declared type is `actualMeters?: number` and no
+  producer was found — hardening debt. A non-`stored` row excluded from AVG
+  WATTS by the null check is uncounted by `k ROWS PREDATE` (spec-level,
+  ruling 6). The e2e is blind to local-vs-UTC getters: every row sits at
+  local noon.
+
+## Phase PS PR 1 plan, lens 2, 2026-09-12 (prescribed code as code)
+
+Read every block against the real declarations (`domain/types.ts`,
+`schema.ts`, `storedSummary.ts`, `data.ts`'s validators); reinstated the
+fold's 50 files at `b4bddbdf`, ran three tsc projects, eslint, prettier, 168
+unit + 340 client tests — all green. Six findings, four MECHANISM (folded):
+(F1) Σ seconds = 0 over ≥ 2 rows rendered an empty bar + empty legend on hero
+and subpage with no copy — measured by render; (F2) a cleared CUSTOM date was
+silently ignored; (F4) `gate0LogBodies.test.ts` re-mapped inputs by hand so
+the step-key mutation could not reach it; (F6) the delete→refetch e2e leg was
+`page.goto`, blind to a module cache. Held: the tier rule vs `buildHeroes`
+line by line; every seed figure re-derived by hand (incl. the 174 W ruling-6
+literal); per-user isolation at store and route; no invalid date can leave an
+`<input type="date">` (jsdom sanitises to "", measured). Bookkeeping:
+`backdateLog` doc named a `zone` param that no longer existed; Task 10 called
+a tracked directory "untracked".
+
 ## Phase PS anchor pass, 2026-09-12 (career stats, TRIAD: a number's meaning)
 
 Target: `docs/superpowers/specs/2026-09-12-career-stats-design.md` + ROADMAP
