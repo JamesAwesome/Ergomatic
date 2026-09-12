@@ -1,0 +1,204 @@
+{
+  "formula": "WCAG 2.1 relative luminance, https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio",
+  "tokens": "app/src/theme/tokens.css",
+  "pairs": [
+    {
+      "fg": "--ink",
+      "fgHex": "#1b1a17",
+      "bg": "--page",
+      "bgHex": "#f4f1e8",
+      "kind": "text",
+      "use": "titles, headline metres, table values",
+      "ratio": 15.41,
+      "floor": 4.5,
+      "pass": true
+    },
+    {
+      "fg": "--ink",
+      "fgHex": "#1b1a17",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "text",
+      "use": "identity card name, table values on the card, chart value labels",
+      "ratio": 17.11,
+      "floor": 4.5,
+      "pass": true
+    },
+    {
+      "fg": "--ink-3",
+      "fgHex": "#57544c",
+      "bg": "--page",
+      "bgHex": "#f4f1e8",
+      "kind": "text",
+      "use": "mono labels, captions, door rows, tab labels",
+      "ratio": 6.69,
+      "floor": 4.5,
+      "pass": true
+    },
+    {
+      "fg": "--ink-3",
+      "fgHex": "#57544c",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "text",
+      "use": "email, column headings, axis ticks and legend text on the card",
+      "ratio": 7.43,
+      "floor": 4.5,
+      "pass": true
+    },
+    {
+      "fg": "--ink-2",
+      "fgHex": "#3f3c35",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "text",
+      "use": "unselected filter segment",
+      "ratio": 10.81,
+      "floor": 4.5,
+      "pass": true
+    },
+    {
+      "fg": "--on-color",
+      "fgHex": "#fffdf7",
+      "bg": "--ink",
+      "bgHex": "#1b1a17",
+      "kind": "text",
+      "use": "selected filter segment, avatar initials",
+      "ratio": 17.11,
+      "floor": 4.5,
+      "pass": true
+    },
+    {
+      "fg": "--ink-4",
+      "fgHex": "#6f6a5f",
+      "bg": "--page",
+      "bgHex": "#f4f1e8",
+      "kind": "text",
+      "use": "captions that name a bucket (NO TYPE)",
+      "ratio": 4.76,
+      "floor": 4.5,
+      "pass": true
+    },
+    {
+      "fg": "--accent",
+      "fgHex": "#b5341f",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "non-text",
+      "use": "active tab mark",
+      "ratio": 5.94,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--rule-3",
+      "fgHex": "#c9c3b2",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "non-text",
+      "use": "filter strip border, date input border (house hairline)",
+      "ratio": 1.73,
+      "floor": 3,
+      "pass": false
+    },
+    {
+      "fg": "--rule",
+      "fgHex": "#d8d3c4",
+      "bg": "--page",
+      "bgHex": "#f4f1e8",
+      "kind": "non-text",
+      "use": "card border (house hairline)",
+      "ratio": 1.32,
+      "floor": 3,
+      "pass": false
+    },
+    {
+      "fg": "--ink",
+      "fgHex": "#1b1a17",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "non-text",
+      "use": "current-week bar, 2k line + dots, rowed streak cell, season curve + end dot, TR segment",
+      "ratio": 17.11,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--ink-4",
+      "fgHex": "#6f6a5f",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "non-text",
+      "use": "previous-week bars (DRAWN); NO TYPE segment",
+      "ratio": 5.29,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--rule-3",
+      "fgHex": "#c9c3b2",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "non-text",
+      "use": "previous-week bars per handoff 2026-08-07 decision 9 (#c9c3b2) — NOT drawn, fails",
+      "ratio": 1.73,
+      "floor": 3,
+      "pass": false
+    },
+    {
+      "fg": "--ink-5",
+      "fgHex": "#a09a8c",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "non-text",
+      "use": "previous-week bars, second candidate — NOT drawn, fails",
+      "ratio": 2.75,
+      "floor": 3,
+      "pass": false
+    },
+    {
+      "fg": "--type-an",
+      "fgHex": "#5c4382",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "non-text",
+      "use": "AN segment + legend swatch",
+      "ratio": 8,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--type-at",
+      "fgHex": "#8a5f18",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "non-text",
+      "use": "AT segment + legend swatch",
+      "ratio": 5.53,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--type-o2",
+      "fgHex": "#2a6275",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "non-text",
+      "use": "O2 segment + legend swatch, 6k line + dots",
+      "ratio": 6.65,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--rule-2",
+      "fgHex": "#ded8c9",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "non-text",
+      "use": "gridlines, not-rowed streak cell outline (decorative: the rowed fill carries the state)",
+      "ratio": 1.4,
+      "floor": 3,
+      "pass": false
+    }
+  ]
+}

@@ -1,0 +1,194 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1180,
+      "h": 300
+    },
+    {
+      "file": "A1-YouToday.dc.html",
+      "x": 0,
+      "y": 440,
+      "w": 390,
+      "h": 844,
+      "title": "A1 · You today (capture)"
+    },
+    {
+      "file": "A1b-YouTodayLandscape.dc.html",
+      "x": 480,
+      "y": 440,
+      "w": 844,
+      "h": 390,
+      "title": "A1b · You today, landscape (capture)"
+    },
+    {
+      "file": "A2-H1-You.dc.html",
+      "x": 0,
+      "y": 1420,
+      "w": 390,
+      "h": 844,
+      "title": "A2-H1 · hero = METRES PER WEEK"
+    },
+    {
+      "file": "A2-H2-You.dc.html",
+      "x": 480,
+      "y": 1420,
+      "w": 390,
+      "h": 844,
+      "title": "A2-H2 · hero = STREAK WEEK STRIP"
+    },
+    {
+      "file": "A2-H3-You.dc.html",
+      "x": 960,
+      "y": 1420,
+      "w": 390,
+      "h": 844,
+      "title": "A2-H3 · hero = TIME BY TYPE"
+    },
+    {
+      "file": "A2-H1-YouLandscape.dc.html",
+      "x": 0,
+      "y": 2540,
+      "w": 844,
+      "h": 720,
+      "title": "A2-H1 landscape"
+    },
+    {
+      "file": "A2-H2-YouLandscape.dc.html",
+      "x": 940,
+      "y": 2540,
+      "w": 844,
+      "h": 720,
+      "title": "A2-H2 landscape"
+    },
+    {
+      "file": "A2-H3-YouLandscape.dc.html",
+      "x": 1880,
+      "y": 2540,
+      "w": 844,
+      "h": 720,
+      "title": "A2-H3 landscape"
+    },
+    {
+      "file": "A3-StatsPortrait.dc.html",
+      "x": 0,
+      "y": 3400,
+      "w": 390,
+      "h": 2400,
+      "title": "A3 · /you/stats portrait, ALL"
+    },
+    {
+      "file": "A4-StatsLandscape.dc.html",
+      "x": 480,
+      "y": 3400,
+      "w": 844,
+      "h": 2300,
+      "title": "A4 · /you/stats landscape, ALL"
+    },
+    {
+      "file": "A5-CustomOpen.dc.html",
+      "x": 0,
+      "y": 5940,
+      "w": 390,
+      "h": 2460,
+      "title": "A5 · CUSTOM open (Aug 14 to Sep 12)"
+    },
+    {
+      "file": "A5b-CustomError.dc.html",
+      "x": 480,
+      "y": 5940,
+      "w": 390,
+      "h": 2460,
+      "title": "A5b · CUSTOM, FROM after TO"
+    },
+    {
+      "file": "A6a-Empty0Rows.dc.html",
+      "x": 0,
+      "y": 8540,
+      "w": 390,
+      "h": 844,
+      "title": "A6a · no rows"
+    },
+    {
+      "file": "A6b-Empty1Row.dc.html",
+      "x": 480,
+      "y": 8540,
+      "w": 390,
+      "h": 1900,
+      "title": "A6b · one row"
+    },
+    {
+      "file": "A6c-NoMonitorRows.dc.html",
+      "x": 960,
+      "y": 8540,
+      "w": 390,
+      "h": 2300,
+      "title": "A6c · three rows, none from a monitor"
+    },
+    {
+      "file": "Seed.dc.html",
+      "x": 0,
+      "y": 10980,
+      "w": 1180,
+      "h": 1500,
+      "title": "Seed rows + arithmetic"
+    },
+    {
+      "file": "A7-Contrast.dc.html",
+      "x": 1260,
+      "y": 10980,
+      "w": 1180,
+      "h": 1000,
+      "title": "A7 · contrast + hit targets"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "hero-heights",
+      "x": 1440,
+      "y": 1420,
+      "w": 420,
+      "text": "Hero heights in portrait, measured in Chromium at 390px (hero-heights.json):\nH1 METRES PER WEEK · 201px\nH2 STREAK WEEK STRIP · 142px\nH3 TIME BY TYPE · 181px\nEach is one 44px+ tap target opening /you/stats; the doors group keeps DIAGNOSTICS last. In portrait all four doors stay above the 844px fold for every candidate; in landscape every candidate scrolls (accepted 2026-09-12)."
+    },
+    {
+      "id": "a2-check",
+      "x": 1440,
+      "y": 1640,
+      "w": 420,
+      "text": "Headline figures, recomputed from the seed rows (Seed artboard):\nLIFETIME = all thirteen rows = 56,752 M\nSEASON 2027 = rows dated May 1 2026 or later (R5..R13) = 43,012 M\nH1 bars: 0 · 0 · 10,000 · 0 · 0 · 13,000 · 3,000 · 2,000 (weeks of Jul 20 .. Sep 7)\nH2 strip: □■□■□□□■□□■□□■■■, streak 3 / longest 3\nH3 stack: AN 5.7% · AT 26.6% · O2 43.4% · TR 9.6% · NO TYPE 14.6%"
+    },
+    {
+      "id": "a3-check",
+      "x": 0,
+      "y": 5830,
+      "w": 480,
+      "text": "A3/A4 TOTALS: ALL 56,752 m / 3:59:39 / 13. MACHINE 36,752 m / 2:34:31 / 10; 8 OF 10 own totals; rest 718; calories 1,731 (8 OF 10); avg watts 176 over the nine non-stored pm5 rows. Seam line counts R1 (ruled: singular form, full-width n OF m line). Filter scope is stated under the strip: TOTALS, METRES PER WEEK and TIME BY TYPE follow the range; SEASON and TEST TREND never do."
+    },
+    {
+      "id": "palette-note",
+      "x": 560,
+      "y": 5830,
+      "w": 480,
+      "text": "TIME BY TYPE stack order is AN · AT · O2 · TR · NO TYPE, not the spec's listing AN · O2 · AT · TR · NO TYPE: the dataviz palette validator fails the O2↔AN adjacency (normal-vision ΔE 11.3 < 15, deutan 4.9) and passes the drawn order (16.8 / 13.5). Previous-week bars are --ink-4, not the handoff's #c9c3b2 (1.73:1 < 3:1). Both are deviations for the ruling (A7)."
+    },
+    {
+      "id": "a5-note",
+      "x": 960,
+      "y": 5940,
+      "w": 420,
+      "text": "A5: the CUSTOM range Aug 14 .. Sep 12 has four rows; METRES PER WEEK draws the eight weeks ending Sep 12 and dashes the weeks that begin before the range (Jul 20 .. Aug 10) as empty slots. SEASON and TEST TREND are unchanged by the filter."
+    },
+    {
+      "id": "a6-note",
+      "x": 1440,
+      "y": 8540,
+      "w": 420,
+      "text": "A6b (one row): TOTALS render; METRES PER WEEK, TIME BY TYPE and SEASON each read TWO ROWS MAKE A CHART; TEST TREND draws the single T6 point (a record of one is still a record). A6c (three manual rows): MACHINE column reads NO MONITOR ROWS YET with its rows hidden; the charts render from the three rows; no test history, so TEST TREND reads NO 2K OR 6K TEST LOGGED."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
