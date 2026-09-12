@@ -44,7 +44,6 @@
 // where only one of the two decreases, and the AND-rule must reject all
 // three or the segment count comes out wrong).
 
-import { readFileSync } from "node:fs";
 import { describe, expect, it, beforeAll } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
@@ -57,20 +56,7 @@ import {
   type ParsedRecording,
 } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
-
-/** Repo-root recordings, resolved relative to THIS file (`captureReplay.
- *  test.ts:112-117`'s own idiom: plain string surgery on `import.meta.url`,
- *  never the global `URL` constructor — this project's jsdom environment
- *  resolves `new URL(...)` against `http://localhost:3000/` instead of the
- *  given `file://` base). `docs/monitor/sessions/walk-2026-08-16/` lives
- *  three directories above `app/src/monitor/` — up out of `monitor/`,
- *  `src/`, and `app/` to the repo root, then down into `docs/`. */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/registerReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-16/",
-  );
+import { readCapture } from "../test/captures";
 
 /** The armed program is HAND-TRANSCRIBED — both committed captures carry no
  *  `header.program` (premise pass, 2026-08-16: grep for `"program"` across
@@ -449,7 +435,7 @@ async function replaySession(
   readings: MachineReading[];
   frameSamples: DriverFrameSample[];
 }> {
-  const text = readFileSync(`${SESSIONS_DIR}${fileName}`, "utf8");
+  const text = readCapture("walk-2026-08-16", fileName);
   const parsed = parseRecording(text);
   const readings = readGeneralStatus(parsed);
 
@@ -664,7 +650,7 @@ describe("session 2: the emitted interval referent is monotone across boundaries
   beforeAll(async () => {
     ctx = await replaySession("session-2-wu-4unequal.jsonl", SESSION_2_PROGRAM);
     parsed = parseRecording(
-      readFileSync(`${SESSIONS_DIR}session-2-wu-4unequal.jsonl`, "utf8"),
+      readCapture("walk-2026-08-16", "session-2-wu-4unequal.jsonl"),
     );
   });
 

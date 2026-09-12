@@ -58,8 +58,6 @@
 // mappable on both transport arms) is Task 1's own subscription tests, not
 // this file's job.
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -79,26 +77,14 @@ import {
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
 import { withLiveness } from "./transports/liveness";
 import { releasingSchedule } from "../test/statusSubscriptions";
-
-/** Same path-surgery idiom as `registerReplay.test.ts`/`connectedMetrics
- *  Replay.test.ts`/`captureReplay.test.ts` (all three cite the same reason:
- *  this project's jsdom environment resolves `new URL(...)` against
- *  `http://localhost:3000/` instead of a `file://` base, so plain string
- *  surgery on `import.meta.url` is used instead). `docs/monitor/sessions/`
- *  lives three directories above `app/src/monitor/`. */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/burstReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-23/",
-  );
+import { readCapture } from "../test/captures";
 
 const CAPTURE_FILE = "keystone-pm5-recording-1787491974452.jsonl.gz";
 
 /** Parsed once, at module scope (`captureReplay.test.ts`'s own established
  *  reasoning: gunzip+parse is fast but not worth repeating per test). */
 const KEYSTONE_CAPTURE: ParsedRecording = parseRecording(
-  gunzipSync(readFileSync(`${SESSIONS_DIR}${CAPTURE_FILE}`)).toString("utf8"),
+  readCapture("walk-2026-08-23", CAPTURE_FILE),
 );
 
 /**

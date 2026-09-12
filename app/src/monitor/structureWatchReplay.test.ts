@@ -25,8 +25,6 @@
 // structure-watch assertion, because a byte the real machine was never told
 // to hold cannot honestly be compared against anything it reports back.
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { MonitorEvent } from "../../domain/monitor/types.js";
@@ -43,25 +41,15 @@ import {
   type ParsedRecording,
 } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
+import { readCapture } from "../test/captures";
 
-/** Same path-surgery idiom as `avgPaceVerdict.replay.test.ts`/
- *  `lifecycleReplay.test.ts` (jsdom resolves `new URL(...)` against
- *  `http://localhost:3000/`, so string surgery on `import.meta.url` stands
- *  in for it). `docs/monitor/sessions/` lives three directories above
- *  `app/src/monitor/`. */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/structureWatchReplay\.test\.ts$/,
-    "../docs/monitor/sessions/",
-  );
-
+/** `relPath` is `walkDir/file` (the shape every call site below passes it
+ *  in) — split once and handed to the shared loader. */
 function loadCapture(relPath: string): ParsedRecording {
-  const full = `${SESSIONS_DIR}${relPath}`;
-  const raw = full.endsWith(".gz")
-    ? gunzipSync(readFileSync(full)).toString("utf8")
-    : readFileSync(full, "utf8");
-  return parseRecording(raw);
+  const slash = relPath.indexOf("/");
+  return parseRecording(
+    readCapture(relPath.slice(0, slash), relPath.slice(slash + 1)),
+  );
 }
 
 /** `walk-2026-08-25/rests-finished-recording.jsonl.gz` — "Walk Rests"

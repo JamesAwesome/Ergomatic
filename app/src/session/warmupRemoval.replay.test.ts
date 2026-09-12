@@ -35,7 +35,6 @@
 // literal — so this pin exercises the real finish-grace/immutability rules
 // those functions enforce, not a shortcut that could silently diverge from
 // what a rower's phone actually stores.
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { createEventLog } from "../monitor/eventLog";
@@ -51,16 +50,7 @@ import {
   type MonitorRun,
 } from "../monitor/monitorRun";
 import { buildSummaryModel, type SummaryModel } from "./summaryModel";
-
-/** Same path-surgery idiom as `connectedMetricsReplay.test.ts`'s own
- *  `SESSIONS_DIR` (this file lives at the same depth under `app/`, so the
- *  identical `../docs/monitor/sessions/` climb applies). */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/session\/warmupRemoval\.replay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-16/",
-  );
+import { readCapture } from "../test/captures";
 
 /** Copied verbatim from `connectedMetricsReplay.test.ts:86` — see that
  *  file's own doc comment for the full transcription provenance. The
@@ -264,7 +254,7 @@ const SESSION_1: Capture = {
  *  comes from the fixed 129 literal, not a baseline lookup), so
  *  `buildLogSeed`'s only branch that reads baselines is never reached. */
 async function buildSummaryForCapture(capture: Capture): Promise<SummaryModel> {
-  const text = readFileSync(`${SESSIONS_DIR}${capture.path}`, "utf8");
+  const text = readCapture("walk-2026-08-16", capture.path);
   const parsed = parseRecording(text);
 
   const replay = createReplayTransport(parsed);

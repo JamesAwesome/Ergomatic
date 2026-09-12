@@ -53,7 +53,6 @@
 // holds; the field COUNT in the brief's description does not, for this
 // specific armed program.
 
-import { readFileSync } from "node:fs";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -78,18 +77,12 @@ import {
 } from "./transports/replay";
 import { withLiveness, type LivenessDeps } from "./transports/liveness";
 import { releasingSchedule } from "../test/statusSubscriptions";
-
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/liveDropSeamReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-16/",
-  );
+import { readCapture } from "../test/captures";
 
 const CAPTURE_FILE = "session-1-keystone-2x250r0.jsonl";
 
 const FULL_CAPTURE: ParsedRecording = parseRecording(
-  readFileSync(`${SESSIONS_DIR}${CAPTURE_FILE}`, "utf8"),
+  readCapture("walk-2026-08-16", CAPTURE_FILE),
 );
 
 /** Where this file cuts the capture off: seq 510 (t=91486.9ms) — ten real

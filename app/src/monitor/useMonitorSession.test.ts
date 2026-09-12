@@ -82,8 +82,7 @@ import {
 } from "../../domain/monitor/pm5/parse.js";
 import { check as checkContinuity } from "./continuity";
 import { listSessionLogs } from "./sessionLogHistory";
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
+import { readCapture } from "../test/captures";
 import {
   applyContinuityCheck,
   BANNER_RETRACT_HYSTERESIS_MS,
@@ -8886,18 +8885,11 @@ const LL_CORPUS_FILES = [
   "walk-2026-08-25/smoke-terminated-recording.jsonl.gz",
 ];
 
-const LL_SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/useMonitorSession\.test\.ts$/,
-    "../docs/monitor/sessions/",
-  );
-
+/** `fileName` is `walkDir/file` (the shape `LL_CORPUS_FILES` above lists
+ *  them in) — split once and handed to the shared loader. */
 function loadCorpusFreezeFrames(fileName: string): MonitorFrame[] {
-  const path = `${LL_SESSIONS_DIR}${fileName}`;
-  const text = fileName.endsWith(".gz")
-    ? gunzipSync(readFileSync(path)).toString("utf8")
-    : readFileSync(path, "utf8");
+  const slash = fileName.indexOf("/");
+  const text = readCapture(fileName.slice(0, slash), fileName.slice(slash + 1));
   const recording = parseRecording(text);
   const frames: MonitorFrame[] = [];
   for (const event of recording.events) {
@@ -11549,10 +11541,7 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
   });
 
   it("F2b production-path pin (design spec §4, PR 3 Task 2 Step 2(e)): session-2-wu-4unequal.jsonl's own real backward count (seq 24->29, the leftover-register PRE-RUN shape `.claude/agents/antagonist-ledger.md`'s 'Phase RC delta pass' names) never reaches a conviction through `applyContinuityCheck`, because `run === null` short-circuits before `check` is ever called — the SAME pair, fed straight into `check` with no such guard, DOES convict, so 'no conviction' here is `run === null` doing the work, not an accident of the readings themselves", () => {
-    const text = readFileSync(
-      `${LL_SESSIONS_DIR}walk-2026-08-16/session-2-wu-4unequal.jsonl`,
-      "utf8",
-    );
+    const text = readCapture("walk-2026-08-16", "session-2-wu-4unequal.jsonl");
     const { events } = parseRecording(text);
     const eventAt = (seq: number) => {
       const e = events.find((ev) => ev.seq === seq);

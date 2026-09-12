@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import {
   parseAdditionalStatus1,
@@ -18,24 +16,23 @@ import {
   deriveAverageHeartRate,
   type HeartRateSample,
 } from "../../domain/monitor/derivedHeartRate.js";
+import { readCapture } from "../test/captures";
 
 // RF11: the tile's number is checked against the MACHINE's own trace, off a
 // committed capture, not against a fixture this file chose. The corpus fact
 // this whole change rests on is visible here too — the same recordings that
 // carry hundreds of real heart-rate readings leave the end-of-workout
 // summary's four heart-rate fields empty, which is why the tile reads `—`.
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /app\/src\/monitor\/derivedHeartRate\.replay\.test\.ts$/,
-    "docs/monitor/sessions/",
-  );
+
+/** `file` is `walkDir/name` (the shape every call site below passes it in). */
+function splitWalkFile(file: string): [walkDir: string, name: string] {
+  const slash = file.indexOf("/");
+  return [file.slice(0, slash), file.slice(slash + 1)];
+}
 
 function samplesFrom(file: string): HeartRateSample[] {
-  const bytes = readFileSync(`${SESSIONS_DIR}${file}`);
-  const text = file.endsWith(".gz")
-    ? gunzipSync(bytes).toString("utf8")
-    : bytes.toString("utf8");
+  const [walkDir, name] = splitWalkFile(file);
+  const text = readCapture(walkDir, name);
   const out: HeartRateSample[] = [];
   let resting = false;
   for (const line of text.split("\n")) {
@@ -196,9 +193,8 @@ describe("deriveAverageHeartRate over the RECORDER's own samples", () => {
    *  directory imports another (the convention `avgPaceVerdict.replay.test.ts`
    *  states and follows). */
   function framesFrom(file: string): MonitorFrame[] {
-    const { events } = parseRecording(
-      readFileSync(`${SESSIONS_DIR}${file}`, "utf8"),
-    );
+    const [walkDir, name] = splitWalkFile(file);
+    const { events } = parseRecording(readCapture(walkDir, name));
     const frames: MonitorFrame[] = [];
     let last: {
       currentSplit: number;

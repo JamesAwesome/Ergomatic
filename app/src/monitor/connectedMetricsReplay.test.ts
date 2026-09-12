@@ -47,7 +47,6 @@
 //     states 4/5, `twd` alone everywhere else — verified against the real
 //     replay run before this file's tests were trusted (see the four
 //     checkpoints' own comments).
-import { readFileSync } from "node:fs";
 import { describe, expect, it, beforeAll } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
@@ -66,15 +65,7 @@ import {
   type ParsedRecording,
 } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
-
-/** Same path-surgery idiom as `registerReplay.test.ts` (this file lives
- *  beside it, one directory count identical). */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/connectedMetricsReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-16/",
-  );
+import { readCapture } from "../test/captures";
 
 /** Hand-transcribed, identical to `registerReplay.test.ts`'s own
  *  `SESSION_2_PROGRAM` (that file's own header comment carries the
@@ -319,7 +310,7 @@ async function replaySession(
   frameSamples: DriverFrameSample[];
   parsed: ParsedRecording;
 }> {
-  const text = readFileSync(`${SESSIONS_DIR}${fileName}`, "utf8");
+  const text = readCapture("walk-2026-08-16", fileName);
   const parsed = parseRecording(text);
   const readings = readGeneralStatus(parsed);
 

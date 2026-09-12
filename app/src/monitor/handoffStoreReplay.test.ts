@@ -114,8 +114,6 @@
 // leaves the stale copy behind for `stillLive` to find) and every write to
 // any OTHER key pass straight through to the real `setItem`.
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -126,24 +124,14 @@ import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
 import { releasingSchedule } from "../test/statusSubscriptions";
 import { withLiveness } from "./transports/liveness";
-
-/** Same path-surgery idiom as `burstReplay.test.ts`/`registerReplay.test.ts`
- *  (this project's jsdom environment resolves `new URL(...)` against
- *  `http://localhost:3000/` instead of a `file://` base). `docs/monitor/
- *  sessions/` lives three directories above `app/src/monitor/`. */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/handoffStoreReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-25/",
-  );
+import { readCapture } from "../test/captures";
 
 const CAPTURE_FILE = "rests-finished-recording.jsonl.gz";
 
 /** Parsed once, at module scope (established convention, `burstReplay.test
  *  .ts`/`captureReplay.test.ts`). */
 const RESTS_CAPTURE: ParsedRecording = parseRecording(
-  gunzipSync(readFileSync(`${SESSIONS_DIR}${CAPTURE_FILE}`)).toString("utf8"),
+  readCapture("walk-2026-08-25", CAPTURE_FILE),
 );
 
 /** See the file header's decode section — byte-verified against

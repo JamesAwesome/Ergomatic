@@ -81,8 +81,6 @@
 // derivation is in `docs/monitor/sessions/walk-2026-08-25/README.md`,
 // under the dated addendum to finding W-2.
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { MonitorEvent } from "../../domain/monitor/types.js";
@@ -105,25 +103,15 @@ import {
 } from "./transports/recording";
 import { createSubscribedDriver } from "../test/statusSubscriptions";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
+import { readCapture } from "../test/captures";
 
-/** Same path-surgery idiom as `avgPaceVerdict.replay.test.ts`/
- *  `structureWatchReplay.test.ts` (jsdom resolves `new URL(...)` against
- *  `http://localhost:3000/`, so string surgery on `import.meta.url` stands
- *  in for it). `docs/monitor/sessions/` lives three directories above
- *  `app/src/monitor/`. */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/oracleCorpusReplay\.test\.ts$/,
-    "../docs/monitor/sessions/",
-  );
-
+/** `relPath` is `walkDir/file` (the shape every call site below passes it
+ *  in) — split once and handed to the shared loader. */
 function loadCapture(relPath: string): ParsedRecording {
-  const full = `${SESSIONS_DIR}${relPath}`;
-  const raw = full.endsWith(".gz")
-    ? gunzipSync(readFileSync(full)).toString("utf8")
-    : readFileSync(full, "utf8");
-  return parseRecording(raw);
+  const slash = relPath.indexOf("/");
+  return parseRecording(
+    readCapture(relPath.slice(0, slash), relPath.slice(slash + 1)),
+  );
 }
 
 // ---------------------------------------------------------------------

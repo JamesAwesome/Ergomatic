@@ -15,8 +15,6 @@
 // no record at all — Phase LM's own finding, restated in the design spec's
 // §1 consumer section).
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -27,18 +25,12 @@ import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
 import { withLiveness, type LivenessDeps } from "./transports/liveness";
 import { releasingSchedule } from "../test/statusSubscriptions";
-
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/structureWatchSessionReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-27/",
-  );
+import { readCapture } from "../test/captures";
 
 const CAPTURE_FILE = "menu-at-ready-recording.jsonl.gz";
 
 const MENU_AT_READY_CAPTURE: ParsedRecording = parseRecording(
-  gunzipSync(readFileSync(`${SESSIONS_DIR}${CAPTURE_FILE}`)).toString("utf8"),
+  readCapture("walk-2026-08-27", CAPTURE_FILE),
 );
 
 /** Hand-transcribed from the capture's own `ce060021` programming tx bytes

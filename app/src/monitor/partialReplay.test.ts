@@ -85,8 +85,6 @@
 // the single import this file adds is a NON-test module,
 // `../session/partialGateFixture`.
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -105,36 +103,16 @@ import { releasingSchedule } from "../test/statusSubscriptions";
 import { withLiveness } from "./transports/liveness";
 import { resetForTests as resetHandoffStore } from "./handoffStore";
 import { resetConnectionAttemptTraceForTests } from "./nfc/connectionAttemptTrace";
+import { readCapture } from "../test/captures";
 
-/** Same path-surgery idiom as `lifecycleReplay.test.ts`/`burstReplay.test.ts`
- *  (jsdom resolves `new URL(...)` against `http://localhost:3000/`, so string
- *  surgery on `import.meta.url` stands in for it). */
-const MONITOR_SESSIONS_ROOT = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/partialReplay\.test\.ts$/,
-    "../docs/monitor/sessions/",
-  );
-
-function loadCapture(walkDir: string, file: string): ParsedRecording {
-  return parseRecording(
-    gunzipSync(
-      readFileSync(`${MONITOR_SESSIONS_ROOT}${walkDir}/${file}`),
-    ).toString("utf8"),
-  );
-}
-
-const END_ON_INTERVAL_1 = loadCapture(
-  "walk-2026-08-28",
-  "end-on-interval-1-recording.jsonl.gz",
+const END_ON_INTERVAL_1: ParsedRecording = parseRecording(
+  readCapture("walk-2026-08-28", "end-on-interval-1-recording.jsonl.gz"),
 );
-const REST_BOUNDARY = loadCapture(
-  "walk-2026-08-28",
-  "rest-boundary-recording.jsonl.gz",
+const REST_BOUNDARY: ParsedRecording = parseRecording(
+  readCapture("walk-2026-08-28", "rest-boundary-recording.jsonl.gz"),
 );
-const RESTS_FINISHED = loadCapture(
-  "walk-2026-08-25",
-  "rests-finished-recording.jsonl.gz",
+const RESTS_FINISHED: ParsedRecording = parseRecording(
+  readCapture("walk-2026-08-25", "rests-finished-recording.jsonl.gz"),
 );
 
 /** HAND-TRANSCRIBED from the captures' own `ce060021` programming tx (seq
