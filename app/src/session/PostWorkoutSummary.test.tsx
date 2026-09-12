@@ -126,7 +126,7 @@ function realisticSeries(): SeriesData {
     [114, 27, 150],
     [112, 28, 152],
   ] as const) {
-    samples.push({ t: t * 10, d: t * 4, p: pace * 10, spm, hr });
+    samples.push({ t: t * 10, d: t * 4, p: pace * 10, spm, hr, r: undefined });
     t += 20;
   }
   return { samples };

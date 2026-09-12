@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { isFreeRow, type LogSource } from "../../domain/types.js";
+import type { Sample, SeriesData } from "../../domain/monitor/types.js";
 import type { Db } from "../db/index.js";
 import { endedByEnum, planState, sessionLogs, workouts } from "../db/schema.js";
 import type { PlanKey } from "./planState.js";
@@ -38,19 +39,23 @@ export type Thumbs = "up" | "down";
 // pgEnum (`server/db/schema.ts`'s `endedByEnum`) is the value authority;
 // this type mirrors it the same way `HeldResult`/`Thumbs` above already
 // mirror theirs.
-// Wave F PR 1 (lifecycle design spec §1, "The migration, owned"): this is
-// a HAND-COPIED literal union, not derived from `CloseReason` — widening
-// the client union typechecks clean and fails only at runtime on a phone
-// unless this mirror (and `server/db/schema.ts`'s `endedByEnum`, and
-// `server/routes/data.ts`'s `ENDED_BY_VALUES`) moves in the same commit.
-// `"program-dropped"` added here for exactly that reason.
-export type EndedBy =
-  | "finished"
-  | "rower"
-  | "link-lost"
-  | "program-failed"
-  | "program-dropped"
-  | "interrupted";
+// DERIVED from the pgEnum since Phase MD PR 3, not hand-copied. It was a
+// literal union, and so was `server/routes/data.ts`'s `ENDED_BY_VALUES`, and
+// so was the prose inside that route's own error message — four copies of
+// one value set, each of which typechecked clean while disagreeing with the
+// column. Widening now happens once, in `server/db/schema.ts`. The same
+// expression already compiles a few hundred lines below, in
+// `PARTIAL_ENDED_BY`'s `satisfies` clause, which is where the idiom comes
+// from; drizzle types `enumValues` as the literal tuple inferred at the
+// `pgEnum` call site, not `string[]`.
+export type EndedBy = (typeof endedByEnum.enumValues)[number];
+
+/** The same six values as a runtime array, for the route's own bounds check
+ *  and for the message it prints when that check refuses. Exported from here
+ *  rather than re-typed in `routes/data.ts`: that file already imports
+ *  `EndedBy` from this module and does not import `db/schema.js` at all, so
+ *  this adds no import edge into the schema for the route layer. */
+export const ENDED_BY_VALUES = endedByEnum.enumValues;
 
 // Amendment (2026-08-02, Phase 6C Task 1.5): targetSplit is now OPTIONAL (an
 // effort step's frozen split is an estimate, never a prescription — the 5G
@@ -117,31 +122,74 @@ export interface LogStep {
   machineRestMeters?: number;
 }
 
-// Series capture spec (2026-08-19), §1/§3: a server-side MIRROR of the
-// client's `src/monitor/seriesRecorder.ts` `Sample`/`SeriesData` shapes —
-// not a shared import. Server code never imports from `src/` (the client
-// tree); this is the same "independent, own-bounds mirror" idiom `LogStep`
-// above already uses for the pm5-sourced fields it duplicates from
-// `logDraft.ts` rather than sharing a type across the client/server
-// boundary. `routes/data.ts`'s `validateSeries` is what actually
-// constructs a value of this shape — every field here has already passed
-// its own band check by the time it reaches this store.
-export interface LogSeriesSample {
-  t: number;
-  d: number;
-  p: number;
-  spm: number;
-  hr?: number;
-  /** trace-truth Task 2 (spec §3): mirrors the client's `Sample.r` —
-   *  present and `true` only for a sample recorded while the machine was
-   *  resting; absent means work, same idiom as `hr` above. */
-  r?: true;
-}
+// Series capture spec (2026-08-19), §1/§3, re-decided in Phase MD PR 3:
+// DERIVED from the domain's own `Sample`/`SeriesData`, not mirrored.
+//
+// This block used to be a hand-written copy, and its comment gave the
+// reason: "server code never imports from `src/`". That reason does not
+// reach this case any more. `Sample` no longer lives in `src/` — it lives
+// in `domain/monitor/types.ts`, which `tsconfig.server.json` already
+// includes and which server files already import from (`grep -rl 'domain/'
+// server --include='*.ts' | wc -l`). `server/concept2/mapping.ts` imports
+// `deriveAverageHeartRate` from the very module whose input type is a
+// `Pick` of this shape, so the compiler edge exists today; a hand-copy
+// beside it buys nothing and can drift, which is exactly the RF33 defect
+// this PR exists to close — a renamed field must be a compile error on
+// BOTH sides, and a copy cannot do that.
+//
+// What is still the server's own, and is the actual trust boundary: the
+// BOUNDS. `routes/data.ts`'s `validateSeries` is what constructs a value of
+// this shape from an untrusted body, and every field has passed its own
+// band check before it reaches this store. Sharing the SHAPE with the
+// domain does not share the bands, and does not make the route trust the
+// client. (`LogStep` above is still an independent own-bounds mirror; its
+// twin is `logDraft.ts` in the CLIENT tree, so the old reason does still
+// reach it.)
+//
+// Mutable, unlike the domain's `readonly` fields: `-readonly` is the whole
+// of the difference, and writing it as a mapped type means a field added to
+// `Sample` appears here with no edit and no chance of divergence.
+export type LogSeriesSample = { -readonly [K in keyof Sample]: Sample[K] };
+// `SeriesData`'s own two fields are already mutable, so this mapped type is
+// an alias in practice and `LogSeries["samples"]` is `Sample[]` — a stored
+// sample's FIELDS stay `readonly`, which nothing on this path assigns to.
+// Written as the mapping anyway so the two derivations read alike and a
+// later `readonly` on `SeriesData` needs no edit here.
+export type LogSeries = { -readonly [K in keyof SeriesData]: SeriesData[K] };
 
-export interface LogSeries {
-  samples: LogSeriesSample[];
-  truncated?: true;
-}
+/** Every field of `LogSeriesSample`, as a runtime array.
+ *
+ *  The exhaustiveness witness is `Record<keyof LogSeriesSample, true>`:
+ *  TypeScript rejects a MISSING key (TS2741) and an EXTRA one, so this
+ *  literal compiles only when its keys are exactly the interface's — and
+ *  since Phase MD PR 3 that interface derives from the DOMAIN's `Sample`,
+ *  so this is a runtime array of the domain shape's own field names. The
+ *  weaker `as const satisfies readonly (keyof LogSeriesSample)[]` was the
+ *  first draft and is silent on an omission — it cannot go red on the
+ *  defect this exists for (RF21).
+ *
+ *  What it gates: `routes/data.ts`'s `validateSeriesSample` REBUILDS its
+ *  result from an explicit field list rather than spreading the raw input,
+ *  and a field added to the domain shape without being added to that list
+ *  is silently dropped from every stored trace — the compiler cannot see
+ *  that, because the list produces a valid `LogSeriesSample` either way
+ *  for any field whose value may be `undefined`. It does NOT gate the six
+ *  per-field predicates: those are six different checks with four
+ *  different ceilings and are deliberately written out one by one.
+ *  `server/routes/seriesSeam.test.ts` is what turns this array into a
+ *  runtime assertion: it compares it against the KEY UNION over every sample
+ *  the real recorder produced AND over every sample the real validator
+ *  rebuilt on the far side of a real POST. The union, not a single sample —
+ *  `hr` and `r` are absent from most samples individually, so only the union
+ *  can see a field the list dropped. */
+export const SERIES_SAMPLE_FIELDS = Object.keys({
+  t: true,
+  d: true,
+  p: true,
+  spm: true,
+  hr: true,
+  r: true,
+} satisfies Record<keyof LogSeriesSample, true>);
 
 export interface LogInput {
   workoutId: string | null;
@@ -312,7 +360,8 @@ export interface LogPatch {
  *
  *  The client's twin is `src/log/storedSummary.ts`'s
  *  `PARTIAL_CLOSE_REASONS` (server code never imports from `src/` — see
- *  `LogSeriesSample`'s own comment above). What holds the two arrays equal
+ *  `LogStep`'s own comment above; `LogSeriesSample` is the exception that
+ *  derives from `domain/`, and says why). What holds the two arrays equal
  *  is ONE assertion — `partial.integration.test.ts`'s
  *  `expect([...PARTIAL_ENDED_BY]).toStrictEqual([...PARTIAL_CLOSE_REASONS])`,
  *  the only place both trees are imported. NOT that file's row-by-row

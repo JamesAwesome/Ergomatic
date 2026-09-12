@@ -15,6 +15,7 @@ import {
   CursorNotFoundError,
   PARTIAL_ENDED_BY,
   type LogInput,
+  type LogSeries,
   type LogPatch,
   type LogsStore,
   type PlanLink,
@@ -682,7 +683,39 @@ function makeFakeLogsStore(
       // all), so the real store's `list` can never return it. Spreading the
       // whole `input` here used to leak it into this fake's `list` (and thus
       // `GET /api/logs`) — a shape production can never produce.
-      const { advancesPlan, ...stored } = input;
+      const { advancesPlan, series: rawSeries, ...rest } = input;
+      // jsonb IS a serializer, and this fake stands in for the column. Phase
+      // MD PR 3 made `Sample.r` a required key whose value may be
+      // `undefined`; `JSON.stringify` drops such a key, so real Postgres
+      // hands back a sample with no `r` while this fake, keeping the object
+      // it was handed, handed back one WITH it. Three store-contract cases
+      // passed here and failed against real Postgres because of it, which is
+      // the one thing a contract suite must not do. Round-trip `series` so
+      // both backends agree.
+      //
+      // `steps` and `machineSummary` are jsonb too and get the SAME
+      // round-trip (PM gate on #412: the invariant is "this fake stands in
+      // for a jsonb column", and closing it for one column leaves the other
+      // two as the next counterexample). Nothing writes an undefined-valued
+      // key into either today, so this half is ungated — it removes a
+      // fake/real divergence rather than catching one.
+      // The cast below is deliberately WIDER than the value it produces: on
+      // the read side `r` is absent, exactly as it is off a real jsonb read,
+      // and `LogSeries` says the key is required. That is the shape's own
+      // stated posture (`domain/monitor/types.ts`: the required key is a
+      // CONSTRUCTION-SITE gate, and `s.r === true` is correct either way),
+      // not a hole this fake opens.
+      const roundTrip = <T>(value: T): T =>
+        value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
+      const stored = {
+        ...rest,
+        steps: roundTrip(rest.steps),
+        machineSummary: roundTrip(rest.machineSummary),
+        series:
+          rawSeries === undefined
+            ? undefined
+            : (JSON.parse(JSON.stringify(rawSeries)) as LogSeries | null),
+      };
 
       // From-the-log spec (2026-08-18), §2: mirrors the real store's
       // reordered create() — the plan_state bump runs FIRST (still gated

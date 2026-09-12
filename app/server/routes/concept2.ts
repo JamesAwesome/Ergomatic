@@ -26,7 +26,7 @@ import {
   type Concept2Store,
   type LinkSurface,
 } from "../stores/concept2.js";
-import type { LogStep, LogsStore } from "../stores/logs.js";
+import type { LogSeriesSample, LogStep, LogsStore } from "../stores/logs.js";
 import { tzError } from "./data.js";
 
 // Wave E PR1 Task 6, rebuilt at PR1.75a
@@ -246,11 +246,15 @@ function toMappingRow(row: {
     steps: Array.isArray(row.steps) ? (row.steps as LogStep[]) : [],
     // The trace feeds the derived heart-rate average. Untyped off
     // `store.get` like its neighbours; a shape the write path never admits
-    // reads as no samples rather than a partial trace.
+    // reads as no samples rather than a partial trace. The cast names the
+    // store's own `LogSeriesSample` (Phase MD PR 3) instead of re-spelling
+    // its field names — this cast is UPSTREAM of `mapping.ts`'s
+    // `SessionLogRow.series`, so a rename that fixed that one and not this
+    // one would still have broken the rest exclusion silently.
     series:
       typeof row.series === "object" && row.series !== null
         ? (row.series as {
-            samples?: readonly { t: number; hr?: number; r?: true }[];
+            samples?: readonly Pick<LogSeriesSample, "t" | "hr" | "r">[];
           })
         : null,
     source: row.source,

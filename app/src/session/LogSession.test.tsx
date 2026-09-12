@@ -39,6 +39,7 @@ import { loadMonitorRun, MONITOR_RUN_KEY } from "../monitor/handoffStore";
 import { seedMonitorRun } from "../test/seedHandoff";
 import type { SeriesData } from "../monitor/seriesRecorder";
 import type { MonitorLogEntry } from "../monitor/eventLog";
+import { asSerialized } from "../test/asSerialized";
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
 
@@ -3486,11 +3487,11 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   it("renders the trace chart below the intervals block when the loaded run carries a series", async () => {
     const series: SeriesData = {
       samples: [
-        { t: 0, d: 0, p: 1400, spm: 22, hr: 128 },
-        { t: 200, d: 80, p: 1350, spm: 23, hr: 132 },
-        { t: 400, d: 165, p: 1250, spm: 24, hr: 138 },
-        { t: 600, d: 255, p: 1200, spm: 25, hr: 142 },
-        { t: 800, d: 350, p: 1150, spm: 26, hr: 148 },
+        { t: 0, d: 0, p: 1400, spm: 22, hr: 128, r: undefined },
+        { t: 200, d: 80, p: 1350, spm: 23, hr: 132, r: undefined },
+        { t: 400, d: 165, p: 1250, spm: 24, hr: 138, r: undefined },
+        { t: 600, d: 255, p: 1200, spm: 25, hr: 142, r: undefined },
+        { t: 800, d: 350, p: 1150, spm: 26, hr: 148, r: undefined },
       ],
     };
     const { run, workout } = buildMonitorFixture({ series });
@@ -4274,8 +4275,8 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   it("attaches series on the wire body when the run has one — the success leg", async () => {
     const series: SeriesData = {
       samples: [
-        { t: 10, d: 23, p: 1400, spm: 24, hr: 138 },
-        { t: 20, d: 47, p: 1350, spm: 25 },
+        { t: 10, d: 23, p: 1400, spm: 24, hr: 138, r: undefined },
+        { t: 20, d: 47, p: 1350, spm: 25, r: undefined },
       ],
     };
     const { run, workout } = buildMonitorFixture({ series });
@@ -4298,7 +4299,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(logCalls(apiFn)).toHaveLength(1);
     const body = parsedBodies(apiFn)[0]!;
-    expect(body.series).toStrictEqual(series);
+    expect(body.series).toStrictEqual(asSerialized(series));
     expect(loadMonitorRun()).toBeNull();
     expect(retireSpy).toHaveBeenCalledTimes(1);
     expect(retireSpy).toHaveBeenCalledWith(
@@ -4313,7 +4314,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   // than failing outright.
   it("the sacrifice retry: a 413 on the first POST retries once without series, and the log saves series-less", async () => {
     const series: SeriesData = {
-      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
+      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138, r: undefined }],
     };
     const { run, workout } = buildMonitorFixture({ series });
     await seedMonitorRun(run);
@@ -4368,7 +4369,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(logCalls(apiFn)).toHaveLength(2);
     const bodies = parsedBodies(apiFn);
-    expect(bodies[0]!.series).toStrictEqual(series);
+    expect(bodies[0]!.series).toStrictEqual(asSerialized(series));
     expect("series" in bodies[1]!).toBe(false);
     // The retried body is otherwise byte-identical — only `series` is
     // genuinely gone (not present-and-undefined: `bodies[1]` came back
@@ -4433,7 +4434,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   // log's own ring).
   it("the POST sacrifice's own ring append is capped at 500 entries, oldest dropped first — the same discipline eventLog.ts's record() applies", async () => {
     const series: SeriesData = {
-      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
+      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138, r: undefined }],
     };
     const { run, workout } = buildMonitorFixture({ series });
     await seedMonitorRun(run);
@@ -4496,7 +4497,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("the sacrifice retry ALSO fails: surfaces the genuine error, MonitorRun survives for a real retry", async () => {
     const series: SeriesData = {
-      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
+      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138, r: undefined }],
     };
     const { run, workout } = buildMonitorFixture({ series });
     await seedMonitorRun(run);
@@ -4540,7 +4541,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   // surfacing a failure §3 promises can never happen.
   it("MED-1: workoutId correction survives into the sacrifice — deleted workout + series both recoverable, the log saves series-less", async () => {
     const series: SeriesData = {
-      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
+      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138, r: undefined }],
     };
     const { run, workout } = buildMonitorFixture({ series });
     await seedMonitorRun(run);
@@ -4586,11 +4587,11 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(logCalls(apiFn)).toHaveLength(3);
     const bodies = parsedBodies(apiFn);
     expect(bodies[0]!.workoutId).toBe(MONITOR_WORKOUT_ID);
-    expect(bodies[0]!.series).toStrictEqual(series);
+    expect(bodies[0]!.series).toStrictEqual(asSerialized(series));
     // Leg 2: the correction carried forward — workoutId null, series
     // STILL present (this is what the original bug discarded).
     expect(bodies[1]!.workoutId).toBeNull();
-    expect(bodies[1]!.series).toStrictEqual(series);
+    expect(bodies[1]!.series).toStrictEqual(asSerialized(series));
     // Leg 3: BOTH corrections present at once — the workoutId fix from
     // leg 2 survives, AND series is now gone.
     expect(bodies[2]!.workoutId).toBeNull();

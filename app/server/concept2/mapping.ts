@@ -9,7 +9,7 @@
 // here rather than a shared import.
 
 import type { LogSource } from "../../domain/types.js";
-import type { LogStep } from "../stores/logs.js";
+import type { LogSeriesSample, LogStep } from "../stores/logs.js";
 import { buildC2Intervals } from "./intervals.js";
 import { wireVerificationCode } from "../../domain/monitor/verificationCode.js";
 import { c2Tenths, sendableInt } from "./tenths.js";
@@ -57,11 +57,15 @@ export interface SessionLogRow {
   machineWorkSeconds: number | null;
   machineSummary: Record<string, unknown> | null;
   /** The trace, needed for the ONE field the monitor never
-   *  fills — see the heart-rate block in `buildC2Payload`. Structurally the
-   *  store's `LogSeries`, typed loosely here for the same reason
-   *  `machineSummary` is: `routes/data.ts` owns its bands. */
+   *  fills — see the heart-rate block in `buildC2Payload`. DERIVED from the
+   *  store's own `LogSeriesSample` since Phase MD PR 3 (it was a hand-spelled
+   *  inline literal, and a rename of `r` here would have silently stopped
+   *  excluding rest from a rower's logbook heart-rate — RF33 one layer up).
+   *  Narrowed to the three fields this file reads; `routes/data.ts` still
+   *  owns the bands. `samples` stays optional and `truncated` stays absent:
+   *  neither is read on this path (`?? []` absorbs the first). */
   series?: {
-    samples?: readonly { t: number; hr?: number; r?: true }[];
+    samples?: readonly Pick<LogSeriesSample, "t" | "hr" | "r">[];
   } | null;
   source: LogSource;
   endedBy: string | null;
