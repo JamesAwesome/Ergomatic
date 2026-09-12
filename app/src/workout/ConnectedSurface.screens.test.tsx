@@ -51,6 +51,7 @@ import { buildRun, type EnginePhase } from "../session/engine";
 import ConnectedSurface, { LAST_PANE_KEY } from "./ConnectedSurface";
 import { phaseIndexForInterval } from "./connected/surfaceModel";
 import type { PaneId } from "./connected/SegmentedControl";
+import { withDerivedAxes } from "../test/sessionAxes";
 
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
@@ -330,7 +331,7 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
   const fixture = options.fixture ?? FIXTURE;
   localStorage.clear();
   localStorage.setItem(LAST_PANE_KEY, pane);
-  const session: MonitorSession = {
+  const session: MonitorSession = withDerivedAxes({
     phase: options.phase ?? "live",
     undecodable: false,
     error: null,
@@ -353,7 +354,7 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
     retryHandoffSave: vi.fn().mockResolvedValue(undefined),
     proceedHandoff: vi.fn().mockResolvedValue(undefined),
     exportLog: vi.fn().mockReturnValue(LOG_JSON),
-  };
+  });
   // `session.frame` is `liveFrame(...)` a few lines up and never null; the
   // field is nullable on `MonitorSession` for the pre-first-frame case,
   // which no capture in this file builds.

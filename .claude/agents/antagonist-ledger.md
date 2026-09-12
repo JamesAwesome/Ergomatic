@@ -6,6 +6,101 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## 2026-09-12 — Phase MD exit pass (close-out, main `b2e26701`)
+
+Attacked the seven exit-criteria claims in `docs/closeouts/close-MD.md` and the
+`**Exit:**` paragraph of ROADMAP's Phase MD span. Read-only; two production
+mutations run and reverted, worktree clean.
+
+- **HELD (PROVEN) — the hand-off boundary gate can go red.** Re-added a
+  `saveMonitorRun` writer to `monitorRun.ts`: 2 failures (the offender scan and
+  the zero-storage pin). Added a bare legacy-writer CALL to `ConnectAction.tsx`:
+  the scan named the file. Both arms bite; the header's named evasions
+  (`app/scripts/**`, a non-`key` variable) stand and are disclosed.
+- **HELD — the doMock counting rule is the same on both sides.** 29 grep lines
+  at `3e7978b9` minus 3 comments = 26 statements → 0 (HEAD's 2 lines are both
+  comments); `vi.doMock(` total 82 → 30, comments included on both sides.
+- **BROKEN (oracle) / HELD (conclusion) — the `r\??: true` grep.** A decoy
+  `rest?: true` declaration left the count at 3. The real guard is
+  `logs.ts:152`'s mapped type, `mapping.ts:68`'s `Pick`, and
+  `SERIES_SAMPLE_FIELDS satisfies Record<keyof LogSeriesSample, true>`.
+- **COULD NOT ESTABLISH — Exploration B's 109/59.** Re-extracted the eight
+  cores at `bed5c1e4`: the census's two stated boundaries give 161/8/101 and
+  80/8/40. The 8/8 row reproduces exactly (same eight lines, four punctuation)
+  and the unique fraction is 50-63% either way, so NO HARNESS holds.
+- **HELD (PROVEN) — the wire kept `r` optional.** `data.ts:877-879` accepts an
+  absent `r`; `JSON.stringify` drops the `undefined`-valued required key
+  (measured). The PM's PR-3 caveat on "no hardware walk" is discharged.
+- **One `- [x]` overstated its scope (RF10/RF36), corrected in the close PR.**
+  Exploration B's row said "the last two transport `vi.doMock`s under
+  `src/monitor/`"; six remain there, all in `useMonitorSession.test.ts`. True
+  scope: the last two in the eight.
+- **One RF14 residual with no row.** The suite-level integration flake (3 of 5
+  full runs, three different files, exit 0) lived only in #412's body and PR 3's
+  plan — proposed at #412's hand-back, never ruled. Re-presented at the close.
+
+## Phase MD PR 2 plan pass, 2026-09-12 (/harden lens 1, DELTA on the plan)
+
+- **"Swap `frozen: state.frozen` for `frozen: false`; `ConnectedSurface.test.tsx`
+  and `JustRow.test.tsx` both go red."** False, and it was the ONLY probe on
+  the derivation the PR exists to create: one file builds `session()` as a
+  PROP, the other `vi.doMock`s the hook. The plan's own self-review confirmed
+  the probe was never run. `linkLoss` had no probe at all. **Technique: grep
+  each named file for the producer's instantiation before believing "must go
+  red"; a fixture helper that calls the same derive function is a mirror
+  (RF11).**
+- **"Retype the overrides `Partial<MonitorSession>` so the compiler becomes
+  the gate."** Insufficient: the hazard is the unannotated BASE literal
+  returned from a `doMock` factory. **Technique: annotate the RETURN, not the
+  parameter.**
+- **"22 hits at baseline" / clear sites in `fail()`/`teardown()`/`cancel()`.**
+  25 hits; the four paired sites are `handleEvent` ×2, `teardown`, `fail`, and
+  the bare `= null` is in `connect()`. `cancel()` holds none. Closure identity
+  of the `.catch` guard HELD.
+- **"20 hook blocks + 5 replay specs", "24 of 26 blocks freed".** 26 is a
+  STATEMENT count; three of the twenty live in shared setup helpers (8 + 4 + 2
+  callers), so the reach is 31 `it` blocks. **The delta pass's own
+  "count per block" technique, re-broken one revision later — assign each hit
+  to its enclosing `it(` OR function.**
+- **"`SCAFFOLD_PREFIX = "test/"` skips the new helper."** It skips the whole
+  directory for one file with no detector case that can fail. One-entry
+  allowlist folded into the existing no-dead-entries mirror.
+- **"The derivation and the deletion cannot be separate commits."** Half true;
+  the field deletion plus its own table-test fix is a green standalone commit.
+- **Attacked and could not break:** all four Task 1 mutations; the ring
+  assertion's discrimination; both corrected exit-criterion greps (run on
+  main); the whole-line-only comment stripper; the single new import; no
+  production spread of a `MonitorSession`.
+- **Could not establish:** whether dropping `vi.resetModules()` from 22 blocks
+  changes any assertion that turns on the hook and the test holding two
+  `handoffStore` instances. Filed as a second clause on Task 5's rule (iv).
+
+## Phase MD PR 3 plan pass, 2026-09-12 (one `Sample` shape — /harden lens 1, DELTA)
+
+- **"No compiler crosses `src/` → `server/`; one test does" (spec §3 invariant
+  4).** True about `src/`, falsified by the plan's own Task 1, which moves the
+  declaration into `domain/` — a tree `tsconfig.server.json` includes, that 27
+  server files import from, and that `server/concept2/mapping.ts` already
+  imports `deriveAverageHeartRate` from. The hand-written mirror became a
+  CHOICE; the controller ruled for the derived shape (six declarations → two).
+- **"Every consumer downstream of the store re-serializes, so wrapping both
+  sides of the contract assertions weakens nothing."** Counterexample inside
+  the same PR: the FAKE logs store keeps `stored.series` by reference, and the
+  new seam test runs `Object.keys` over it. Fix: wrap the expected side only
+  and make the fake jsonb-honest (`JSON.parse(JSON.stringify(…))`).
+- **"The spread preserves serialized key order."** The plain literal compiles
+  and serializes identically; Postgres jsonb reorders keys anyway (measured).
+  The spread is right because it keeps `hr` ABSENT in memory.
+- **The seam test's payload assertion had no divergence pin** (131 vs 129 on
+  this capture; nothing asserted they differ). Pinned.
+- **Comment-and-title drift half-swept**; `schema.test.ts`'s now-unused
+  `EndedBy` import under `noUnusedLocals`; three prescribed artifacts living
+  only in the authoring session's scratchpad.
+- **Attacked and could not break:** the `types.ts` home; every consumer call
+  site under the required key; exit criterion 1 red at 7; criterion 5b; the
+  `EndedBy` order safety; the witness's scope; mutation 1 below the seam; no
+  session-scoped state.
+
 ## Phase PS PR 1 delta pass, 2026-09-12 (the implementation plan — /harden lens 1)
 
 Target: `docs/superpowers/plans/2026-09-12-career-stats-pr1-plan.md` at

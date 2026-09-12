@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseRecording } from "../monitor/transports/recording.js";
 import { createReplayTransport } from "../monitor/transports/replay.js";
@@ -9,6 +8,7 @@ import type { Sample, SeriesData } from "../monitor/seriesRecorder.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { fmtSplit } from "../../domain/format.js";
+import { readCapture } from "../test/captures";
 import { buildTrace } from "./traceModel.js";
 
 // ---------------------------------------------------------------------
@@ -32,10 +32,6 @@ import { buildTrace } from "./traceModel.js";
 // file's remaining tests need, using ONLY realistic, single-session input.
 // ---------------------------------------------------------------------
 
-const REPO_ROOT = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(/app\/src\/log\/traceModel\.test\.ts$/, "");
-
 /** Drives a committed `.jsonl` capture through the PRODUCTION parser and
  *  driver, collecting every emitted `MonitorFrame` — see
  *  `seriesRecorder.test.ts`'s own `loadCaptureFrames` for the full
@@ -43,15 +39,16 @@ const REPO_ROOT = import.meta.url
  *  `intervalIndex` parse: this recorder cannot fold a boundary on a key
  *  that never changes). */
 async function loadCaptureFrames(
-  repoRelativePath: string,
+  walkDir: string,
+  file: string,
   programOverride?: WorkoutProgram,
 ): Promise<MonitorFrame[]> {
-  const text = readFileSync(`${REPO_ROOT}${repoRelativePath}`, "utf-8");
+  const text = readCapture(walkDir, file);
   const parsed = parseRecording(text);
   const program = programOverride ?? parsed.header.program;
   if (!program) {
     throw new Error(
-      `loadCaptureFrames: ${repoRelativePath} carries no header.program and no programOverride was given`,
+      `loadCaptureFrames: ${walkDir}/${file} carries no header.program and no programOverride was given`,
     );
   }
 
@@ -86,8 +83,8 @@ function seriesFromFrames(frames: MonitorFrame[]): SeriesData {
   return series;
 }
 
-const STEP3_PATH =
-  "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl";
+const STEP3_WALK_DIR = "walk-2026-08-17";
+const STEP3_FILE = "step-3-pm5-recording-second-rest-1786973713929.jsonl";
 
 /** `seriesRecorder.test.ts`'s own `SESSION_2_PROGRAM` (walk-2026-08-16,
  *  hand-transcribed — no `header.program` on this recording). Duplicated
@@ -145,7 +142,9 @@ const SESSION_2_PROGRAM: WorkoutProgram = {
 
 describe("buildTrace — §7.2 the sentinel rule, proven against a REAL capture", () => {
   it("step-3 (wu 1:00 r0 + 1:00 r30, a real belted walk): every p===0 sample is excluded from both the drawn points and domainY", async () => {
-    const series = seriesFromFrames(await loadCaptureFrames(STEP3_PATH));
+    const series = seriesFromFrames(
+      await loadCaptureFrames(STEP3_WALK_DIR, STEP3_FILE),
+    );
     // Ground this test depends on, pinned exactly (also independently
     // pinned by seriesRecorder.test.ts's own oracle for this capture).
     expect(series.samples).toHaveLength(243);
@@ -168,7 +167,9 @@ describe("buildTrace — §7.2 the sentinel rule, proven against a REAL capture"
   });
 
   it("step-3: the SAME rule for the rate channel — every spm===0 sample is excluded from both the drawn points and domainY (11 of 243 samples read spm===0 in this capture)", async () => {
-    const series = seriesFromFrames(await loadCaptureFrames(STEP3_PATH));
+    const series = seriesFromFrames(
+      await loadCaptureFrames(STEP3_WALK_DIR, STEP3_FILE),
+    );
     const zeroSpmSamples = series.samples.filter((s) => s.spm === 0);
     // Pinned exactly, not "some" — a real count on this real capture, the
     // same evidentiary bar the pace sentinel test above sets. Both fields
@@ -195,7 +196,9 @@ describe("buildTrace — §7.2 the sentinel rule, proven against a REAL capture"
 
 describe("buildTrace — §3/§7.1 domainY: the full range of real readings, no clipping", () => {
   it("step-3's pace domain fully contains the real min/max split, never clipped toward either end", async () => {
-    const series = seriesFromFrames(await loadCaptureFrames(STEP3_PATH));
+    const series = seriesFromFrames(
+      await loadCaptureFrames(STEP3_WALK_DIR, STEP3_FILE),
+    );
     const realPaceTenths = series.samples
       .filter((s) => s.p !== 0)
       .map((s) => s.p);
@@ -220,7 +223,8 @@ describe("buildTrace — 2026-08-20: rest samples are drawn but excluded from th
   // stretching a work range of ~2s into a flat line).
   it("session-2-wu-4unequal (a real non-frozen-rest capture): domainY is bounded by WORK readings only, never by the rest excursion", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      "walk-2026-08-16",
+      "session-2-wu-4unequal.jsonl",
       SESSION_2_PROGRAM,
     );
     const series = seriesFromFrames(frames);
@@ -321,7 +325,9 @@ describe("buildTrace — §3/§7.4 the line breaks across a REAL gap, never acro
   // evidence is owed to a future task if this module's own gap-break
   // behavior needs a real-capture witness again.
   it("step-3: heart rate (no sentinel exclusions of its own in this capture, since every sample carries hr) draws as ONE unbroken segment straight through BOTH interval boundaries, including the 30s rest", async () => {
-    const series = seriesFromFrames(await loadCaptureFrames(STEP3_PATH));
+    const series = seriesFromFrames(
+      await loadCaptureFrames(STEP3_WALK_DIR, STEP3_FILE),
+    );
     const trace = buildTrace(series, "hr")!;
     expect(trace.points).toHaveLength(1);
     // All 243 samples carry hr when replayed through the REAL driver
@@ -358,7 +364,9 @@ describe("buildTrace — §3/§7.4 the line breaks across a REAL gap, never acro
 
 describe("buildTrace — §3 pace inverts (faster is up), rate/hr do not", () => {
   it("on a real capture", async () => {
-    const series = seriesFromFrames(await loadCaptureFrames(STEP3_PATH));
+    const series = seriesFromFrames(
+      await loadCaptureFrames(STEP3_WALK_DIR, STEP3_FILE),
+    );
     expect(buildTrace(series, "pace")!.invert).toBe(true);
     expect(buildTrace(series, "rate")!.invert).toBe(false);
     expect(buildTrace(series, "hr")!.invert).toBe(false);
@@ -367,7 +375,9 @@ describe("buildTrace — §3 pace inverts (faster is up), rate/hr do not", () =>
 
 describe("buildTrace — §5's text alternative: real values, direction, no boundary claim", () => {
   it("pace summary on step-3 names the measure, the session's first/last real reading, its fastest split, the segment count, and the rest clause — never the word 'interval'", async () => {
-    const series = seriesFromFrames(await loadCaptureFrames(STEP3_PATH));
+    const series = seriesFromFrames(
+      await loadCaptureFrames(STEP3_WALK_DIR, STEP3_FILE),
+    );
     const trace = buildTrace(series, "pace")!;
     // First/last/fastest real readings independently derived from the
     // capture, not hand-copied constants.
@@ -403,7 +413,9 @@ describe("buildTrace — §5's text alternative: real values, direction, no boun
   });
 
   it("hr summary on step-3 carries no segment clause, since the line never breaks", async () => {
-    const series = seriesFromFrames(await loadCaptureFrames(STEP3_PATH));
+    const series = seriesFromFrames(
+      await loadCaptureFrames(STEP3_WALK_DIR, STEP3_FILE),
+    );
     const trace = buildTrace(series, "hr")!;
     expect(trace.points).toHaveLength(1);
     expect(trace.summary.startsWith("Heart rate, ")).toBe(true);
@@ -456,9 +468,9 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
   it("marks trace points recorded during a rest", () => {
     const series = {
       samples: [
-        { t: 10, d: 40, p: 1200, spm: 20 },
+        { t: 10, d: 40, p: 1200, spm: 20, r: undefined },
         { t: 20, d: 45, p: 1400, spm: 18, r: true as const },
-        { t: 30, d: 80, p: 1200, spm: 20 },
+        { t: 30, d: 80, p: 1200, spm: 20, r: undefined },
       ],
     };
     const model = buildTrace(series, "pace")!;
@@ -473,9 +485,9 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
     // same series: exactly ONE segment, not three
     const series = {
       samples: [
-        { t: 10, d: 40, p: 1200, spm: 20 },
+        { t: 10, d: 40, p: 1200, spm: 20, r: undefined },
         { t: 20, d: 45, p: 1400, spm: 18, r: true as const },
-        { t: 30, d: 80, p: 1200, spm: 20 },
+        { t: 30, d: 80, p: 1200, spm: 20, r: undefined },
       ],
     };
     expect(buildTrace(series, "pace")!.points).toHaveLength(1);
@@ -492,7 +504,8 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
   // itself did not create.
   it("a real, non-frozen rest capture (session-2-wu-4unequal.jsonl) carries rest-marked points through to the model; the capture's own real gap splits it in two, but no rest run straddles that split", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      "walk-2026-08-16",
+      "session-2-wu-4unequal.jsonl",
       SESSION_2_PROGRAM,
     );
     const rec = createSeriesRecorder();
@@ -522,7 +535,8 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
   // claiming the rest pace is meaningful; this clause doesn't).
   it("buildSummary names the rest spans for a screen-reader user, on the real rest-bearing capture", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      "walk-2026-08-16",
+      "session-2-wu-4unequal.jsonl",
       SESSION_2_PROGRAM,
     );
     const rec = createSeriesRecorder();
@@ -540,9 +554,9 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
   it("buildSummary names no rest spans when the trace has none", () => {
     const series = {
       samples: [
-        { t: 10, d: 40, p: 1200, spm: 20 },
-        { t: 20, d: 45, p: 1400, spm: 18 },
-        { t: 30, d: 80, p: 1200, spm: 20 },
+        { t: 10, d: 40, p: 1200, spm: 20, r: undefined },
+        { t: 20, d: 45, p: 1400, spm: 18, r: undefined },
+        { t: 30, d: 80, p: 1200, spm: 20, r: undefined },
       ],
     };
     const trace = buildTrace(series, "pace")!;

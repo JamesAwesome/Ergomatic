@@ -94,11 +94,13 @@
 // proof this transcription is right — a wrong duration/pace/rest fails
 // that assertion, not silently.
 //
-// Composition: the SAME `createReplayTransport` + `vi.doMock("../adapters/
-// monitorTransport")` + `vi.resetModules()` + dynamic re-import idiom
-// `burstReplay.test.ts` established — restated here rather than imported
-// (this repo's own convention: no test file in `src/monitor/` imports
-// another test file).
+// Composition: the SAME `createReplayTransport` + `createTransport`/
+// `registerAppLifecycleListener` deps (Phase MD PR 2) + `vi.resetModules()`
+// + dynamic re-import idiom `burstReplay.test.ts` established — restated
+// here rather than imported (this repo's own convention: no test file in
+// `src/monitor/` imports another test file). `vi.resetModules()` survives
+// here for the fresh-module-graph reason `runReplay`'s own doc comment
+// gives, never to swap a mocked module — the mocks are gone.
 //
 // THE FAULT INJECTION (plan Task 1's own brief, spec §10's header rule —
 // "PAYLOAD-INSPECTING storage stubs — deny by content, never by count
@@ -112,8 +114,6 @@
 // leaves the stale copy behind for `stillLive` to find) and every write to
 // any OTHER key pass straight through to the real `setItem`.
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -124,24 +124,14 @@ import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
 import { releasingSchedule } from "../test/statusSubscriptions";
 import { withLiveness } from "./transports/liveness";
-
-/** Same path-surgery idiom as `burstReplay.test.ts`/`registerReplay.test.ts`
- *  (this project's jsdom environment resolves `new URL(...)` against
- *  `http://localhost:3000/` instead of a `file://` base). `docs/monitor/
- *  sessions/` lives three directories above `app/src/monitor/`. */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/handoffStoreReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-25/",
-  );
+import { readCapture } from "../test/captures";
 
 const CAPTURE_FILE = "rests-finished-recording.jsonl.gz";
 
 /** Parsed once, at module scope (established convention, `burstReplay.test
  *  .ts`/`captureReplay.test.ts`). */
 const RESTS_CAPTURE: ParsedRecording = parseRecording(
-  gunzipSync(readFileSync(`${SESSIONS_DIR}${CAPTURE_FILE}`)).toString("utf8"),
+  readCapture("walk-2026-08-25", CAPTURE_FILE),
 );
 
 /** See the file header's decode section — byte-verified against
@@ -306,12 +296,14 @@ function snapshotStore(
 
 /**
  * Drives `RESTS_CAPTURE.events` through the real transport-replay engine
- * into a FRESH `useMonitorSession` instance — the identical `vi.doMock`/
- * `vi.resetModules()` composition `burstReplay.test.ts`'s own `runReplay`
- * established (restated here, not imported: no test file in `src/monitor/`
- * imports another). `driverOptions.now`/`.schedule` bind to the SAME
- * `replay.clock` the recorded `t` values replay against, so `FINISH_GRACE_
- * MS` reads the identical clock the wire timing is scripted on.
+ * into a FRESH `useMonitorSession` instance, `createTransport`/
+ * `registerAppLifecycleListener` passed as deps (Phase MD PR 2) rather than
+ * `vi.doMock`ed — the same composition `burstReplay.test.ts`'s own
+ * `runReplay` uses (restated here, not imported: no test file in
+ * `src/monitor/` imports another). `driverOptions.now`/`.schedule` bind to
+ * the SAME `replay.clock` the recorded `t` values replay against, so
+ * `FINISH_GRACE_MS` reads the identical clock the wire timing is scripted
+ * on.
  *
  * `snapshotAtMs` (row-2 leg): virtual-clock instants at which to record
  * the store's own state, scheduled on `replay.clock` so they fire from
@@ -333,12 +325,12 @@ async function runReplay(
     onRecovery: () => undefined,
   });
 
-  vi.doMock("../adapters/monitorTransport", () => ({
-    defaultTransport: vi.fn(() => transport),
-  }));
-  vi.doMock("../adapters/appLifecycle", () => ({
-    registerAppLifecycleListener: vi.fn(() => (): void => undefined),
-  }));
+  // THE SEAM (Phase MD PR 2): `registerAppLifecycleListener`/`createTransport`
+  // are passed as DEPS now, never `vi.doMock`ed — `vi.resetModules()` + the
+  // dynamic re-import below stay for the FRESH-MODULE-GRAPH reason this
+  // function's own doc comment gives (the `freshStore` import a few lines
+  // down has to land in the SAME module epoch as the hook), not to swap a
+  // mock.
   vi.resetModules();
 
   const { useMonitorSession: freshUseMonitorSession } =
@@ -356,6 +348,8 @@ async function runReplay(
   const { result } = renderHook(() =>
     freshUseMonitorSession({
       now: () => FIXED_NOW,
+      createTransport: () => transport,
+      registerAppLifecycleListener: () => (): void => undefined,
       driverOptions: {
         now: () => replay.clock.now(),
         schedule: releasingSchedule((cb, ms) => replay.clock.schedule(cb, ms)),
@@ -395,8 +389,6 @@ async function runReplay(
 
 describe("the finish-grace boundary vs. a denied live→closed write (design spec §3, §10 row 8) — plan Task 1's own gate", () => {
   afterEach(() => {
-    vi.doUnmock("../adapters/monitorTransport");
-    vi.doUnmock("../adapters/appLifecycle");
     vi.resetModules();
     vi.restoreAllMocks();
     localStorage.clear();

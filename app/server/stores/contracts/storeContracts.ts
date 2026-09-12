@@ -21,6 +21,26 @@ import type { NewWorkoutInput, WorkoutsStore } from "../workouts.js";
 // in-memory fake) a fresh `makeStores()` call produces.
 const NON_EXISTENT_UUID = "00000000-0000-0000-0000-000000000000";
 
+/** A value as the jsonb COLUMN can hold it.
+ *
+ *  Phase MD PR 3 made `Sample.r` (and so `LogSeriesSample.r`) a REQUIRED key
+ *  whose value may be `undefined`, so a sample built in memory carries
+ *  `r: undefined` while the column carries no `r` at all — `JSON.stringify`
+ *  drops an `undefined`-valued key, which is the whole reason the change
+ *  costs zero stored bytes.
+ *
+ *  Wrap the EXPECTED side ONLY. The ACTUAL side is what the backend handed
+ *  back and must be compared as it is, or these cases stop being able to see
+ *  a backend returning a key the column cannot hold — which is precisely
+ *  what the in-memory fake was doing until this PR taught its `create` to
+ *  round-trip `series` the way jsonb does.
+ *
+ *  `src/test/asSerialized.ts` is the client tree's copy under the same name;
+ *  server code never imports from `src/`. Same `undefined` guard as the client
+ *  copy (`JSON.parse(JSON.stringify(undefined))` throws). */
+const asSerialized = <T>(value: T): T =>
+  value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
+
 /** `listPlanLinks` also returns each winning row's save-time workout
  *  snapshot, pinned in full by the two dedicated `listPlanLinks` cases
  *  below. The DELETE suite's subject is only ever WHICH LOG holds an
@@ -1300,7 +1320,9 @@ export function describeStoreContracts(
           await stores.logs.create(
             userId,
             logInput({
-              series: { samples: [{ t: 10, d: 23, p: 140, spm: 24 }] },
+              series: {
+                samples: [{ t: 10, d: 23, p: 140, spm: 24, r: undefined }],
+              },
             }),
           );
           const list = await stores.logs.list(userId, 10);
@@ -1310,10 +1332,12 @@ export function describeStoreContracts(
         it("get still returns the full row, series included", async () => {
           const stores = await makeStores();
           const userId = await stores.makeUser();
-          const series = { samples: [{ t: 10, d: 23, p: 140, spm: 24 }] };
+          const series = {
+            samples: [{ t: 10, d: 23, p: 140, spm: 24, r: undefined }],
+          };
           const { id } = await stores.logs.create(userId, logInput({ series }));
           const row = await stores.logs.get(userId, id);
-          expect(row).toMatchObject({ series });
+          expect(row).toMatchObject({ series: asSerialized(series) });
         });
 
         // RC-2/RC-3 wave: `machineSummary` joins `steps`/`series` in the
@@ -1616,14 +1640,14 @@ export function describeStoreContracts(
           const userId = await stores.makeUser();
           const series = {
             samples: [
-              { t: 10, d: 23, p: 1400, spm: 24, hr: 138 },
-              { t: 20, d: 47, p: 1350, spm: 25 },
+              { t: 10, d: 23, p: 1400, spm: 24, hr: 138, r: undefined },
+              { t: 20, d: 47, p: 1350, spm: 25, r: undefined },
             ],
             truncated: true as const,
           };
           const { id } = await stores.logs.create(userId, logInput({ series }));
           const row = await stores.logs.get(userId, id);
-          expect(row!.series).toStrictEqual(series);
+          expect(row!.series).toStrictEqual(asSerialized(series));
         });
 
         // S5 (§4's table): the full 14,400-sample worst case (ruling 2's
@@ -1642,11 +1666,12 @@ export function describeStoreContracts(
             p: 1400 + (i % 500),
             spm: 20 + (i % 10),
             ...(i % 3 === 0 ? { hr: 120 + (i % 100) } : {}),
+            r: undefined,
           }));
           const series = { samples, truncated: true as const };
           const { id } = await stores.logs.create(userId, logInput({ series }));
           const row = await stores.logs.get(userId, id);
-          expect(row!.series).toStrictEqual(series);
+          expect(row!.series).toStrictEqual(asSerialized(series));
         });
       });
 

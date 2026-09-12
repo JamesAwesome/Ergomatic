@@ -103,6 +103,12 @@ import { forgetLastDevice } from "./lastDevice";
 import { defaultTransport } from "../adapters/monitorTransport";
 import { registerAppLifecycleListener } from "../adapters/appLifecycle";
 import {
+  deriveAxes,
+  deriveLinkLoss,
+  type ConnectedAxes,
+  type LinkLossAxis,
+} from "./connectedAxes";
+import {
   SILENCE_THRESHOLD_MS,
   type CancelFn,
   type LivenessDeps,
@@ -952,6 +958,14 @@ function defaultSeriesFlushSchedule(cb: () => void, ms: number): () => void {
 
 export interface MonitorSession {
   phase: ConnectedPhase;
+  /** The four axes, derived once here (Phase MD PR 2). Screens read THIS,
+   *  never `phase` — `connectedAxes.ts`'s header says why, and
+   *  `connectedPhaseReaders.test.ts` enforces both halves. */
+  axes: ConnectedAxes;
+  /** Who said the link was gone, when `axes.link` is `"lost"`. Separate from
+   *  `axes` because the axes tuple cannot answer it — see the derivation
+   *  site at the bottom of this hook. */
+  linkLoss: LinkLossAxis;
   /** The app cannot read this monitor: a characteristic failed to decode
    *  steadily and this SITTING has never produced a readable frame. Distinct
    *  from a lost link, which is silence and belongs to the liveness path —
@@ -997,15 +1011,16 @@ export interface MonitorSession {
   /** Mirrors `freezeRef` — `isPausedRun(freezeRef.current)` at the instant
    *  of the last `update()`. Published for `connectedAxes.ts`'s `activity`
    *  axis (design spec §1) — read-only, derived, not a second source of
-   *  truth (`freezeRef` still owns the write). Consumed since task 2:
-   *  `ConnectedSurface.tsx`'s `deriveAxes` call feeds this straight through. */
+   *  truth (`freezeRef` still owns the write). Consumed by THIS hook's own
+   *  `deriveAxes` call (Phase MD PR 2 — the one derivation site; screens
+   *  read `session.axes` and no longer call `deriveAxes` themselves). */
   frozen: boolean;
   /** Mirrors `runRef`: `true` iff this hook's own record is open
    *  (`runRef.current !== null && runRef.current.completedAt === null`) at
    *  the instant of the last `update()`. Published for `connectedAxes.ts`'s
    *  `session` axis (design spec §1) — at `disconnected` the record
-   *  deliberately stays open, so `phase` alone cannot say. Consumed since
-   *  task 2, the same call `frozen` is. */
+   *  deliberately stays open, so `phase` alone cannot say. Consumed by the
+   *  same `deriveAxes` call `frozen` is (Phase MD PR 2). */
   runOpen: boolean;
   /** Mirrors `SessionState.frameSilence` (Phase LL Task 2). Published for
    *  `connectedAxes.ts`'s `deriveLink` — routed through the EXISTING lost
@@ -1128,7 +1143,17 @@ export interface MonitorSessionDeps {
    *  `transports/index.ts`'s `resolveDefaultTransport` (fake-injection, then
    *  Web Bluetooth) on web — ROADMAP CL item 2, see that adapter's own doc
    *  comment for the full reasoning. */
-  createTransport?: () => Transport | null | Promise<Transport | null>;
+  createTransport?: (
+    liveness: LivenessDeps,
+  ) => Transport | null | Promise<Transport | null>;
+  /** Registers a background/foreground listener. Defaults to
+   *  `adapters/appLifecycle`'s `registerAppLifecycleListener` (the static
+   *  import above IS the default). Injected so a test delivers a lifecycle
+   *  event by PASSING A FUNCTION rather than replacing the adapter module —
+   *  RF19's whole class of defect enters here, and `adapters/appLifecycle.ts`'s
+   *  own header records why the real module can never deliver one under
+   *  Vitest (`isNative()` is always `false` there). */
+  registerAppLifecycleListener?: typeof registerAppLifecycleListener;
   /** The driver's event log. Injectable so Task 7's diagnostics sheet can
    *  own the log it renders (`exportLog()` — the sheet reads on open; the
    *  log has no subscribe and doesn't get one, spec §5). */
@@ -1497,7 +1522,7 @@ const NO_FREEZE: FreezeRun = {
  * path below is UNCHANGED — a machine that says Active still promotes on
  * the very first frame, and this counter never runs on that path.
  */
-export const ROWING_ACTIVE_FALLBACK_FRAMES = 5;
+const ROWING_ACTIVE_FALLBACK_FRAMES = 5;
 
 /** The run of consecutive strictly-progressing rowing frames seen while the
  *  session sits at `ready`. `distanceMeters` is the previous frame's reading,
@@ -1954,13 +1979,17 @@ export function useMonitorSession(
    *  ever written while the phase is `ready`; once the session is live it is
    *  dead weight until the next `cancel()` clears it. */
   const rowingStreakRef = useRef<RowingStreak | null>(null);
-  /** HAS THIS SITTING EVER PRODUCED A READABLE FRAME? Minted at mount,
-   *  cleared at teardown, and NOT at `connect()` — which is the whole point.
-   *  `createPm5Driver`'s closure is rebuilt on every connect, including the
-   *  one the rower's own Try again button triggers after a BLE drop, so the
-   *  driver's own latches cannot answer this without calling a
-   *  proven-readable monitor unreadable. RF27 lifetime table lives in the
-   *  design spec. */
+  /** HAS THIS SITTING EVER PRODUCED A READABLE FRAME? Minted `false` at
+   *  mount and never cleared — its lifetime IS the mount (Task 6
+   *  exploration, Phase MD PR 2: `grep -n 'framesEverEmittedRef'` returns
+   *  exactly three hits — the `useRef(false)`, one `= true` write, one
+   *  read — no clear site anywhere). The old wording here claimed "cleared
+   *  at teardown, and NOT at `connect()`"; that was wrong on both halves —
+   *  there is no teardown clear either. NOT at `connect()` is still the
+   *  point: `createPm5Driver`'s closure is rebuilt on every connect,
+   *  including the one the rower's own Try again button triggers after a
+   *  BLE drop, so the driver's own latches cannot answer this without
+   *  calling a proven-readable monitor unreadable. */
   const framesEverEmittedRef = useRef(false);
   /** Door spec (2026-09-02) §5.3's LIFETIME TABLE, in one ref.
    *
@@ -2097,15 +2126,24 @@ export function useMonitorSession(
    *  `gapMs`/`framesWhileHidden` readings that `app-lifecycle`/
    *  `resume-frames` already record, reused rather than re-derived — and
    *  consumed by the very next `handleFrame` call, whatever phase it
-   *  arrives in. Mirrors `framesWhileHiddenRef`'s own "armed here,
-   *  consumed there, then cleared" lifetime for the CONNECTION (reset at
-   *  `connect()`, below). It ALSO gets the same per-run discard
+   *  arrives in. Mirrors `framesWhileHiddenRef`'s "armed here, consumed
+   *  there" ARMING PATTERN only, not its clear-site count — the two are
+   *  NOT lockstep (Task 6 exploration, Phase MD PR 2: five clear sites
+   *  here against `framesWhileHiddenRef`'s two, `connect()` plus its own
+   *  foreground consumption). This ref ALSO gets the same per-run discard
    *  `freezeRef`/`rowingStreakRef` use — a stale armed edge from a resume
    *  that happened before a fresh arm (`program()` or `beginFreeRow()`,
    *  or the RC-37 programDropped/ready exit) must not be consumed by that
    *  NEW run's own first frame — cleared at all three of those sites for
-   *  the identical reason
-   *  `rowingStreakRef` is. `null` when no resume is currently awaiting its
+   *  the identical reason `rowingStreakRef` is, on top of `connect()` and
+   *  its own consumption. `framesWhileHiddenRef` gets none of those three
+   *  per-run clears, and that absence is DELIBERATE, not an oversight to
+   *  fix: it reaches exactly one `resume-frames` ring string, has one test
+   *  consumer, and feeds no predicate — a value carried across a per-run
+   *  reset can misreport that one string's count but cannot misdecide
+   *  anything. The first real (non-logging) consumer of `resume-frames`
+   *  is what should re-open this question, not a symmetry argument with
+   *  `resumeEdgeArmedRef`. `null` when no resume is currently awaiting its
    *  first post-resume frame. */
   const resumeEdgeArmedRef = useRef<{
     gapMs: number | null;
@@ -5247,9 +5285,8 @@ export function useMonitorSession(
       // `createTransport` override) resolves on the same tick, so `await`
       // costs nothing observable there.
       const transport = await (
-        depsRef.current.createTransport ??
-        (() => defaultTransport(livenessDepsRef.current))
-      )();
+        depsRef.current.createTransport ?? defaultTransport
+      )(livenessDepsRef.current);
       if (superseded()) {
         // Cancelled while the transport was still resolving (the native and
         // DEV arms both `await` a dynamic import here). Nothing was built
@@ -5309,7 +5346,10 @@ export function useMonitorSession(
           let scanLifecycle: (() => void) | null = null;
           try {
             try {
-              scanLifecycle = await registerAppLifecycleListener((event) => {
+              scanLifecycle = await (
+                depsRef.current.registerAppLifecycleListener ??
+                registerAppLifecycleListener
+              )((event) => {
                 if (event === "background") controller.abort();
               });
             } catch (err: unknown) {
@@ -5614,7 +5654,10 @@ export function useMonitorSession(
         // doc comment for the race this closes.
         const lifecycleAttempt = { cancelled: false };
         lifecycleAttemptRef.current = lifecycleAttempt;
-        const lifecycleResult = registerAppLifecycleListener((event) => {
+        const lifecycleResult = (
+          depsRef.current.registerAppLifecycleListener ??
+          registerAppLifecycleListener
+        )((event) => {
           if (event === "background") {
             // Task 1 (lost-monitor design spec): opens a hidden window for
             // `handleFrame`'s own counter to fill in — read back and
@@ -5743,17 +5786,54 @@ export function useMonitorSession(
           if (latch && hasMarkSuspect(transport)) transport.markSuspect();
         });
         if (lifecycleResult instanceof Promise) {
-          void lifecycleResult.then((unsub) => {
-            if (lifecycleAttempt.cancelled) {
-              // `fail()`/`teardown()` already ran for this attempt before the
-              // native promise settled — the ref may already belong to a
-              // LATER attempt's own real listener. Unregister this one
-              // directly rather than writing it anywhere.
-              unsub();
-              return;
-            }
-            lifecycleUnsubRef.current = unsub;
-          });
+          // `.then(onFulfilled, onRejected)`, NOT `.then(...).catch(...)`: a
+          // chained `.catch` would also catch a throw from the fulfilled
+          // arm's own `unsub()` and record a registration that SUCCEEDED as
+          // a failed one (branch review, L1). The rejection handler is scoped
+          // to the registration alone.
+          void lifecycleResult.then(
+            (unsub) => {
+              if (lifecycleAttempt.cancelled) {
+                // `fail()`/`teardown()` already ran for this attempt before the
+                // native promise settled — the ref may already belong to a
+                // LATER attempt's own real listener. Unregister this one
+                // directly rather than writing it anywhere.
+                unsub();
+                return;
+              }
+              lifecycleUnsubRef.current = unsub;
+            },
+            (err: unknown) => {
+              // A rejected registration for a LIVE attempt is one ring entry
+              // and nothing else: the session is already connected and every
+              // other path through it still works — only the
+              // background/foreground instruments are missing, which is
+              // exactly what RF19 says must be visible rather than silent.
+              // Guarded by the same `cancelled` token the `.then` arm reads:
+              // an attempt torn down before the native promise settled is not
+              // this session's failure to report — and note that TWO of the
+              // four `cancelled = true` sites are in `handleEvent`, so a
+              // mid-session link DROP silences a late rejection on purpose:
+              // the session it would have instrumented is already over.
+              // Recorded on the session RING
+              // (`log`), not the NFC attempt trace — that trace is drained into
+              // this ring and `complete()`d above, and is `undefined` on
+              // non-NFC connect, so a `trace?.record` here would reach nothing.
+              // The CAUSE rides the detail (`String(err)`): a registration
+              // that rejects on a device is a platform-sourced failure with
+              // nothing else observing it (RF19), and an entry that says only
+              // WHERE it happened sends the next reader back to the phone.
+              // A SYNCHRONOUS throw from the registrar is out of this arm's
+              // scope: it lands in `connect()`'s own catch and fails the
+              // connect, as it always did (the web arm cannot throw; the
+              // native arm returns a promise).
+              if (lifecycleAttempt.cancelled) return;
+              log.record(
+                "lifecycle-registration-failed",
+                `session: ${String(err)}`,
+              );
+            },
+          );
         } else {
           lifecycleUnsubRef.current = lifecycleResult;
         }
@@ -6444,8 +6524,43 @@ export function useMonitorSession(
     };
   }, []);
 
+  // THE ONE DERIVATION SITE (Phase MD PR 2). Five screens used to rebuild
+  // this input object field-for-field and call `deriveAxes` themselves; they
+  // read `session.axes` now, and `connectedPhaseReaders.test.ts`'s second
+  // scan is what keeps a sixth from appearing.
+  //
+  // `linkLoss` is published BESIDE `axes` rather than folded into it because
+  // it is NOT a function of the axes tuple: `lost|none|none|unknown` is
+  // produced both by `pairing` + `frameSilence` (`linkLoss: "inferred"`) and
+  // by `disconnected` (`"reported"`). Conflating those two is the Phase RN
+  // Gate 0 defect — offering a reconnect that cannot run, because nothing
+  // was disposed on the inferred path. `connectedAxes.ts`'s own sentence
+  // ("exported as its own reader ... because exactly one screen needs it")
+  // is superseded: one derivation site beats one narrow shape.
+  //
+  // THE NOT_A_MACHINE_REFUSAL RULING, re-homed here from
+  // `AxesInput.failureLeavesLinkUp`'s doc comment when that field was
+  // deleted (James, 2026-09-12). The field was `null` at every call site
+  // that ever existed, so `deriveLink`'s `failed` case returned `"lost"`
+  // unconditionally in practice and the `"up"` branch was live code with no
+  // live caller; the branch is gone. The ruling it encoded survives, and
+  // this is the only place a real value could ever be produced: a
+  // transport-side failure reads `"lost"`, and a genuine `ProgramRejection`
+  // the PM5 itself sent reads `"up"`. Whoever first needs that distinction
+  // classifies `ConnectedError.reason` HERE and widens `deriveLink` again —
+  // see `ConnectedInterstitial.tsx`'s NOT_A_MACHINE_REFUSAL markers for what
+  // the distinction is for.
+  const axesInput = {
+    phase: state.phase,
+    frozen: state.frozen,
+    runOpen: state.runOpen,
+    frameSilence: state.frameSilence,
+  };
+
   return {
     phase: state.phase,
+    axes: deriveAxes(axesInput),
+    linkLoss: deriveLinkLoss(axesInput),
     undecodable: state.undecodable,
     error: state.error,
     deviceName: state.deviceName,

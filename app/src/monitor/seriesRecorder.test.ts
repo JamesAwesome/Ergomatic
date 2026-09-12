@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   parseAdditionalStatus1,
@@ -15,7 +14,12 @@ import { fromHexString, parseRecording } from "./transports/recording.js";
 import { createEventLog } from "./eventLog.js";
 import { createSubscribedDriver } from "../test/statusSubscriptions";
 import { createReplayTransport } from "./transports/replay.js";
-import { createSeriesRecorder, SERIES_SAMPLE_CAP } from "./seriesRecorder.js";
+import {
+  createSeriesRecorder,
+  SERIES_SAMPLE_CAP,
+  type Sample,
+} from "./seriesRecorder.js";
+import { readCapture } from "../test/captures";
 
 // ---------------------------------------------------------------------
 // Real-wire replay helper (the oracle grounding, same idiom as
@@ -36,25 +40,14 @@ import { createSeriesRecorder, SERIES_SAMPLE_CAP } from "./seriesRecorder.js";
 // a completeness nicety, not a load-bearing choice.
 // ---------------------------------------------------------------------
 
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/seriesRecorder\.test\.ts$/,
-    "../docs/monitor/sessions/",
-  );
-
-/** Repo-root resolution (same plain-string-surgery idiom as `SESSIONS_DIR`
- *  above and `registerReplay.test.ts`'s own `SESSIONS_DIR` — this project's
- *  jsdom environment resolves `new URL(...)` against `http://localhost:3000/`
- *  rather than the given `file://` base). `loadCaptureFrames` below takes
- *  paths VERBATIM from the plan/spec, rooted at the repo root (e.g.
- *  `docs/monitor/sessions/...`), not `SESSIONS_DIR`-relative. */
-const REPO_ROOT = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(/app\/src\/monitor\/seriesRecorder\.test\.ts$/, "");
-
+/** `relativePath` is `walkDir/file` — split once and handed to the shared
+ *  loader. */
 function readSessionFile(relativePath: string): string {
-  return readFileSync(`${SESSIONS_DIR}${relativePath}`, "utf-8");
+  const slash = relativePath.indexOf("/");
+  return readCapture(
+    relativePath.slice(0, slash),
+    relativePath.slice(slash + 1),
+  );
 }
 
 /** Drives a committed `.jsonl` capture through the PRODUCTION parser and
@@ -80,15 +73,16 @@ function readSessionFile(relativePath: string): string {
  *  approach `registerReplay.test.ts` established for the walk-2026-08-16
  *  pair — see `STEP_2_PROGRAM` below for that decode. */
 async function loadCaptureFrames(
-  repoRelativePath: string,
+  walkDir: string,
+  file: string,
   programOverride?: WorkoutProgram,
 ): Promise<MonitorFrame[]> {
-  const text = readFileSync(`${REPO_ROOT}${repoRelativePath}`, "utf-8");
+  const text = readCapture(walkDir, file);
   const parsed = parseRecording(text);
   const program = programOverride ?? parsed.header.program;
   if (!program) {
     throw new Error(
-      `loadCaptureFrames: ${repoRelativePath} carries no header.program and no programOverride was given`,
+      `loadCaptureFrames: ${walkDir}/${file} carries no header.program and no programOverride was given`,
     );
   }
 
@@ -280,7 +274,8 @@ describe("createSeriesRecorder — §6.1 oracle, decoded from the committed reco
   // wire bytes, same decode.
   it("step-2 (walk-2026-08-17, 2×250m r0 no wu — itself a restSeconds:0 boundary, distance-interval shaped): exactly 139 samples; the boundary's exact fold VALUE; real d/p/spm at named samples; the interval's own terminal gap under one second", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+      "walk-2026-08-17",
+      "step-2-pm5-recording-1786973078979.jsonl",
       STEP_2_PROGRAM,
     );
     const resetIndex = findResetIndex(frames);
@@ -355,7 +350,8 @@ describe("createSeriesRecorder — §6.1 oracle, decoded from the committed reco
   // step-3 carries its own `header.program`, so no override is needed.
   it("step-3 (walk-2026-08-17, wu 1:00 r0 + 1:00 r30 + ...): exactly 243 samples; BOTH boundaries' exact fold VALUE and segment-end gap; the 30s rest contributes ZERO samples", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+      "walk-2026-08-17",
+      "step-3-pm5-recording-second-rest-1786973713929.jsonl",
     );
 
     const resetIndices = findAllResetIndices(frames);
@@ -497,7 +493,8 @@ describe("createSeriesRecorder — S7 dual-rate decimation is platform-independe
   // real.
   it("a synthetic 10 Hz stream (the real ~2 Hz recording's own frames, each held/repeated 5×) decimates to the identical series", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+      "walk-2026-08-17",
+      "step-2-pm5-recording-1786973078979.jsonl",
       STEP_2_PROGRAM,
     );
 
@@ -592,7 +589,8 @@ describe("createSeriesRecorder — hr presence (§1's Shape row: absent, never p
   // presence contract against a capture that DOES cross two boundaries.
   it("real leg: every sample from the first 0x0032 arrival onward decoded from step-3 (a belted walk) carries a numeric hr", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+      "walk-2026-08-17",
+      "step-3-pm5-recording-second-rest-1786973713929.jsonl",
     );
     const rec = createSeriesRecorder();
     for (const f of frames) rec.onFrame(f);
@@ -858,7 +856,8 @@ describe("createSeriesRecorder — trace-truth Task 1: the register map, driven 
   // kept verbatim.
   it("replays step-3 to the same 243 samples the shipped recorder produced (t and d in TENTHS)", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+      "walk-2026-08-17",
+      "step-3-pm5-recording-second-rest-1786973713929.jsonl",
     );
     const rec = createSeriesRecorder();
     for (const f of frames) rec.onFrame(f);
@@ -887,7 +886,8 @@ describe("createSeriesRecorder — trace-truth Task 1: the register map, driven 
     "loses NOTHING when %i frames are dropped across an interval boundary",
     async (n) => {
       const frames = await loadCaptureFrames(
-        "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+        "walk-2026-08-17",
+        "step-3-pm5-recording-second-rest-1786973713929.jsonl",
       );
       const rec = createSeriesRecorder();
       for (const f of dropAfterBoundary(frames, n)) rec.onFrame(f);
@@ -1057,7 +1057,8 @@ const SESSION_2_PROGRAM: WorkoutProgram = {
 describe("createSeriesRecorder — trace-truth Task 2: rests are marked (real capture, non-frozen rest)", () => {
   it("marks every sample recorded while the machine was resting (real capture, non-frozen rest)", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      "walk-2026-08-16",
+      "session-2-wu-4unequal.jsonl",
       SESSION_2_PROGRAM,
     );
     const rec = createSeriesRecorder();
@@ -1074,10 +1075,74 @@ describe("createSeriesRecorder — trace-truth Task 2: rests are marked (real ca
     expect(samples).toHaveLength(419);
     const rested = samples.filter((s) => s.r === true);
     expect(rested).toHaveLength(21);
-    // work samples carry NO key at all — absent, not false (the `hr` idiom)
-    expect(Object.keys(samples.find((s) => s.r === undefined)!)).not.toContain(
-      "r",
+    // A work sample costs ZERO SERIALIZED bytes. This used to read
+    // `Object.keys(...).not.toContain("r")`, which was a PROXY for that: it
+    // was true only while `r` was an optional key. Phase MD PR 3 made `r` a
+    // REQUIRED key valued `true | undefined`, so the key is present in
+    // memory and the proxy went red while the invariant it stood for was
+    // untouched. Asserting on the JSON is strictly stronger — it is the
+    // thing that reaches localStorage, the POST body and the jsonb column.
+    expect(
+      JSON.stringify(samples.find((s) => s.r === undefined)!),
+    ).not.toContain('"r"');
+  });
+
+  it("serializes a work sample and a rest sample to exactly these bytes, and the recorder obeys the same rule on both arms", () => {
+    // INDEPENDENT literals for the BYTES (RF21): the expected strings are
+    // written out by hand, so a change to `Sample` or to the recorder's
+    // constants cannot retune them. The literals themselves are ANNOTATED
+    // `Sample`, deliberately — untyped, this test would only have been
+    // exercising `JSON.stringify`, and a field added to or renamed on
+    // `Sample` would have left it green. With the annotation the same edit
+    // reds `pnpm typecheck` here.
+    const work: Sample = { t: 1, d: 4, p: 121, spm: 25, hr: 140, r: undefined };
+    const rest: Sample = { t: 2, d: 8, p: 122, spm: 25, hr: 141, r: true };
+    expect(JSON.stringify(work)).toBe(
+      '{"t":1,"d":4,"p":121,"spm":25,"hr":140}',
     );
+    expect(JSON.stringify(rest)).toBe(
+      '{"t":2,"d":8,"p":122,"spm":25,"hr":141,"r":true}',
+    );
+
+    // And the RECORDER's own output obeys the same rule on both arms. A
+    // rowing frame's sample carries no `r` in its JSON; a resting frame's
+    // carries `"r":true`. The second leg is what stops the first from
+    // passing against a recorder that simply never writes the flag.
+    const frame = (state: MonitorFrame["state"]): MonitorFrame => ({
+      elapsedSeconds: 1,
+      distanceMeters: 5,
+      sessionElapsedSeconds: 1,
+      sessionDistanceMeters: 5,
+      currentSplit: 120,
+      spm: 22,
+      heartRateBpm: 140,
+      rowingActive: state === "rowing",
+      splitAvgPace: null,
+      restSeconds: 0,
+      intervalIndex: null,
+      intervalRemaining: null,
+      intervalAccrued: null,
+      state,
+    });
+    const rowing = createSeriesRecorder();
+    rowing.onFrame(frame("rowing"));
+    expect(JSON.stringify(rowing.snapshot()!.samples[0]!)).not.toContain('"r"');
+    const resting = createSeriesRecorder();
+    resting.onFrame(frame("resting"));
+    expect(JSON.stringify(resting.snapshot()!.samples[0]!)).toContain(
+      '"r":true',
+    );
+  });
+
+  it("refuses to compile a Sample built without spelling `r`", () => {
+    // The compile-time half of the change, proved the repo's own way
+    // (`useMonitorSession.test.ts`'s directive idiom): `@ts-expect-error` is
+    // itself an error when the line below compiles, so this file stops
+    // typechecking the moment `r` goes back to being optional. Delete the
+    // directive and `pnpm typecheck` reports TS2741 on the literal.
+    // @ts-expect-error `r` is a REQUIRED key valued `true | undefined`
+    const missing: Sample = { t: 0, d: 0, p: 0, spm: 0 };
+    expect(missing.r).toBeUndefined();
   });
 });
 
@@ -1488,7 +1553,8 @@ describe("createSeriesRecorder — series-truth Task 3: the two committed captur
 
   it("session-1-keystone-2x250r0.jsonl: attribution is populated and monotonic (proving old/new equivalence), and the pinned totals are unchanged from the pre-this-task recorder", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-16/session-1-keystone-2x250r0.jsonl",
+      "walk-2026-08-16",
+      "session-1-keystone-2x250r0.jsonl",
       SESSION_1_PROGRAM,
     );
     assertConsumptionRanAndIsMonotonic(frames);
@@ -1512,7 +1578,8 @@ describe("createSeriesRecorder — series-truth Task 3: the two committed captur
 
   it("session-2-wu-4unequal.jsonl: attribution is populated and monotonic (proving old/new equivalence), and the pinned totals are unchanged from the pre-this-task recorder", async () => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      "walk-2026-08-16",
+      "session-2-wu-4unequal.jsonl",
       SESSION_2_PROGRAM,
     );
     assertConsumptionRanAndIsMonotonic(frames);

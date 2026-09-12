@@ -247,32 +247,84 @@ toolkit, not a history.
     `workMeters: null` and a declining `endedBy` — nothing to reorder, result
     identical both ways. Read the fixture's fields, not its name.
 
-21. **A refactor's capture-before contract is only as good as its TIER COVERAGE
+21. **When a design MOVES a type into a shared tree, re-derive the seam claim
+    from the tsconfig `include` lists and the existing import graph — never
+    from the comment that predates the move.** `logs.ts`'s "server code never
+    imports from `src/`" is true and stops covering the case the moment the
+    shape lands in `domain/`: `tsconfig.server.json` includes `domain`, 27
+    server files already import from it, and `concept2/mapping.ts` already
+    imports the very module in question. "No compiler can cross this seam" is
+    a claim about a build graph, so read the build graph.
+22. **A normaliser applied to the SUBJECT of an assertion converts an oracle
+    into a mirror; apply it only to the EXPECTED value.** Wrapping a store's
+    OUTPUT in `JSON.parse(JSON.stringify(…))` makes the in-memory fake and
+    real Postgres agree by construction on exactly the property the contract
+    suite exists to compare. Wrap the constructed side; let the fake go red.
+23. **Before believing "everything downstream re-serializes", grep for the
+    in-memory FAKE of the store.** A fake that keeps the object it was handed
+    is a consumer with no serializer between it and the caller.
+24. **Postgres `jsonb` does not preserve object key order** (sorts by length
+    then bytewise; measured on `postgres:18.4`). Any "the stored bytes are the
+    bytes we sent" claim about a jsonb column is false; settle it with one
+    `psql -c`.
+25. **A payload assertion that depends on two derivations DIFFERING must
+    assert that they differ.** Pin the divergence, or a capture swap silently
+    retires every assertion beneath it (RF21).
+26. **A mutation on a newly published field must be run in a file that
+    INSTANTIATES the producer.** Before writing "both these files must go
+    red", grep each for `renderHook`/the producer's own `doMock`: a screen
+    test that builds its own `session` fixture, or that `vi.doMock`s the hook
+    outright, sits downstream of the break and cannot fail for a change
+    inside it. And when the fixture helper calls the SAME derive function the
+    producer calls, every ported test is a mirror, not an oracle — the gate
+    has to live where the producer runs.
+27. **Classify a lifetime table's clear sites by their ENCLOSING FUNCTION
+    with a script, not from memory.** Walking backward from each `grep -n`
+    hit to the nearest `const X = useCallback(` moved four "cancel/teardown"
+    sites to `handleEvent` ×2 / `teardown` / `fail` + `connect` — and
+    `handleEvent` being an owner is the lifetime fact the table existed to
+    surface (a mid-session drop marks the attempt cancelled).
+
+28. **A text grep offered as an exit oracle measures a SPELLING, not an
+    invariant — drop a decoy declaration in and watch it stay silent.** Phase
+    MD's "no second declaration of the sample shape survives" gate greps
+    `r\??: true`; a decoy interface spelling the flag `rest?: true` under
+    `src/monitor/` left the count at exactly 3. What actually held was
+    structural (a `-readonly [K in keyof Sample]` mapped type and a `Pick`),
+    so cite the derivation, not the grep.
+29. **When a census's numbers rest on an intermediate artifact that was not
+    committed, re-derive them from the document's own method BEFORE citing
+    them at a phase exit.** Exploration B's 109/8/59 states two incompatible
+    core boundaries in one file; the two readings give 161/8/101 and 80/8/40.
+    The 8/8 row and the ~half-unique conclusion reproduce under both, so the
+    decision was safe and the figures are not quotable — which is the
+    distinction to report.
+30. **A refactor's capture-before contract is only as good as its TIER COVERAGE
     — enumerate the fixtures by the branch each one LANDS ON, not by its name.**
     Six "one per tier" fixtures covered machine ×2, work-pair ×2, stored ×2 and
     the `steps` tier ZERO times — the one branch with a nullable field and a
     hand-written key mapping (RF33). The tell: a fixture named for a tier it
     only reaches under the mutation.
-22. **A zone pinned to the DEVELOPER'S OWN zone is green by environment twice
+31. **A zone pinned to the DEVELOPER'S OWN zone is green by environment twice
     over** — the "did the pin take" assertion is vacuous locally, and any
     Node-side `new Date("…T09:00:00")` or `resolvedOptions().timeZone` parses in
     the RUNNER's zone while `test.use({timezoneId})` only moves the BROWSER.
     Recompute the expected instant under UTC before believing a local pass.
-23. **Diff the prescribed CSS class list against the prescribed JSX.** Rules
+32. **Diff the prescribed CSS class list against the prescribed JSX.** Rules
     with no element (`.stats-legend-row`, `.stats-legend-pct`) are invisible to
     jsdom, to `textContent` assertions, and to the a11y sweep — only a capture
     sees them. RF5 in the other direction.
-24. **Lens 2 — the zero-total surface.** When a chart's layout function
+33. **Lens 2 — the zero-total surface.** When a chart's layout function
     handles `total = 0` by returning `[]`, render the SURFACE with ≥ 2 rows
     whose summed field is all-null and read what the rower sees: PS PR 1's bar
     and legend both rendered EMPTY with a caption underneath, while every unit
     test of the layout was green. The unit is right; the seam above it has no
     sentence for "rows, but nothing to draw".
-25. **Lens 2 — a hand-rolled input map beside the ONE builder.** Grep every
+34. **Lens 2 — a hand-rolled input map beside the ONE builder.** Grep every
     test for the field-by-field `?? null` mapping the domain builder exists to
     own; a test that maps by hand cannot see the builder's key-rename
     mutation.
-26. **Lens 2 — `page.goto` after a delete proves reload, not remount.** A "no
+35. **Lens 2 — `page.goto` after a delete proves reload, not remount.** A "no
     cache outlives the screen" invariant needs one same-document leg.
 
 ## Things attacked and found sound

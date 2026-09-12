@@ -2,9 +2,11 @@
 // 2's own end-to-end proof: the committed `menu-at-ready-recording.jsonl.gz`
 // capture, replayed through the REAL driver AND the REAL
 // `useMonitorSession` hook (the same harness idiom `lifecycleReplay.test.ts`
-// already established: path-surgery `SESSIONS_DIR`, `vi.doMock` the
-// transport seam, `vi.resetModules()`, dynamic re-import so this file's own
-// fresh `useMonitorSession` picks the mock up).
+// established, Phase MD PR 2: `createTransport` passed through the hook's
+// own deps, no module mock, no `vi.resetModules()`, no dynamic re-import —
+// this file used to reach the seam through a
+// `vi.doMock("../adapters/monitorTransport")` + `vi.resetModules()` +
+// dynamic re-import composition instead).
 //
 // What this proves that `structureWatchReplay.test.ts` (driver-only) does
 // not: that the driver's `programDropped` event actually REACHES the hook's
@@ -15,30 +17,24 @@
 // no record at all — Phase LM's own finding, restated in the design spec's
 // §1 consumer section).
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { RECEIVE_CHARACTERISTIC_UUID } from "../../domain/monitor/pm5/uuids.js";
 import type { Transport } from "../../domain/monitor/types.js";
-import type { RunIdentity } from "./useMonitorSession";
+import { useMonitorSession, type RunIdentity } from "./useMonitorSession";
+import { resetForTests as resetHandoffStore } from "./handoffStore";
+import { resetConnectionAttemptTraceForTests } from "./nfc/connectionAttemptTrace";
 import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
 import { withLiveness, type LivenessDeps } from "./transports/liveness";
 import { releasingSchedule } from "../test/statusSubscriptions";
-
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/structureWatchSessionReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-27/",
-  );
+import { readCapture } from "../test/captures";
 
 const CAPTURE_FILE = "menu-at-ready-recording.jsonl.gz";
 
 const MENU_AT_READY_CAPTURE: ParsedRecording = parseRecording(
-  gunzipSync(readFileSync(`${SESSIONS_DIR}${CAPTURE_FILE}`)).toString("utf8"),
+  readCapture("walk-2026-08-27", CAPTURE_FILE),
 );
 
 /** Hand-transcribed from the capture's own `ce060021` programming tx bytes
@@ -124,24 +120,18 @@ async function runReplay(): Promise<SessionReplayOutcome> {
     },
   };
 
-  const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-    withLiveness(countingTransport, {
-      ...deps,
-      now: () => replay.clock.now(),
-      schedule: (fn, ms) => replay.clock.schedule(fn, ms),
-    }),
-  );
-  vi.doMock("../adapters/monitorTransport", () => ({
-    defaultTransport: mockDefaultTransport,
-  }));
-  vi.resetModules();
-
-  const { useMonitorSession: freshUseMonitorSession } =
-    await import("./useMonitorSession");
-
+  // THE SEAM (Phase MD PR 2, `lifecycleReplay.test.ts`'s own idiom): the
+  // transport is a DEPENDENCY now, not a module mock.
   const { result, unmount } = renderHook(() =>
-    freshUseMonitorSession({
+    useMonitorSession({
       now: () => FIXED_NOW,
+      createTransport: (liveness: LivenessDeps) =>
+        withLiveness(countingTransport, {
+          ...liveness,
+          now: () => replay.clock.now(),
+          schedule: (fn, ms) => replay.clock.schedule(fn, ms),
+        }),
+      registerAppLifecycleListener: () => (): void => undefined,
       driverOptions: {
         now: () => replay.clock.now(),
         schedule: releasingSchedule((cb, ms) => replay.clock.schedule(cb, ms)),
@@ -195,10 +185,15 @@ const RECORDED_RECEIVE_TX_COUNT = MENU_AT_READY_CAPTURE.events.filter(
 ).length;
 
 describe("useMonitorSession, replayed against walk-2026-08-27/menu-at-ready: RC-37's consumer wiring end to end", () => {
+  // The isolation `vi.resetModules()` used to give this file (Phase MD PR
+  // 2's own move, `lifecycleReplay.test.ts`'s precedent) — both reset per
+  // test now, explicitly, matching `partialReplay.test.ts:356-359`.
+  beforeEach(() => {
+    resetHandoffStore();
+    resetConnectionAttemptTraceForTests();
+  });
+
   afterEach(() => {
-    vi.doUnmock("../adapters/monitorTransport");
-    vi.resetModules();
-    vi.restoreAllMocks();
     localStorage.clear();
     sessionStorage.clear();
   });

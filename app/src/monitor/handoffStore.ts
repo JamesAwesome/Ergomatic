@@ -998,7 +998,10 @@ export function currentUnretired(sessionKey?: string): HandoffEntry | null {
  * failed session bound the surprise") — never retried, but a distinct
  * `storage-getter-error{operation:"remove"}` receipt IS emitted alongside
  * the ordinary retire receipt so the failure is at least named, even
- * though nothing downstream branches on it.
+ * though nothing downstream branches on it. The consequence — on that
+ * path a RELAUNCH rehydrates the retired record, because the tombstone
+ * is in-memory and the bytes are still there — was ACCEPTED by James at
+ * #408's hand-back (2026-09-12): no ROADMAP row, the receipt bounds it.
  *
  * **Also sweeps a malformed durable slot, independent of the entry finding
  * anything** (task-2 review, finding I2). Every call to this function —

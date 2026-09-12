@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import {
@@ -15,6 +13,7 @@ import {
   type RawPm5Status,
 } from "../../domain/monitor/pm5/parse.js";
 import type { Baselines, Step, WorkoutType } from "../../domain/types.js";
+import { readCapture } from "../test/captures";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { fromHexString } from "../monitor/transports/recording";
 import type { MachineSummaryDetail, MonitorRun } from "../monitor/monitorRun";
@@ -153,32 +152,15 @@ function interval(
   };
 }
 
-/** Repo-level captures, resolved relative to THIS file so the test works
- *  regardless of the process's cwd — the SAME technique
- *  `captureReplay.test.ts` already established (`monitor/
- *  captureReplay.test.ts`'s own `SESSIONS_DIR` comment: plain string
- *  surgery on `import.meta.url`, not the global `URL` constructor, since
- *  this project's jsdom environment resolves `new URL(...)` against
- *  `http://localhost:3000/` instead of the given `file://` base).
- *  `src/session/` sits at the same depth under `app/` as `src/monitor/`,
- *  so the identical `../docs/monitor/sessions/` climb applies. */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/session\/summaryModel\.test\.ts$/,
-    "../docs/monitor/sessions/",
-  );
-
+/** `relativePath` is `walkDir/file` (the shape every call site below
+ *  passes it in) — split once and handed to the shared loader, which
+ *  gunzips or not by extension, so this one function replaces both the
+ *  plain and the gzipped reader this file used to carry separately. */
 function readSessionFile(relativePath: string): string {
-  return readFileSync(`${SESSIONS_DIR}${relativePath}`, "utf-8");
-}
-
-/** Same idea as `readSessionFile` for a gzipped capture (this repo's own
- *  `captureReplay.test.ts` precedent for decompressing at test time rather
- *  than committing a second, uncompressed duplicate of a recording). */
-function readGzSessionFile(relativePath: string): string {
-  return gunzipSync(readFileSync(`${SESSIONS_DIR}${relativePath}`)).toString(
-    "utf-8",
+  const slash = relativePath.indexOf("/");
+  return readCapture(
+    relativePath.slice(0, slash),
+    relativePath.slice(slash + 1),
   );
 }
 
@@ -2588,7 +2570,7 @@ describe("buildSummaryModel — §6.1 THE TULE-FOG REGRESSION PIN (James's own s
 
 describe("buildSummaryModel — §6.3b THE WIRE-SCOPING PROOF (the pyramid capture, walk-2026-08-18-metrics)", () => {
   it("the committed capture's own boundary bytes appear verbatim (review finding 6's own pattern, applied to a gzipped capture)", () => {
-    const text = readGzSessionFile(
+    const text = readSessionFile(
       "walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz",
     );
     for (const hex of [

@@ -9,8 +9,10 @@
 //   - record/replay — `RecordedEvent` had no lifecycle member at all. The
 //     recorder sits at the TRANSPORT seam; this defect entered from iOS ABOVE
 //     it, so no recording could carry it and no replay could reproduce it.
-//   - unit tests — they `vi.doMock("../adapters/appLifecycle")`, replacing the
-//     very seam that was wrong.
+//   - unit tests — they used to `vi.doMock("../adapters/appLifecycle")`,
+//     replacing the very seam that was wrong; this file injects
+//     `registerAppLifecycleListener` as a dependency instead now (Phase MD
+//     PR 2).
 //   - coverage — `src/native/**` is `v8 ignore`d, and that is the arm that was
 //     wrong.
 //   - e2e — runs on web, where the lifecycle arm is a deliberate no-op
@@ -50,19 +52,19 @@
 // Harness idiom follows `burstReplay.test.ts` (the only other file that drives
 // the REAL hook under a replay transport): path-surgery `SESSIONS_DIR`, a
 // hand-transcribed `WorkoutProgram` whose correctness is proven by the replay's
-// own empty `divergences`, `vi.doMock` + `vi.resetModules()` + dynamic
-// re-import. Re-derived rather than imported — no test file in `src/monitor/`
-// imports another (that convention is stated in `connectedMetricsReplay.test
-// .ts`'s own header).
+// own empty `divergences`. It used to add `vi.doMock` + `vi.resetModules()` +
+// dynamic re-import; both are gone now, replaced by
+// `registerAppLifecycleListener`/`createTransport` passed as dependencies
+// (Phase MD PR 2). Re-derived rather than imported — no test file in
+// `src/monitor/` imports another (that convention is stated in
+// `connectedMetricsReplay.test.ts`'s own header).
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { GENERAL_STATUS_UUID } from "../../domain/monitor/pm5/uuids.js";
 import type { AppLifecycleEvent } from "../adapters/appLifecycle";
-import type { RunIdentity } from "./useMonitorSession";
+import { useMonitorSession, type RunIdentity } from "./useMonitorSession";
 import {
   parseRecording,
   type ParsedRecording,
@@ -71,16 +73,9 @@ import {
 import { createReplayTransport, type ReplayResult } from "./transports/replay";
 import { releasingSchedule } from "../test/statusSubscriptions";
 import { withLiveness, type LivenessDeps } from "./transports/liveness";
-
-/** Same path-surgery idiom as `burstReplay.test.ts`/`registerReplay.test.ts`
- *  (jsdom resolves `new URL(...)` against `http://localhost:3000/`, so string
- *  surgery on `import.meta.url` is used instead). */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/lifecycleReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-23/",
-  );
+import { resetForTests as resetHandoffStore } from "./handoffStore";
+import { resetConnectionAttemptTraceForTests } from "./nfc/connectionAttemptTrace";
+import { readCapture } from "../test/captures";
 
 const CAPTURE_FILE = "keystone-pm5-recording-1787491974452.jsonl.gz";
 
@@ -92,7 +87,7 @@ const CAPTURE_FILE = "keystone-pm5-recording-1787491974452.jsonl.gz";
  *  assertions below extend that from "it parses" to "it still REPLAYS,
  *  unchanged, through the real driver". */
 const KEYSTONE_CAPTURE: ParsedRecording = parseRecording(
-  gunzipSync(readFileSync(`${SESSIONS_DIR}${CAPTURE_FILE}`)).toString("utf8"),
+  readCapture("walk-2026-08-23", CAPTURE_FILE),
 );
 
 /** HAND-TRANSCRIBED from the capture's own `ce060021` programming tx bytes
@@ -264,31 +259,26 @@ async function runReplay(
     onLifecycle: (event) => lifecycleCb?.(event),
   });
 
-  vi.doMock("../adapters/monitorTransport", () => ({
-    defaultTransport: vi.fn((deps: LivenessDeps) =>
-      withLiveness(replay.transport, {
-        ...deps,
-        now: () => replay.clock.now(),
-        schedule: (fn, ms) => replay.clock.schedule(fn, ms),
-      }),
-    ),
-  }));
-  vi.doMock("../adapters/appLifecycle", () => ({
-    registerAppLifecycleListener: vi.fn(
-      (cb: (e: AppLifecycleEvent) => void) => {
+  // THE SEAM (Phase MD PR 2). Both halves of this harness are DEPENDENCIES
+  // now — the transport and the lifecycle registrar — so a recording's
+  // `lifecycle` track reaches the production handler with no module mock, no
+  // `vi.resetModules()`, and no dynamic re-import. `createTransport` receives
+  // the hook's own `LivenessDeps` (the same value `defaultTransport` gets in
+  // production), which is what lets the decorator's clock be rebound to the
+  // replay clock through the dep instead of by replacing the adapter.
+  const { result } = renderHook(() =>
+    useMonitorSession({
+      now: () => FIXED_NOW,
+      createTransport: (liveness: LivenessDeps) =>
+        withLiveness(replay.transport, {
+          ...liveness,
+          now: () => replay.clock.now(),
+          schedule: (fn, ms) => replay.clock.schedule(fn, ms),
+        }),
+      registerAppLifecycleListener: (cb: (e: AppLifecycleEvent) => void) => {
         lifecycleCb = cb;
         return () => undefined;
       },
-    ),
-  }));
-  vi.resetModules();
-
-  const { useMonitorSession: freshUseMonitorSession } =
-    await import("./useMonitorSession");
-
-  const { result } = renderHook(() =>
-    freshUseMonitorSession({
-      now: () => FIXED_NOW,
       driverOptions: {
         now: () => replay.clock.now(),
         schedule: releasingSchedule((cb, ms) => replay.clock.schedule(cb, ms)),
@@ -319,10 +309,15 @@ function lifecycleEntries(ring: RingEntry[]): RingEntry[] {
 }
 
 describe("Phase LM Task 4 (design spec exit criterion 8): a lifecycle transition, replayed", () => {
+  beforeEach(() => {
+    // The isolation `vi.resetModules()` used to give this file (Phase MD
+    // PR 2): every replay writes hand-off receipts through `handoffStore`'s
+    // module singleton, and the connection-attempt trace's `latest` is
+    // process-wide. Both are reset per test now, explicitly.
+    resetHandoffStore();
+    resetConnectionAttemptTraceForTests();
+  });
   afterEach(() => {
-    vi.doUnmock("../adapters/monitorTransport");
-    vi.doUnmock("../adapters/appLifecycle");
-    vi.resetModules();
     vi.restoreAllMocks();
     localStorage.clear();
   });

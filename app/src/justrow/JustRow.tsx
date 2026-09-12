@@ -21,7 +21,6 @@ import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
 // component entirely, and without its own acquire the phone sleeps mid-row
 // — the exact iOS data-loss failure the lifecycle work exists to prevent.
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
-import { deriveAxes, deriveLinkLoss } from "../monitor/connectedAxes";
 import { NAMELESS_MONITOR_CAPTION } from "../monitor/deviceCaption";
 import { read as readHandoff } from "../monitor/handoffStore";
 import SupportMatrixLink from "../monitor/SupportMatrixLink";
@@ -135,25 +134,10 @@ export default function JustRow() {
     void session.connect(last.request, last.trace);
   }, [session]);
 
-  // AXES, NEVER `session.phase`. `connectedAxes.ts` exists so that no
-  // screen switches on the raw machine state, and its enum-reader pin
-  // treats the two files that still do as migrating debt rather than a
-  // precedent — so this screen asks the four axes the same questions
-  // `JustRowObserver` asks.
-  const axes = deriveAxes({
-    phase: session.phase,
-    frozen: session.frozen,
-    runOpen: session.runOpen,
-    failureLeavesLinkUp: null,
-    frameSilence: session.frameSilence,
-  });
-  const linkLoss = deriveLinkLoss({
-    phase: session.phase,
-    frozen: session.frozen,
-    runOpen: session.runOpen,
-    failureLeavesLinkUp: null,
-    frameSilence: session.frameSilence,
-  });
+  // AXES, NEVER `session.phase` — and the hook derives them now (Phase MD
+  // PR 2), so this screen reads them rather than rebuilding the input.
+  const axes = session.axes;
+  const linkLoss = session.linkLoss;
 
   // THE ARM FIRES ONCE THE LINK IS UP, not at the press. `connect()` goes
   // through the platform's picker, so there is no moment inside

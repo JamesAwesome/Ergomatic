@@ -5,6 +5,56 @@ engagement. **Not read up front** — the bounded, always-read half is
 `pm-techniques.md`, and an entry is proposed to both. Grep this file for the
 detail behind a ruling, or for the history of a phase you are about to judge.
 
+## 2026-09-12 — Phase MD close gate (four PRs, two explorations): PASS WITH CONDITIONS
+
+Verdict: PASS WITH CONDITIONS. Every written exit criterion met and verified
+on the tree at `b2e26701`, not from the PR bodies:
+
+- doMock under `app/src/monitor/`: `vi.doMock(` lines **82 → 30**
+  (`git grep -c 'vi\.doMock(' 3e7978b9 -- app/src/monitor` vs HEAD);
+  `appLifecycle` doMock statements **26 → 0** (two surviving grep hits are
+  comments in `lifecycleReplay.test.ts` and `useMonitorSession.test.ts`).
+- `saveMonitorRun`: zero code references; all hits are comments or the boundary
+  test's own `LEGACY_WRITER_CALL` regex. `scripts/handoffStoreBoundary.test.ts`
+  **27 → 28 `it(`** — extended, not replaced, as the row required.
+- The `r\??: true` grep prints exactly the three named lines. The only other
+  `interface Sample` is `continuity.test.ts:496`, an unrelated `{t, reading}`.
+- Both explorations answered in writing ("no PR" / "no harness"), each with the
+  artifact the PM gate funded them for.
+- **No criterion verified at the wrong layer (RF24):** the byte-compat fixtures
+  are captured by driving the real writer, which is the upstream start RF24
+  asks for.
+
+**The PR-3 caveat is DISCHARGED.** Read `domain/monitor/types.ts:797-826`: `r`
+is a REQUIRED key valued `true | undefined`, `JSON.stringify` drops it, and no
+`"r":null` appears anywhere under `app/src/monitor/fixtures/`. The +19.1%
+inflation was a `::text` figure for a shape nobody wrote. The comment also
+names the condition that would invert it (`exactOptionalPropertyTypes`, set in
+no tsconfig here) — the right way to write a caveat down.
+
+**"Tester impact: none" holds in all four**, with one INFERRED item recorded:
+#413 moved axes derivation out of five screens into the hook, and nothing
+rendered was compared. The claim rests on the identical-literal census plus
+green e2e. If a derivation diverged, the connected link-loss banner misreports.
+No walk owed (no wire, no number); the next connected session is the check.
+
+**Release: no tag for MD; cut `v0.46.0` for the backlog.** `v0.45.0` is
+2026-09-09 and 38 commits back, carrying #385, #387, #402 (all tester-visible),
+#400's compat drop and #409's migration. Notes PR first, then James tags.
+
+**Conditions:** (1) `b2e26701`'s post-merge run on main was still `in_progress`
+at this gate — read it to `success` before close or tag (RF28) — DISCHARGED:
+run 34722809211 completed success, deploy included; (2) the surviving ROADMAP
+ledger row carries the three receipts above — `docs/history/phase-md.md`
+carries only PR 2's figure, and `docs/closeouts/` is not where a future sweep
+looks.
+
+**Deploy latency ruled NOISE.** #413's deploy started 37m50s after its gates
+(20:50:15 → 21:28:05) and ran green in 95s; #412's, 13 minutes earlier on the
+same runner, started in 0s. Fix-now would be reading the runner's queue logs —
+a session's work for a green anomaly. Trigger recorded instead: a second
+occurrence, or any non-green deploy, files the row that day.
+
 ## 2026-09-12 — Phase PS open gate (career stats on the You tab)
 
 **Verdict:** PASS WITH CONDITIONS (6). Spec
@@ -38,6 +88,42 @@ PS line was deleted in the same diff).
 - Backstop dates: PS `dies 2026-10-12` and MD `dies 2026-10-13` land 24 hours
   apart, so neither can discriminate which phase outvoted the other. Flagged to
   James, not ruled.
+
+## 2026-09-12 — Phase MD PR 3 final gate (#412, TRIAD: stored shape)
+
+**Verdict:** FAIL at first presentation — four blocking, none about behaviour:
+no CI run on the branch (it was DIRTY against a main that had moved), a clean
+merge that duplicated five antagonist technique numbers, a shipped comment
+claiming a ROADMAP row that did not exist, and a 243-word fold. All four
+discharged before the hand-back.
+
+- **The exit criteria were all reproducible and all reproduced**, and the
+  phantom sweep the #409 entry demanded came back CLEAN (49 backticked spec
+  symbols, 5 misses, all external). Two gates in a row is enough to keep the
+  check.
+- **"Answered, not honoured" is the honest disposal of a caveat, and the test
+  of it is the reason the caveat DIDN'T quote.** The mirror comment gave two
+  reasons; the spec retired the quotable one and the shipped comment answers
+  the second (bounds stay in the validator; `LogStep`'s mirror stands because
+  its twin IS in `src/`). **Ask which of a ruling's reasons the answer did not
+  quote.**
+- **A numbered list is a merge hazard that produces no conflict** — see the
+  techniques entry.
+- **"Tester impact: none" survived, and the check was an enum's ORDER.**
+  Deriving a 400 message from `endedByEnum.enumValues` makes the string depend
+  on declaration order; the order matches the deleted literal and a
+  six-literal ordered pin reds on a reorder. **When a PR derives user-visible
+  prose from a collection, the collection's ORDER became product copy.**
+- **Register: the proposed row was a fix-now and the undeclared flake was the
+  row.** Two more round-trips in the fake's own object literal close the
+  fake-vs-jsonb invariant (done in the PR); the testcontainers 10 s port-bind
+  flake — four distinct files in one day, withheld a coverage table — needs a
+  25-file helper and is a real row (`dies 2026-10-10`). **At a hand-back,
+  price the proposed row against its own fix AND look for the finding the body
+  documented but did not propose.**
+- Fold-word series: #248 274, #249 225, #258 134, #268 186, #272 153, #408 295,
+  #409 183, **#412 243 → trimmed**. Same source as #409: proof clauses inside
+  outcome bullets.
 
 ## 2026-09-12 — Wave A PR 1 final gate (#409, TRIAD: stored shape, auth-adjacent)
 

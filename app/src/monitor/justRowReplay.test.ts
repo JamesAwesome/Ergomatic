@@ -35,8 +35,6 @@
 // check; comparing our derived split against the machine's own average-pace
 // field is the one DEFINITION check available, and it is the one below.
 
-import { gunzipSync } from "node:zlib";
-import { readFileSync } from "node:fs";
 import {
   act,
   render,
@@ -53,20 +51,13 @@ import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport } from "./transports/replay";
 import { withLiveness } from "./transports/liveness";
 import { releasingSchedule } from "../test/statusSubscriptions";
-
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/justRowReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-31-justrow/",
-  );
+import { readCapture } from "../test/captures";
 
 const JUST_ROW_CAPTURE: ParsedRecording = parseRecording(
-  gunzipSync(
-    readFileSync(
-      `${SESSIONS_DIR}just-row-pm5-recording-1788214688045.jsonl.gz`,
-    ),
-  ).toString("utf8"),
+  readCapture(
+    "walk-2026-08-31-justrow",
+    "just-row-pm5-recording-1788214688045.jsonl.gz",
+  ),
 );
 
 // The walk README's own decode of the capture's 0x0039 — independent
@@ -81,8 +72,6 @@ const FIXED_NOW = new Date("2026-08-31T09:00:00.000Z");
 
 describe("the free row, wire to log door (RF24: one test upstream of the producer)", () => {
   afterEach(() => {
-    vi.doUnmock("../adapters/monitorTransport");
-    vi.doUnmock("../adapters/appLifecycle");
     vi.doUnmock("../api");
     vi.doUnmock("../api/useWorkouts");
     vi.doUnmock("../api/useBaselines");
@@ -103,24 +92,23 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
       onRecovery: () => undefined,
     });
 
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: vi.fn(() => transport),
-    }));
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(() => (): void => undefined),
-    }));
-    // The api mock, in the SAME epoch as the door import below — so the
-    // Save press at the end of this test posts through the real submit
-    // pipeline into a body this test can read (PM final gate, B2).
+    // THE SEAM (Phase MD PR 2): `registerAppLifecycleListener`/
+    // `createTransport` are passed as deps below, never `vi.doMock`ed. The
+    // api mock stays a `vi.doMock` — it is a THIRD module (rule iv) — in the
+    // SAME epoch as the door import below, so the Save press at the end of
+    // this test posts through the real submit pipeline into a body this test
+    // can read (PM final gate, B2). `vi.resetModules()` + the dynamic
+    // re-import survive for that reason: reaching `../api`'s mock AND
+    // sharing ONE module epoch for the hook, the store and the door — a
+    // static import at the top of this file would be a different store
+    // instance and would read null forever (handoffStoreReplay.test.ts's own
+    // rule).
     const apiFn = vi.fn<
       (path: string, init?: RequestInit) => Promise<Response>
     >(async () => new Response(JSON.stringify({ id: "log-replay-1" })));
     vi.doMock("../api", () => ({ api: apiFn }));
     vi.resetModules();
 
-    // ONE module epoch for the hook, the store and the door — a static
-    // import at the top of this file would be a different store instance
-    // and would read null forever (handoffStoreReplay.test.ts's own rule).
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
     const freshStore = await import("./handoffStore");
@@ -128,6 +116,8 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     const { result } = renderHook(() =>
       freshUseMonitorSession({
         now: () => FIXED_NOW,
+        createTransport: () => transport,
+        registerAppLifecycleListener: () => (): void => undefined,
         driverOptions: {
           now: () => replay.clock.now(),
           schedule: releasingSchedule((cb, ms) =>

@@ -7,11 +7,13 @@
 // crosses." This file drives that seam for real: the committed
 // `walk-2026-08-16/session-1-keystone-2x250r0.jsonl` capture plays through
 // the REAL driver AND the REAL `useMonitorSession` hook (the harness idiom
-// `structureWatchSessionReplay.test.ts` established for RC-37's READY-phase
-// half: path-surgery `SESSIONS_DIR`, `vi.doMock` the transport seam,
-// `vi.resetModules()`, dynamic re-import so this file's own fresh
-// `useMonitorSession` picks the mock up) to a LIVE phase carrying one
-// completed interval actual, and only THEN does constructed input begin.
+// `lifecycleReplay.test.ts` established, Phase MD PR 2: `createTransport`
+// passed through the hook's own deps, no module mock, no
+// `vi.resetModules()`, no dynamic re-import — this file used to reach the
+// seam through a `vi.doMock("../adapters/monitorTransport")` +
+// `vi.resetModules()` + dynamic re-import composition instead) to a LIVE
+// phase carrying one completed interval actual, and only THEN does
+// constructed input begin.
 //
 // **THE HONEST BOUNDARY, stated verbatim (spec §1's own words): "The BYTES
 // are constructed (no committed recording carries this shape mid-live,
@@ -53,9 +55,8 @@
 // holds; the field COUNT in the brief's description does not, for this
 // specific armed program.
 
-import { readFileSync } from "node:fs";
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import {
   WORKOUTSTATE_WAITTOBEGIN,
@@ -64,8 +65,12 @@ import {
 import { buildGeneralStatusBytes } from "../../domain/monitor/pm5/statusFrames.js";
 import { GENERAL_STATUS_UUID } from "../../domain/monitor/pm5/uuids.js";
 import type { Transport } from "../../domain/monitor/types.js";
-import type { RunIdentity } from "./useMonitorSession";
-import { loadMonitorRun } from "./handoffStore";
+import { useMonitorSession, type RunIdentity } from "./useMonitorSession";
+import {
+  loadMonitorRun,
+  resetForTests as resetHandoffStore,
+} from "./handoffStore";
+import { resetConnectionAttemptTraceForTests } from "./nfc/connectionAttemptTrace";
 import {
   parseRecording,
   type ParsedRecording,
@@ -78,18 +83,12 @@ import {
 } from "./transports/replay";
 import { withLiveness, type LivenessDeps } from "./transports/liveness";
 import { releasingSchedule } from "../test/statusSubscriptions";
-
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/liveDropSeamReplay\.test\.ts$/,
-    "../docs/monitor/sessions/walk-2026-08-16/",
-  );
+import { readCapture } from "../test/captures";
 
 const CAPTURE_FILE = "session-1-keystone-2x250r0.jsonl";
 
 const FULL_CAPTURE: ParsedRecording = parseRecording(
-  readFileSync(`${SESSIONS_DIR}${CAPTURE_FILE}`, "utf8"),
+  readCapture("walk-2026-08-16", CAPTURE_FILE),
 );
 
 /** Where this file cuts the capture off: seq 510 (t=91486.9ms) — ten real
@@ -271,24 +270,22 @@ async function runLiveDropReplay(): Promise<LiveDropOutcome> {
   const clock = extendClock(replay.clock);
   const wrapped = injectable(replay.transport);
 
-  const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-    withLiveness(wrapped, {
-      ...deps,
-      now: () => clock.now(),
-      schedule: (fn, ms) => clock.schedule(fn, ms),
-    }),
-  );
-  vi.doMock("../adapters/monitorTransport", () => ({
-    defaultTransport: mockDefaultTransport,
-  }));
-  vi.resetModules();
-
-  const { useMonitorSession: freshUseMonitorSession } =
-    await import("./useMonitorSession");
-
+  // THE SEAM (Phase MD PR 2, `lifecycleReplay.test.ts`'s own idiom): the
+  // transport is a DEPENDENCY now, not a module mock — no `vi.doMock`, no
+  // `vi.resetModules()`, no dynamic re-import. `createTransport` receives
+  // the hook's own `LivenessDeps`, which is what lets the decorator's
+  // clock be rebound to the replay+extended clock through the dep instead
+  // of by replacing the adapter.
   const { result, unmount } = renderHook(() =>
-    freshUseMonitorSession({
+    useMonitorSession({
       now: () => FIXED_NOW,
+      createTransport: (liveness: LivenessDeps) =>
+        withLiveness(wrapped, {
+          ...liveness,
+          now: () => clock.now(),
+          schedule: (fn, ms) => clock.schedule(fn, ms),
+        }),
+      registerAppLifecycleListener: () => (): void => undefined,
       driverOptions: {
         now: () => clock.now(),
         schedule: releasingSchedule((cb, ms) => clock.schedule(cb, ms)),
@@ -364,10 +361,15 @@ async function runLiveDropReplay(): Promise<LiveDropOutcome> {
 }
 
 describe("useMonitorSession, replayed against walk-2026-08-16/session-1-keystone-2x250r0 through a constructed mid-live drop: Wave F PR 1's live arm end to end (design spec 2026-08-31-lifecycle-design.md §1, review P1-3)", () => {
+  // The isolation `vi.resetModules()` used to give this file (Phase MD PR
+  // 2's own move, `lifecycleReplay.test.ts`'s precedent) — both reset per
+  // test now, explicitly, matching `partialReplay.test.ts:356-359`.
+  beforeEach(() => {
+    resetHandoffStore();
+    resetConnectionAttemptTraceForTests();
+  });
+
   afterEach(() => {
-    vi.doUnmock("../adapters/monitorTransport");
-    vi.resetModules();
-    vi.restoreAllMocks();
     localStorage.clear();
     sessionStorage.clear();
   });

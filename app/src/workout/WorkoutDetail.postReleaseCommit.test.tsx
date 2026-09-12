@@ -207,6 +207,7 @@ import { createFakeTransport } from "../monitor/transports/fake";
 import type { FakeControls } from "../monitor/transports/fake";
 import WorkoutDetail from "./WorkoutDetail";
 import LogSession from "../session/LogSession";
+import { asSerialized } from "../test/asSerialized";
 
 /** One effort-only distance step, so no baselines question is entangled
  *  with this file's subject — `connectedRecovery`'s own fixture shape and
@@ -720,7 +721,7 @@ describe("§10 row 2 through the real destination seam: a producer update after 
     expect(body.workoutId).toBe(WORKOUT.id);
     expect(body.deviceName).toBe(DEVICE);
     expect(body.endedBy).toBe("rower");
-    expect(body.series).toStrictEqual(atRelease!.run.series);
+    expect(body.series).toStrictEqual(asSerialized(atRelease!.run.series));
   }, 20000);
 
   // ---------------------------------------------------------------------

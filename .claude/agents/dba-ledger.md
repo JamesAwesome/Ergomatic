@@ -8,6 +8,55 @@ the history of a table you are about to judge again. Every number here
 carries the command that produced it; a section without commands is not a
 DBA entry.
 
+## 2026-09-12 — PR #412, Phase MD PR 3 "one Sample shape" (gate, TRIAD: stored shape)
+
+**Verdict: PASS.** No migration, no schema change, no SQL change, zero stored
+bytes changed. Ruling scale: none — a byte-equality verdict holds identically
+at 133 samples and at the 14,400 cap.
+
+| Environment | |
+| --- | --- |
+| Postgres | 18.4 (Debian, aarch64), `docker run --rm -d --name erg-dba-pg -p 5434:5432 -e POSTGRES_PASSWORD=dev postgres:18.4` |
+| Settings | `work_mem` 4 MB · `shared_buffers` 128 MB · `jit` on · `max_parallel_workers_per_gather` 2 (untouched; no timing claimed) |
+| Machine | Apple M5, 10 cores, 16 GB; Docker 29.4.1; Node v26.5.0 |
+| Trees | `3fc49767` (main) vs `877495a4`, both `git archive`d with `node_modules` symlinked |
+| Migrations | `migrate(db, { migrationsFolder })`, production's own call |
+| Runs | single run each (byte comparison, not timing) |
+
+**Method.** One `tsx` probe copied identically into both trees, importing the
+REAL `createDataRouter` + `createLogsStore(db)` and POSTing via supertest —
+client shape → validator → drizzle → pg → jsonb. Series from the real
+`createSeriesRecorder` over `walk-2026-08-16/session-2-wu-4unequal.jsonl`
+(133 samples, 21 resting), plus a deterministic synthetic series at
+`SERIES_SAMPLE_CAP` = 14,400.
+
+| Measure | main | branch |
+| --- | --- | --- |
+| capture `md5(series::text)` | `fcc401bda2b5b8a26b0dea3ee1bd9d45` | identical |
+| capture `pg_column_size` / `::text` chars | 1580 B / 7654 | 1580 B / 7654 |
+| 14,400-cap `md5` | `a2c5f84ebdbe3a11addea757f9ad0023` | identical |
+| 14,400-cap `pg_column_size` / chars | 163,347 B / 763,396 | identical |
+| `GET /api/logs/:id` bytes (capture / cap) | 7,078 / 635,790 | identical |
+| `INSERT INTO "session_logs"` text (`log_statement='all'`) | 34 cols, `series`=$19, `ended_by`=$20 | string-identical |
+| `LOG_LIST_COLUMNS` keys | 33, no `series` | diff empty |
+| `endedBy` error prose, derived vs deleted literal | — | `derived === literal` → true |
+| `app/drizzle/` files changed | — | 0 |
+
+**RF21 — the gate goes red.** Mutating the branch validator to
+`r: r === true ? true : null` moved both rows (capture md5 → `483b28085f…`,
+cap md5 → `9a174a014d…`).
+
+**Intuition corrected.** The ROADMAP row's feared "+19.1 %" was a `::text`
+figure: `r: null` at the cap is +18.2 % of text characters but only +2.95 %
+of stored bytes — jsonb compresses ~4.7× at this size.
+
+**Observation, no row.** `ENDED_BY_VALUES === endedByEnum.enumValues` and the
+array is not frozen; nothing mutates it. No measured trigger.
+
+**Untested.** Prod row count (last dated figure 16 rows, 2026-08-28);
+WAL/write cost (identical statement + identical parameters — INFERENCE);
+response compression in production.
+
 ## 2026-09-12 — Phase PS PR 1 plan pass, the prescribed `statsRows()` (plan Task 4 / Task 10)
 
 **Verdict: PASS.** Scale that ruled: the household — 1k rows/user (≈4 years at

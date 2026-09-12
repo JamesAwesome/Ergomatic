@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import {
   parseAdditionalStatus1,
@@ -18,24 +16,23 @@ import {
   deriveAverageHeartRate,
   type HeartRateSample,
 } from "../../domain/monitor/derivedHeartRate.js";
+import { readCapture } from "../test/captures";
 
 // RF11: the tile's number is checked against the MACHINE's own trace, off a
 // committed capture, not against a fixture this file chose. The corpus fact
 // this whole change rests on is visible here too — the same recordings that
 // carry hundreds of real heart-rate readings leave the end-of-workout
 // summary's four heart-rate fields empty, which is why the tile reads `—`.
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /app\/src\/monitor\/derivedHeartRate\.replay\.test\.ts$/,
-    "docs/monitor/sessions/",
-  );
+
+/** `file` is `walkDir/name` (the shape every call site below passes it in). */
+function splitWalkFile(file: string): [walkDir: string, name: string] {
+  const slash = file.indexOf("/");
+  return [file.slice(0, slash), file.slice(slash + 1)];
+}
 
 function samplesFrom(file: string): HeartRateSample[] {
-  const bytes = readFileSync(`${SESSIONS_DIR}${file}`);
-  const text = file.endsWith(".gz")
-    ? gunzipSync(bytes).toString("utf8")
-    : bytes.toString("utf8");
+  const [walkDir, name] = splitWalkFile(file);
+  const text = readCapture(walkDir, name);
   const out: HeartRateSample[] = [];
   let resting = false;
   for (const line of text.split("\n")) {
@@ -58,7 +55,7 @@ function samplesFrom(file: string): HeartRateSample[] {
         // dead rest-guard and a 10x dropout cap both pass for a whole round.
         t: Math.round(a.elapsedSeconds * 10),
         hr: a.heartRateBpm,
-        ...(resting ? { r: true as const } : {}),
+        r: resting ? (true as const) : undefined,
       });
     }
   }
@@ -93,7 +90,11 @@ describe("deriveAverageHeartRate, against real captures", () => {
     const samples = samplesFrom(
       "walk-2026-08-25/rests-finished-recording.jsonl.gz",
     );
-    const withRestCounted = samples.map(({ t, hr }) => ({ t, hr }));
+    const withRestCounted = samples.map(({ t, hr }) => ({
+      t,
+      hr,
+      r: undefined,
+    }));
     expect(deriveAverageHeartRate(samples)).toBe(103);
     expect(deriveAverageHeartRate(withRestCounted)).toBe(103);
     // …and on the capture where they genuinely diverge, the two differ by a
@@ -105,9 +106,11 @@ describe("deriveAverageHeartRate, against real captures", () => {
     // which is the whole of option A versus option B.
     const four = samplesFrom("walk-2026-08-16/session-2-wu-4unequal.jsonl");
     expect(deriveAverageHeartRate(four)).toBe(133);
-    expect(deriveAverageHeartRate(four.map(({ t, hr }) => ({ t, hr })))).toBe(
-      134,
-    );
+    expect(
+      deriveAverageHeartRate(
+        four.map(({ t, hr }) => ({ t, hr, r: undefined })),
+      ),
+    ).toBe(134);
   });
 
   it("pins the dropout cap at SIX seconds, in the deciseconds t carries", () => {
@@ -119,14 +122,14 @@ describe("deriveAverageHeartRate, against real captures", () => {
     // the second case return 100 instead of null.
     expect(
       deriveAverageHeartRate([
-        { t: 0, hr: 100 },
-        { t: 59, hr: 180 },
+        { t: 0, hr: 100, r: undefined },
+        { t: 59, hr: 180, r: undefined },
       ]),
     ).toBe(100);
     expect(
       deriveAverageHeartRate([
-        { t: 0, hr: 100 },
-        { t: 60, hr: 180 },
+        { t: 0, hr: 100, r: undefined },
+        { t: 60, hr: 180, r: undefined },
       ]),
     ).toBeNull();
   });
@@ -136,27 +139,29 @@ describe("deriveAverageHeartRate, against real captures", () => {
     // live MonitorRun trace has not been through the server's validator.
     expect(
       deriveAverageHeartRate([
-        { t: 0, hr: 19 },
-        { t: 10, hr: 19 },
+        { t: 0, hr: 19, r: undefined },
+        { t: 10, hr: 19, r: undefined },
       ]),
     ).toBeNull();
     expect(
       deriveAverageHeartRate([
-        { t: 0, hr: 255 },
-        { t: 10, hr: 255 },
+        { t: 0, hr: 255, r: undefined },
+        { t: 10, hr: 255, r: undefined },
       ]),
     ).toBeNull();
     expect(
       deriveAverageHeartRate([
-        { t: 0, hr: 20 },
-        { t: 10, hr: 20 },
+        { t: 0, hr: 20, r: undefined },
+        { t: 10, hr: 20, r: undefined },
       ]),
     ).toBe(20);
   });
 
   it("returns null rather than a number when nothing usable is there", () => {
     expect(deriveAverageHeartRate([])).toBeNull();
-    expect(deriveAverageHeartRate([{ t: 0, hr: 120 }])).toBeNull();
+    expect(
+      deriveAverageHeartRate([{ t: 0, hr: 120, r: undefined }]),
+    ).toBeNull();
     expect(
       deriveAverageHeartRate([
         { t: 0, hr: 120, r: true },
@@ -167,9 +172,9 @@ describe("deriveAverageHeartRate, against real captures", () => {
     // must not dominate the mean.
     expect(
       deriveAverageHeartRate([
-        { t: 0, hr: 200 },
-        { t: 6000, hr: 100 },
-        { t: 6010, hr: 100 },
+        { t: 0, hr: 200, r: undefined },
+        { t: 6000, hr: 100, r: undefined },
+        { t: 6010, hr: 100, r: undefined },
       ]),
     ).toBe(100);
   });
@@ -188,9 +193,8 @@ describe("deriveAverageHeartRate over the RECORDER's own samples", () => {
    *  directory imports another (the convention `avgPaceVerdict.replay.test.ts`
    *  states and follows). */
   function framesFrom(file: string): MonitorFrame[] {
-    const { events } = parseRecording(
-      readFileSync(`${SESSIONS_DIR}${file}`, "utf8"),
-    );
+    const [walkDir, name] = splitWalkFile(file);
+    const { events } = parseRecording(readCapture(walkDir, name));
     const frames: MonitorFrame[] = [];
     let last: {
       currentSplit: number;
@@ -227,7 +231,7 @@ describe("deriveAverageHeartRate over the RECORDER's own samples", () => {
     return frames;
   }
 
-  it("excludes the rest the RECORDER marked, without this test naming the field", () => {
+  it("excludes the rest the RECORDER marked", () => {
     const recorder = createSeriesRecorder();
     for (const f of framesFrom("walk-2026-08-16/session-2-wu-4unequal.jsonl")) {
       recorder.onFrame(f);
@@ -239,13 +243,19 @@ describe("deriveAverageHeartRate over the RECORDER's own samples", () => {
     const derived = deriveAverageHeartRate(produced);
     expect(derived).not.toBeNull();
 
-    // Strip whatever marks rest, by rebuilding each sample from the two
-    // fields the derivation reads by value. If the exclusion is live, the two
-    // answers differ; if the flag is misnamed or ignored, they are equal and
-    // this fails — which is exactly what the first version of this change did.
+    // Strip the mark and re-derive: if the exclusion is live the two answers
+    // differ, and if it is ignored they are equal and this fails. This test
+    // no longer has to avoid NAMING the field — since Phase MD PR 3 a rename
+    // is caught by the compiler (`HeartRateSample` is a `Pick` of the
+    // recorder's own `Sample`), so what is left for this leg to prove is that
+    // the exclusion RUNS over real recorder output.
+    // `r` is a REQUIRED key valued `true | undefined` since Phase MD PR 3,
+    // so `"r" in s` is now true of EVERY sample and does no discriminating;
+    // `s.r === true` is what counts the rests. Kept as-is because the count
+    // it produces is still the producer-side assertion this leg needs.
     const rest = produced.filter((s) => "r" in s && s.r === true);
     expect(rest.length).toBeGreaterThan(0);
-    const withoutFlag = produced.map(({ t, hr }) => ({ t, hr }));
+    const withoutFlag = produced.map(({ t, hr }) => ({ t, hr, r: undefined }));
     expect(deriveAverageHeartRate(withoutFlag)).not.toBe(derived);
   });
 });

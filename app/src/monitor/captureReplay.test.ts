@@ -86,6 +86,7 @@
 import { describe, expect, it } from "vitest";
 import { gunzipSync } from "node:zlib";
 import { readFileSync } from "node:fs";
+import { capturePath } from "../test/captures";
 
 /** The subset of a captured `MonitorFrame` these invariants need. Deliberately
  *  narrower than `domain/monitor/types.ts`'s `MonitorFrame` — this file reads
@@ -99,35 +100,23 @@ interface CapturedFrame {
   state: string;
 }
 
-/** Repo-level captures, resolved relative to THIS file so the test works
- *  regardless of the process's cwd (`pnpm test` invocations run from
- *  `app/`, but nothing here should depend on that). Plain string surgery on
- *  `import.meta.url`, not the global `URL` constructor: this project's
- *  jsdom environment resolves `new URL(...)` against `http://localhost:3000/`
- *  instead of the given `file://` base — the same quirk
- *  `ConnectedSurface.test.tsx`'s `indexCssPath` and `TimerTargets.test.tsx`
- *  work around. `docs/monitor/sessions/` lives three directories above
- *  `app/src/monitor/` — up out of `monitor/`, `src/`, and `app/` to the repo
- *  root. */
-const SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/captureReplay\.test\.ts$/,
-    "../docs/monitor/sessions/",
-  );
-
 /** Gunzip + parse ONE `.log.gz` capture into its ordered `[event]` frame
  *  lines. Lines that are not a frame event — `>>> dispatched: ...`, `remote:
  *  ...`, `program(...)` narration, acks, structure/programmed/notify/write
  *  events, and anything that fails to parse as JSON at all — are skipped.
  *  Only ever called once per file (module scope below), never per test: with
  *  ~10.4k frames in the largest capture, gunzip+parse is fast but is not
- *  worth repeating per assertion. */
+ *  worth repeating per assertion. These three captures live directly under
+ *  `docs/monitor/sessions/`, not under a walk directory — `capturePath`'s
+ *  `walkDir` argument is "" here. The decompressed BYTES (not just the
+ *  parsed text) are kept as `raw`, for the byte-prefix comparisons below
+ *  (`raw.subarray(...).equals(...)`), so this stays a local gunzip rather
+ *  than `readCapture`, which only hands back a string. */
 function parseFrames(fileName: string): {
   raw: Buffer;
   frames: CapturedFrame[];
 } {
-  const raw = gunzipSync(readFileSync(`${SESSIONS_DIR}${fileName}`));
+  const raw = gunzipSync(readFileSync(capturePath("", fileName)));
   const text = raw.toString("utf8");
   const frames: CapturedFrame[] = [];
   for (const line of text.split("\n")) {

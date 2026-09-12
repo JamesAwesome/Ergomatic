@@ -62,12 +62,13 @@
 // trailing event is needed (an earlier draft of this file appended one on
 // a mistaken reading of the scheduled-timer path alone — reviewed out).
 //
-// Composition: the SAME `createReplayTransport` + `vi.doMock("../adapters/
-// monitorTransport")` + `vi.resetModules()` + dynamic re-import idiom
-// `burstReplay.test.ts` established (that file's own header names every
-// citation for why this is the genuine production wiring, not a bypass;
-// not re-derived here — "no test file in `src/monitor/` imports another"
-// stays true, but the REASONING doesn't need re-proving twice). THE ONE
+// Composition: the SAME `createReplayTransport` + `createTransport`/
+// `registerAppLifecycleListener` deps (Phase MD PR 2) + `vi.resetModules()`
+// + dynamic re-import idiom `burstReplay.test.ts` established (that file's
+// own header names every citation for why this is the genuine production
+// wiring, not a bypass; not re-derived here — "no test file in
+// `src/monitor/` imports another" stays true, but the REASONING doesn't
+// need re-proving twice). THE ONE
 // ADDITION (spec §6, antagonist REVISE 6): `MonitorSessionDeps.schedule`
 // is ALSO bound to the replay's own virtual clock below —
 // `burstReplay.test.ts` binds only `driverOptions.now`/`.schedule`, which
@@ -132,8 +133,6 @@
 // mutation evidence (below) reverts that and confirms leg 2 goes red on
 // it again.
 
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { createElement } from "react";
 import { act, render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -172,35 +171,14 @@ import type { SessionStore, SessionUser } from "../../server/auth/sessions.js";
 import { makeFakeStores } from "../../server/testing/fakes.js";
 import { createDataRouter } from "../../server/routes/data.js";
 import { buildMonitorLogSteps } from "../session/logDraft";
+import { readCapture } from "../test/captures";
 
-/** Same path-surgery idiom as `burstReplay.test.ts` (jsdom resolves
- *  `new URL(...)` against `http://localhost:3000/`, so string surgery on
- *  `import.meta.url` stands in for it). `docs/monitor/sessions/` lives
- *  three directories above `app/src/monitor/`. Shared by every leg in
- *  this file — each leg's own walk directory joins underneath it. */
-const MONITOR_SESSIONS_ROOT = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/summaryHoldReplay\.test\.ts$/,
-    "../docs/monitor/sessions/",
-  );
-
-function loadCapture(walkDir: string, file: string): ParsedRecording {
-  return parseRecording(
-    gunzipSync(
-      readFileSync(`${MONITOR_SESSIONS_ROOT}${walkDir}/${file}`),
-    ).toString("utf8"),
-  );
-}
-
-const SMOKE_CAPTURE: ParsedRecording = loadCapture(
-  "walk-2026-08-25",
-  "smoke-terminated-recording.jsonl.gz",
+const SMOKE_CAPTURE: ParsedRecording = parseRecording(
+  readCapture("walk-2026-08-25", "smoke-terminated-recording.jsonl.gz"),
 );
 
-const END_CAPTURE: ParsedRecording = loadCapture(
-  "walk-2026-08-28",
-  "end-on-interval-1-recording.jsonl.gz",
+const END_CAPTURE: ParsedRecording = parseRecording(
+  readCapture("walk-2026-08-28", "end-on-interval-1-recording.jsonl.gz"),
 );
 
 /** HAND-TRANSCRIBED, byte-verified against seq 15/16's own assembled tx
@@ -515,20 +493,19 @@ interface ReplayOutcome {
 
 /**
  * Drives `recording` through the real transport-replay engine into a
- * FRESH `useMonitorSession` instance — `burstReplay.test.ts`'s own idiom
- * (`vi.doMock("../adapters/monitorTransport")` + `vi.resetModules()` +
- * dynamic re-import), restated here per this project's "no test file in
- * `src/monitor/` imports another" convention. GENERALIZED over
+ * FRESH `useMonitorSession` instance — `burstReplay.test.ts`'s own idiom,
+ * `createTransport`/`registerAppLifecycleListener` passed as deps (Phase MD
+ * PR 2) rather than `vi.doMock`ed, restated here per this project's "no test
+ * file in `src/monitor/` imports another" convention. GENERALIZED over
  * `program`/`identity` (leg 1 and leg 2 each program a different capture)
  * and an optional `scheduleAction` (leg 2's own `scheduleEndPress` —
  * leg 1 needs none, since a Menu terminate is a pure wire event with no
  * app-initiated write). Called multiple times per leg below (a truncated
  * replay stopping right before the burst, then the full capture) —
  * exactly the two-call shape `burstReplay.test.ts`'s own `runReplay`
- * already establishes (its real-run/control-run pair), so `vi.doMock`
- * re-registering its factory and `vi.resetModules()` forcing a genuinely
- * fresh module graph each call is proven safe to repeat across many
- * calls in one file.
+ * already establishes (its real-run/control-run pair), so `vi.resetModules()`
+ * forcing a genuinely fresh module graph each call is proven safe to repeat
+ * across many calls in one file.
  *
  * Returns `handoffHeld`/`phase` read directly off the hook's OWN state —
  * never persisted to `MonitorRun` (`grep` confirms no such field on that
@@ -565,12 +542,11 @@ async function runReplay(
     onRecovery: () => undefined,
   });
 
-  vi.doMock("../adapters/monitorTransport", () => ({
-    defaultTransport: vi.fn(() => transport),
-  }));
-  vi.doMock("../adapters/appLifecycle", () => ({
-    registerAppLifecycleListener: vi.fn(() => (): void => undefined),
-  }));
+  // THE SEAM (Phase MD PR 2): `registerAppLifecycleListener`/`createTransport`
+  // are passed as DEPS now, never `vi.doMock`ed — `vi.resetModules()` + the
+  // dynamic re-import below survive for the FRESH-MODULE-GRAPH reason this
+  // function's own doc comment gives (this is `burstReplay.test.ts`'s
+  // two-call collision, not a mock swap).
   vi.resetModules();
 
   const { useMonitorSession: freshUseMonitorSession } =
@@ -581,6 +557,8 @@ async function runReplay(
       now: () => FIXED_NOW,
       // Antagonist REVISE 6 (spec §6) — see this file's header comment.
       schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+      createTransport: () => transport,
+      registerAppLifecycleListener: () => (): void => undefined,
       driverOptions: {
         now: () => replay.clock.now(),
         schedule: releasingSchedule((cb, ms) => replay.clock.schedule(cb, ms)),
@@ -740,8 +718,6 @@ export async function mountLogSessionAndSave(
 // identical mock/module/storage cleanup, and vitest's `afterEach` applies
 // to every test in the file regardless of which `describe` declares it.
 afterEach(() => {
-  vi.doUnmock("../adapters/monitorTransport");
-  vi.doUnmock("../adapters/appLifecycle");
   vi.doUnmock("../api/useWorkouts");
   vi.doUnmock("../api/useBaselines");
   vi.doUnmock("../api/usePlan");

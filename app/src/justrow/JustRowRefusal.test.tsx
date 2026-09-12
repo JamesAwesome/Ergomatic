@@ -6,6 +6,7 @@ import type { MonitorSession } from "../monitor/useMonitorSession";
 import { useMonitorSession } from "../monitor/useMonitorSession";
 import { resetForTests as resetHandoffStoreForTests } from "../monitor/handoffStore";
 import JustRow from "./JustRow";
+import { withDerivedAxes, type SessionWithoutAxes } from "../test/sessionAxes";
 
 /**
  * THE FREE-ROW DOOR'S OWN REFUSAL FRAME (Phase MT, whole-branch review
@@ -35,7 +36,8 @@ const REFUSAL_DETAIL =
   "Erg type not supported\nThis monitor is on a SkiErg. Nothing here will start.";
 
 function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
-  return {
+  const { axes, linkLoss, ...rest } = overrides;
+  const base: SessionWithoutAxes = {
     phase: "idle",
     undecodable: false,
     error: null,
@@ -58,8 +60,9 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     retryHandoffSave: vi.fn().mockResolvedValue(undefined),
     proceedHandoff: vi.fn().mockResolvedValue(undefined),
     exportLog: vi.fn().mockReturnValue("[]"),
-    ...overrides,
+    ...rest,
   };
+  return withDerivedAxes(base, { axes, linkLoss });
 }
 
 /** The door renders its failure frame only once the rower has pressed

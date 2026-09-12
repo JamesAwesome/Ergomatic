@@ -91,6 +91,40 @@ function readsConnectedPhase(strippedSource: string): boolean {
   );
 }
 
+/** THE SECOND SCAN (Phase MD PR 2). `useMonitorSession` publishes
+ *  `session.axes`/`session.linkLoss` now, so there is exactly ONE derivation
+ *  site; before this PR five screens each rebuilt the input and called
+ *  `deriveAxes`/`deriveLinkLoss` themselves. These two files are the only
+ *  ones allowed to match: the hook, which CALLS them, and the module, which
+ *  matches on its own `export function derive…(` DEFINITIONS — the detector
+ *  cannot tell a definition from a call, and does not need to. */
+const AXES_DERIVERS = new Set([
+  "monitor/useMonitorSession.ts",
+  "monitor/connectedAxes.ts",
+]);
+
+/** ALL SIX derivers `connectedAxes.ts` exports over `AxesInput` —
+ *  `deriveLink`, `deriveProgram`, `deriveSession`, `deriveActivity`,
+ *  `deriveAxes`, `deriveLinkLoss` — not just the composed pair. The four
+ *  sub-derivations are exported so each `never` guard is independently
+ *  reachable from a test (that module's own comment says why), which also
+ *  means a screen could call one directly and walk straight past a narrower
+ *  pattern. Measured at `3fc49767`: outside the two owners and the five call
+ *  sites this PR removes, the widened pattern's only hits are two PROSE
+ *  mentions, both stripped by `commentStrippedSource`. */
+const DERIVE_CALL = /\bderive(?:Axes|Link(?:Loss)?|Program|Session|Activity)\(/;
+
+/** ONE NAMED FILE, never a directory prefix. `productionSourceFiles()`
+ *  returns everything under `src/test/` because those files do not end in
+ *  `.test.ts`, and that directory holds REAL harnesses a screen could import
+ *  (`statusSubscriptions.ts`, `renderedCopy.ts`, `cssView.ts`) — exempting
+ *  the whole prefix would let a second deriver appear there unseen.
+ *  `test/sessionAxes.ts` derives on purpose: it is how every hand-built
+ *  `MonitorSession` fixture gets axes that agree with its own phase. Scoped
+ *  here rather than inside `productionSourceFiles()` so the ConnectedPhase
+ *  sweep above keeps the exact reach it had before this PR. */
+const AXES_SCAFFOLD = new Set(["test/sessionAxes.ts"]);
+
 describe("the ConnectedPhase enum-reader pin (connected-axes 2a, spec exit criterion 8)", () => {
   it("no file outside the allowlist reads ConnectedPhase — ask connectedAxes.ts's axes instead", () => {
     const offenders: string[] = [];
@@ -131,6 +165,53 @@ describe("the ConnectedPhase enum-reader pin (connected-axes 2a, spec exit crite
       }
     `;
     expect(readsConnectedPhase(commentStrippedSource(newOffender))).toBe(true);
+  });
+
+  it("nothing outside the hook, connectedAxes.ts and the fixture helper derives the axes", () => {
+    const offenders: string[] = [];
+    for (const rel of productionSourceFiles()) {
+      if (AXES_DERIVERS.has(rel) || AXES_SCAFFOLD.has(rel)) continue;
+      const stripped = commentStrippedSource(
+        readFileSync(join(ROOT, rel), "utf-8"),
+      );
+      if (DERIVE_CALL.test(stripped)) offenders.push(rel);
+    }
+    expect(offenders).toStrictEqual([]);
+  });
+
+  it("every deriver and the one scaffold entry actually derive — no dead entries", () => {
+    // The scaffold entry is iterated TOO: a skip that stops being needed
+    // must fail red, or it is exactly the silent dead weight the sweep above
+    // exists to prevent.
+    for (const rel of [...AXES_DERIVERS, ...AXES_SCAFFOLD]) {
+      const stripped = commentStrippedSource(
+        readFileSync(join(ROOT, rel), "utf-8"),
+      );
+      expect([rel, DERIVE_CALL.test(stripped)]).toStrictEqual([rel, true]);
+    }
+  });
+
+  it("the derive detector fires on a new caller, not just on the owners", () => {
+    const newOffender = `
+      function draw(session) {
+        const axes = deriveAxes({ phase: session.phase });
+        return axes.link;
+      }
+    `;
+    expect(DERIVE_CALL.test(commentStrippedSource(newOffender))).toBe(true);
+  });
+
+  it("the derive detector does not fire on prose naming deriveAxes in a leading-line comment", () => {
+    // `commentStrippedSource` strips whole-line `//` and `/* */` ONLY — a
+    // TRAILING `// ...` on a code line survives. Every replacement pointer
+    // comment this PR writes is therefore a LEADING-line comment, and this
+    // case is the shape that proves the stripper handles it.
+    const prose = `
+      // The axes come from the hook now — see deriveAxes(input) there.
+      /** deriveLinkLoss(input) lives beside it. */
+      export const x = 1;
+    `;
+    expect(DERIVE_CALL.test(commentStrippedSource(prose))).toBe(false);
   });
 
   it("the detector does not fire on ordinary prose mentioning the name in a comment", () => {

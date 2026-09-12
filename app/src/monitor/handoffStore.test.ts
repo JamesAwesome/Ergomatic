@@ -33,6 +33,7 @@ import { loadRun, RUN_KEY, saveRun, type SessionRun } from "../session/run";
 // through the freshly re-imported `store`.
 import { MONITOR_RUN_KEY } from "./handoffStore";
 import type { HandoffReceipt, RetireReason } from "./handoffStore";
+import { asSerialized } from "../test/asSerialized";
 
 type StoreModule = typeof import("./handoffStore");
 
@@ -100,7 +101,7 @@ function freshRun(
 }
 
 const SERIES: SeriesData = {
-  samples: [{ t: 0, d: 0, p: 120, spm: 24 }],
+  samples: [{ t: 0, d: 0, p: 120, spm: 24, r: undefined }],
 };
 
 let store: StoreModule;
@@ -1626,7 +1627,7 @@ describe("loadMonitorRun's validator: what it admits, and what it refuses withou
   it("a record whose series is ALREADY valid is untouched by the strip — only a malformed series is ever stripped", () => {
     const withValid = freshRun(t0.toISOString(), { series: SERIES });
     store.commit(withValid.startedAt, null, withValid);
-    expect(store.loadMonitorRun()!.series).toStrictEqual(SERIES);
+    expect(store.loadMonitorRun()!.series).toStrictEqual(asSerialized(SERIES));
   });
 
   // Door spec §5.1: `partial` is additive-optional, NO `v` bump. Starts at

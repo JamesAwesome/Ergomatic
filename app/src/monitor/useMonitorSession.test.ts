@@ -40,10 +40,13 @@ import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
+import * as appLifecycleModule from "../adapters/appLifecycle";
 import { releasingSchedule } from "../test/statusSubscriptions";
+import { withDerivedAxes } from "../test/sessionAxes";
 import type { MonitorRun } from "./monitorRun";
 import { loadMonitorRun, MONITOR_RUN_KEY } from "./handoffStore";
 import { loadLastDevice, saveLastDevice } from "./lastDevice";
+import { resetConnectionAttemptTraceForTests } from "./nfc/connectionAttemptTrace";
 import {
   resetForTests as resetHandoffStore,
   currentUnretired as currentUnretiredHandoffForTest,
@@ -79,8 +82,7 @@ import {
 } from "../../domain/monitor/pm5/parse.js";
 import { check as checkContinuity } from "./continuity";
 import { listSessionLogs } from "./sessionLogHistory";
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
+import { readCapture } from "../test/captures";
 import {
   applyContinuityCheck,
   BANNER_RETRACT_HYSTERESIS_MS,
@@ -646,6 +648,12 @@ beforeEach(() => {
   // `resetForTests`'s own doc comment in `handoffStore.ts` for the full
   // reasoning and the empirical evidence.
   resetHandoffStore();
+  // Task 5 (Phase MD PR 2): dropping `vi.resetModules()` from the ported
+  // lifecycle blocks means they now share `nfc/connectionAttemptTrace.ts`'s
+  // module-wide `latest` with every other test in the file instead of each
+  // getting its own copy. Reset here so a port that starts leaking a stale
+  // trace fails on its OWN assertion, not a neighbour's.
+  resetConnectionAttemptTraceForTests();
 });
 
 describe("useMonitorSession: connect", () => {
@@ -4526,9 +4534,11 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
   // above (the SAME `verifyHandoffWritable()` call, at a third call
   // site). Reaching it at the hook level requires latching `frameSilence`
   // first, which this file's own existing tests only ever do via the
-  // heavier `vi.doMock("../adapters/appLifecycle")` + `Date.now()`-spoofing
-  // resume-gap harness (`resumeAfterGap`, further down this file) — the
-  // simple `harness()`/fake-timeline composition this describe block uses
+  // `Date.now()`-spoofing resume-gap harness (`resumeAfterGap`, further down
+  // this file — it used to need `vi.doMock("../adapters/appLifecycle")` too;
+  // since Phase MD PR 2 it injects the registrar as a dep, but its clock
+  // spoofing is still a separate harness from) the simple
+  // `harness()`/fake-timeline composition this describe block uses
   // has no injection point for the REAL watchdog clock `frameSilence`
   // latches on, confirmed by trying (`tick()` only advances the FAKE's own
   // scripted wire time, never real wall-clock milliseconds). Judged not
@@ -5910,6 +5920,17 @@ describe('Whole-branch review B1: End under a watchdog-fired banner (phase still
     });
     expect(result.current.frameSilence).toBe(true);
     expect(result.current.phase).toBe("live");
+    // The published tuple at frame silence, by hand (Phase MD PR 2): the
+    // watchdog demotes a live-looking link to `"lost"`, and `linkLoss` says
+    // NOBODY TOLD US — the distinction the axes tuple cannot carry, and the
+    // one Phase RN's Gate 0 defect turned on.
+    expect(result.current.axes).toStrictEqual({
+      link: "lost",
+      program: "armed",
+      session: "live",
+      activity: "moving",
+    });
+    expect(result.current.linkLoss).toBe("inferred");
 
     await act(async () => {
       await result.current.endSession();
@@ -8864,18 +8885,11 @@ const LL_CORPUS_FILES = [
   "walk-2026-08-25/smoke-terminated-recording.jsonl.gz",
 ];
 
-const LL_SESSIONS_DIR = import.meta.url
-  .replace(/^file:\/\//, "")
-  .replace(
-    /src\/monitor\/useMonitorSession\.test\.ts$/,
-    "../docs/monitor/sessions/",
-  );
-
+/** `fileName` is `walkDir/file` (the shape `LL_CORPUS_FILES` above lists
+ *  them in) — split once and handed to the shared loader. */
 function loadCorpusFreezeFrames(fileName: string): MonitorFrame[] {
-  const path = `${LL_SESSIONS_DIR}${fileName}`;
-  const text = fileName.endsWith(".gz")
-    ? gunzipSync(readFileSync(path)).toString("utf8")
-    : readFileSync(path, "utf8");
+  const slash = fileName.indexOf("/");
+  const text = readCapture(fileName.slice(0, slash), fileName.slice(slash + 1));
   const recording = parseRecording(text);
   const frames: MonitorFrame[] = [];
   for (const event of recording.events) {
@@ -9089,6 +9103,17 @@ describe("useMonitorSession: frozen (the freeze predicate), end to end", () => {
     tick(fake, 100);
     expect(result.current.phase).toBe("live");
     expect(result.current.frozen).toBe(true);
+    // THE PUBLISHED TUPLE, written out by hand (Phase MD PR 2). Never
+    // `deriveAxes(...)` in an expectation — that is the same function the
+    // hook calls, so it would agree with any bug (RF11). This is the ONLY
+    // place the real hook's `axes`/`linkLoss` are asserted at a freeze.
+    expect(result.current.axes).toStrictEqual({
+      link: "up",
+      program: "armed",
+      session: "live",
+      activity: "frozen",
+    });
+    expect(result.current.linkLoss).toBe("none");
 
     // The pause HOLDS across further identical frames (RC-25's fixture
     // extension) — this is what makes the edge-vs-per-frame check below real.
@@ -10720,16 +10745,11 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       value: "visible",
       configurable: true,
     });
-    // `vi.doMock`'s module-factory override is NOT cleared by
-    // `resetModules()`/`restoreAllMocks()` (those affect the module
-    // REGISTRY and spy IMPLEMENTATIONS respectively, never a `doMock`
-    // factory) — without this, the NATIVE-arm test's own mock of
-    // `../adapters/appLifecycle` silently governs every OTHER test in
-    // this block that runs after it, since they all dynamically
-    // re-import `useMonitorSession.ts`. Caught by the REVIEWER'S PROBE
-    // test below failing only in file-order, never in isolation.
-    vi.doUnmock("../adapters/appLifecycle");
-    vi.resetModules();
+    // Phase MD PR 2: every test in this block now passes
+    // `registerAppLifecycleListener` as a dep instead of `vi.doMock`ing the
+    // adapter, so there is no module-factory override left to leak between
+    // tests — the doUnmock/resetModules this comment used to explain are
+    // gone with it.
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
@@ -10782,18 +10802,6 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
 
   it("Task 1 (lost-monitor design spec): resume records frames seen while hidden and what the ready gate saw — driven through the NATIVE dispatch, same reason the reviewer's probe below needs it (minor 9: the web arm never calls back at all)", async () => {
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
-          lifecycleCb = cb;
-          return () => undefined;
-        },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
     // One status frame, never satisfying the ready gate (no rowingActive,
     // no banked distance) — the exact shape the flagship defect leaves
     // behind: a frame arrived, but nothing about it looked like a pull.
@@ -10803,8 +10811,12 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       events: [status(100, { rowingState: 0 })],
     });
     const { result } = renderHook(() =>
-      freshUseMonitorSession({
+      useMonitorSession({
         createTransport: () => fake,
+        registerAppLifecycleListener: (cb) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
@@ -10844,25 +10856,17 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
   it("NATIVE arm: registerAppLifecycleListener resolves via the async native path, and its unsubscribe reaches lifecycleUnsubRef (the Promise branch)", async () => {
     const nativeUnsub = vi.fn();
     let nativeCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
-          nativeCb = cb;
-          return Promise.resolve(nativeUnsub);
-        },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
     const fake = createFakeTransport({
       deviceName: DEVICE_NAME,
       program: TWO_INTERVALS,
     });
     const { result, unmount } = renderHook(() =>
-      freshUseMonitorSession({
+      useMonitorSession({
         createTransport: () => fake,
+        registerAppLifecycleListener: (cb) => {
+          nativeCb = cb;
+          return Promise.resolve(nativeUnsub);
+        },
         driverOptions: { schedule: releasingSchedule() },
       }),
     );
@@ -10879,7 +10883,6 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     expect(nativeUnsub).toHaveBeenCalledOnce();
     expect(nativeCb).toBeDefined();
 
-    vi.resetModules();
     vi.restoreAllMocks();
   });
 
@@ -10896,29 +10899,19 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       program: TWO_INTERVALS,
       events,
     });
-    // The REAL decorator, composed exactly as `defaultTransport` does — so
-    // the snapshot the resume handler reads is the production one.
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(fake, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        // The REAL decorator, composed exactly as `defaultTransport` does —
+        // so the snapshot the resume handler reads is the production one.
+        // `createTransport` receives the hook's own `LivenessDeps`, which is
+        // why replacing `../adapters/monitorTransport` is no longer needed.
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(fake, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: { schedule: releasingSchedule() },
       }),
     );
@@ -10994,27 +10987,15 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       program: TWO_INTERVALS,
       events,
     });
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(fake, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(fake, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: { schedule: releasingSchedule() },
       }),
     );
@@ -11067,27 +11048,15 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       program: TWO_INTERVALS,
       events,
     });
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(fake, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(fake, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: { schedule: releasingSchedule() },
       }),
     );
@@ -11151,15 +11120,6 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       program: TWO_INTERVALS,
       events,
     });
-    // Composes the REAL decorator around the fake — the same thing
-    // `defaultTransport` does in production — so this test reaches the
-    // REAL `markSuspect`/`silent`/`armed` state machine, not a bypass.
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(fake, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     // NATIVE-shaped dispatch (same idiom as the "NATIVE arm" test above):
     // captures the hook's own callback so this test can fire a
     // "foreground" transition directly, without going through
@@ -11167,20 +11127,17 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     // this code path (minor 9), so a real probe of the SHORT-resume
     // clearing bug has to look like this now.
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        // Composes the REAL decorator around the fake — the same thing
+        // `defaultTransport` does in production — so this test reaches the
+        // REAL `markSuspect`/`silent`/`armed` state machine, not a bypass.
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(fake, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: { schedule: releasingSchedule() },
       }),
     );
@@ -11263,14 +11220,14 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
 // replaces the new attempt's unsub with the stale one, leaking the new
 // listener forever. Driven with a CONTROLLABLE (deferred) promise per
 // attempt so this test can resolve them in the exact adversarial order —
-// same `vi.doMock("../adapters/appLifecycle")` idiom the "NATIVE arm" test
-// above uses, but with the resolution under this test's own control
-// instead of resolving eagerly.
+// same injected-registrar shape the "NATIVE arm" test above uses (both
+// pass `registerAppLifecycleListener` as a dep since Phase MD PR 2; the
+// `vi.doMock` idiom they shared before is gone), but with the resolution
+// under this test's own control instead of resolving eagerly.
 // ---------------------------------------------------------------------------
 
 describe("Whole-branch review minor 1: the native lifecycle unsub race, driven with a controllable promise", () => {
   afterEach(() => {
-    vi.resetModules();
     vi.restoreAllMocks();
   });
 
@@ -11289,24 +11246,18 @@ describe("Whole-branch review minor 1: the native lifecycle unsub race, driven w
     const attempts: {
       resolve: (unsub: () => void) => void;
     }[] = [];
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(() => {
-        const d = deferred<() => void>();
-        attempts.push(d);
-        return d.promise;
-      }),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
     const fake = createFakeTransport({
       deviceName: DEVICE_NAME,
       program: TWO_INTERVALS,
     });
     const { result, unmount } = renderHook(() =>
-      freshUseMonitorSession({
+      useMonitorSession({
         createTransport: () => fake,
+        registerAppLifecycleListener: () => {
+          const d = deferred<() => void>();
+          attempts.push(d);
+          return d.promise;
+        },
         driverOptions: { schedule: releasingSchedule() },
       }),
     );
@@ -11590,10 +11541,7 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
   });
 
   it("F2b production-path pin (design spec §4, PR 3 Task 2 Step 2(e)): session-2-wu-4unequal.jsonl's own real backward count (seq 24->29, the leftover-register PRE-RUN shape `.claude/agents/antagonist-ledger.md`'s 'Phase RC delta pass' names) never reaches a conviction through `applyContinuityCheck`, because `run === null` short-circuits before `check` is ever called — the SAME pair, fed straight into `check` with no such guard, DOES convict, so 'no conviction' here is `run === null` doing the work, not an accident of the readings themselves", () => {
-    const text = readFileSync(
-      `${LL_SESSIONS_DIR}walk-2026-08-16/session-2-wu-4unequal.jsonl`,
-      "utf8",
-    );
+    const text = readCapture("walk-2026-08-16", "session-2-wu-4unequal.jsonl");
     const { events } = parseRecording(text);
     const eventAt = (seq: number) => {
       const e = events.find((ev) => ev.seq === seq);
@@ -11680,9 +11628,6 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
 
 describe("Phase LL Task 4: the continuity consumption seam, through the real hook composition — a healthy resume never false-positives", () => {
   afterEach(() => {
-    vi.doUnmock("../adapters/appLifecycle");
-    vi.doUnmock("../adapters/monitorTransport");
-    vi.resetModules();
     vi.restoreAllMocks();
   });
 
@@ -11698,38 +11643,27 @@ describe("Phase LL Task 4: the continuity consumption seam, through the real hoo
       program: TWO_INTERVALS,
       events,
     });
-    // Phase LM: `applyContinuityCheck` is ARMED by `frameSilence`, and
-    // `frameSilence` now needs a measured gap — so this test composes the
-    // REAL liveness decorator (the same thing `defaultTransport` does) and
-    // gives it a real gap below. Before Phase LM it could arm the check by
-    // firing a bare resume; that path no longer exists, and reaching for a
-    // shortcut here would leave this test arming nothing at all.
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(fake, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     // Phase LL minor 9: lifecycle-suspect marking is native-only now, so
     // this test's own resume trigger has to look like the native dispatch
     // (same idiom the "NATIVE arm"/REVIEWER'S PROBE tests use) rather than
     // a web `visibilitychange` — `harness()`'s own web arm can no longer
     // produce this transition at all.
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        // Phase LM: `applyContinuityCheck` is ARMED by `frameSilence`, and
+        // `frameSilence` now needs a measured gap — so this test composes
+        // the REAL liveness decorator (the same thing `defaultTransport`
+        // does) and gives it a real gap below. Before Phase LM it could arm
+        // the check by firing a bare resume; that path no longer exists,
+        // and reaching for a shortcut here would leave this test arming
+        // nothing at all.
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(fake, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: { schedule: releasingSchedule() },
       }),
     );
@@ -11903,9 +11837,6 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
   }
 
   afterEach(() => {
-    vi.doUnmock("../adapters/monitorTransport");
-    vi.doUnmock("../adapters/appLifecycle");
-    vi.resetModules();
     vi.restoreAllMocks();
   });
 
@@ -11923,35 +11854,23 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     });
     const intercepting = interceptingTransport(fake);
 
-    // Same COMPOSITION-proving idiom as the REVIEWER'S PROBE test above:
-    // the REAL decorator, composed around this test's own transport, the
-    // same thing `defaultTransport` does in production — so `frameSilence`
-    // is the genuine production wiring, not a bypass.
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(intercepting, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     // Phase LL minor 9: lifecycle-suspect marking is native-only now — the
     // resume trigger below has to look like the native dispatch, same as
     // every other test in this file that used to rely on a web
     // `visibilitychange`.
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        // Same COMPOSITION-proving idiom as the REVIEWER'S PROBE test
+        // above: the REAL decorator, composed around this test's own
+        // transport, the same thing `defaultTransport` does in production —
+        // so `frameSilence` is the genuine production wiring, not a bypass.
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(intercepting, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
@@ -12058,27 +11977,15 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
       events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
     });
     const intercepting = interceptingTransport(fake);
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(intercepting, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(intercepting, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
@@ -12150,27 +12057,15 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
       events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
     });
     const intercepting = interceptingTransport(fake);
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(intercepting, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(intercepting, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
@@ -12261,27 +12156,15 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
       events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
     });
     const intercepting = interceptingTransport(fake);
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(intercepting, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(intercepting, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
@@ -12373,27 +12256,15 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
       events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
     });
     const intercepting = interceptingTransport(fake);
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(intercepting, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(intercepting, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
@@ -12515,27 +12386,15 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
       ],
     });
     const intercepting = interceptingTransport(fake);
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(intercepting, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(intercepting, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
@@ -12619,9 +12478,6 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
 
 describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
   afterEach(() => {
-    vi.doUnmock("../adapters/monitorTransport");
-    vi.doUnmock("../adapters/appLifecycle");
-    vi.resetModules();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
@@ -12654,27 +12510,19 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
       program: TWO_INTERVALS,
       events,
     });
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(fake, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result, unmount } = renderHook(() =>
+      useMonitorSession({
+        // The REAL decorator, composed exactly as `defaultTransport` does —
+        // `createTransport` receives the hook's own `LivenessDeps` now
+        // (Phase MD PR 2), so replacing `../adapters/monitorTransport` is no
+        // longer needed.
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(fake, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result, unmount } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: { schedule: releasingSchedule() },
       }),
     );
@@ -12765,26 +12613,18 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
 
   it("leg (a) supplement: gapMs reads 'unmeasured' when no liveness decorator is available — the same bare createTransport composition Task 1's own 'resume records frames' test uses, no defaultTransport/withLiveness involved", async () => {
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
-          lifecycleCb = cb;
-          return () => undefined;
-        },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
     const fake = createFakeTransport({
       deviceName: DEVICE_NAME,
       program: TWO_INTERVALS,
       events: [frame(100, D0), frame(200, D0)],
     });
     const { result } = renderHook(() =>
-      freshUseMonitorSession({
+      useMonitorSession({
         createTransport: () => fake,
+        registerAppLifecycleListener: (cb) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
@@ -13180,20 +13020,19 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
 
 describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeMs, resume-first-frame's nextGapsMs", () => {
   afterEach(() => {
-    vi.doUnmock("../adapters/monitorTransport");
-    vi.doUnmock("../adapters/appLifecycle");
-    vi.resetModules();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
-  /** Same mocked-adapter composition `setupResumeInstrumentSession` (§3's
-   *  own describe block, above) uses — duplicated locally per this file's
-   *  established practice, not reused across blocks — but ALSO drives a
-   *  full `program()`/arm handshake (`programAndArm`'s own body, inlined:
-   *  the shared helper's `Session`/`FakeControls` types are structural, but
-   *  this composition's `result`/`fake` come from a dynamically re-imported
-   *  module, so inlining avoids any cross-import type friction). Needed
+  /** Same composition `setupResumeInstrumentSession` (§3's own describe
+   *  block, above) uses — duplicated locally per this file's established
+   *  practice, not reused across blocks — but ALSO drives a full
+   *  `program()`/arm handshake (`programAndArm`'s own body, inlined: the
+   *  shared helper's `Session`/`FakeControls` types are structural, and both
+   *  compositions now share the SAME statically-imported `useMonitorSession`
+   *  (Phase MD PR 2), so inlining is no longer needed to dodge cross-import
+   *  type friction — kept anyway, per this file's own established practice
+   *  of duplicating locally rather than reusing across blocks). Needed
    *  because `gapsMs`/`frameArrivalsRef` only ever populate inside the
    *  `phase === "live"` branch (`isPausedRun`'s own consumer) — every leg in
    *  the sibling describe block stays at `pairing`/`ready`, which is enough
@@ -13211,27 +13050,19 @@ describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeM
       program: TWO_INTERVALS,
       events,
     });
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(fake, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result, unmount } = renderHook(() =>
+      useMonitorSession({
+        // The REAL decorator, composed exactly as `defaultTransport` does —
+        // `createTransport` receives the hook's own `LivenessDeps` now
+        // (Phase MD PR 2), so replacing `../adapters/monitorTransport` is no
+        // longer needed.
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(fake, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result, unmount } = renderHook(() =>
-      freshUseMonitorSession({
         // Same timer-hygiene defaults `harness()` uses (this file's own
         // top-level composition) — without them the arm handshake below
         // waits on REAL `setTimeout`s that `vi.useFakeTimers()` never fires
@@ -13572,9 +13403,6 @@ describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeM
 
 describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
   afterEach(() => {
-    vi.doUnmock("../adapters/monitorTransport");
-    vi.doUnmock("../adapters/appLifecycle");
-    vi.resetModules();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
@@ -13593,27 +13421,19 @@ describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
       program: TWO_INTERVALS,
       events,
     });
-    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
-      withLiveness(fake, deps),
-    );
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: mockDefaultTransport,
-    }));
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
+    const { result, unmount } = renderHook(() =>
+      useMonitorSession({
+        // The REAL decorator, composed exactly as `defaultTransport` does —
+        // `createTransport` receives the hook's own `LivenessDeps` now
+        // (Phase MD PR 2), so replacing `../adapters/monitorTransport` is no
+        // longer needed.
+        createTransport: (liveness: LivenessDeps) =>
+          withLiveness(fake, liveness),
+        registerAppLifecycleListener: (cb) => {
           lifecycleCb = cb;
           return () => undefined;
         },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-    const { result, unmount } = renderHook(() =>
-      freshUseMonitorSession({
         driverOptions: { schedule: releasingSchedule() },
       }),
     );
@@ -13726,8 +13546,6 @@ describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
 
 describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-run reset at the RC-37 programDropped/ready exit", () => {
   afterEach(() => {
-    vi.doUnmock("../adapters/appLifecycle");
-    vi.resetModules();
     vi.restoreAllMocks();
   });
 
@@ -13858,24 +13676,15 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-r
   it("a resume-stale-run opened at READY does not survive the drop — final whole-branch review item 5: it closes THERE with its own endedBy=reset entry, not silently, and does not ALSO close a second time at the eventual unmount's teardown", async () => {
     sessionStorage.removeItem("ergomatic:last-monitor-log");
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
-          lifecycleCb = cb;
-          return () => undefined;
-        },
-      ),
-    }));
-    vi.resetModules();
-
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
-
     const transport = rawTransport();
     const clock = manualClock();
     const { result, unmount } = renderHook(() =>
-      freshUseMonitorSession({
+      useMonitorSession({
         createTransport: () => transport,
+        registerAppLifecycleListener: (cb) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
         now: () => t0,
         driverOptions: {
           settleTicks: 0,
@@ -15730,17 +15539,6 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
 
   it("a background transition during the targeted scan aborts it to target-interrupted", async () => {
     let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(
-        (cb: (event: "background" | "foreground") => void) => {
-          lifecycleCb = cb;
-          return () => undefined;
-        },
-      ),
-    }));
-    vi.resetModules();
-    const { useMonitorSession: freshUseMonitorSession } =
-      await import("./useMonitorSession");
     let seen: AbortSignal | null = null;
     const scanTarget = vi.fn(
       (_r: unknown, signal: AbortSignal) =>
@@ -15754,8 +15552,12 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
         }),
     );
     const { result } = renderHook(() =>
-      freshUseMonitorSession({
+      useMonitorSession({
         createTransport: () => ({ ...stubRadio({}), scanTarget }),
+        registerAppLifecycleListener: (cb) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
       }),
     );
     await act(async () => {
@@ -15770,7 +15572,6 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
     expect(seen!.aborted).toBe(true);
     expect(result.current.phase).toBe("failed");
     expect(result.current.error?.reason).toBe("target-interrupted");
-    vi.doUnmock("../adapters/appLifecycle");
   });
 
   it("a poisoned tail reached through the PICKER maps to scan-cleanup-failed (no live Try again), not link-failed", async () => {
@@ -16273,3 +16074,207 @@ describe("useMonitorSession: an unsupported erg machine", () => {
  * today. Filed under Phase MT in ROADMAP.md. A test that cannot fail is worse
  * than no test, so there is none here (RF21).
  */
+
+// THE LIFECYCLE SEAM (Phase MD PR 2). `MonitorSessionDeps.
+// registerAppLifecycleListener` defaults to the adapter export and is read
+// from `depsRef` at each of the two call sites' own call time. These tests
+// are the seam's contract; every OTHER lifecycle test in this file now
+// rides it instead of `vi.doMock`ing the adapter.
+//
+// A fifth test closes this describe — `withDerivedAxes` refusing a HALF
+// override of `axes`/`linkLoss`. It lives here because this is where the
+// helper is imported, and it landed with Task 2, which created
+// `src/test/sessionAxes.ts`.
+describe("the lifecycle registrar dependency", () => {
+  const ATTEMPT_ID = "3c1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+  const targetedRequest = {
+    kind: "advertised-name" as const,
+    attemptId: ATTEMPT_ID,
+    exactName: DEVICE_NAME,
+  };
+
+  it("omitted, the hook calls the ADAPTER's own export — the static import IS the default", async () => {
+    // No `vi.resetModules()` anywhere in this test ON PURPOSE: a reset gives
+    // the hook a DIFFERENT module registry, whose `appLifecycle` namespace is
+    // not the object spied on here, and the spy would then never be called
+    // however correct the default was.
+    const spy = vi
+      .spyOn(appLifecycleModule, "registerAppLifecycleListener")
+      .mockImplementation(() => () => undefined);
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("a rejected SESSION registration on a LIVE attempt is exactly one ring entry naming the cause, and the session carries on", async () => {
+    let rejectRegistration!: (err: unknown) => void;
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        registerAppLifecycleListener: () =>
+          new Promise<() => void>((_resolve, reject) => {
+            rejectRegistration = reject;
+          }),
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(result.current.phase).toBe("pairing");
+
+    await act(async () => {
+      rejectRegistration(new Error("addListener refused"));
+      await flush();
+    });
+
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    // A PREFIX match, not an equality: the detail carries the rejection's
+    // own `String(err)` after `session: `, and pinning that text would pin a
+    // platform's message rather than our own record.
+    const details = ring
+      .filter((e) => e.kind === "lifecycle-registration-failed")
+      .map((e) => e.detail);
+    expect(details).toHaveLength(1);
+    expect(details[0]).toMatch(/^session: /);
+    // Not a failure of the session: everything but the background/foreground
+    // instruments still works.
+    expect(result.current.phase).toBe("pairing");
+  });
+
+  it("a rejected SESSION registration for a CANCELLED attempt is silent — no ring entry", async () => {
+    let rejectRegistration!: (err: unknown) => void;
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        registerAppLifecycleListener: () =>
+          new Promise<() => void>((_resolve, reject) => {
+            rejectRegistration = reject;
+          }),
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(result.current.phase).toBe("pairing");
+
+    await act(async () => {
+      await result.current.cancel();
+    });
+
+    await act(async () => {
+      rejectRegistration(new Error("addListener refused"));
+      await flush();
+    });
+
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      ring.filter((e) => e.kind === "lifecycle-registration-failed"),
+    ).toStrictEqual([]);
+  });
+
+  it("each site calls the registrar current at ITS OWN call time — a rerender between the scan lease and the session registration is harmless", async () => {
+    const calls: string[] = [];
+    let releaseScan!: () => void;
+    const scanTarget = vi.fn(
+      () =>
+        new Promise<DiscoveredMonitor[]>((resolve) => {
+          releaseScan = () => resolve([{ id: "x", name: DEVICE_NAME }]);
+        }),
+    );
+    // Two STABLE consts, hoisted out of the render callback (the test rule
+    // invariant 1 names): a closure minted inside `renderHook`'s callback
+    // would be a new function on every commit, which says nothing about
+    // which one each site read.
+    const first = (): (() => void) => {
+      calls.push("first");
+      return () => undefined;
+    };
+    const second = (): (() => void) => {
+      calls.push("second");
+      return () => undefined;
+    };
+    const { result, rerender } = renderHook(
+      (dep: MonitorSessionDeps["registerAppLifecycleListener"]) =>
+        useMonitorSession({
+          createTransport: () => ({ ...stubRadio({}), scanTarget }),
+          registerAppLifecycleListener: dep,
+          driverOptions: { schedule: releasingSchedule() },
+        }),
+      {
+        initialProps:
+          first as MonitorSessionDeps["registerAppLifecycleListener"],
+      },
+    );
+
+    await act(async () => {
+      void result.current.connect(targetedRequest);
+      await flush();
+    });
+    // The scan lease is registered and the scan is still pending.
+    expect(calls).toStrictEqual(["first"]);
+
+    rerender(second as MonitorSessionDeps["registerAppLifecycleListener"]);
+    await act(async () => {
+      releaseScan();
+      await flush();
+    });
+
+    // Site two read `depsRef.current` at ITS time, so it got the NEW value.
+    // Nothing else diverged: the session still reached pairing.
+    expect(calls).toStrictEqual(["first", "second"]);
+    expect(result.current.phase).toBe("pairing");
+  });
+
+  it("withDerivedAxes refuses a HALF override — axes and linkLoss travel together", () => {
+    // The helper's one enforced rule, gated where the real hook is already
+    // driven. `base` comes from the PRODUCER — the hook's own published
+    // session with the derived pair stripped off — rather than a hand-built
+    // literal this file does not otherwise have (RF33).
+    const { result, unmount } = renderHook(() => useMonitorSession());
+    const { axes: _axes, linkLoss: _linkLoss, ...base } = result.current;
+    unmount();
+
+    expect(() =>
+      withDerivedAxes(base, {
+        axes: {
+          link: "up",
+          program: "armed",
+          session: "live",
+          activity: "moving",
+        },
+      }),
+    ).toThrow(/override axes and linkLoss together or neither/);
+    expect(() => withDerivedAxes(base, { linkLoss: "reported" })).toThrow(
+      /override axes and linkLoss together or neither/,
+    );
+    expect(() => withDerivedAxes(base)).not.toThrow();
+  });
+});
