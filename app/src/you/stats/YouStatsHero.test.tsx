@@ -62,15 +62,25 @@ async function renderHero() {
   return screen.findByRole("link", { name: "Stats" });
 }
 
+const chipTexts = (hero: HTMLElement) =>
+  Array.from(hero.querySelectorAll(".stats-legend-chip"), (c) =>
+    (c.textContent ?? "").replace(/\s+/g, " ").trim(),
+  );
+
 describe("YouStatsHero — Gate 0's H3 hero, and the door (spec §5, invariant 16)", () => {
   it("prints LIFETIME 56,752 M and SEASON 2027 43,012 M for the seed, with the five-bucket legend", async () => {
     mockRows(GATE0_ROWS);
     const hero = await renderHero();
     await screen.findByText("LIFETIME · 56,752 M");
     expect(hero).toHaveTextContent("SEASON 2027 · 43,012 M");
-    expect(hero).toHaveTextContent(
-      "AN 6% · AT 27% · O2 43% · TR 10% · NO TYPE 15%",
-    );
+    // A2-H3's legend is one swatch chip per bucket (independent literal).
+    expect(chipTexts(hero)).toStrictEqual([
+      "AN 6%",
+      "AT 27%",
+      "O2 43%",
+      "TR 10%",
+      "NO TYPE 15%",
+    ]);
     expect(hero).toHaveTextContent("WORK TIME BY TYPE · ALL ROWS");
   });
 
@@ -81,8 +91,9 @@ describe("YouStatsHero — Gate 0's H3 hero, and the door (spec §5, invariant 1
     // The link itself is the only focusable node in the subtree (count 1).
     expect(hero.matches("a, button, [tabindex]")).toBe(true);
     expect(hero.querySelectorAll("a, button, [tabindex]")).toHaveLength(0);
+    // The last chip's percent is the deepest descendant of the legend.
     fireEvent.click(
-      screen.getByText("AN 6% · AT 27% · O2 43% · TR 10% · NO TYPE 15%"),
+      hero.querySelector(".stats-legend-chip:last-child .stats-legend-pct")!,
     );
     expect(await screen.findByText("Stats page")).toBeInTheDocument();
   });
@@ -95,7 +106,7 @@ describe("YouStatsHero — Gate 0's H3 hero, and the door (spec §5, invariant 1
       r.getAttribute("data-bucket"),
     );
     expect(order).toStrictEqual(["AT", "O2", "TR"]);
-    expect(hero).toHaveTextContent("AT 40% · O2 51% · TR 9%");
+    expect(chipTexts(hero)).toStrictEqual(["AT 40%", "O2 51%", "TR 9%"]);
   });
 
   it("two rows with metres but no work seconds: LIFETIME counts them, and the bar's place reads NO WORK TIME TO DRAW YET with no svg and no legend", async () => {

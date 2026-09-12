@@ -11929,14 +11929,19 @@ section:not(.news-pinned) .news-row:last-of-type {
    --ink-3 on --surface 7.43, --ink-3 on --page 6.69, --ink-4 on --page 4.76
    (the one NO TYPE caption), --ink-2 on --surface 10.81 (unselected chip),
    --on-color on --ink 17.11 (selected chip). Data marks ≥ 5.29 (--ink-4). */
+/* A2-H3 (build.mjs `heroBlock`): an OPEN block between two --rule-2
+   hairlines on --page — not a card. One tap target, ~181 px in portrait
+   (hero-heights.json). */
 .you-stats-hero {
-  display: block;
-  margin-top: 22px;
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 2px;
   min-height: var(--tap);
   box-sizing: border-box;
-  background: var(--surface);
-  border: 1px solid var(--rule);
+  border-top: 1px solid var(--rule-2);
+  border-bottom: 1px solid var(--rule-2);
   color: var(--ink);
   text-decoration: none;
 }
@@ -11949,12 +11954,20 @@ section:not(.news-pinned) .news-row:last-of-type {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 4px 12px;
-  margin: 0 0 12px;
+  margin: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   letter-spacing: 0.08em;
   font-variant-numeric: tabular-nums;
+}
+.you-stats-figures > span {
+  white-space: nowrap;
+}
+.you-stats-hero .stats-caption {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.08em;
 }
 .stacked-bar {
   display: block;
@@ -11985,7 +11998,27 @@ section:not(.news-pinned) .news-row:last-of-type {
   letter-spacing: 0.06em;
   color: var(--ink-3);
 }
+/* The hero's compact legend (A2-H3): swatch chips, wrapping. */
 .stats-legend-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.stats-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.stats-legend-chip .stats-swatch {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+.stats-legend-chip .stats-legend-key {
   color: var(--ink);
 }
 .stats-caption-quiet {
@@ -12057,39 +12090,82 @@ section:not(.news-pinned) .news-row:last-of-type {
   border-radius: var(--radius);
   padding: 0 8px;
 }
+/* A3's TOTALS card (build.mjs `totalsCard`): a --surface panel with the
+   `112px minmax(0,1fr) minmax(0,1fr)` grid, 12 px column gaps, 36 px lines,
+   10 px 0.14em labels, 15 px 500 tabular figures. Kept as a real <table>
+   (the role queries and axe read the native semantics) with a FIXED layout
+   that pins the label column at 112 px and splits the rest evenly. */
+.stats-card {
+  margin-top: 12px;
+  padding: 10px 14px 4px;
+  background: var(--surface);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+}
 .stats-table {
   width: 100%;
-  margin-top: 12px;
+  table-layout: fixed;
   border-collapse: collapse;
   font-family: var(--font-mono);
-  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .stats-table th {
   text-align: left;
-  font-weight: 500;
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 0.14em;
   color: var(--ink-3);
-  letter-spacing: 0.06em;
+}
+.stats-table th[scope="row"],
+.stats-table thead th:first-child {
+  width: 112px;
+}
+.stats-table thead th {
+  text-align: right;
+  white-space: nowrap;
+  padding: 0 0 6px 12px;
+  border-top: none;
 }
 .stats-table td {
   text-align: right;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--ink);
+  white-space: nowrap;
+  padding-left: 12px;
 }
-.stats-table th,
-.stats-table td {
-  padding: 8px 0;
+.stats-table tbody th,
+.stats-table tbody td {
+  height: 36px;
+  padding-top: 0;
+  padding-bottom: 0;
+  vertical-align: middle;
   border-top: 1px solid var(--rule-2);
 }
-.stats-table thead th {
-  border-top: none;
-}
+.stats-table th.stats-note,
 .stats-table td.stats-note {
-  text-align: left;
-}
-.stats-row-caption {
-  display: block;
+  text-align: right;
   font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
   color: var(--ink-3);
+  white-space: normal;
+  padding: 4px 0 8px;
+  border-top: none;
+  line-height: 1.5;
+}
+/* A3's row caption (`cap()`): one full-width line under its figure. */
+.stats-table td.stats-row-caption {
+  height: auto;
+  padding: 0 0 8px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  line-height: 1.5;
+  white-space: normal;
+  border-top: none;
 }
 .stats-legend {
   list-style: none;

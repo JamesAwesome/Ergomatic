@@ -22,81 +22,88 @@ export default function TotalsGroup({ summary }: { summary: StatsSummary }) {
       {summary.storedTierRows > 0 && (
         <p className="stats-caption">{seamLine(summary.storedTierRows)}</p>
       )}
-      <table className="stats-table">
-        <thead>
-          <tr>
-            <th scope="col" />
-            <th scope="col">ALL ROWS</th>
-            <th scope="col">MACHINE</th>
-          </tr>
-          {hasMachine && (
+      {/* A3's TOTALS card: a `--surface` panel on the page, `112px 1fr 1fr`
+          columns (fixed layout, so the ALL ROWS header never wraps and the
+          TIME cells never touch). */}
+      <div className="stats-card">
+        <table className="stats-table">
+          <thead>
             <tr>
-              <td colSpan={3} className="stats-note">
-                {machine.ownTotals} OF {machine.sessions} CARRY THE MONITOR'S
-                OWN TOTALS
-              </td>
+              <th scope="col" />
+              <th scope="col">ALL ROWS</th>
+              <th scope="col">MACHINE</th>
             </tr>
-          )}
-        </thead>
-        <tbody>
-          <tr>
-            <th scope="row">METRES</th>
-            <td>{fmtMeters(all.meters)}</td>
-            <td>{cell(fmtMeters(machine.meters))}</td>
-          </tr>
-          <tr>
-            <th scope="row">TIME</th>
-            <td>{fmtSeconds(all.seconds)}</td>
-            <td>{cell(fmtSeconds(machine.seconds))}</td>
-          </tr>
-          <tr>
-            <th scope="row">SESSIONS</th>
-            <td>{all.sessions}</td>
-            <td>{cell(String(machine.sessions))}</td>
-          </tr>
-          {!hasMachine && (
-            <tr>
-              <td />
-              <td />
-              <td className="stats-note">{NO_MONITOR_ROWS}</td>
-            </tr>
-          )}
-          {hasMachine && (
-            <>
+            {hasMachine && (
               <tr>
-                <th scope="row">REST METRES</th>
-                <td />
-                <td>{fmtMeters(machine.restMeters)}</td>
-              </tr>
-              <tr>
-                <th scope="row">
-                  CALORIES
-                  <span className="stats-row-caption">
-                    {machine.caloriesRows} OF {machine.sessions} ROWS CARRY IT ·
-                    MONITOR'S OWN COUNT
-                  </span>
-                </th>
-                <td />
-                <td>{fmtMeters(machine.calories)}</td>
-              </tr>
-              <tr>
-                <th scope="row">
-                  AVG WATTS
-                  <span className="stats-row-caption">
-                    AT THE RANGE'S AVERAGE PACE · WORK-ONLY ROWS
-                  </span>
-                </th>
-                <td />
-                <td>
-                  {machine.avgWatts === undefined
-                    ? "—"
-                    : String(machine.avgWatts)}
+                <td colSpan={3} className="stats-note">
+                  {machine.ownTotals} OF {machine.sessions} CARRY THE MONITOR'S
+                  OWN TOTALS
                 </td>
               </tr>
-            </>
-          )}
-        </tbody>
-      </table>
+            )}
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">METRES</th>
+              <td>{fmtMeters(all.meters)}</td>
+              <td>{cell(fmtMeters(machine.meters))}</td>
+            </tr>
+            <tr>
+              <th scope="row">TIME</th>
+              <td>{fmtSeconds(all.seconds)}</td>
+              <td>{cell(fmtSeconds(machine.seconds))}</td>
+            </tr>
+            <tr>
+              <th scope="row">SESSIONS</th>
+              <td>{all.sessions}</td>
+              <td>{cell(String(machine.sessions))}</td>
+            </tr>
+            {!hasMachine && (
+              <tr>
+                <td />
+                <td />
+                <td className="stats-note">{NO_MONITOR_ROWS}</td>
+              </tr>
+            )}
+            {hasMachine && (
+              <>
+                <tr>
+                  <th scope="row">REST METRES</th>
+                  <td />
+                  <td>{fmtMeters(machine.restMeters)}</td>
+                </tr>
+                <tr>
+                  <th scope="row">CALORIES</th>
+                  <td />
+                  <td>{fmtMeters(machine.calories)}</td>
+                </tr>
+                {/* A3's `cap()`: the row's caption is a full-width line UNDER the
+                    figure, not text inside the 112 px label cell. */}
+                <tr className="stats-caption-row">
+                  <td colSpan={3} className="stats-row-caption">
+                    {machine.caloriesRows} OF {machine.sessions} ROWS CARRY IT ·
+                    MONITOR'S OWN COUNT
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">AVG WATTS</th>
+                  <td />
+                  <td>
+                    {machine.avgWatts === undefined
+                      ? "—"
+                      : String(machine.avgWatts)}
+                  </td>
+                </tr>
+                <tr className="stats-caption-row">
+                  <td colSpan={3} className="stats-row-caption">
+                    AT THE RANGE'S AVERAGE PACE · WORK-ONLY ROWS
+                  </td>
+                </tr>
+              </>
+            )}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
