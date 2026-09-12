@@ -48,12 +48,17 @@ run pnpm --dir app exec bash scripts/test-run.sh --project unit scripts/ || exit
 # in no test's module graph.
 #
 # The needle is the `node:fs` import, because reading the filesystem IS the
-# property that makes a suite unselectable. Measured: it picks 46 files /
-# 1941 tests in 10.3s, against 57s for the whole client project, and the
-# same 46 files come back from `grep -lE 'readFileSync|readdirSync|statSync'`.
+# property that makes a suite unselectable. Measured 2026-09-08: it picks 46
+# files / 1941 tests in 10.3s, against 57s for the whole client project, and
+# the same 46 files come back from `grep -lE 'readFileSync|readdirSync|statSync'`.
+# Since Phase MD Exploration B (2026-09-12) the session captures are read
+# through `src/test/captures.ts`, so a suite that reads the tree may import
+# THAT instead of `node:fs` — the needle names both. Measured that day: the
+# `node:fs` needle alone had fallen from 44 to 23 files while the tree-reading
+# set was 47; the widened needle and the census's widened needle both say 47.
 CLIENT_TREE=""
 if [ -d app/src ]; then
-  CLIENT_TREE="$( cd app && grep -rlE '"node:fs|from "fs"' src \
+  CLIENT_TREE="$( cd app && grep -rlE '"node:fs|from "fs"|test/captures"' src \
     --include='*.test.ts' --include='*.test.tsx' 2>/dev/null | sort | tr '\n' ' ' )" \
     || CLIENT_TREE=""
 fi
