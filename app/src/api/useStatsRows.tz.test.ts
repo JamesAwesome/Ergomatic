@@ -2,9 +2,17 @@
 // passes in UTC proves nothing about a device in New York. Set BEFORE any
 // Date is constructed in this file; the first test ASSERTS the zone took
 // (RF38: a property of how the test got there is an assertion).
+const TZ_BEFORE = process.env.TZ;
 process.env.TZ = "America/New_York";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
+
+// The file owns its worker, but a later file sharing it would inherit the
+// zone: put it back.
+afterAll(() => {
+  if (TZ_BEFORE === undefined) delete process.env.TZ;
+  else process.env.TZ = TZ_BEFORE;
+});
 import { toCalendarDate } from "./useStatsRows";
 
 describe("useStatsRows — the adapter converts in the process's zone (spec §8.3, invariant 5)", () => {

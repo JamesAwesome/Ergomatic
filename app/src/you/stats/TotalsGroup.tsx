@@ -35,10 +35,10 @@ export default function TotalsGroup({ summary }: { summary: StatsSummary }) {
             </tr>
             {hasMachine && (
               <tr>
-                <td colSpan={3} className="stats-note">
+                <th colSpan={3} scope="colgroup" className="stats-note">
                   {machine.ownTotals} OF {machine.sessions} CARRY THE MONITOR'S
                   OWN TOTALS
-                </td>
+                </th>
               </tr>
             )}
           </thead>

@@ -12,6 +12,7 @@ import {
   type DateRange,
   type Preset,
 } from "../../../domain/stats/calendar.js";
+import type { DatedStatsRow } from "../../../domain/stats/statsRow.js";
 import { useStatsRows } from "../../api/useStatsRows";
 import BackLink from "../../shell/BackLink";
 import { fmtDate, parseDate } from "./format";
@@ -93,7 +94,7 @@ function Body({
   onCustom,
   applied,
 }: {
-  rows: Parameters<typeof summarize>[0];
+  rows: readonly DatedStatsRow[];
   today: CalendarDate;
   preset: Preset;
   onPreset: (p: Preset) => void;

@@ -4,12 +4,12 @@ import request from "supertest";
 import { requireUser } from "../auth/middleware.js";
 import type { SessionStore, SessionUser } from "../auth/sessions.js";
 import { makeFakeStores } from "../testing/fakes.js";
-import { rowContribution } from "../../domain/stats/rowContribution.js";
-import type { StatsRowsResponse } from "../../domain/stats/statsRow.js";
 import {
-  toStatsRowInput,
-  type StoredLog,
-} from "../../src/log/storedSummary.js";
+  rowContribution,
+  statsRowInput,
+  type StatsRowSource,
+} from "../../domain/stats/rowContribution.js";
+import type { StatsRowsResponse } from "../../domain/stats/statsRow.js";
 import { createDataRouter } from "./data.js";
 import { createStatsRouter } from "./stats.js";
 
@@ -193,7 +193,20 @@ describe("GET /api/stats/rows (Phase PS PR 1, spec §4.3)", () => {
         .expect(201);
       const id = (created.body as { id: string }).id;
       const detail = await asA(request(app).get(`/api/logs/${id}`)).expect(200);
-      const client = rowContribution(toStatsRowInput(detail.body as StoredLog));
+      // The CLIENT's path, without importing src/ into a server test: the
+      // detail body through the domain's one builder with the two fields
+      // src/log/storedSummary.ts's toStatsRowInput maps (endedBy ?? null,
+      // machineSummary?.totalCalories) mapped the same way here.
+      const detailBody = detail.body as StatsRowSource & {
+        machineSummary?: { totalCalories?: unknown };
+      };
+      const client = rowContribution(
+        statsRowInput({
+          ...detailBody,
+          endedBy: detailBody.endedBy ?? null,
+          totalCalories: detailBody.machineSummary?.totalCalories,
+        }),
+      );
       const stats = await asA(request(app).get("/api/stats/rows")).expect(200);
       const server = (stats.body as StatsRowsResponse).rows.find(
         (r) => r.id === id,

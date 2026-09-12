@@ -12,6 +12,7 @@ export const NO_ROWS_YET =
  *  with metres only), so the bar has nothing to draw. Copy pending James
  *  at PR review (a Gate 0 addition — the seed never reaches this state). */
 export const NO_WORK_TIME_TO_DRAW = "NO WORK TIME TO DRAW YET";
+const FIGURES_ID = "you-stats-figures";
 
 /**
  * Gate 0's H3 hero (career-stats spec §5, §14 rulings 9-10): LIFETIME and
@@ -30,6 +31,9 @@ export default function YouStatsHero() {
       state={{ from: "/you" }}
       className="you-stats-hero"
       aria-label="Stats"
+      // The accessible NAME stays `Stats` (invariant 16); the figures are
+      // the DESCRIPTION, so a screen reader still hears LIFETIME and SEASON.
+      aria-describedby={state.state === "ready" ? FIGURES_ID : undefined}
     >
       {state.state === "loading" && <p className="stats-caption">LOADING…</p>}
       {state.state === "error" && (
@@ -50,7 +54,7 @@ function HeroBody({
   const buckets = timeByType(rows, all);
   return (
     <>
-      <p className="you-stats-figures">
+      <p className="you-stats-figures" id={FIGURES_ID}>
         <span>LIFETIME · {fmtMeters(lifetime)} M</span>
         <span>
           SEASON {seasonOf(today).name} · {fmtMeters(season)} M
