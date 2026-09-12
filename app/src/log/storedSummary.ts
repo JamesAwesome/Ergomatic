@@ -628,30 +628,6 @@ function buildMeta(row: StoredLog): SummaryMeta {
 // `domain/stats/rowContribution.ts` (the same allowlist, on `string | null`)
 // and is applied inside `rowContribution`, which `buildHeroes` below calls.
 
-function stepActualSums(steps: StoredLogStep[]): {
-  meters?: number;
-  seconds?: number;
-} {
-  let hasMeters = false;
-  let meters = 0;
-  let hasSeconds = false;
-  let seconds = 0;
-  for (const step of steps) {
-    if (step.actualMeters !== undefined) {
-      hasMeters = true;
-      meters += step.actualMeters;
-    }
-    if (step.actualSeconds !== undefined) {
-      hasSeconds = true;
-      seconds += step.actualSeconds;
-    }
-  }
-  return {
-    meters: hasMeters ? meters : undefined,
-    seconds: hasSeconds ? seconds : undefined,
-  };
-}
-
 // Tier B's AVG SPLIT: `500 × Σt/Σd` over pm5-sourced steps whose own
 // `actualSeconds` clears the sub-threshold floor — `MIN_MEASURABLE_
 // ELAPSED_SECONDS`'s own doc comment, `summaryModel.ts`'s
@@ -711,8 +687,10 @@ function tierBAvgSplitSeconds(steps: StoredLogStep[]): number | undefined {
 // `isReconstructableClose(row.endedBy)`: a row whose `endedBy` names an
 // incomplete-by-construction close DECLINES to FALLBACK instead (also an
 // empty `stepSums`) rather than risk this rung firing on a growing,
-// un-bounded population. See the tier-B2/FALLBACK comment block above
-// `stepActualSums` for the full risk/decision writeup.
+// un-bounded population. See the tier-B2/FALLBACK comment block earlier in
+// this module (the `isReconstructableClose` notes) for the full
+// risk/decision writeup; the sums themselves come from the domain's
+// `rowContribution` (Phase PS PR 1), the one reader of `steps`.
 function buildStoredRest(
   row: StoredLog,
   stepSums: { meters?: number; seconds?: number },
@@ -864,9 +842,10 @@ function buildHeroes(row: StoredLog): SummaryHeroes {
   // main before the refactor). Everything else in each branch — avg
   // split, the TOTAL line and its deliberately EMPTY `stepSums` on three
   // of the four tiers, the machine tiles — is as it was; the tier
-  // comments above `stepActualSums` still describe why.
+  // comments earlier in this module still describe why. The B2 TOTAL line
+  // reads the domain contribution's own sums (the local `stepActualSums`
+  // is gone — one reader of `steps`, RF24).
   const c = rowContribution(toStatsRowInput(row));
-  const stepSums = stepActualSums(row.steps);
 
   if (c.tier === "machine") {
     const distanceMeters = c.workMeters;
@@ -920,7 +899,12 @@ function buildHeroes(row: StoredLog): SummaryHeroes {
       avgSplit:
         avgSplitSeconds !== undefined ? fmtSplit(avgSplitSeconds) : undefined,
       avgSplitSeconds,
-      totalLine: buildStoredTotalLine(row, timeSeconds, stepSums),
+      // The domain's own sums (rounded metres, verbatim seconds) — the one
+      // reader of `steps` (RF24); the local `stepActualSums` is gone.
+      totalLine: buildStoredTotalLine(row, timeSeconds, {
+        meters: c.workMeters,
+        seconds: c.workSeconds ?? undefined,
+      }),
     };
   }
 
