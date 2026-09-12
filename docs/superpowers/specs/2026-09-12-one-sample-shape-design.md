@@ -6,7 +6,11 @@ antagonist pass on this spec, PM final-PR gate on the PR, `/harden` on the plan.
 **No hardware walk**, on the condition the ROADMAP states and this spec keeps:
 the shape ON THE WIRE AND ON DISK does not change by one byte (§3.2).
 
-**Revision 2, 2026-09-12** — folds the full antagonist pass (hinge HELD on four serializers; seven corrections; §9). Written from
+**Revision 3, 2026-09-12** — folds `/harden` lens 1 over the implementation
+plan (§9, second block). The one design change: **the server DERIVES the shape
+from `domain/` instead of mirroring it**, so six declarations become TWO, not
+three. Revision 2 folded the full antagonist pass (hinge HELD on four
+serializers; seven corrections; §9, first block). Written from
 `docs/superpowers/audits/2026-09-12-architecture-walk/pr3-census.md` (every
 number carries its command there). §7 lists what the ROADMAP row got wrong.
 
@@ -23,16 +27,19 @@ copy the row never listed, upstream of the Concept2 send, where the same
 rename would silently stop excluding rest from a rower's logbook heart-rate.
 
 **This PR makes the flag a REQUIRED KEY whose value may be `undefined`, in one
-declaration the others derive from.** `JSON.stringify` drops an
+declaration every other type derives from — INCLUDING the server's.** `JSON.stringify` drops an
 `undefined`-valued key (measured: byte-identical to omitting it), so the record
 on disk and on the wire does not change — the +19% the row feared belongs to
 `r: null`, which this PR does not write and the server validator already
 rejects. What changes is that a sample built without spelling `r` no longer
-compiles, on the client, in the domain, and at the two server seams that can
-share a type. The one seam that cannot share a type (the server mirror, which
-the repo forbids importing across) gets the test RF24 says it is missing: the
-real recorder's output, carried across the POST, through the store shape, to
-the Concept2 payload.
+compiles, anywhere — and that a RENAMED field is a compile error on both sides
+of the POST. The rule that used to forbid the server sharing this type
+(`logs.ts`: *"Server code never imports from `src/`"*) does not reach the case
+once `Sample` lives in `domain/`, which `tsconfig.server.json` already
+includes. What the compiler still cannot see — a field the validator's rebuild
+list quietly drops, a value that fails to survive the POST — gets the test
+RF24 says is missing: the real recorder's output, carried across the POST,
+through the store shape, to the Concept2 payload.
 
 Nothing a rower sees changes. The `EndedBy` mirror rider (James, 2026-09-12)
 rides along: three hand-copied lists of one enum become one source.
@@ -67,11 +74,14 @@ rides along: three hand-copied lists of one enum become one source.
   (`logs.ts:332`'s `satisfies readonly (typeof endedByEnum.enumValues)[number][]`).
 - **Does the system have the concept?** The PM5 reports a per-frame `state`
   (`"resting"` among them); the flag is our own one-bit projection of it,
-  stamped once by the recorder from the frame that won the bucket
-  (`seriesRecorder.ts:425`). Unchanged here.
-- **Prior art in the repo:** `logs.ts:120-128` rules the server mirror
-  DELIBERATE ("not a shared import … server code never imports from `src/`");
-  this spec keeps that rule and gates the mirror by test instead (§5).
+  stamped once by the recorder from the frame that won the bucket (the sole
+  producer line in `createSeriesRecorder`). Unchanged here.
+- **Prior art in the repo:** `logs.ts`'s `LogSeriesSample` comment rules the
+  server mirror DELIBERATE ("not a shared import … server code never imports
+  from `src/`). **Revision 3 does NOT keep that rule for this type** — the
+  rule is about `src/`, and §4's C bullet shows it stops reaching the case
+  once `Sample` lives in `domain/`. The rule stands for `LogStep`, whose twin
+  is in `src/`.
   `derivedHeartRate.replay.test.ts:230-251` is already the client-side
   upstream-of-producer test; `MAX_GAP_DECISECONDS`'s boundary pin shipped in
   #345 — nothing to redo.
@@ -81,7 +91,7 @@ rides along: three hand-copied lists of one enum become one source.
 
 | | file | role | fields carrying `r` |
 | --- | --- | --- | --- |
-| A | `src/monitor/seriesRecorder.ts:219` `Sample` | PRODUCER | `readonly r?: true` |
+| A | `src/monitor/seriesRecorder.ts`'s `Sample` | PRODUCER | `readonly r?: true` |
 | B | `domain/monitor/derivedHeartRate.ts:59` `HeartRateSample` | consumer input | `readonly r?: true` |
 | C | `server/stores/logs.ts:129` `LogSeriesSample` | deliberate server MIRROR | `r?: true` (mutable) |
 | D | `server/routes/data.ts:819-933` validator | builds C from an explicit field list; `r` must be `true` or absent, `null` → 400; unknown keys dropped | — |
@@ -94,11 +104,12 @@ Consumers: `derivedHeartRate.ts:103` and `traceModel.ts:182`.
 
 ## 3. The invariants this owes
 
-1. **One spelling per tree, derived not copied.** On the client/domain side
-   exactly one declaration of the sample shape exists and every other type is
-   a `Pick`/mapped type of it. On the server side exactly one hand-written
-   mirror exists (C) and E and F derive from it. Six declarations become
-   three, and only C is a copy — by the repo's own rule.
+1. **One spelling, derived not copied.** Exactly one declaration of the
+   sample shape exists in the repo (A, in `domain/monitor/types.ts`) and every
+   other type is a `Pick` or mapped type of it — the recorder's re-export, B,
+   C, E and F alike. **Six declarations become TWO** (A and `SeriesData`), and
+   none of the survivors is a copy. Revision 2 said "three, and only C is a
+   copy"; see §9's second block.
 2. **The bytes are unchanged.** No sample serialized by the recorder, written
    to `MONITOR_RUN_KEY`, POSTed, stored in jsonb or read back changes by one
    byte. Gated by PR 1's byte-compatibility fixtures, which this PR inherits
@@ -110,8 +121,12 @@ Consumers: `derivedHeartRate.ts:103` and `traceModel.ts:182`.
    trace chart (`Reading.rest`), the validator (kept), the store, the Concept2
    mapping (excluded from the logbook average) — and a build that omits the
    flag at any hand-built site is a compile error, not a green test.
-4. **The server mirror is gated by a test that starts at the recorder.** No
-   compiler crosses `src/` → `server/`; one test does (§5).
+4. **The server reads the domain's shape through a compiler edge that already
+   existed; the seam test is the RUNTIME gate over D/C/F/E.** The compiler
+   catches a renamed field on both sides of the POST. It cannot catch a field
+   the validator's rebuild list quietly drops, or a value that fails to
+   survive the POST — one test that starts at `createSeriesRecorder` does
+   (§5).
 5. **`r: null` and `r: false` stay refused** at the validator (400,
    `"r must be true or absent"`) — the persisted idiom is absent-means-work,
    and nothing in this PR writes a falsy `r`.
@@ -126,7 +141,8 @@ Consumers: `derivedHeartRate.ts:103` and `traceModel.ts:182`.
   `readonly hr?: number` (unchanged — `hr` is a value, not a flag, and its
   absence already means "no belt"). `seriesRecorder.ts` re-exports both
   (`export type { Sample, SeriesData }` — `verbatimModuleSyntax` accepts it;
-  all 21 importers keep compiling; no lint rule is scoped to `domain/`) and
+  every importer keeps compiling, probed by a clean `pnpm typecheck`; no lint
+  rule is scoped to `domain/`) and
   writes `r: f.state === "resting" ? true : undefined` in place of the
   conditional spread — a conditional spread cannot satisfy a required key,
   so the producer line MUST change, and its output is byte-identical. The
@@ -139,28 +155,60 @@ Consumers: `derivedHeartRate.ts:103` and `traceModel.ts:182`.
 - **B becomes `Pick<Sample, "t" | "hr" | "r">`** — the RF33 comment at
   `derivedHeartRate.ts:50-58` is rewritten to say the link is now the
   compiler's, and to keep the incident's one paragraph.
-- **C keeps its hand-written mirror** (`logs.ts:120-128`'s rule stands) with
-  `r: true | undefined` required, and gains an EXHAUSTIVENESS witness in the
-  repo's own `schema.test.ts:26` idiom:
+- **C DERIVES from A, and the mirror rule does not reach this case.**
+  `logs.ts:120-128` justifies the hand-copy with one sentence — *"Server code
+  never imports from `src/` (the client tree)"* — and once `Sample` lives in
+  `domain/monitor/types.ts` that sentence is about a different directory.
+  `tsconfig.server.json`'s `include` is `["server", "domain",
+  "src/vite-env.d.ts"]`; `grep -rl 'domain/' server --include='*.ts' | wc -l`
+  → **28**; and `server/concept2/mapping.ts` already imports
+  `deriveAverageHeartRate` from the very module whose input type becomes a
+  `Pick` of this shape. The compiler edge exists today, so a hand-copy beside
+  it buys nothing and can drift — which is the RF33 defect this spec exists to
+  close, since a renamed field must be a compile error on BOTH sides and a
+  copy cannot do that. So:
+  `export type LogSeriesSample = { -readonly [K in keyof Sample]: Sample[K] }`
+  and the same mapping over `SeriesData` for `LogSeries`. `-readonly` is the
+  whole of the difference. **The ROADMAP row's caveat is therefore ANSWERED,
+  not honoured:** the row required this spec to engage that comment, and the
+  engagement is that its reason has expired. `logs.ts`'s comment is rewritten
+  to say what IS still the server's own — the BOUNDS. `routes/data.ts`'s
+  validator is the trust boundary for an untrusted body; sharing the SHAPE
+  does not share the bands and does not make the route trust the client.
+  `LogStep` beside it stays a hand-written mirror, because ITS twin
+  (`logDraft.ts`) really is in `src/`.
+  C also gains an EXHAUSTIVENESS witness in the repo's own `schema.test.ts`
+  idiom:
   `const SERIES_SAMPLE_FIELDS = Object.keys({ t: true, d: true, p: true, spm: true, hr: true, r: true } satisfies Record<keyof LogSeriesSample, true>)`.
   (`as const satisfies readonly (keyof T)[]` was the first draft and cannot go
   red on a MISSING member — `tsc` is silent on the omission; only
-  `Record<keyof T, true>` errors, `TS2741`. Antagonist pass, probed.) The
-  witness gates the validator's REBUILD list only — the explicit field list
-  at `data.ts:892-895` — and the seam test (§5) compares it against the client
-  tree's keys. The validator's six per-field predicates, their order and
+  `Record<keyof T, true>` errors, `TS1360` on the literal. Antagonist pass,
+  probed.) It now gates the validator's REBUILD list against the DOMAIN's
+  shape, which is strictly more than it gated before; the seam test (§5)
+  compares it against the key UNION over the recorder's own output and over
+  the validator's. The validator's six per-field predicates, their order and
   their pinned messages are UNCHANGED: they are six different checks with
   four different ceilings and cannot be "iterated", and revision 1's claim
   that they could was wrong.
-- **E and F derive from C:** `Pick<LogSeriesSample, "t" | "hr" | "r">`; F's
-  cast names that type instead of an inline literal. `truncated` and
+- **E and F derive from C** (and so, transitively, from A):
+  `Pick<LogSeriesSample, "t" | "hr" | "r">`; F's cast names that type instead
+  of an inline literal. `truncated` and
   `samples?` at E/F: unchanged (the Concept2 path never reads `truncated`;
   `?? []` absorbs `samples`).
 - **D (the validator):** unchanged in behaviour; the rebuild list is checked
-  against `SERIES_SAMPLE_FIELDS`; the stale `:813` comment ("stores it
-  unbanded") corrected to name the RC-6 band (`seriesRecorder.ts:418`,
-  10..60) while keeping `SERIES_SPM_MAX = 255` with its honest reason (the
-  wire byte is a u8).
+  against `SERIES_SAMPLE_FIELDS`; the stale comment above `SERIES_SPM_MAX`
+  ("the recorder stores it unbanded") corrected to name the RC-6 band
+  (`seriesRecorder.ts`, 10..60) while keeping `SERIES_SPM_MAX = 255` with its
+  honest reason (the wire byte is a u8). The rebuild builds `r` at
+  construction (a required key cannot be assigned after) and keeps SPREADING
+  `hr`, which is load-bearing for a reason that is not byte order: the spread
+  leaves `hr` genuinely ABSENT in memory when there is no reading, and that is
+  what keeps every `toStrictEqual` comparing a stored sample to a hand-built
+  one honest. **Key order is NOT load-bearing** — Postgres normalizes jsonb
+  keys by length then bytewise on ingest (PRIMARY, measured on 18.4:
+  `'{"t":1,"d":4,"p":121,"spm":25,"hr":140}'::jsonb` reads back
+  `{"d": 4, "p": 121, "t": 1, "hr": 140, "spm": 25}`), so no ordering chosen
+  here survives the column.
 - **`EndedBy` rider:** `logs.ts` — `export type EndedBy =
   (typeof endedByEnum.enumValues)[number]` and
   `export const ENDED_BY_VALUES = endedByEnum.enumValues` (`.includes(value
@@ -197,17 +245,24 @@ Consumers: `derivedHeartRate.ts:103` and `traceModel.ts:182`.
   `stores/logs`'s input shape, run `toMappingRow` (F) and the Concept2 mapping
   (E), and assert the payload's derived heart-rate average equals
   `deriveAverageHeartRate` over the recorder's own samples — and that a
-  recorder sample with `r: true` is still `r: true` after D. File:
+  recorder sample with `r: true` is still `r: true` after D. **It also pins
+  that the rests MATTER on the chosen capture** (the same derivation over
+  rest-stripped samples returns a DIFFERENT number), or a mutation that drops
+  `r` could land on the same average by luck and leave the oracle agreeing
+  with a broken seam. File:
   `server/routes/seriesSeam.test.ts` — NOT `.integration.test.ts` (that
   suffix routes to the Docker-only `integration` project); it runs in the
   node `unit` project, DOM-free (`seriesRecorder.ts` imports exactly one
   type from `domain/`). Precedent: `server/routes/data.test.ts:15` already
   imports `../../src/session/partialGateFixture.js` in that project — one
   of FOUR such files, so "the one sanctioned cross-tree import" was wrong
-  and `partial.integration.test.ts` was the wrong one to cite. Mutation: rename `r` in the F cast to
-  `rest` — the payload average changes (rest samples included) and the test
-  fails; a second mutation drops `r` from `SERIES_SAMPLE_FIELDS` — the
-  validator stops carrying it and the same assertion fails.
+  and `partial.integration.test.ts` was the wrong one to cite.
+  Mutations: the `rest` RENAME no longer compiles once C derives (which is the
+  protection working), so the compiling equivalent strips the mark inside
+  `toMappingRow` — the payload average changes; a second mutation drops `r`
+  from the validator's rebuild list — the rest count and the key-union
+  assertion both red; a third drops a DIFFERENT field (`hr`) from that list,
+  which is what proves the witness rather than the flag.
 - **The compiler gate, proved:** one `@ts-expect-error` test in
   `seriesRecorder.test.ts` builds a `Sample` without `r` — the directive is
   green only while the omission is an error (the repo's own idiom at
@@ -222,20 +277,24 @@ Consumers: `derivedHeartRate.ts:103` and `traceModel.ts:182`.
   `expect(JSON.stringify(work)).not.toContain('"r"')` — strictly stronger.**
   `derivedHeartRate.replay.test.ts:246`'s `"r" in s && s.r === true` keeps
   its count right but the `in` half stops discriminating; one comment.
-- `derivedHeartRate.replay.test.ts:230-251` stays; its `:246` sanity count
-  keeps naming `r` — that is the flag's producer-side assertion, wanted.
+- `derivedHeartRate.replay.test.ts`'s "over the RECORDER's own samples" leg
+  stays and keeps its rest count. **Its TITLE loses the clause "without this
+  test naming the field"**, which the required key makes false — the file
+  writes `r` three times afterwards — and the comment above its strip says
+  what the leg still proves: a rename is now the COMPILER's to catch, so this
+  leg proves the exclusion RUNS over real recorder output.
 - `schema.test.ts`: the tautological test goes; `endedBy.integration.test.ts`
   stays as the DB round-trip.
 
 ## 6. Exit criteria
 
-1. From `app/`: `grep -rnE '(^|[^a-zA-Z])r\??: true' src domain server --include='*.ts' --include='*.tsx' | grep -v '\.test\.'` → on main today **6** hits (five declarations + the producer line — measured, so the criterion is red before the work); after: **3** — `domain/monitor/types.ts`, `server/stores/logs.ts`, and `seriesRecorder.ts`'s producer line (B/E/F are `Pick`s and do not spell the field).
+1. From `app/`: `grep -rnE '(^|[^a-zA-Z])r\??: true' src domain server --include='*.ts' --include='*.tsx' | grep -v '\.test\.'` → on main today **7** hits (measured at `3fc49767`, so the criterion is red before the work; revision 2 said 6, before PR 1's `monitorRunShapes.ts` landed); after: **3**, and the criterion is the LINES, not the count — `domain/monitor/types.ts` (the declaration), `server/stores/logs.ts` (`r: true` inside the exhaustiveness witness) and `src/monitor/fixtures/monitorRunShapes.ts` (PR 1's hand-authored rest sample). The producer line drops OUT (`r: f.state === "resting" ? true : undefined` does not match the pattern) and the server declaration is GONE (C derives).
 2. PR 1's byte fixtures untouched (`git diff --stat main -- app/src/monitor/fixtures` empty) and `handoffStoreBytes.test.ts` green.
 3. The server seam test exists, starts at `createSeriesRecorder`, and both mutations in §5 are shown red.
 4. The `@ts-expect-error` compile gate exists; removing the directive's line makes `pnpm typecheck` fail (shown).
 5. From `app/`: `grep -n 'export type EndedBy' server/stores/logs.ts` prints the derived form (`(typeof endedByEnum.enumValues)[number]`) — the old union is prettier-wrapped across six lines, so a one-line string grep was green on main and proved nothing; `grep -c '"finished"' server/stores/logs.ts server/routes/data.ts` drops by the number of hand-copies removed (measured before/after in the PR body); `schema.test.ts`'s `EXHAUSTIVE` deleted with the reason in the commit.
 6. `pnpm test` (all three projects — integration needs Docker), `pnpm typecheck`, `pnpm lint`, a full `pnpm e2e` whose result was read (RF1); no screenshot committed.
-7. PR body's first sentence: which module got deeper and what its interface now is.
+7. PR body's first sentence is the OUTCOME, in James's words, per CLAUDE.md's "Write for James first" — the "which module got deeper and what its interface now is" sentence belongs in the collapsed Record block, not above the fold.
 
 ## 7. Deviations from the ROADMAP row, stated (RF10)
 
@@ -250,7 +309,41 @@ Consumers: `derivedHeartRate.ts:103` and `traceModel.ts:182`.
   `schema.test.ts:26-40`, which this PR deletes as tautological once the type
   derives — and says so.
 - `MAX_GAP_DECISECONDS` boundary pin: already shipped, not redone.
-- The `EndedBy` row says "three mirrors"; there are four (the error-message prose at `data.ts:175`).
+- The `EndedBy` row says "three mirrors"; there are four (the error-message prose in `endedByError`).
+- The row required the spec to engage `stores/logs.ts:120-127`'s "deliberate mirror" ruling "rather than treating it as drift". **It is engaged and its reason has EXPIRED** (§4's C bullet): the comment's justification is that server code never imports from `src/`, and after this PR the shape lives in `domain/`. The mirror is deleted rather than defended, and `logs.ts`'s comment is rewritten to name the bounds — not the shape — as the thing the server owns.
+- Six declarations become **two**, not three: the row, the census and revision 2 all assumed the server copy was permanent.
+
+## 9b. What revision 3 changed, and why (`/harden` lens 1 over the plan)
+
+- **The server DERIVES.** `logs.ts`'s mirror rule is about `src/`, and A now
+  lives in `domain/`, which `tsconfig.server.json` includes and which 28
+  server files already import from — `mapping.ts` among them, from the very
+  module whose input becomes a `Pick` of this shape. C and `LogSeries` become
+  `-readonly` mapped types; six declarations become two; invariants 1 and 4
+  rewritten; §7 answers the ROADMAP row's caveat instead of honouring it.
+- **"No compiler crosses this seam" is deleted** from the seam test's header
+  and from `types.ts`'s comment. One does. What it cannot cross is a dropped
+  rebuild-list field or a value that fails to survive the POST, and that is
+  what the test is for.
+- **The in-memory logs fake is FIXED, not worked around.** It kept
+  `undefined`-valued keys that jsonb drops, so three store-contract cases
+  passed against it and failed against real Postgres. `create` now round-trips
+  `series`; `asSerialized` wraps the EXPECTED side only, so these cases can
+  still see a backend returning a key the column cannot hold. `steps` and
+  `machineSummary` keep the infidelity, with a dated ROADMAP row.
+- **The `hr` spread keeps a true reason and loses a false one.** It is not
+  about byte order — Postgres normalizes jsonb key order on ingest (measured
+  on 18.4) — it is that the spread leaves `hr` genuinely absent in memory.
+  "Re-serializes to the bytes the client sent" is struck everywhere.
+- **The seam test gains a divergence pin** so its oracle cannot agree with a
+  broken seam by luck.
+- **`derivedHeartRate.replay.test.ts`'s title** stops claiming the test avoids
+  naming the field, and **`schema.test.ts`'s replacement pin** is described
+  honestly: it DOES red on an added member; only `data.test.ts`'s POST loop
+  stays green on one.
+- Bookkeeping: §2 cites `Sample` by symbol, the "21 importers" figure is
+  replaced by the gate that proves it, and §6 criterion 7 follows CLAUDE.md's
+  own shape.
 
 ## 9. What revision 2 changed, and why (antagonist full pass)
 
@@ -265,8 +358,11 @@ Consumers: `derivedHeartRate.ts:103` and `traceModel.ts:182`.
 
 ## 8. Settled by the antagonist pass (were open in revision 1)
 
-- The re-export keeps all 21 importers compiling (probed); no lint rule
-  restricts `domain/`.
+- The re-export keeps every importer compiling — probed by a clean
+  `pnpm typecheck`, which is the gate; the earlier figure of "21" was a count
+  nobody reproduced (`grep -rlE 'from "[^"]*seriesRecorder' src e2e
+  --include='*.ts' --include='*.tsx' | wc -l` → 17 files, 19 import lines).
+  No lint rule restricts `domain/`.
 - The producer's spread sites serialize byte-identically with an explicit
   `r: undefined` (measured); `Object.freeze` is indifferent to it.
 - The validator is not iterated (see §4), so no refusal order or message
