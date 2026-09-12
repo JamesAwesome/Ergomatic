@@ -280,4 +280,30 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
     expect(chip("SEASON")).toHaveFocus();
     expect(chip("ALL")).toHaveAttribute("tabindex", "-1");
   });
+
+  // RF8: the pattern's other three arrows and the wrap at both ends, and a
+  // non-arrow key that must change nothing — copied from PaceRefInput's
+  // keyboard cases. Plus the TO input, which the CUSTOM case above never
+  // edits: 30 DAYS is 18,000 and MONTH (09-01..) is 5,000, so TO = 08-31
+  // leaves 08-14..08-31 = 13,000.
+  it("ArrowLeft wraps ALL to CUSTOM, ArrowDown wraps CUSTOM to ALL, ArrowUp steps back, Enter changes nothing, and TO applies on change", async () => {
+    await renderScreen(GATE0_ROWS);
+    chip("ALL").focus();
+    fireEvent.keyDown(chip("ALL"), { key: "Enter" });
+    expect(chip("ALL")).toHaveAttribute("aria-checked", "true");
+    fireEvent.keyDown(chip("ALL"), { key: "ArrowLeft" });
+    expect(chip("CUSTOM")).toHaveAttribute("aria-checked", "true");
+    expect(chip("CUSTOM")).toHaveFocus();
+    fireEvent.change(screen.getByLabelText("TO"), {
+      target: { value: "2026-08-31" },
+    });
+    expect(rowValue("METRES", 1)).toBe("13,000");
+    fireEvent.keyDown(chip("CUSTOM"), { key: "ArrowDown" });
+    expect(chip("ALL")).toHaveAttribute("aria-checked", "true");
+    expect(chip("ALL")).toHaveFocus();
+    fireEvent.keyDown(chip("ALL"), { key: "ArrowRight" });
+    fireEvent.keyDown(chip("SEASON"), { key: "ArrowUp" });
+    expect(chip("ALL")).toHaveAttribute("aria-checked", "true");
+    expect(chip("ALL")).toHaveFocus();
+  });
 });
