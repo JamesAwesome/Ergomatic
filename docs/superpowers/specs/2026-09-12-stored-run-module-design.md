@@ -42,8 +42,8 @@ exactly the outcome that would look like success and be worth nothing.
   wire, or any number.
 - **Prior art in this repo, read before writing this:** the hand-off store's
   own design spec and its two open residuals (`ROADMAP.md`, Codebase-audit
-  owners). Residual 1 is this PR's business and §7 puts its decision to
-  James rather than taking it.
+  owners). Residual 1 is this PR's business; §7 put its decision to James and
+  he ruled A on 2026-09-12.
 - **Nothing found** on one point, recorded as a result: no research
   document under `docs/superpowers/research/` covers module merging or
   localStorage single-writer discipline. There was nothing to re-read.
@@ -180,7 +180,18 @@ rather than shipped as a file move. A facade that re-exports 35 symbols
 through one name is a shallower module than the two it replaced, not a deeper
 one.
 
-## 7. The open question for James — asked before the work, not after
+## 7. RULED BY JAMES, 2026-09-12: option A
+
+**Delete both, re-home the documentation, rewrite the pin.** The work below is
+therefore in PR 1's scope, and the pin rewrite carries its own mutation
+requirement: the rewritten pin must be proven to go red, because the version it
+replaces would pass forever once the symbol it greps for cannot exist. A pin
+that survives this change without being rewritten is the defect, not the
+leftover.
+
+The option list that produced the ruling is kept below as the record.
+
+### The question as it was put
 
 **`anyLiveSession()` and its private `monitorRunState()` have zero production
 callers, and the code argues in detail for keeping them anyway.**
@@ -246,8 +257,15 @@ next touches these functions", and the work does not start until he rules.
 - A refused durable write yields `saved-without-series` **and the fixture
   path sees it** — today the fixture path cannot, because it does not go
   through the writer that produces the verdict.
-- `anyLiveSession`'s five tests are deleted with the function if James rules
-  A.
+- `anyLiveSession`'s truth-table suite and three named tests
+  (`monitorRun.test.ts:1226`, `:1272`, `:1387-1398`) are deleted with the
+  function, per §7's ruling.
+- **`todayGuard.pin.test.ts` is rewritten to bind against the rule, not the
+  name**, and the rewrite ships with a mutation proving it goes red — make
+  `Today.tsx`'s guard read through the store instead of reading the record
+  directly, and the pin must fail. Its current form (`:51`, `:91`) greps
+  `Today.tsx`'s source for an `anyLiveSession` import, which no file can
+  contain once the symbol is gone.
 
 ## 9. Exit criteria
 
@@ -257,9 +275,13 @@ next touches these functions", and the work does not start until he rules.
 3. The merged module exports ≤ 28 values; before/after lists in the PR body.
 4. §5's byte-compatibility gate is green, and the PR body states both
    mutations and what their failures said.
-5. `pnpm test`, `pnpm typecheck`, `pnpm lint`, and a full `pnpm e2e` run whose
+5. `grep -rn 'anyLiveSession\|monitorRunState' app/src` returns nothing, and
+   the rewritten `todayGuard` pin is shown to go red under the mutation §8
+   names — a pin that passes because its subject no longer exists is the
+   failure this criterion exists to catch.
+6. `pnpm test`, `pnpm typecheck`, `pnpm lint`, and a full `pnpm e2e` run whose
    result has been read (RF1 — this diff touches `app/src/`).
-6. No behaviour change: no screenshot in `docs/screenshots/` differs, and the
+7. No behaviour change: no screenshot in `docs/screenshots/` differs, and the
    PR says so rather than committing refreshed captures.
 
 ## 10. What an antagonist should attack
