@@ -746,9 +746,10 @@ NEGATIVE offset, so a late-UTC instant crosses midnight backwards) at the
 top, BEFORE any `Date` is constructed, and ASSERTS the offset took —
 `new Date("2026-09-12T12:00:00Z").getTimezoneOffset()` is `240` — because a
 property of how the test got there is an assertion, not a comment (RF38).
-(3) Observable: the instant `2026-09-12T23:30:00Z` converts to
-`{ y: 2026, m: 9, d: 12 }` (the PREVIOUS local day; in UTC it would be the
-13th). (4) Mutation: swap the local getters for `getUTCFullYear`/
+(3) Observable: the instant `2026-09-13T02:30:00Z` converts to
+`{ y: 2026, m: 9, d: 12 }` (22:30 EDT, the PREVIOUS local day; in UTC it
+would be the 13th — a `23:30Z` instant on the 12th cannot serve, it is the
+12th in UTC too, measured at PR 1's Task 5 mutation). (4) Mutation: swap the local getters for `getUTCFullYear`/
 `getUTCMonth`/`getUTCDate` in the adapter → the assertion reads `d: 13`,
 and the report pastes that failure. (5) "The adapter converts in the
 process's zone, and the test process's zone is one where it matters."

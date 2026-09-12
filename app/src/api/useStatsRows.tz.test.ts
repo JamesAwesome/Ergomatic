@@ -12,8 +12,10 @@ describe("useStatsRows — the adapter converts in the process's zone (spec §8.
     expect(new Date("2026-09-12T12:00:00Z").getTimezoneOffset()).toBe(240);
   });
 
-  it("23:30 UTC on the 12th is still the 12th in New York — the previous local day, not UTC's 13th", () => {
-    expect(toCalendarDate(new Date("2026-09-12T23:30:00Z"))).toStrictEqual({
+  it("02:30 UTC on the 13th is still the 12th in New York (22:30 EDT) — the previous local day; UTC would say the 13th", () => {
+    // 23:30Z on the 12th cannot serve: it is the 12th in UTC too, so the
+    // UTC-getter mutant passes it (measured at 652ac26c).
+    expect(toCalendarDate(new Date("2026-09-13T02:30:00Z"))).toStrictEqual({
       y: 2026,
       m: 9,
       d: 12,
