@@ -22,6 +22,13 @@
 // loop asserts 201 for each of its own six literals — that loop catches a
 // member REMOVED from the enum (the POST 400s) and stays GREEN on one added,
 // because an added member widens the route automatically.
+//
+// The CLIENT still carries its own copies, ungated by anything here (PR 3
+// collapsed the SERVER's four; it did not reach across the wire):
+// `src/monitor/monitorRun.ts`'s `CloseReason` (five members, no
+// "interrupted") and its `endedBy` validator, `src/log/storedSummary.ts`'s
+// two branches, `src/monitor/handoffStore.ts`'s `isMonitorRun`. A member
+// added to the pgEnum reaches none of them until a client PR spells it.
 import { describe, expect, it } from "vitest";
 import { endedByEnum } from "./schema.js";
 

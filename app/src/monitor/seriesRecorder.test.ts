@@ -1090,7 +1090,7 @@ describe("createSeriesRecorder — trace-truth Task 2: rests are marked (real ca
     ).not.toContain('"r"');
   });
 
-  it("serializes a work sample and a rest sample to exactly these bytes", () => {
+  it("serializes a work sample and a rest sample to exactly these bytes, and the recorder obeys the same rule on both arms", () => {
     // INDEPENDENT literals for the BYTES (RF21): the expected strings are
     // written out by hand, so a change to `Sample` or to the recorder's
     // constants cannot retune them. The literals themselves are ANNOTATED

@@ -36,8 +36,10 @@ const NON_EXISTENT_UUID = "00000000-0000-0000-0000-000000000000";
  *  round-trip `series` the way jsonb does.
  *
  *  `src/test/asSerialized.ts` is the client tree's copy under the same name;
- *  server code never imports from `src/`. */
-const asSerialized = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+ *  server code never imports from `src/`. Same `undefined` guard as the client
+ *  copy (`JSON.parse(JSON.stringify(undefined))` throws). */
+const asSerialized = <T>(value: T): T =>
+  value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
 
 /** `listPlanLinks` also returns each winning row's save-time workout
  *  snapshot, pinned in full by the two dedicated `listPlanLinks` cases

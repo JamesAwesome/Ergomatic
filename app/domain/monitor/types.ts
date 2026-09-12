@@ -780,8 +780,9 @@ export function hasTargetedScan(
 // spelled the rest flag `rest`, structural typing accepted the real
 // `Sample` with the key simply absent, and the rest exclusion was dead on
 // every production path while every test passed). The recorder still owns
-// the VALUES and re-exports both names, so its 21 importers are unchanged;
-// this file owns the SHAPE.
+// the VALUES and re-exports both names, so its importers are unchanged
+// (18 files / 20 import lines at PR 3: `grep -rlE 'from "[^"]*seriesRecorder'
+// src e2e server | wc -l`); this file owns the SHAPE.
 //
 // The SERVER derives from here too: `server/stores/logs.ts`'s
 // `LogSeriesSample`/`LogSeries` are `-readonly` mapped types of this pair,

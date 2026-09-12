@@ -360,7 +360,8 @@ export interface LogPatch {
  *
  *  The client's twin is `src/log/storedSummary.ts`'s
  *  `PARTIAL_CLOSE_REASONS` (server code never imports from `src/` — see
- *  `LogSeriesSample`'s own comment above). What holds the two arrays equal
+ *  `LogStep`'s own comment above; `LogSeriesSample` is the exception that
+ *  derives from `domain/`, and says why). What holds the two arrays equal
  *  is ONE assertion — `partial.integration.test.ts`'s
  *  `expect([...PARTIAL_ENDED_BY]).toStrictEqual([...PARTIAL_CLOSE_REASONS])`,
  *  the only place both trees are imported. NOT that file's row-by-row
