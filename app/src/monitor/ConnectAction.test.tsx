@@ -10,7 +10,8 @@ import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { saveRun, loadRun, type SessionRun } from "../session/run";
-import { createMonitorRun, loadMonitorRun, saveMonitorRun } from "./monitorRun";
+import { createMonitorRun, loadMonitorRun } from "./monitorRun";
+import { seedMonitorRunNow } from "../test/seedHandoff";
 import {
   commit as commitHandoff,
   currentUnretired as currentUnretiredHandoff,
@@ -131,7 +132,7 @@ function connectAsTaskFiveWill(): void {
   if ("code" in compiled) {
     throw new Error(`fixture failed to compile: ${compiled.code}`);
   }
-  saveMonitorRun(
+  seedMonitorRunNow(
     createMonitorRun(
       {
         workoutId: "fl-connect",

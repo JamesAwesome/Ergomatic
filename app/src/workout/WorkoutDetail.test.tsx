@@ -19,11 +19,8 @@ import {
 } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
-import {
-  loadMonitorRun,
-  saveMonitorRun,
-  type MonitorRun,
-} from "../monitor/monitorRun";
+import { loadMonitorRun, type MonitorRun } from "../monitor/monitorRun";
+import { seedMonitorRun } from "../test/seedHandoff";
 import { compileProgram } from "../../domain/monitor/program.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { WorkoutType } from "../../domain/types.js";
@@ -895,7 +892,7 @@ describe("WorkoutDetail", () => {
     it("finished but unlogged: Start stages the unlogged warning and touches nothing", async () => {
       mockHooks(BASELINES);
       const connected = monitorRunFor(FINISHED_AT);
-      saveMonitorRun(connected);
+      await seedMonitorRun(connected);
       await renderDetail();
 
       await userEvent.click(
@@ -917,7 +914,7 @@ describe("WorkoutDetail", () => {
     it("finished but unlogged: Cancel leaves the connected record byte-identical", async () => {
       mockHooks(BASELINES);
       const connected = monitorRunFor(FINISHED_AT);
-      saveMonitorRun(connected);
+      await seedMonitorRun(connected);
       await renderDetail();
 
       await userEvent.click(
@@ -934,7 +931,7 @@ describe("WorkoutDetail", () => {
 
     it("finished but unlogged: Replace session clears it and proceeds — the reverse cross-clear", async () => {
       mockHooks(BASELINES);
-      saveMonitorRun(monitorRunFor(FINISHED_AT));
+      await seedMonitorRun(monitorRunFor(FINISHED_AT));
       await renderDetailWithCountdownRoute("/library/w1");
 
       await userEvent.click(
@@ -954,7 +951,7 @@ describe("WorkoutDetail", () => {
     it("LIVE-looking MonitorRun: Start stages the unlogged sentence, not 'in progress' — any MonitorRun at this door is dead (queue item 3, F6 spec 2b, exit criterion 5)", async () => {
       mockHooks(BASELINES);
       const live = monitorRunFor(null);
-      saveMonitorRun(live);
+      await seedMonitorRun(live);
       await renderDetail();
 
       await userEvent.click(
@@ -975,7 +972,7 @@ describe("WorkoutDetail", () => {
     it("LIVE: Cancel preserves it, Replace session clears it", async () => {
       mockHooks(BASELINES);
       const live = monitorRunFor(null);
-      saveMonitorRun(live);
+      await seedMonitorRun(live);
       await renderDetailWithCountdownRoute("/library/w1");
 
       await userEvent.click(
@@ -1009,7 +1006,7 @@ describe("WorkoutDetail", () => {
       );
       saveDraft(draftA);
       saveRun(completedRunFor(draftA));
-      saveMonitorRun(monitorRunFor(FINISHED_AT));
+      await seedMonitorRun(monitorRunFor(FINISHED_AT));
       await renderDetailWithCountdownRoute("/library/w1");
 
       await userEvent.click(
@@ -1787,7 +1784,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     it("Connect stages the confirm too — not a straight walk into the interstitial", async () => {
       mockHooks(BASELINES, [PERSONAL_WORKOUT]);
       const connected = monitorRunFor(FINISHED_AT);
-      saveMonitorRun(connected);
+      await seedMonitorRun(connected);
       await renderDetail("/library/w3");
 
       await userEvent.click(screen.getByRole("button", { name: "Connect" }));
@@ -1807,7 +1804,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     it("Cancel preserves the connected record byte-identical", async () => {
       mockHooks(BASELINES, [PERSONAL_WORKOUT]);
       const connected = monitorRunFor(FINISHED_AT);
-      saveMonitorRun(connected);
+      await seedMonitorRun(connected);
       await renderDetail("/library/w3");
 
       await userEvent.click(screen.getByRole("button", { name: "Connect" }));
@@ -1820,7 +1817,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     it("Connect anyway proceeds; a real failure's own Row Instead — never Connect anyway itself — destroys the stale record", async () => {
       mockHooks(BASELINES, [PERSONAL_WORKOUT]);
       const connected = monitorRunFor(FINISHED_AT);
-      saveMonitorRun(connected);
+      await seedMonitorRun(connected);
       await renderDetail("/library/w3");
 
       await userEvent.click(screen.getByRole("button", { name: "Connect" }));
@@ -1865,7 +1862,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     it("Connect anyway, a real failure, Cancel: the stale record SURVIVES — nothing lost, on either tier", async () => {
       mockHooks(BASELINES, [PERSONAL_WORKOUT]);
       const connected = monitorRunFor(FINISHED_AT);
-      saveMonitorRun(connected);
+      await seedMonitorRun(connected);
       await renderDetail("/library/w3");
       const { currentUnretired: currentUnretiredHandoff } =
         await import("../monitor/handoffStore");
@@ -1930,7 +1927,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
 
     it("a LIVE-looking MonitorRun (completedAt: null) still stages the unlogged sentence: any MonitorRun at this door is dead (F6 spec 2b, exit criterion 5)", async () => {
       mockHooks(BASELINES, [PERSONAL_WORKOUT]);
-      saveMonitorRun(monitorRunFor(null));
+      await seedMonitorRun(monitorRunFor(null));
       await renderDetail("/library/w3");
 
       await userEvent.click(screen.getByRole("button", { name: "Connect" }));

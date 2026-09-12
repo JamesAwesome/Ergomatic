@@ -11,15 +11,12 @@ import {
 } from "./draft";
 import { buildFreeRowRun, buildRun } from "./engine";
 import { loadRun, saveRun, type SessionRun } from "./run";
-import {
-  loadMonitorRun,
-  saveMonitorRun,
-  type MonitorRun,
-} from "../monitor/monitorRun";
+import { loadMonitorRun, type MonitorRun } from "../monitor/monitorRun";
 import {
   commit as commitHandoff,
   resetForTests as resetHandoffStoreForTests,
 } from "../monitor/handoffStore";
+import { seedMonitorRun } from "../test/seedHandoff";
 import { compileProgram } from "../../domain/monitor/program.js";
 import { useStartWorkout, type StartableWorkout } from "./useStartWorkout";
 
@@ -233,8 +230,8 @@ describe("useStartWorkout", () => {
     expect(result.current.replaceStage).toBe("in-progress");
   });
 
-  it("stages 'unlogged' for a finished-but-unlogged MonitorRun, ranked above a live one", () => {
-    saveMonitorRun(monitorRunFor("2026-08-05T12:41:00.000Z"));
+  it("stages 'unlogged' for a finished-but-unlogged MonitorRun, ranked above a live one", async () => {
+    await seedMonitorRun(monitorRunFor("2026-08-05T12:41:00.000Z"));
     const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
@@ -244,8 +241,8 @@ describe("useStartWorkout", () => {
     expect(result.current.replaceStage).toBe("unlogged");
   });
 
-  it("stages 'unlogged' for a LIVE-looking MonitorRun (completedAt null): any MonitorRun at this door is dead (queue item 3, F6 spec 2b, exit criterion 5)", () => {
-    saveMonitorRun(monitorRunFor(null));
+  it("stages 'unlogged' for a LIVE-looking MonitorRun (completedAt null): any MonitorRun at this door is dead (queue item 3, F6 spec 2b, exit criterion 5)", async () => {
+    await seedMonitorRun(monitorRunFor(null));
     const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
@@ -283,9 +280,9 @@ describe("useStartWorkout", () => {
     expect(result.current.replaceStage).toBe("unlogged");
   });
 
-  it("cancelReplace clears the staged panel and touches no storage", () => {
+  it("cancelReplace clears the staged panel and touches no storage", async () => {
     const live = monitorRunFor(null);
-    saveMonitorRun(live);
+    await seedMonitorRun(live);
     const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
@@ -312,7 +309,7 @@ describe("useStartWorkout", () => {
     );
     saveDraft(draftA);
     saveRun(completedRunFor(draftA));
-    saveMonitorRun(monitorRunFor("2026-08-05T12:41:00.000Z"));
+    await seedMonitorRun(monitorRunFor("2026-08-05T12:41:00.000Z"));
     const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
@@ -339,7 +336,7 @@ describe("useStartWorkout", () => {
   // returned hook API, exactly what the "Replace session" button calls.
   it("the door leg — confirmReplace tombstones the key, so a late producer burst can no longer resurrect it", async () => {
     const monitorRun = monitorRunFor("2026-08-05T12:41:00.000Z");
-    saveMonitorRun(monitorRun);
+    await seedMonitorRun(monitorRun);
     const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
