@@ -132,6 +132,16 @@ printf 'Read `.claude/skills/theta/SKILL.md` completely.\n' >> "$TMP/.agents/ski
 check "$(ask)" 0 "PROBE D: a prose adapter naming the canonical path is the other legal shape"
 rm -rf "$TMP/.claude/skills/theta" "$TMP/.agents/skills/theta"
 
+# A skill name is used as a grep pattern; without -F a metacharacter makes it
+# match a DIFFERENT name, and the run then reports the wrong skill as
+# unpaired. Both names below are genuinely unpaired and both must be named.
+write_skill .claude "a.b"
+write_skill .agents "axb"
+out="$(bash "$SCRIPT" "$TMP" 2>&1)"
+check "$(echo "$out" | grep -c 'skills/a\.b has no')" 1 "a name with a regex metacharacter is reported as unpaired"
+check "$(echo "$out" | grep -c 'skills/axb has no')" 1 "and so is the name it would have regex-matched"
+rm -rf "$TMP/.claude/skills/a.b" "$TMP/.agents/skills/axb"
+
 # A directory with no SKILL.md is not a skill; saying so beats letting the
 # frontmatter reader return empty strings that happen to match each other.
 mkdir -p "$TMP/.claude/skills/eta" "$TMP/.agents/skills/eta"

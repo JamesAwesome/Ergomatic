@@ -73,21 +73,28 @@ AGENTS_NAMES="$(skill_names "$AGENTS_DIR")"
 
 while IFS= read -r name; do
   [ -n "$name" ] || continue
-  printf '%s\n' "$AGENTS_NAMES" | grep -qx "$name" \
+  printf '%s\n' "$AGENTS_NAMES" | grep -qxF "$name" \
     || fail ".claude/skills/$name has no .agents/skills/$name — Codex cannot see it"
 done <<< "$CLAUDE_NAMES"
 
 while IFS= read -r name; do
   [ -n "$name" ] || continue
-  printf '%s\n' "$CLAUDE_NAMES" | grep -qx "$name" \
+  printf '%s\n' "$CLAUDE_NAMES" | grep -qxF "$name" \
     || fail ".agents/skills/$name has no .claude/skills/$name — Claude Code cannot see it"
 done <<< "$AGENTS_NAMES"
 
 # Compare frontmatter only for names present in both; a name missing on one
 # side is already reported above and would just repeat itself here.
+#
+# Every membership test above and below is `grep -qxF`: without -F a skill
+# name is a REGEX, so a directory named `a.b` matches an unrelated `axb` and
+# the set comparison answers about the wrong name. It does not produce a false
+# green — the opposite direction still fails the run — but it misreports WHICH
+# skill is unpaired, and a gate that blames the wrong file is how someone
+# fixes the wrong thing.
 while IFS= read -r name; do
   [ -n "$name" ] || continue
-  printf '%s\n' "$AGENTS_NAMES" | grep -qx "$name" || continue
+  printf '%s\n' "$AGENTS_NAMES" | grep -qxF "$name" || continue
 
   c="$CLAUDE_DIR/$name/SKILL.md"
   a="$AGENTS_DIR/$name/SKILL.md"
