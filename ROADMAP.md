@@ -758,7 +758,7 @@ an investigation whose honest answer may be "no PR".
       Three one-line riders ride PR 2 (named in PR 2's row). Re-open only if PR 2 lands and the
       foreground handler, with lifecycle injected, still reads as a module
       wanting an owner.
-- [ ] **Exploration B — one replay harness. Runs after PR 2, never before.**
+- [x] **Exploration B — one replay harness. Runs after PR 2, never before.**
       · dies 2026-10-13 (campsite: given the phase's own date on the way past
       by PR 2, 2026-09-12; its opener has always been "maybe no PR") ·
       Eight session-level replay specs — the `src/monitor/*Replay*.test.ts`
@@ -785,6 +785,33 @@ an investigation whose honest answer may be "no PR".
       land** (most of it comes from the mocks disappearing, which is PR 2's
       doing). A shared harness built over differences that matter is a worse
       module than eight honest copies.
+      **Exploration B — answered 2026-09-12: NO HARNESS.** Measured on main
+      `bed5c1e4` (census:
+      `docs/superpowers/audits/2026-09-12-architecture-walk/exploration-b-census.md`).
+      Normalising the eight runner cores (comments stripped, constant names
+      unified) gives 109 distinct lines; **8 appear in all eight, four of them
+      punctuation**, and 59 appear in exactly one file. Every one of the eight
+      has an assertion that dies if its setup is swapped: `burstReplay` and
+      `summaryHoldReplay` call the runner twice per test and need a fresh
+      module graph (the comment records the failure), `handoffStoreReplay`
+      needs a `Storage.prototype.setItem` denial in the hook's own epoch,
+      `justRowReplay` never calls `program()`, `partialReplay` pins one-element
+      divergence lists only reachable at `barrierTimeoutMs: 250`,
+      `liveDropSeamReplay` needs `extendClock` + `injectable`,
+      `structureWatchSessionReplay` needs a counting transport BETWEEN replay
+      and `withLiveness`, `lifecycleReplay` needs `onLifecycle` + the real
+      liveness spread. The row's premise ("two `vi.doMock`s, `resetModules`, a
+      dynamic import" each) described two of the eight after #413; the ten
+      `vi.doMock`s that remain in the set all mock `../api*` for a screen the
+      hook never imports, so no hook dep can reach them. **What DID ride
+      (Exploration B's PR):** the `import.meta.url` path surgery — 8 of 8 used
+      it, each regex embedding its own filename, 25 files repo-wide — became
+      one loader in `src/test/captures.ts`; and the last two transport
+      `vi.doMock`s under `src/monitor/` became `createTransport` deps. One
+      divergence recorded, no row: five of the eight stub the hook's
+      `onSilence`/`onRecovery` and three spread the real ones; inert (none of
+      the five asserts `frameSilence`), and a replay spec that asserts silence
+      says which it is.
 
 **Exit:** every PR that lands states which module got deeper and what its
 interface now is, in one sentence, at the top of its body. Phase close reports:
@@ -2414,26 +2441,17 @@ fixed.
   the live verdict is left. **Rides the next PR touching the driver area.**
   Evidence: docs/history/phase-rc.md (RC-9), the oracle corpus test.
 
-- **The hand-off store's two open residuals, lifted here by #239's STRIKE
-  CONTRACT (2026-08-31)** when the AUD-016 item was struck. They are real and
-  unscheduled; neither is a defect the store introduced. The former
-  memory-only-reload item moved to Accepted on James's 2026-09-03 ruling.
-  1. **Three legacy reads survive**: `monitorRunState()` and `anyLiveSession()`
-     (`monitorRun.ts`) and `Today.tsx`'s stale-draft-discard guard still call
-     `loadMonitorRun()` rather than the store. Deliberately left with a citing
-     comment each — `anyLiveSession()` has zero production callers, and
-     deleting them would orphan the cross-file anti-pattern documentation that
-     names them (`todayGuard.pin.test.ts`'s binding pin). **Whoever next
-     touches these functions owns the decision**, per the close-out's own flag.
-     **That trigger has FIRED, and James RULED on 2026-09-12: both go.**
-     Phase MD PR 1 deletes `anyLiveSession` and the private `monitorRunState`,
-     re-homes the anti-pattern documentation, and rewrites
-     `todayGuard.pin.test.ts` — whose negative import pin would otherwise pass
-     forever once the symbol cannot exist (RF21), and whose two byte-exact
-     import pins that PR breaks anyway by moving `loadMonitorRun`. The row
-     stays here as the evidence; the work lands in that PR. **Landed in Phase
-     MD PR 1 (#408, 2026-09-12); proposed for STRIKE at that PR's hand-back.**
-  2. **The store's standing probe is row 11's tier-precedence COMPOUND
+- **The hand-off store's one open residual, lifted here by #239's STRIKE
+  CONTRACT (2026-08-31)** when the AUD-016 item was struck. Real and
+  unscheduled; not a defect the store introduced. The former
+  memory-only-reload item moved to Accepted on James's 2026-09-03 ruling;
+  the legacy-reads item (three `loadMonitorRun()` callers outside the store)
+  landed in Phase MD PR 1 (#408) and was STRUCK at that PR's hand-back
+  (James, 2026-09-12). The masked `safeRemoveItem` at retire — a failed
+  physical remove is receipted and tombstoned for the process, so a relaunch
+  can rehydrate a retired record — was ACCEPTED with no row at the same
+  hand-back: the store comment at `retire` names it.
+  1. **The store's standing probe is row 11's tier-precedence COMPOUND
      mutation**, not the single-line reorder — that one is a genuine non-bite.
      Remove the `if (hydrated) return` re-entrancy guard together with forcing
      the population guard true: 6 files / 40 tests fail, including
@@ -3085,25 +3103,6 @@ Each needs erg time or a deliberate recording session.
   "off Connect Device". (`phase-nf.md`)
 
 ## Small, queued, rides the next PR in its area
-
-- **DONE — folded into Phase MD PR 1 (James's rider, 2026-09-12): one export
-  in `src/isPlainRecord.ts`, four call sites re-pointed. Struck only when
-  James rules at the hand-back.** `isPlainRecord` is declared four times,
-  byte-identically. Exported from
-  `monitor/monitorRun.ts:453` and re-declared private in
-  `builder/builderDraft.ts:47`, `session/draft.ts:85` and `session/run.ts:75`;
-  all four bodies are the same line —
-  `typeof value === "object" && value !== null && !Array.isArray(value)`. Found
-  by the 2026-09-12 architecture walk's PR 1 spec and deliberately left out of
-  that PR as scope creep (RF34). **What fixed it:** James ruled on 2026-09-12
-  that debt paid as a side effect of phase work is welcome, so the shared
-  predicate landed in PR 1 after all — one export, four call sites re-pointed,
-  a six-case test, a biting mutation. The reasoning this row used to carry
-  ("four copies cannot disagree, so it does not earn its own branch") was true
-  and is why it rode a PR rather than getting one.
-  · dies 2026-10-13 (filed 2026-09-12, approved by James) · rides the next PR
-  touching any of the four files; dated with Phase MD because PR 1 moves one of
-  them and is the most likely vehicle
 
 - **PR1.75b leftovers, lifted from Phase PROTO 2026-09-10.** (1) a unit test for
   the empty `?state=` callback (`params.get` answers `""`, which the adapter
