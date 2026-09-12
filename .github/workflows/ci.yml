@@ -183,6 +183,12 @@ jobs:
         run: |
           bash -n app/scripts/test-run-advisory.sh
           bash app/scripts/test-run-advisory.test.sh
+      # Runs against the real checkout, which is also what proves the
+      # symlinks survived actions/checkout as symlinks.
+      - name: Lint + run the skills parity gate
+        run: |
+          bash -n scripts/skills-parity.sh
+          bash scripts/skills-parity.sh
 
   deploy:
     needs: [changes, root-hooks, app, docker, e2e, scripts]
