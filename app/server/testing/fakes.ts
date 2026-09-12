@@ -199,6 +199,10 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
     // sortOrder null regardless of what `input` carries, since a
     // client-supplied value on the request body must never take effect.
     // Only createMany(null, …)/_seedGlobal below (the seed path) author one.
+    // `id` is likewise never read here: the real store's `create()` has an
+    // explicit column list that omits it, and the contract suite pins that
+    // a caller-supplied id is ignored on this path and honoured on
+    // `createMany` — `newWorkoutRow` mints, and nothing below overrides.
     const row = newWorkoutRow({ ...input, sortOrder: null }, userId);
     forUser(userId).set(row.id, row);
     return withIsGlobal(row) as unknown as WorkoutRow;
@@ -223,9 +227,13 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
     // per-input loop would. `userId: null` seeds globals, exactly as
     // seedGlobalLibrary does against Postgres.
     async createMany(userId: string | null, inputs: NewWorkoutInput[]) {
-      const rows: WorkoutRow[] = inputs.map((input) =>
-        newWorkoutRow(input, userId),
-      );
+      // Mirrors the real store: `createMany` writes `input.id` when the
+      // caller chose one (only the seed does — deterministic seed ids,
+      // 2026-09-12), and the column default otherwise.
+      const rows: WorkoutRow[] = inputs.map((input) => ({
+        ...newWorkoutRow(input, userId),
+        ...(input.id !== undefined ? { id: input.id } : {}),
+      }));
       const target = userId === null ? globals : forUser(userId);
       for (const row of rows) target.set(row.id, row);
       return rows.map((row) => withIsGlobal(row) as unknown as WorkoutRow);

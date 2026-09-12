@@ -236,6 +236,32 @@ export function describeStoreContracts(
     });
 
     describe("workouts", () => {
+      // Deterministic seed ids (design spec 2026-09-12, G3). `NewWorkoutInput`
+      // carries an optional `id` so the SEED can choose one; that made a
+      // client-chosen id a runtime possibility rather than a type error, and
+      // `validateWorkoutInput` is a pass-through cast, so `req.body.id`
+      // reaches `create()` today. This case is the gate that keeps `create`
+      // from honouring it — and it lives HERE, not in the route test, because
+      // the route test runs against the fake and a real-store regression
+      // cannot reach it (measured: mutating the real `create()` to write
+      // `input.id` left `routes/data.test.ts` green). The contract runs
+      // against both stores. `createMany` honouring the id is the seed's
+      // path and is asserted in the same breath so the asymmetry is pinned.
+      it("create() ignores a caller-supplied id; createMany() honours one — the seed is the only chooser of ids", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const chosen = "96fa2455-b89b-5c2b-81fb-6c96d412fd44";
+        const created = await stores.workouts.create(userId, {
+          ...workoutInput({ title: "Client id" }),
+          ...({ id: chosen } as object),
+        });
+        expect(created.id).not.toBe(chosen);
+        const [many] = await stores.workouts.createMany(userId, [
+          { ...workoutInput({ title: "Seed id" }), id: chosen },
+        ]);
+        expect(many!.id).toBe(chosen);
+      });
+
       // Phase DE PR 1 (spec §3.2): the product has no difficulty, but the
       // NOT NULL column stays for one tag cycle so pre-PR-1 builds (which
       // render `difficulty.toUpperCase()`) never see NULL. Every write site
