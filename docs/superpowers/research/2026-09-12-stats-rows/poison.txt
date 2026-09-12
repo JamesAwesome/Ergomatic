@@ -1,0 +1,7 @@
+ workout_title | guarded 
+---------------+---------
+ poison        |        
+ poison-float  |    37.5
+(2 rows)
+
+ERROR:  invalid input syntax for type double precision: "thirty-seven"

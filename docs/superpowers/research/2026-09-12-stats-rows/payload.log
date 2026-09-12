@@ -1,0 +1,21 @@
+== Node-side, drizzle over the real schema ==
+-- 1k --
+  sample row keys(10): calories,id,loggedAt,restMeters,restSeconds,source,tier,workMeters,workSeconds,workoutType
+  sample row: {"id":"70365282-24e5-4eac-ae5c-5c230d1d70c4","loggedAt":"2023-09-07T06:17:00.000Z","source":"pm5","workoutType":"O2","tier":"machine","workMeters":2001,"workSeconds":399.4,"restMeters":130,"restSeconds":60,"calories":201}
+  tiers: {"machine":700,"steps":300}
+  totalCalories numeric in 700/1000 rows (drizzle read the unaliased case-expression)
+1k     rows=1000  query+parse median 18.2 ms  map+stringify 0.8 ms  body 224781 B  = 224.8 B/row
+-- 10k --
+  sample row keys(10): calories,id,loggedAt,restMeters,restSeconds,source,tier,workMeters,workSeconds,workoutType
+  sample row: {"id":"6ee95a88-464b-42a7-a066-9f11fd1c6f50","loggedAt":"2023-11-13T13:39:00.000Z","source":"manual","workoutType":"AN","tier":"steps","workMeters":6000,"workSeconds":603,"restMeters":null,"restSeconds":null,"calories":null}
+  tiers: {"steps":3000,"machine":7000}
+  totalCalories numeric in 7000/10000 rows (drizzle read the unaliased case-expression)
+10k    rows=10000  query+parse median 174.1 ms  map+stringify 6.9 ms  body 2248115 B  = 224.8 B/row
+-- 100k --
+  sample row keys(10): calories,id,loggedAt,restMeters,restSeconds,source,tier,workMeters,workSeconds,workoutType
+  sample row: {"id":"d20f4bb8-af58-4085-a3e3-7e5319d65ac5","loggedAt":"2023-11-13T13:39:00.000Z","source":"manual","workoutType":"AN","tier":"steps","workMeters":6000,"workSeconds":603,"restMeters":null,"restSeconds":null,"calories":null}
+  tiers: {"steps":30000,"machine":70000}
+  totalCalories numeric in 70000/100000 rows (drizzle read the unaliased case-expression)
+100k   rows=100000  query+parse median 1933.8 ms  map+stringify 77.1 ms  body 22481319 B  = 224.8 B/row
+
+== HTTP on :8099 (Express res.json, no compression middleware) ==

@@ -1,0 +1,3 @@
+1k    drizzle 7.8 ms   raw pg 6.7 ms   drizzle mapper overhead 1.0 ms (15%)
+10k   drizzle 80.2 ms   raw pg 70.6 ms   drizzle mapper overhead 9.6 ms (14%)
+100k  drizzle 832.4 ms   raw pg 766.6 ms   drizzle mapper overhead 65.9 ms (9%)
