@@ -7,26 +7,32 @@
 // `MonitorRun` has no `EnginePhase[]`/`index`/`pausedAt` at all (the PM5
 // itself owns pacing; nothing here ticks a phase forward), so folding it
 // into `SessionRun` would mean every phone-timer reader learning to ignore
-// fields that never apply to it. Mirrors `session/run.ts`'s idiom
-// throughout: `v: 1`, a strict-shape `isPlainRecord`-based validator that
-// covers every field a reader touches unconditionally, best-effort IO that
-// never throws, and a `clear*` that removes the key outright.
+// fields that never apply to it.
+//
+// **Phase MD PR 1: this file holds the record type and its PURE builders,
+// and no storage call at all.** The persistence half — the key, the
+// validators (`isMonitorRun`, `stripMalformedSeries`, `hasValidSeries`),
+// the raw read `loadMonitorRun`, and `connectGuardStage` — moved into
+// `monitor/handoffStore.ts`, the one module that writes the durable key
+// (spec `docs/superpowers/specs/2026-09-12-stored-run-module-design.md`
+// §4). The dependency now runs one way: persistence imports this type.
+// `app/scripts/handoffStoreBoundary.test.ts` asserts this file holds ZERO
+// storage references.
 //
 // `session/run.ts`'s own 6B/6C comments carry over unchanged here: the
 // `completedAt: null` vs `completedAt: <iso>` boundary is "live" vs
 // "finished but not yet logged/consumed" (7C's eventual monitor-side log
-// path, not built this phase); an unrecognized `v` or a malformed shape is
-// discarded (the key cleared) rather than crashing whatever screen reads it
-// first, same as `loadRun`'s own "Resilience #5".
+// path, not built this phase); an unrecognized `v` or a malformed shape
+// reads as absent rather than crashing whatever screen reads it first
+// (`loadRun`'s own "Resilience #5" — except that the monitor side's reader,
+// `handoffStore.ts`'s `loadMonitorRun`, destroys nothing on that path: it
+// returns `null` and leaves the bytes alone).
 
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { IntervalActual } from "../../domain/monitor/types.js";
 import type { LogSeed } from "../session/logDraft";
 import type { SeriesData } from "./seriesRecorder";
-import { clearRun, loadRun } from "../session/run";
-import { isPlainRecord } from "../isPlainRecord";
-
-export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
+import { clearRun } from "../session/run";
 
 /**
  * Phase LL Task 4 (design spec §4's writer table, the anchor pass's own
@@ -120,8 +126,8 @@ export type MachineSummaryDetail = {
  *  `completedAt`. */
 export interface MonitorRun {
   // v bumps 1 -> 2 the day `logSeed` ships (7C spec §2): a v1 record
-  // (written before this task) loads as it always has — see `isMonitorRun`
-  // and `loadMonitorRun`'s own Resilience #5 discipline — it just never
+  // (written before this task) loads as it always has — see
+  // `handoffStore.ts`'s `isMonitorRun` and `loadMonitorRun` — it just never
   // carries a seed, and never migrates to get one (there is nothing to
   // build it FROM after the fact: the `EnginePhase[]` it would need is long
   // gone by the time an old record is loaded back). Every run
@@ -139,8 +145,8 @@ export interface MonitorRun {
   /** What KIND of run this is (Phase JR PR 1, spec rev 4's stored shape).
    *
    *  ADDITIVE and OPTIONAL, on an existing v2 record and with **no `v`
-   *  bump**: `isMonitorRun` is a positive conjunction with no unknown-key
-   *  check (it says so itself below), and `handoffStore.ts` persists the
+   *  bump**: `handoffStore.ts`'s `isMonitorRun` is a positive conjunction
+   *  with no unknown-key check (it says so itself), and that module persists the
    *  whole object with `JSON.stringify` and re-admits through that same
    *  validator — so an older build reading a newer record simply ignores
    *  this, and a newer build reading an older one sees `undefined`, which
@@ -263,8 +269,10 @@ export interface MonitorRun {
    */
   series?: SeriesData;
   /**
-   * Set the one time a localStorage write WITH a series present threw and
-   * the retry-without-series inside `saveMonitorRun`'s own catch succeeded
+   * Set the one time a durable write WITH a series present threw and the
+   * retry-without-series inside the writer's own catch succeeded —
+   * `handoffStore.ts`'s `performDurableWrite` today, the deleted
+   * `saveMonitorRun` before Phase MD PR 1
    * (§3's sacrifice ordering) — the audit trail of a trace that was
    * sacrificed to save the run itself. Never written any other way, and
    * (stated, not hidden, the plan's own self-review names this explicitly)
@@ -286,7 +294,8 @@ export interface MonitorRun {
    * established: a record from before this task simply has none, and this
    * field is never written any other way — in particular NOT by
    * `completeMonitorRun`, which closes on the wire event alone and has no
-   * summary in hand yet. `isMonitorRun` below deliberately gains no check
+   * summary in hand yet. `handoffStore.ts`'s `isMonitorRun` deliberately
+   * gains no check
    * for this field (its own comment: "this positive conjunction tolerates
    * the new fields on records this task's own code never wrote") —
    * write-once and identity are the writer's job, not the validator's.
@@ -312,7 +321,8 @@ export interface MonitorRun {
    *
    * Additive-optional with NO `v` bump, the same never-migrate contract
    * `endedBy`/`series`/`summaryTotals` above already established:
-   * `isMonitorRun` is a positive conjunction with no unknown-key check
+   * `handoffStore.ts`'s `isMonitorRun` is a positive conjunction with no
+   * unknown-key check
    * (its own comment says so), so an older build reading a newer record
    * ignores this and a newer build reading an older one sees `undefined`.
    *
@@ -340,7 +350,8 @@ export interface MonitorRun {
    * is ever built). Additive-optional, the same never-migrate contract
    * `summaryTotals`/`series`/`endedBy` above already established: a
    * record from before this task simply has none, and this field is
-   * never written any other way. `isMonitorRun` below deliberately gains
+   * never written any other way. `handoffStore.ts`'s `isMonitorRun`
+   * deliberately gains
    * no check for this field either, same reasoning as `summaryTotals`'s
    * own comment: write-once and identity are the writer's job, not the
    * validator's.
@@ -381,8 +392,8 @@ export interface MonitorRun {
    * fields this PR** (`session/summaryModel.ts`'s `monitorDistanceMeters`/
    * `monitorTimeSeconds` keep summing straight off `actuals`, exactly as
    * before) — pinned by construction: every screen renders the identical
-   * number whether or not a record carries this split. `isMonitorRun`
-   * below deliberately gains no check for any of the four, same reasoning
+   * number whether or not a record carries this split. `handoffStore.ts`'s
+   * `isMonitorRun` gains no check for any of the four, same reasoning
    * as `summaryTotals`'s own comment: write-once-per-close-reason
    * discipline is the writer's job, not the validator's.
    */
@@ -446,235 +457,6 @@ export interface MonitorRun {
 // mid-session. Do that only together with the version bump or the
 // migration, and price the loss above first.
 
-/** True when `value.series` is either absent or shaped enough to trust — a
- *  plain record carrying a `samples` array, never a per-sample domain
- *  validation (that is Task 3's server-side job, not this best-effort
- *  client mirror's). Pulled out of `isMonitorRun` below (LOW-3, task-2
- *  review) so `loadMonitorRun`'s own pre-pass (`stripMalformedSeries`) and
- *  the validator share the identical rule rather than two copies
- *  drifting. */
-function hasValidSeries(value: Record<string, unknown>): boolean {
-  const series = value.series;
-  return (
-    series === undefined ||
-    (isPlainRecord(series) && Array.isArray(series.samples))
-  );
-}
-
-/**
- * LOW-3 (task-2 review): a malformed `series` used to discard the WHOLE
- * record through `isMonitorRun`'s all-or-nothing conjunction — the
- * inverse of §3's own sacrifice principle ("only the trace is ever
- * sacrificed, never the run"), just applied at LOAD time instead of SAVE
- * time. `loadMonitorRun` runs this FIRST: a `series` that fails
- * `hasValidSeries` is dropped from the value before `isMonitorRun` ever
- * sees it, so every other field — each validated entirely on its own —
- * still loads. Returns the SAME reference when `series` is already valid
- * or absent (the common case, and what lets `isMonitorRun`'s own
- * `hasValidSeries` check stay in place downstream too, as a redundant
- * safety net for any caller that reaches it without going through this
- * pre-pass first — there is exactly one, `loadMonitorRun`, today, but the
- * function is not exported and nothing pins that as permanent).
- *
- * Honest limit (Task 3 review, the re-review's own comment nit): this
- * strips the RETURNED candidate only — the STORED copy under
- * `MONITOR_RUN_KEY` still carries the malformed `series` untouched, and
- * stays dirty until the next `saveMonitorRun` call overwrites it (a
- * successful save, or the sacrifice retry, both replace the whole key).
- * A reload before that next save re-reads the same malformed bytes and
- * strips them again, identically — cheap, not a leak, but worth naming
- * so a future reader doesn't assume this function repairs storage.
- */
-// Task 2: EXPORTED for `handoffStore.ts` — see the note above `isPlainRecord`.
-export function stripMalformedSeries(
-  value: Record<string, unknown>,
-): Record<string, unknown> {
-  if (hasValidSeries(value)) return value;
-  // `_series` is discarded on purpose, same `^_` ignore-pattern idiom
-  // `saveMonitorRun`'s own sacrifice retry already uses.
-  const { series: _series, ...withoutSeries } = value;
-  return withoutSeries;
-}
-
-// Task 2: EXPORTED for `handoffStore.ts` — see the note above `isPlainRecord`.
-export function isMonitorRun(value: unknown): value is MonitorRun {
-  if (!isPlainRecord(value)) return false;
-  const program = value.program;
-  // `logSeed` (7C, v2): same shallow treatment as `program` above — a v1
-  // record simply omits it (undefined is fine, `loadMonitorRun`'s own
-  // "no throw, no migration" contract), and when present it only has to be
-  // shaped enough not to crash a reader that unconditionally destructures
-  // `steps`/`paces` — never a deep per-step validation.
-  const logSeed = value.logSeed;
-  return (
-    (value.v === 1 || value.v === 2) &&
-    (value.workoutId === null || typeof value.workoutId === "string") &&
-    typeof value.title === "string" &&
-    isPlainRecord(program) &&
-    Array.isArray(program.intervals) &&
-    Array.isArray(value.actuals) &&
-    typeof value.deviceName === "string" &&
-    typeof value.startedAt === "string" &&
-    (value.completedAt === null || typeof value.completedAt === "string") &&
-    typeof value.terminated === "boolean" &&
-    // Phase JR PR 1 (review of 29e00561): `mode` is a KNOWN field, so it is
-    // validated like every other one. Declaring `mode?: "justrow"` and then
-    // never checking it let `mode: "corrupt"` load as a valid record, which
-    // is a different thing from the unknown-key tolerance this validator
-    // deliberately keeps — that tolerance is about fields this build has
-    // never heard of, not about a field it declares and then trusts.
-    (value.mode === undefined || value.mode === "justrow") &&
-    // Phase LL Task 4, widened again by Wave F PR 1 (spec §1): a record
-    // written by ANY era's writer (a legacy `"interrupted"` row, or one of
-    // the five new `CloseReason` values) still loads. Shallow membership
-    // check only, same discipline as every other field this validator
-    // covers: "shaped enough not to crash a reader that unconditionally
-    // destructures `endedBy`," never a claim about which specific writer
-    // produced it.
-    (value.endedBy === undefined ||
-      value.endedBy === "finished" ||
-      value.endedBy === "rower" ||
-      value.endedBy === "link-lost" ||
-      value.endedBy === "program-failed" ||
-      value.endedBy === "program-dropped" ||
-      value.endedBy === "interrupted") &&
-    // Phase LT spec 2, Task 2: same shallow "shaped enough not to crash an
-    // unconditional destructure" treatment as `logSeed` above. No
-    // unknown-key check anywhere in this validator (the `endedBy?`
-    // precedent this comment's own header cites) — this positive
-    // conjunction tolerates the new fields on records this task's own
-    // code never wrote, same as any other additive field ever has.
-    hasValidSeries(value) &&
-    (value.seriesDropped === undefined || value.seriesDropped === true) &&
-    (logSeed === undefined ||
-      (isPlainRecord(logSeed) &&
-        Array.isArray(logSeed.steps) &&
-        isPlainRecord(logSeed.paces)))
-  );
-}
-
-/** Persists the run. Best-effort, same rationale as `saveRun`: localStorage
- *  can throw (quota, private-mode Safari, disabled storage), and this never
- *  lets that escape uncaught. Unlike `saveRun`, this reports nothing back —
- *  the brief's own interface fixes `saveMonitorRun`'s return type at `void`.
- *
- *  **NO PRODUCTION CALLERS (hand-off store design spec §1).** Every
- *  production write of `MONITOR_RUN_KEY` goes through `handoffStore.ts`'s
- *  `commit`/`retryDurable`, which port this function's sacrifice ordering
- *  verbatim (`performDurableWrite`); `createMonitorRun`/`recordActual`/
- *  `completeMonitorRun`/`appendSummaryObservations` are pure builders, and
- *  the doors (`Today.tsx`/`LogSession.tsx`/`useStartWorkout.ts`) commit and
- *  retire through the store. This stays exported for the dozens of test
- *  files that seed a fixture with it. Its `void` return is therefore a
- *  fixture-seeder's contract, not a production one — the caller that DOES
- *  need to branch on a failed durable write is the store's committer, which
- *  reports it (§8's receipts).
- *
- *  **THE SACRIFICE (Phase LT spec 2 §3, ruling 3's own caution section):**
- *  a ~720 KB worst-case series (ruling 2's cap) changes the odds of the
- *  ORIGINAL risk this comment already named — `monitorRun.ts:186-189` at
- *  brainstorm time was O(KB) and negligible; it is not anymore. On a thrown
- *  write WITH a `series` present, this catch retries ONCE, WITHOUT the
- *  series, stamping `seriesDropped: true` on the smaller record — the trace
- *  is what gets sacrificed, never the run. Honest claim, carried from the
- *  spec verbatim rather than oversold: the retried, smaller write can ALSO
- *  throw (a genuinely full origin, not merely a large record) — the run's
- *  odds on that second failure return to TODAY's odds (this function's own
- *  pre-existing best-effort swallow, unchanged below), they do not become a
- *  guarantee. A record with no `series` at all skips the retry outright —
- *  there is nothing smaller to try, and retrying an identical write would
- *  only throw the identical way. `void` unchanged either way; nothing here
- *  is a second source of truth for what got persisted — the CALLER's
- *  in-memory copy is what every downstream read this session sees, exactly
- *  as before this task. */
-export function saveMonitorRun(r: MonitorRun): void {
-  try {
-    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(r));
-  } catch {
-    if (r.series === undefined) return;
-    try {
-      // `_series` is discarded on purpose — the whole point of this
-      // destructure is to drop it; the `^_` ignore pattern in this repo's
-      // eslint config (`no-unused-vars`) is what allows the name.
-      const { series: _series, ...withoutSeries } = r;
-      const dropped: MonitorRun = { ...withoutSeries, seriesDropped: true };
-      localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(dropped));
-    } catch {
-      // The retry ALSO failed: today's odds, nothing worse — a run this
-      // size was never guaranteed to save even before this task existed.
-    }
-  }
-}
-
-/** Loads the run. Garbage JSON or an unrecognized version/shape reads back
- *  as `null` rather than crashing the caller — the same "Resilience #5"
- *  discipline `loadRun` documents on its own key.
- *
- *  **THIS READ DESTROYS NOTHING (changed at the hand-off store's final fix
- *  round, 2026-08-30; adversarial pass F-2).** Until then this function
- *  fell through to `clearMonitorRun()` on the malformed path — a READ that
- *  performed a `removeItem`. Hand-off store design spec §8 rules the
- *  opposite for the durable tier it now shares: "malformed durable bytes
- *  are never cleared during a read ... the store records the malformed
- *  state, treats the key as absent, receipts it, and clears at the next
- *  retire or accepted commit for the key." The store honoured that; this
- *  legacy loader did not, and `Today.tsx`'s mount effect calls it — so
- *  merely OPENING Today wiped bytes the store was deliberately preserving,
- *  falsifying §8 in the composed app (and falsifying Today's own
- *  "destroys nothing" comment). The self-heal bought nothing that the
- *  store's own deferred clear does not already provide, and no caller ever
- *  depended on it: `monitorRunState` (legacy, zero production callers) and
- *  `Today.tsx`'s guard both only ever read the RETURN VALUE, which is
- *  unchanged at `null`.
- *
- *  `clearMonitorRun` stays exported and unchanged — deliberate,
- *  authorized clears still route through it.
- *
- *  **THE GETTER IS INSIDE THE GUARD TOO (PR #239 review round 1, item 1).**
- *  `localStorage.getItem` can itself throw a `SecurityError` when the
- *  origin's storage is denied, and this call used to sit OUTSIDE the `try`
- *  below — so the throw escaped straight through `Today.tsx`'s mount
- *  effect and took the screen down. Spec §8 rules that a getter throw
- *  "makes both tiers behave as absent-durable ... never an unhandled
- *  throw", and names this loader as the one the store's accessor absorbs;
- *  this is the same rule enforced at the loader itself, so `Today.tsx`'s
- *  guard — which needs a synchronous, un-hydrated, always-fresh raw read
- *  and so cannot route through the store — gets it too. Denial is NOT
- *  malformed bytes: nothing is cleared on this path either. */
-export function loadMonitorRun(): MonitorRun | null {
-  let raw: string | null;
-  try {
-    raw = localStorage.getItem(MONITOR_RUN_KEY);
-  } catch {
-    // Storage denied. Absent, not malformed — no clear, nothing thrown.
-    return null;
-  }
-  if (raw === null) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    // LOW-3: strip a malformed `series` BEFORE validating, so its own
-    // defect never costs the rest of an otherwise-good record
-    // (`stripMalformedSeries`'s own doc comment carries the full
-    // reasoning). A no-op (same reference back) whenever `series` is
-    // already valid or absent, or `parsed` is not even a plain record —
-    // `isMonitorRun` below still rejects those the same way it always has.
-    const candidate = isPlainRecord(parsed)
-      ? stripMalformedSeries(parsed)
-      : parsed;
-    if (isMonitorRun(candidate)) return candidate;
-  } catch {
-    // fall through: garbage JSON is handled the same as an unknown shape
-  }
-  // NO CLEAR HERE — see this function's own doc comment. The key is
-  // reported ABSENT to the caller and left on disk for the store's §8
-  // deferred clear (its next retire or accepted commit for the key).
-  return null;
-}
-
-export function clearMonitorRun(): void {
-  localStorage.removeItem(MONITOR_RUN_KEY);
-}
-
 /** Builds a fresh `MonitorRun` — the ONE place a
  *  new monitor-driven session begins. Cross-clear rule (design spec's
  *  coexistence obligation): creating a `MonitorRun` clears whatever
@@ -687,7 +469,8 @@ export function clearMonitorRun(): void {
  *  make for the identical single-session-at-a-time assumption.
  *
  *  **This function destroys data, and nothing in it asks first.** That is
- *  by design and it is why `connectGuardStage()` below exists: the ONLY
+ *  by design and it is why `handoffStore.ts`'s `connectGuardStage()`
+ *  exists: the ONLY
  *  caller a rower can reach — 7B's Connect affordance (`ConnectAction.tsx`)
  *  — must stage a confirm before ever getting here. Do not add a second
  *  unguarded caller.
@@ -698,7 +481,9 @@ export function clearMonitorRun(): void {
  *  committing — `session/useStartWorkout.ts`'s `confirmReplace` (Phase 6I
  *  Task 4: extracted from WorkoutDetail's own former `startSession`),
  *  downstream of the staged confirm its `handleStart` puts in front of it —
- *  calls `clearMonitorRun` for the mirrored reason. See `session/run.ts`'s
+ *  retires the `MonitorRun` through the hand-off store for the mirrored
+ *  reason (before Phase MD PR 1 it called the deleted `clearMonitorRun`).
+ *  See `session/run.ts`'s
  *  own note on why that clear is NOT inside `saveRun` despite the spec's
  *  prose naming it.
  *
@@ -721,11 +506,16 @@ export function clearMonitorRun(): void {
  *  and its own defensive retire of whatever remains for the staged key
  *  (spec §5's "createMonitorRun defense" row) now happen at this
  *  function's one production caller, `useMonitorSession.ts`'s `handleFrame`
- *  "ready" branch — NOT here. The reason is architectural, not stylistic:
- *  `handoffStore.ts` imports `MONITOR_RUN_KEY`/`isMonitorRun` FROM this
- *  file (Task 2's own hydration path), so this file calling back INTO
- *  `handoffStore.ts` would be a circular import; the hook already imports
- *  both files, so it is the natural place for the commit to live. Nothing
+ *  "ready" branch — NOT here. The reason was architectural, not stylistic:
+ *  `handoffStore.ts` used to import `MONITOR_RUN_KEY`/`isMonitorRun` FROM
+ *  this file (Task 2's own hydration path), so this file calling back INTO
+ *  `handoffStore.ts` would have been a circular import; the hook already
+ *  imports both files, so it is the natural place for the commit to live.
+ *  **Phase MD PR 1 reversed that import direction** — the validators and
+ *  the key now live in `handoffStore.ts`, which imports only the TYPE from
+ *  here — so the cycle no longer exists; the commit stays at the hook
+ *  because the hook is the sole committer (spec §1), not because of the
+ *  cycle. Nothing
  *  else changes: this still returns the SAME shape, and `clearRun()` still
  *  fires unconditionally — that half of the cross-clear rule is the OTHER
  *  coexistence mechanism (the phone-timer `SessionRun`), untouched by the
@@ -829,8 +619,9 @@ function acceptableFinalBoundary(
  * otherwise this returns it UNCHANGED.**
  * `completedAt !== null` is what "closed" means on this record
  * (the same "live" vs "finished but not yet logged" boundary
- * `MonitorRun.completedAt`'s own comment draws, and the one
- * `monitorRunState` below already keys off). The driver's own run scoping
+ * `MonitorRun.completedAt`'s own comment draws; the private
+ * `monitorRunState` that used to key off it was deleted with
+ * `anyLiveSession` in Phase MD PR 1, spec §7). The driver's own run scoping
  * is the first line of defence — it emits a post-run boundary with
  * `index: null` and a `boundary-out-of-run` log rather than an actual
  * belonging to the finished workout (`domain/monitor/types.ts`'s
@@ -908,8 +699,8 @@ function acceptableFinalBoundary(
  * identical decomposition this function's `workMeters`/`restMeters` pair
  * computes, so the two really do agree whenever the rest pair exists.
  * `monitorTimeSeconds` does NOT mirror `workSeconds + restSeconds` the
- * same way: it calls `measuredSessionSeconds` (this file's own
- * `interruptedTotalSeconds`), which sums `Σ elapsedSeconds` plus, for
+ * same way: it calls this file's own `measuredSessionSeconds`, which sums
+ * `Σ elapsedSeconds` plus, for
  * every actual with a real `index`, that interval's OWN `restSeconds` read
  * out of `program.intervals` — the PROGRAMMED rest, a fact about what the
  * rower was ASKED to do, never a wire reading. This function's own
@@ -994,9 +785,11 @@ export function recordActual(
   // PURE: it never persists, and its base is ALWAYS the CALLER's own `run`
   // argument — never a storage re-read. The late/closed finish-grace path
   // above used to rebuild its base from `stillLive(run.startedAt)`, a
-  // fresh `loadMonitorRun()` call — which is exactly the defect: when the
+  // fresh `loadMonitorRun()` call (that reader lives in `handoffStore.ts`
+  // since Phase MD PR 1) — which is exactly the defect: when the
   // live→closed write that PRECEDED this one had been denied (swallowed
-  // by `saveMonitorRun`'s own best-effort catch), storage still held the
+  // by the then-current `saveMonitorRun`'s best-effort catch, since
+  // deleted), storage still held the
   // last successful write — a stale LIVE copy — and that stale copy became
   // this function's base, silently re-opening the record and truncating
   // its actuals (`completedAt` reset to `null`, `endedBy` gone, sums gone).
@@ -1070,7 +863,7 @@ export function recordActual(
  * Returns a NEW record rather than mutating, matching `recordActual`.
  *
  * **Hand-off store design spec §1, plan Task 3 — PURE.** No longer calls
- * `saveMonitorRun` itself: this is one of the three named writer gates
+ * the since-deleted `saveMonitorRun`: this is one of the three named writer gates
  * (`recordActual`, this function, `appendSummaryObservations`) that
  * return `next` (or the same reference on decline) and never persist —
  * `useMonitorSession.ts`'s hook is the sole committer, applying the result
@@ -1130,7 +923,8 @@ export function completeMonitorRun(
  *
  * **Hand-off store design spec §1, plan Task 3 — PURE, widened alongside
  * `completeMonitorRun`/`recordActual`/`appendSummaryObservations`.** No
- * longer calls `saveMonitorRun` — persisting is its callers' job now.
+ * longer calls the since-deleted `saveMonitorRun` — persisting is its
+ * callers' job now.
  * `completeContinuityReset`'s one caller (`useMonitorSession.ts`'s own
  * continuity-reset branch) commits through the hook's own
  * `applyProducerCommit` discipline; `completeInterruptedRun`'s one caller
@@ -1371,10 +1165,10 @@ export function completeContinuityReset(
  * caller has one — a burst that never produced 0x003F still folds its
  * totals and detail alone) — every other field on the record, byte for
  * byte, is exactly what was already there. `isMonitorRun`'s own
- * positive-conjunction, no-unknown-key design (this file's comment above
- * `isMonitorRun`) is what makes that safe without a validator change or a
- * `v` bump: a record carrying any of these three fields still round-trips
- * through `loadMonitorRun` on any build, new or old.
+ * positive-conjunction, no-unknown-key design (its comment, in
+ * `handoffStore.ts`) is what makes that safe without a validator change or
+ * a `v` bump: a record carrying any of these three fields still
+ * round-trips through `loadMonitorRun` on any build, new or old.
  *
  * Returns what it computed (the new record), or `null` when it declined —
  * matching `recordActual`/`completeMonitorRun`'s own "new record back,
@@ -1441,11 +1235,27 @@ export function appendSummaryObservations(
  * file's header comment on `MonitorRun.actuals`) is handled the identical
  * way: `program.intervals[index]` is simply `undefined`, so the rest term
  * is skipped rather than thrown. Never reads `ProgramInterval.type`
- * (loaded-program invariant, this file's `isMonitorRun` comment above) —
+ * (loaded-program invariant, `handoffStore.ts`'s `isMonitorRun` comment) —
  * `restSeconds` is the one interval field every era of this record's
  * shape has always carried.
+ *
+ * **Why this NAME and not `interruptedTotalSeconds` (Phase PW Task 4
+ * review, finding 3; the rename landed in Phase MD PR 1).** This used to
+ * be `interruptedTotalSeconds` with `measuredSessionSeconds` as a neutral
+ * alias beside it, and the alias held the only production caller — so the
+ * alias's name is the one that survived, not the original's. R-D's own
+ * text generalizes this exact "work + programmed rest for completed
+ * intervals" rule from "the interrupted branch" to "every monitor
+ * session's TIME": `summaryModel.ts`'s `buildMonitorModel` needs the
+ * identical formula for a run that finished normally, not just one closed
+ * through the interrupted door, and a second hand-copy would have meant
+ * this formula's own OPEN hardware finding (F-1, the walk sheet's
+ * unreproduced "6 MIN where the wire computes 5" reading —
+ * `docs/monitor/sessions/walk-2026-08-17/README.md`) landing its eventual
+ * fix in only one of the two places that need it. One function, one name,
+ * and the name a caller with no "interrupted" run in hand would reach for.
  */
-export function interruptedTotalSeconds(run: MonitorRun): number {
+export function measuredSessionSeconds(run: MonitorRun): number {
   let total = 0;
   for (const actual of run.actuals) {
     total += actual.elapsedSeconds;
@@ -1455,255 +1265,4 @@ export function interruptedTotalSeconds(run: MonitorRun): number {
     }
   }
   return total;
-}
-
-/**
- * Neutral alias for the formula above (Phase PW Task 4 review, finding 3):
- * R-D's own text generalizes this exact "work + programmed rest for
- * completed intervals" rule from "the interrupted branch" to "every
- * monitor session's TIME" — `summaryModel.ts`'s `buildMonitorModel` needed
- * the identical formula for a run that finished normally, not just one
- * closed through the interrupted door, and a second hand-copy would have
- * meant this formula's own OPEN hardware finding (F-1, the walk sheet's
- * unreproduced "6 MIN where the wire computes 5" reading —
- * `docs/monitor/sessions/walk-2026-08-17/README.md`) landing its eventual
- * fix in only one of the two places that need it. `interruptedTotalSeconds`
- * stays the primary export (every existing caller/test keeps its name);
- * this is the same function object under the name a caller with no
- * "interrupted" run in hand should reach for instead. */
-export const measuredSessionSeconds = interruptedTotalSeconds;
-
-type RecordState = "absent" | "live" | "unlogged";
-
-function sessionRunState(): RecordState {
-  // Deliberately re-reads via `loadRun` (not a value threaded in) so this
-  // always answers against whatever is CURRENTLY on record — `loadRun`
-  // itself already discards a garbage/unrecognized-version entry as
-  // "absent" (its own Resilience #5), which is exactly the right answer
-  // here too: a record neither side can even parse is not a live session.
-  const run = loadRun();
-  if (run === null) return "absent";
-  return run.completedAt === null ? "live" : "unlogged";
-}
-
-// Task 6 close-out ruling (2026-08-30, hand-off store plan): `monitorRunState`
-// and `anyLiveSession` below are LEGACY, WITH ZERO PRODUCTION CALLERS as of
-// this branch (Task 3's review, finding M-2, confirmed again at Task 5 and
-// re-confirmed here via `grep -rn "anyLiveSession(" app/src` — the only
-// non-comment call sites are `anyLiveSession`'s own internal call to
-// `monitorRunState` and `monitorRun.test.ts`'s own truth-table suite).
-// NOT deleted: `anyLiveSession()`'s own doc comment, `connectGuardStage`'s
-// doc comment directly below, `ConnectAction.tsx`, `useMonitorSession.ts`,
-// `Today.tsx`, `useStartWorkout.ts`, `WorkoutDetail.test.tsx` and
-// `todayGuard.pin.test.ts` all cite this function BY NAME as the documented
-// anti-pattern a real, previously-shipped bug (ROADMAP M-1, the F5 data-loss
-// class) warns every future guard away from — deleting the function orphans
-// that whole cross-file contrast and is exactly the "unrelated churn" the
-// close-out brief's own item 4 says to avoid dragging in. Left in place,
-// unchanged, reading the durable tier only (§8's hydration model does not
-// apply to it — nothing here is a store consumer).
-function monitorRunState(): RecordState {
-  const run = loadMonitorRun();
-  if (run === null) return "absent";
-  return run.completedAt === null ? "live" : "unlogged";
-}
-
-/**
- * The coexistence truth table (design spec's obligation): reads BOTH
- * records and answers "is anything actually happening right now, and on
- * which side" — never "did something happen that's still sitting
- * unlogged." That second question is deliberately out of scope: this
- * function's name is `anyLIVEsession`, and a completed-but-unlogged record
- * on either side is exactly what `SessionRun`'s own 6B comment already
- * calls "finished but not yet logged" — real history, but not a live
- * session by any definition a resume/guard caller needs. Concretely, an
- * `"unlogged"` state on either side is treated identically to `"absent"`
- * UNLESS the other side is genuinely `"live"`, in which case the live side
- * wins outright.
- *
- * All nine `{absent, live, unlogged} x {absent, live, unlogged}` cells,
- * pinned:
- *
- * | sessionRun  | monitorRun  | result    | why |
- * |---|---|---|---|
- * | absent      | absent      | `"none"`    | nothing on record either side |
- * | absent      | live        | `"monitor"` | only the monitor is live |
- * | absent      | unlogged    | `"none"`    | a stale monitor record, nothing live |
- * | live        | absent      | `"phone"`   | only the phone is live |
- * | live        | live        | `"monitor"` | BOTH live — see tie-break below |
- * | live        | unlogged    | `"phone"`   | phone live; monitor record is stale |
- * | unlogged    | absent      | `"none"`    | a stale phone record, nothing live |
- * | unlogged    | live        | `"monitor"` | monitor live; phone record is stale |
- * | unlogged    | unlogged    | `"none"`    | "both-stale" — neither is live |
- *
- * The `live`/`live` tie-break (row 5) picks `"monitor"`. **7B closed the
- * gap that used to make this cell ordinarily reachable** — both halves of
- * the cross-clear rule now ship (`createMonitorRun` above clears any
- * `SessionRun`; `session/useStartWorkout.ts`'s `confirmReplace` clears any
- * `MonitorRun`), so neither door leaves the other side's record standing.
- *
- * **One walk through the app's own screens still reaches this cell,
- * though** (Task 2's review, M-2 — an earlier draft of this comment said
- * none did, which was wrong): the cross-clears guard DESTRUCTION, and
- * `Countdown.tsx` CREATES a `SessionRun` with no clear of its own, reachable
- * by deep link (`/session/confirm` — a redirect shim as of fast-follow
- * Task 4, `AppRoutes.tsx`'s `ConfirmRedirect` — or `/session/countdown`
- * directly) or from any of Start's own rewired entry points
- * (`WorkoutDetail.tsx` and `you/RetestShortcut`-style detail entries, via
- * `useStartWorkout.ts`; the old no-baseline BaselineCard was one until
- * Phase BL PR C replaced it with the pure-navigation doors card).
- * A rower who takes that route mid-connected-session leaves both records
- * live. Nothing is destroyed by it, and no clear was
- * added at Countdown on purpose (that would be a new unguarded destruction
- * path, the exact thing this phase closed) — the two record types own their
- * own sides, and `useMonitorSession` deliberately does not consult this
- * function for that reason, tracking its own record instead. The
- * tie-break stays anyway, and this table keeps pinning it: a half-completed
- * write, a localStorage edited by hand, or records left by an older build
- * can all still present this shape, and "unreachable by design" has never
- * been a reason for a resilience path to answer undefined. `"monitor"` is
- * chosen because
- * a `MonitorRun` only ever exists once a rower has actually connected real
- * hardware — a strictly narrower, more deliberate action than the
- * always-available phone timer — so if both somehow claim to be live at
- * once, the hardware-backed record is trusted as the more likely genuine
- * one. The `"both-stale"` cell (row 9) resolves to `"none"`, not a
- * tie-break, precisely because NEITHER side is live there — there is
- * nothing to prefer between two finished records, only a shared "no,
- * nothing is running" answer.
- */
-export function anyLiveSession(): "none" | "phone" | "monitor" {
-  const monitor = monitorRunState();
-  if (monitor === "live") return "monitor";
-  const phone = sessionRunState();
-  if (phone === "live") return "phone";
-  return "none";
-}
-
-/** What a Connect press has to warn about before it is allowed through, or
- *  `null` when nothing is at risk. Shares its shape with `WorkoutDetail`'s
- *  own `replaceStage` union (`session/useStartWorkout.ts`'s
- *  `StartReplaceStage`), and — as of the close-out's queue item 3 — the two
- *  doors now fully AGREE on when `"in-progress"` applies: a `SessionRun`
- *  (a phone timer genuinely running in the background) stages it while
- *  live, on both doors; a `MonitorRun` never does, on either door, because
- *  any `MonitorRun` either door can see is always dead (F6 spec 2b, exit
- *  criterion 5 — see `connectGuardStage`'s own doc comment below). HISTORY:
- *  Start's door used to branch its `MonitorRun` case on `completedAt` too,
- *  staging `"in-progress"` for a live-looking record — the close-out's
- *  queue item 3 shed that, on the identical reasoning this function's own
- *  comment already gives for the Connect door. NOT the same way its
- *  `SessionRun` case still does, though: at the Start door, the
- *  `SessionRun` branch only ever distinguishes completed ("unlogged") from
- *  everything else, never `"in-progress"` — that door's own
- *  `"in-progress"` for a genuinely live phone-timer session is produced by
- *  a DIFFERENT branch entirely, the started-but-unfinished `SessionDraft`
- *  check (`session/useStartWorkout.ts`'s `handleStart`, `startedAt !==
- *  null`). Only THIS function's own `SessionRun` check (below) branches on
- *  live-vs-finished to produce `"in-progress"` directly. */
-export type ConnectGuardStage = "unlogged" | "in-progress" | null;
-
-/**
- * The Connect guard (7B, spec §3 — "the F5 walk, closed"). Answers "would
- * connecting a monitor right now destroy something the rower still needs?"
- * by reading the `SessionRun` record DIRECTLY, which is the whole point of
- * this function existing separately from `anyLiveSession()` directly above.
- *
- * ROADMAP M-1, verbatim, because routing this through the function above is
- * the exact mistake it was written to prevent:
- *
- * > **Guard wiring is NOT uniform (final-review M-1 — read before touching
- * > any guard that reads `RUN_KEY`/`MONITOR_RUN_KEY`).** ... Routing either
- * > through `anyLiveSession()` silently downgrades "unlogged" to "none" and
- * > reintroduces the F5 data-loss class (a real, previously-shipped bug: a
- * > stale run record silently discarded instead of protected). When adding
- * > a NEW guard, ask "does this care about unlogged specifically, or just
- * > live-vs-not" before picking which of the two patterns to follow.
- *
- * For Connect the answer is **YES, it cares about unlogged specifically**:
- * the action behind it is `createMonitorRun` above, whose `clearRun()` is
- * unconditional, and a finished-but-unlogged `SessionRun` is precisely the
- * record 6B's F5 fix exists to protect — `anyLiveSession()`'s own pinned
- * table returns `"none"` for it (rows 7 and 9), so a Connect guard wired
- * that way would walk straight past the one case it is FOR. This is the
- * same direct-read pattern `Today.tsx`'s cold-start guard already uses, and
- * for the same reason its own comment gives.
- *
- * A LIVE `SessionRun` (`completedAt === null`) is staged too, with the
- * "in progress" sentence rather than the "unlogged" one: `clearRun()`
- * destroys that record just as completely, and the spec's own constraint is
- * that **no silent destruction path exists in either direction**. It is a
- * lesser loss than the unlogged case (an abandoned session was never going
- * to be logged), which is why the two get different copy — the identical
- * severity ordering, and the identical pair of sentences, that
- * `WorkoutDetail`'s `handleStart` already applies at the other door.
- *
- * **This guard covers the `MonitorRun` side too, not just the
- * `SessionRun`.** Everything downstream of a Connect press now destroys
- * that record through the store rather than raw storage —
- * `WorkoutDetail.handleRowInstead` retires whatever it finds (key-bound),
- * and the create-commit at `useMonitorSession`'s "ready" branch retires the
- * staged key before opening a new one — but a retire is still a
- * destruction, so a rower must be ASKED first. A
- * finished-but-unlogged `MonitorRun` is 7C's entire prefill input — exactly
- * the same class of record the `SessionRun` check above exists to protect,
- * on the OTHER side of the coexistence line. `WorkoutDetail.handleStart`
- * has read both records since Task 2 (ROADMAP M-1's own two-record
- * widening); this function reading only one was Task 2's original scope
- * (`ConnectAction` shipped unmounted, so the `MonitorRun` side was
- * unreachable through it) and became a live F5-class hole the instant Task
- * 5 mounted the button. Same descending-severity order `handleStart`
- * already uses: the `SessionRun` check runs first (unchanged), then the
- * `MonitorRun` check — so a rower with BOTH records stale gets staged
- * exactly ONCE, not twice, and the `SessionRun`'s own sentence wins ties
- * the same way `handleStart`'s ordering already resolves them. No new copy:
- * both sentences already exist and are shared with the `SessionRun` case
- * above.
- *
- * **F6 spec 2b, Task 2 — the `MonitorRun` check no longer branches on
- * `completedAt`.** It used to mirror the `SessionRun` check above,
- * staging `"in-progress"` for a `completedAt === null` record on the
- * theory that the erg was mid-piece. That theory was never true at this
- * door: a connected session's own screen is WorkoutDetail, and both a
- * reload and a navigation away tear the `useMonitorSession` hook down
- * without ever touching the record — so any `MonitorRun` still visible
- * here, live-looking or not, is a run nothing is driving anymore. Exit
- * criterion 5 names the defect this produced ("Connect never again asks
- * 'Replace it?' about a dead run"): every `MonitorRun` this function can
- * see now stages `"unlogged"`, matching the finished case it already used
- * to reach. The `SessionRun` branch above is untouched — a phone timer
- * genuinely does keep running in the background across reload/navigation,
- * so `"in-progress"` stays true there.
- *
- * **Hand-off store design spec section 5, plan Task 5 -- the `MonitorRun`
- * check now takes its answer as a PARAMETER, never `loadMonitorRun()`
- * directly.** The P1-1 hole this closes: `loadMonitorRun()` reads the
- * DURABLE tier only, so a record whose durable write failed (memory-only
- * -- exactly what `Today.tsx`, Task 4, now renders a row for) was
- * invisible here, while Today's own store-backed read could already see
- * it. The caller (`ConnectAction.tsx`) reads `currentUnretired()` and
- * passes whether it found an entry -- this function cannot call the store
- * itself: `handoffStore.ts` imports `MONITOR_RUN_KEY`/`isMonitorRun` FROM
- * this file (Task 2's own hydration path), so the reverse import would be
- * circular, the identical constraint `createMonitorRun`'s own doc comment
- * states for the create-commit. `hasUnretiredMonitorRun` stands for "does
- * the store currently hold an unretired `MonitorRun`" -- a boolean, not
- * the entry itself, because this function only ever needs to know WHETHER
- * to stage, never WHICH revision; the caller keeps the entry for its own
- * later retire (spec section 5's "armed acceptance" row). */
-export function connectGuardStage(
-  hasUnretiredMonitorRun: boolean,
-): ConnectGuardStage {
-  const run = loadRun();
-  if (run !== null) {
-    return run.completedAt === null ? "in-progress" : "unlogged";
-  }
-  if (hasUnretiredMonitorRun) {
-    // A MonitorRun visible at a Connect door is dead: the connected
-    // session lives on WorkoutDetail's surface and reload/navigation
-    // tears it down. "In progress" would assert machine state we do
-    // not have (spec 2b, exit criterion 5).
-    return "unlogged";
-  }
-  return null;
 }

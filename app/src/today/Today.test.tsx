@@ -21,7 +21,8 @@ import { buildLogSeed } from "../session/logDraft";
 import { buildDraft, type SessionDraft, DRAFT_KEY } from "../session/draft";
 import { advance, buildFreeRowRun, buildRun } from "../session/engine";
 import { RUN_KEY, type SessionRun } from "../session/run";
-import { MONITOR_RUN_KEY, type MonitorRun } from "../monitor/monitorRun";
+import type { MonitorRun } from "../monitor/monitorRun";
+import { MONITOR_RUN_KEY } from "../monitor/handoffStore";
 import { elapsedSinceStart } from "./Today";
 import { TODAY_PICK_KEY, todayDateString, type TodayPick } from "./todayPick";
 import { TODAY_OVERRIDES_KEY, type TodayOverrides } from "./todayOverrides";
@@ -3001,7 +3002,7 @@ describe("Today (2b): the interrupted connected session row", () => {
       ),
     ).toBeVisible();
 
-    const { loadMonitorRun } = await import("../monitor/monitorRun");
+    const { loadMonitorRun } = await import("../monitor/handoffStore");
     const stamped = loadMonitorRun();
     expect(stamped?.completedAt).not.toBeNull();
     expect(stamped?.endedBy).toBe("interrupted");
@@ -3167,7 +3168,7 @@ describe("Today (2b): the interrupted connected session row", () => {
 describe("Today (§10 row 9): a memory-only unlogged row, present before reload and honestly gone after", () => {
   it("renders while the durable write stays denied, then a reload sees nothing — receipted at the ORIGINAL commit, not invented at hydration", async () => {
     mockReady();
-    const { handoffStore, setReceiptChannel } =
+    const { commit, setReceiptChannel } =
       await import("../monitor/handoffStore");
     const receipts: unknown[] = [];
     setReceiptChannel((r) => receipts.push(r));
@@ -3181,7 +3182,7 @@ describe("Today (§10 row 9): a memory-only unlogged row, present before reload 
       .mockImplementation(() => {
         throw new Error("simulated quota failure");
       });
-    const result = handoffStore.commit(run.startedAt, null, run);
+    const result = commit(run.startedAt, null, run);
     setItemSpy.mockRestore();
 
     // Fixture sanity: memory accepted it, durable genuinely never landed.
@@ -3972,7 +3973,7 @@ describe("Today (JR): the free row's recovery row", () => {
     // than on its programmed twin above: Log it on an open free row
     // stamps `interrupted` — the documented "closed later with no
     // evidence" value — before it routes.
-    const { loadMonitorRun } = await import("../monitor/monitorRun");
+    const { loadMonitorRun } = await import("../monitor/handoffStore");
     const stamped = loadMonitorRun();
     expect(stamped?.completedAt).not.toBeNull();
     expect(stamped?.endedBy).toBe("interrupted");

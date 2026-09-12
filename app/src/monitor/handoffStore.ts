@@ -61,12 +61,8 @@
 // tests (which call a non-render method first).
 
 import type { ConnectionAttemptId } from "../../domain/monitor/types.js";
-import {
-  MONITOR_RUN_KEY,
-  isMonitorRun,
-  stripMalformedSeries,
-  type MonitorRun,
-} from "./monitorRun.js";
+import type { MonitorRun } from "./monitorRun.js";
+import { loadRun } from "../session/run";
 import { isPlainRecord } from "../isPlainRecord";
 
 /** The store's one entry shape (§1): "{ sessionKey, revision, run }" —
@@ -285,6 +281,138 @@ function safeRemoveItem(
   key: string,
 ): { ok: true; value: void } | { ok: false } {
   return safeStorageOp(() => localStorage.removeItem(key));
+}
+
+// ---------------------------------------------------------------------
+// The durable record's validators and its raw read (Phase MD PR 1: moved
+// here from `monitorRun.ts` so the module that WRITES the key is the one
+// that says what a valid record is; the builders over there have no
+// storage call left). Every doc comment below travelled with its function.
+// ---------------------------------------------------------------------
+
+export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
+
+/** True when `value.series` is either absent or shaped enough to trust — a
+ *  plain record carrying a `samples` array, never a per-sample domain
+ *  validation. Shared by `stripMalformedSeries` and `isMonitorRun` so the
+ *  pre-pass and the validator cannot drift apart. */
+function hasValidSeries(value: Record<string, unknown>): boolean {
+  const series = value.series;
+  return (
+    series === undefined ||
+    (isPlainRecord(series) && Array.isArray(series.samples))
+  );
+}
+
+/** A malformed `series` used to discard the WHOLE record through
+ *  `isMonitorRun`'s all-or-nothing conjunction — the inverse of §3's own
+ *  sacrifice principle ("only the trace is ever sacrificed, never the
+ *  run"), applied at LOAD time instead of SAVE time. `parseDurableRun`
+ *  runs this FIRST: a `series` that fails `hasValidSeries` is dropped from
+ *  the value before `isMonitorRun` ever sees it, so every other field still
+ *  loads. Returns the SAME reference when `series` is already valid or
+ *  absent. Strips the RETURNED candidate only — the stored bytes stay as
+ *  they are until the next landed `performDurableWrite` replaces them. */
+function stripMalformedSeries(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  if (hasValidSeries(value)) return value;
+  const { series: _series, ...withoutSeries } = value;
+  return withoutSeries;
+}
+
+function isMonitorRun(value: unknown): value is MonitorRun {
+  if (!isPlainRecord(value)) return false;
+  const program = value.program;
+  // `logSeed` (7C, v2): same shallow treatment as `program` above — a v1
+  // record simply omits it (undefined is fine, `loadMonitorRun`'s own
+  // "no throw, no migration" contract), and when present it only has to be
+  // shaped enough not to crash a reader that unconditionally destructures
+  // `steps`/`paces` — never a deep per-step validation.
+  const logSeed = value.logSeed;
+  return (
+    (value.v === 1 || value.v === 2) &&
+    (value.workoutId === null || typeof value.workoutId === "string") &&
+    typeof value.title === "string" &&
+    isPlainRecord(program) &&
+    Array.isArray(program.intervals) &&
+    Array.isArray(value.actuals) &&
+    typeof value.deviceName === "string" &&
+    typeof value.startedAt === "string" &&
+    (value.completedAt === null || typeof value.completedAt === "string") &&
+    typeof value.terminated === "boolean" &&
+    // Phase JR PR 1 (review of 29e00561): `mode` is a KNOWN field, so it is
+    // validated like every other one. Declaring `mode?: "justrow"` and then
+    // never checking it let `mode: "corrupt"` load as a valid record, which
+    // is a different thing from the unknown-key tolerance this validator
+    // deliberately keeps — that tolerance is about fields this build has
+    // never heard of, not about a field it declares and then trusts.
+    (value.mode === undefined || value.mode === "justrow") &&
+    // Phase LL Task 4, widened again by Wave F PR 1 (spec §1): a record
+    // written by ANY era's writer (a legacy `"interrupted"` row, or one of
+    // the five new `CloseReason` values) still loads. Shallow membership
+    // check only, same discipline as every other field this validator
+    // covers: "shaped enough not to crash a reader that unconditionally
+    // destructures `endedBy`," never a claim about which specific writer
+    // produced it.
+    (value.endedBy === undefined ||
+      value.endedBy === "finished" ||
+      value.endedBy === "rower" ||
+      value.endedBy === "link-lost" ||
+      value.endedBy === "program-failed" ||
+      value.endedBy === "program-dropped" ||
+      value.endedBy === "interrupted") &&
+    // Phase LT spec 2, Task 2: same shallow "shaped enough not to crash an
+    // unconditional destructure" treatment as `logSeed` above. No
+    // unknown-key check anywhere in this validator (the `endedBy?`
+    // precedent this comment's own header cites) — this positive
+    // conjunction tolerates the new fields on records this task's own
+    // code never wrote, same as any other additive field ever has.
+    hasValidSeries(value) &&
+    (value.seriesDropped === undefined || value.seriesDropped === true) &&
+    (logSeed === undefined ||
+      (isPlainRecord(logSeed) &&
+        Array.isArray(logSeed.steps) &&
+        isPlainRecord(logSeed.paces)))
+  );
+}
+
+/** JSON → stripped → validated, or null. The ONE parse both readers share:
+ *  `ensureHydrated` (which additionally records the malformed state and
+ *  receipts it) and `loadMonitorRun` (which does neither — a raw read). */
+function parseDurableRun(raw: string): MonitorRun | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const candidate = isPlainRecord(parsed)
+    ? stripMalformedSeries(parsed)
+    : parsed;
+  return isMonitorRun(candidate) ? candidate : null;
+}
+
+/** The raw durable read — `Today.tsx`'s cold-start guard needs a
+ *  synchronous, un-hydrated, always-fresh read of the BYTES (its pin,
+ *  `todayGuard.pin.test.ts`, says why), so this never consults `current`
+ *  and never triggers hydration. Garbage, an unknown shape, or a denied
+ *  getter all read as `null` (the denied getter is receipted); NOTHING is
+ *  cleared on any path (§8). The
+ *  full history of why the read destroys nothing lives in `Today.tsx`'s
+ *  guard comment and the hand-off design spec §8. */
+export function loadMonitorRun(): MonitorRun | null {
+  const raw = safeGetItem(MONITOR_RUN_KEY);
+  if (!raw.ok) {
+    // Denied, not absent — receipted the way hydration receipts the same
+    // failure, so a guard that then discards a draft leaves a record of
+    // WHY it saw nothing (RF25: the owner of "what does Today do when the
+    // origin denies storage" is the receipt channel, not this reader).
+    emit({ kind: "storage-getter-error", operation: "get" });
+    return null;
+  }
+  if (raw.value === null) return null;
+  return parseDurableRun(raw.value);
 }
 
 // ---------------------------------------------------------------------
@@ -518,19 +646,8 @@ function ensureHydrated(): void {
   }
   if (raw.value === null) return;
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw.value);
-  } catch {
-    durableMalformed = true;
-    emit(malformedReceipt(raw.value));
-    return;
-  }
-
-  const candidate = isPlainRecord(parsed)
-    ? stripMalformedSeries(parsed)
-    : parsed;
-  if (!isMonitorRun(candidate)) {
+  const candidate = parseDurableRun(raw.value);
+  if (candidate === null) {
     durableMalformed = true;
     emit(malformedReceipt(raw.value));
     return;
@@ -1019,26 +1136,134 @@ export function resetForTests(): void {
   setReceiptChannel(null);
 }
 
-/** The store's own name, per the plan's Global Constraints ("Names
- *  verbatim from the spec: `handoffStore` ..."). A plain object of the
- *  module's exported functions — this module has exactly one instance per
- *  process by design (§1's module-level state), so this is a namespacing
- *  convenience for call sites, not a second construction path; every
- *  function above is equally reachable by its own named export (this
- *  file's tests use the named exports directly, matching the rest of this
- *  codebase's `import { fn } from "./module"` convention). */
-export const handoffStore = {
-  commit,
-  retryDurable,
-  read,
-  hydrate,
-  currentUnretired,
-  retire,
-  claim,
-  durableState,
-  cachedVerdict,
-  stageRetire,
-  takeStagedRetire,
-  discardStagedRetire,
-  stagedRetireAttemptId,
-};
+/** What a Connect press has to warn about before it is allowed through, or
+ *  `null` when nothing is at risk. Shares its shape with `WorkoutDetail`'s
+ *  own `replaceStage` union (`session/useStartWorkout.ts`'s
+ *  `StartReplaceStage`), and — as of the close-out's queue item 3 — the two
+ *  doors now fully AGREE on when `"in-progress"` applies: a `SessionRun`
+ *  (a phone timer genuinely running in the background) stages it while
+ *  live, on both doors; a `MonitorRun` never does, on either door, because
+ *  any `MonitorRun` either door can see is always dead (F6 spec 2b, exit
+ *  criterion 5 — see `connectGuardStage`'s own doc comment below). HISTORY:
+ *  Start's door used to branch its `MonitorRun` case on `completedAt` too,
+ *  staging `"in-progress"` for a live-looking record — the close-out's
+ *  queue item 3 shed that, on the identical reasoning this function's own
+ *  comment already gives for the Connect door. NOT the same way its
+ *  `SessionRun` case still does, though: at the Start door, the
+ *  `SessionRun` branch only ever distinguishes completed ("unlogged") from
+ *  everything else, never `"in-progress"` — that door's own
+ *  `"in-progress"` for a genuinely live phone-timer session is produced by
+ *  a DIFFERENT branch entirely, the started-but-unfinished `SessionDraft`
+ *  check (`session/useStartWorkout.ts`'s `handleStart`, `startedAt !==
+ *  null`). Only THIS function's own `SessionRun` check (below) branches on
+ *  live-vs-finished to produce `"in-progress"` directly. */
+export type ConnectGuardStage = "unlogged" | "in-progress" | null;
+
+/**
+ * The Connect guard (7B, spec §3 — "the F5 walk, closed"). Answers "would
+ * connecting a monitor right now destroy something the rower still needs?"
+ * by reading the `SessionRun` record DIRECTLY, which is the whole point of
+ * this function existing separately from the deleted `anyLiveSession()`
+ * (see the anti-pattern note below).
+ *
+ * ROADMAP M-1, verbatim, because routing this through the function above is
+ * the exact mistake it was written to prevent:
+ *
+ * > **Guard wiring is NOT uniform (final-review M-1 — read before touching
+ * > any guard that reads `RUN_KEY`/`MONITOR_RUN_KEY`).** ... Routing either
+ * > through `anyLiveSession()` silently downgrades "unlogged" to "none" and
+ * > reintroduces the F5 data-loss class (a real, previously-shipped bug: a
+ * > stale run record silently discarded instead of protected). When adding
+ * > a NEW guard, ask "does this care about unlogged specifically, or just
+ * > live-vs-not" before picking which of the two patterns to follow.
+ *
+ * For Connect the answer is **YES, it cares about unlogged specifically**:
+ * the action behind it is `createMonitorRun` above, whose `clearRun()` is
+ * unconditional, and a finished-but-unlogged `SessionRun` is precisely the
+ * record 6B's F5 fix exists to protect — `anyLiveSession()`'s own pinned
+ * table returns `"none"` for it (rows 7 and 9), so a Connect guard wired
+ * that way would walk straight past the one case it is FOR. This is the
+ * same direct-read pattern `Today.tsx`'s cold-start guard already uses, and
+ * for the same reason its own comment gives.
+ *
+ * A LIVE `SessionRun` (`completedAt === null`) is staged too, with the
+ * "in progress" sentence rather than the "unlogged" one: `clearRun()`
+ * destroys that record just as completely, and the spec's own constraint is
+ * that **no silent destruction path exists in either direction**. It is a
+ * lesser loss than the unlogged case (an abandoned session was never going
+ * to be logged), which is why the two get different copy — the identical
+ * severity ordering, and the identical pair of sentences, that
+ * `WorkoutDetail`'s `handleStart` already applies at the other door.
+ *
+ * **This guard covers the `MonitorRun` side too, not just the
+ * `SessionRun`.** Everything downstream of a Connect press now destroys
+ * that record through the store rather than raw storage —
+ * `WorkoutDetail.handleRowInstead` retires whatever it finds (key-bound),
+ * and the create-commit at `useMonitorSession`'s "ready" branch retires the
+ * staged key before opening a new one — but a retire is still a
+ * destruction, so a rower must be ASKED first. A
+ * finished-but-unlogged `MonitorRun` is 7C's entire prefill input — exactly
+ * the same class of record the `SessionRun` check above exists to protect,
+ * on the OTHER side of the coexistence line. `WorkoutDetail.handleStart`
+ * has read both records since Task 2 (ROADMAP M-1's own two-record
+ * widening); this function reading only one was Task 2's original scope
+ * (`ConnectAction` shipped unmounted, so the `MonitorRun` side was
+ * unreachable through it) and became a live F5-class hole the instant Task
+ * 5 mounted the button. Same descending-severity order `handleStart`
+ * already uses: the `SessionRun` check runs first (unchanged), then the
+ * `MonitorRun` check — so a rower with BOTH records stale gets staged
+ * exactly ONCE, not twice, and the `SessionRun`'s own sentence wins ties
+ * the same way `handleStart`'s ordering already resolves them. No new copy:
+ * both sentences already exist and are shared with the `SessionRun` case
+ * above.
+ *
+ * **F6 spec 2b, Task 2 — the `MonitorRun` check no longer branches on
+ * `completedAt`.** It used to mirror the `SessionRun` check above,
+ * staging `"in-progress"` for a `completedAt === null` record on the
+ * theory that the erg was mid-piece. That theory was never true at this
+ * door: a connected session's own screen is WorkoutDetail, and both a
+ * reload and a navigation away tear the `useMonitorSession` hook down
+ * without ever touching the record — so any `MonitorRun` still visible
+ * here, live-looking or not, is a run nothing is driving anymore. Exit
+ * criterion 5 names the defect this produced ("Connect never again asks
+ * 'Replace it?' about a dead run"): every `MonitorRun` this function can
+ * see now stages `"unlogged"`, matching the finished case it already used
+ * to reach. The `SessionRun` branch above is untouched — a phone timer
+ * genuinely does keep running in the background across reload/navigation,
+ * so `"in-progress"` stays true there.
+ *
+ * **The anti-pattern this guard exists to avoid — formerly
+ * `anyLiveSession()`, deleted in Phase MD PR 1 (James's ruling, spec §7).**
+ * That helper collapsed both records to a live/not-live answer and so
+ * returned `"none"` for a finished-but-unlogged record — the exact record
+ * F5 destroyed (ROADMAP M-1, quoted above). Its nine-cell truth table and
+ * twelve tests died with it. The rule it was the counter-example for
+ * stands: a guard that protects an unlogged record reads that record
+ * DIRECTLY and asks about unlogged specifically. `Today.tsx`'s cold-start
+ * guard (`todayGuard.pin.test.ts`) and this function are the two live
+ * examples.
+ *
+ * **Phase MD PR 1: this function reads the store itself.** It lives in the
+ * store now, so the boolean its callers used to compute for it — because
+ * the reverse import was circular — is gone. Sold honestly: both callers
+ * (`ConnectAction.tsx`'s `handleEntry`, `JustRow.tsx`'s `handleStart`)
+ * still call `currentUnretired()` themselves for `setUnsavedCount`, so the
+ * count the rower sees and the decision to stage come from two reads of
+ * the same in-memory entry rather than one. That is consistent with the
+ * existing double read of `loadRun()` here and in those callers, not a
+ * simplification.
+ */
+export function connectGuardStage(): ConnectGuardStage {
+  const run = loadRun();
+  if (run !== null) {
+    return run.completedAt === null ? "in-progress" : "unlogged";
+  }
+  if (currentUnretired() !== null) {
+    // A MonitorRun visible at a Connect door is dead: the connected
+    // session lives on WorkoutDetail's surface and reload/navigation
+    // tears it down. "In progress" would assert machine state we do
+    // not have (spec 2b, exit criterion 5).
+    return "unlogged";
+  }
+  return null;
+}

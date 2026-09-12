@@ -142,7 +142,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index.js";
 import type { WorkoutType } from "../../domain/types.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
-import { loadMonitorRun, type MonitorRun } from "./monitorRun";
+import type { MonitorRun } from "./monitorRun";
+import { loadMonitorRun } from "./handoffStore";
 import { BURST_HANDOFF_HOLD_MS } from "./useMonitorSession";
 import type { MonitorSession, RunIdentity } from "./useMonitorSession";
 import {

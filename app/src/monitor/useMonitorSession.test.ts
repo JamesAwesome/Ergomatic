@@ -41,7 +41,8 @@ import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
 import { releasingSchedule } from "../test/statusSubscriptions";
-import { loadMonitorRun, MONITOR_RUN_KEY, type MonitorRun } from "./monitorRun";
+import type { MonitorRun } from "./monitorRun";
+import { loadMonitorRun, MONITOR_RUN_KEY } from "./handoffStore";
 import { loadLastDevice, saveLastDevice } from "./lastDevice";
 import {
   resetForTests as resetHandoffStore,

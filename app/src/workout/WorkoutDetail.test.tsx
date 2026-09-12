@@ -19,7 +19,8 @@ import {
 } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
-import { loadMonitorRun, type MonitorRun } from "../monitor/monitorRun";
+import type { MonitorRun } from "../monitor/monitorRun";
+import { loadMonitorRun } from "../monitor/handoffStore";
 import { seedMonitorRun } from "../test/seedHandoff";
 import { compileProgram } from "../../domain/monitor/program.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";

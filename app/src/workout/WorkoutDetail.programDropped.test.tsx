@@ -62,7 +62,7 @@ import type { LibraryWorkout } from "../api/useWorkouts";
 import type { api } from "../api";
 import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
-import { MONITOR_RUN_KEY } from "../monitor/monitorRun";
+import { MONITOR_RUN_KEY } from "../monitor/handoffStore";
 import {
   createFakeTransport,
   type FakeTimelineEvent,

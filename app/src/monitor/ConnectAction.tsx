@@ -6,11 +6,12 @@ import type { NfcCapability } from "../adapters/nfcReader";
 import { loadRun } from "../session/run";
 import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
 import { mintAttemptId } from "./nfc/attemptIdMint";
-import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
 import {
   currentUnretired as currentUnretiredHandoff,
   discardStagedRetire as discardStagedRetireHandoff,
   stageRetire as stageRetireHandoff,
+  connectGuardStage,
+  type ConnectGuardStage,
 } from "./handoffStore";
 
 /**
@@ -204,7 +205,7 @@ export default function ConnectAction({
         Number(monitorEntry !== null),
     );
     stageRetireHandoff(monitorEntry, attemptId);
-    const staged = connectGuardStage(monitorEntry !== null);
+    const staged = connectGuardStage();
     if (staged !== null) {
       setPending({ kind, attemptId });
       setStage(staged);

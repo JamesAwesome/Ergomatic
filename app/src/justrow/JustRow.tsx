@@ -9,11 +9,9 @@ import type { ConnectionAttemptTrace } from "../monitor/nfc/connectionAttemptTra
 import { useNfcEntry } from "../monitor/nfc/useNfcEntry";
 import {
   connectGuardStage,
-  type ConnectGuardStage,
-} from "../monitor/monitorRun";
-import {
   currentUnretired as currentUnretiredHandoff,
   retire as retireHandoff,
+  type ConnectGuardStage,
 } from "../monitor/handoffStore";
 import { buildFreeRowRun } from "../session/engine";
 import { loadRun, saveRun } from "../session/run";
@@ -658,7 +656,7 @@ function StartTimerAction() {
       Number(run !== null && run.completedAt !== null) +
         Number(monitor !== null),
     );
-    const staged = connectGuardStage(monitor !== null);
+    const staged = connectGuardStage();
     if (staged !== null) {
       setStage(staged);
       return;

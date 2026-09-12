@@ -10,10 +10,11 @@ import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { saveRun, loadRun, type SessionRun } from "../session/run";
-import { createMonitorRun, loadMonitorRun } from "./monitorRun";
+import { createMonitorRun } from "./monitorRun";
 import {
   commit as commitHandoff,
   currentUnretired as currentUnretiredHandoff,
+  loadMonitorRun,
   resetForTests as resetHandoffStoreForTests,
   setReceiptChannel,
   stageRetire as stageRetireHandoffForTest,

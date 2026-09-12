@@ -1,9 +1,11 @@
 import type { MonitorRun } from "../monitor/monitorRun";
-
-export interface SeededRef {
-  readonly sessionKey: string;
-  readonly revision: number;
-}
+// The store's own ref type, not a second spelling of it (Phase MD PR 1,
+// harden lens 2): a local `{ sessionKey; revision }` interface here would
+// drift from `HandoffRef` the moment the store's changed. A type-only
+// import, so it does not pull the store's module instance in ahead of the
+// dynamic import below — the reason that import is dynamic does not apply
+// to types, which are erased.
+import type { HandoffRef } from "../monitor/handoffStore";
 
 function refuse(reason: string, run: MonitorRun): never {
   throw new Error(
@@ -20,7 +22,7 @@ function refuse(reason: string, run: MonitorRun): never {
  *  Dynamic import on purpose — a file that calls `vi.resetModules()` per
  *  test must seed the store instance the screen will import NEXT, not one
  *  this module cached at load. Use this form by default. */
-export async function seedMonitorRun(run: MonitorRun): Promise<SeededRef> {
+export async function seedMonitorRun(run: MonitorRun): Promise<HandoffRef> {
   const store = await import("../monitor/handoffStore");
   const result = store.commit(run.startedAt, null, run);
   if (!result.accepted) refuse(result.reason, run);

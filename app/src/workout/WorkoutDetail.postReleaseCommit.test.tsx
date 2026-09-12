@@ -196,9 +196,10 @@ import type { LibraryWorkout } from "../api/useWorkouts";
 import type { api } from "../api";
 import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
-import { MONITOR_RUN_KEY, type MonitorRun } from "../monitor/monitorRun";
+import type { MonitorRun } from "../monitor/monitorRun";
 import {
   currentUnretired,
+  MONITOR_RUN_KEY,
   resetForTests as resetHandoffStore,
 } from "../monitor/handoffStore";
 import { BURST_HANDOFF_HOLD_MS } from "../monitor/useMonitorSession";

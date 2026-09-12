@@ -17,7 +17,8 @@ import type { IntervalActual } from "../domain/monitor/types.js";
 import { buildDraft, startDraft } from "../src/session/draft";
 import { advance, buildRun } from "../src/session/engine";
 import { buildLogSeed } from "../src/session/logDraft";
-import { MONITOR_RUN_KEY, type MonitorRun } from "../src/monitor/monitorRun";
+import type { MonitorRun } from "../src/monitor/monitorRun";
+import { MONITOR_RUN_KEY } from "../src/monitor/handoffStore";
 import { RUN_KEY, type SessionRun } from "../src/session/run";
 
 /** Deletes a signed-in user's own (non-global) workout by title, so a

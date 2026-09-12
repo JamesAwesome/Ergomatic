@@ -66,7 +66,8 @@ import {
   END_OF_WORKOUT_SUMMARY_UUID,
   LOGGED_WORKOUT_UUID,
 } from "../../domain/monitor/pm5/uuids.js";
-import { loadMonitorRun, type MonitorRun } from "./monitorRun";
+import type { MonitorRun } from "./monitorRun";
+import { loadMonitorRun } from "./handoffStore";
 import type { RunIdentity } from "./useMonitorSession";
 import {
   parseRecording,

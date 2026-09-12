@@ -42,9 +42,9 @@ import type { Baselines, Step, WorkoutType } from "../../domain/types.js";
 import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { clearDraft, loadDraft } from "../session/draft";
 import { loadRun, type SessionRun } from "../session/run";
-import { loadMonitorRun } from "../monitor/monitorRun";
 import {
   hydrate as hydrateHandoff,
+  loadMonitorRun,
   read as readHandoff,
   type HandoffEntry,
 } from "../monitor/handoffStore";

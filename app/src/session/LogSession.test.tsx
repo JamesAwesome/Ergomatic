@@ -34,13 +34,8 @@ import { buildRun } from "./engine";
 import { buildLogSeed, buildLogSteps, formatLogDate } from "./logDraft";
 import { loadRun, RUN_KEY, saveRun, type SessionRun } from "./run";
 import { buildSummaryModel } from "./summaryModel";
-import {
-  connectGuardStage,
-  loadMonitorRun,
-  MONITOR_RUN_KEY,
-  type MachineSummaryDetail,
-  type MonitorRun,
-} from "../monitor/monitorRun";
+import type { MachineSummaryDetail, MonitorRun } from "../monitor/monitorRun";
+import { loadMonitorRun, MONITOR_RUN_KEY } from "../monitor/handoffStore";
 import { seedMonitorRun } from "../test/seedHandoff";
 import type { SeriesData } from "../monitor/seriesRecorder";
 import type { MonitorLogEntry } from "../monitor/eventLog";
@@ -5197,7 +5192,14 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
     // exercising the monitor branch.
     expect(screen.getByText("BY FEEL")).toBeInTheDocument();
     expect(loadMonitorRun()).not.toBeNull();
-    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
+    // Phase MD PR 1: `connectGuardStage` reads the STORE now, not the
+    // durable bytes, so it has to be called on the same module instance the
+    // screen used — this file's `beforeEach` resets modules, and a
+    // statically-imported copy would hydrate a second instance from the
+    // bytes and then never see the discard's retire (it read green before
+    // the discard and stayed "unlogged" after it).
+    const { connectGuardStage } = await import("../monitor/handoffStore");
+    expect(connectGuardStage()).toBe("unlogged");
 
     await userEvent.click(
       screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
@@ -5210,7 +5212,7 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
       await screen.findByText("WORKOUT DETAIL SCREEN"),
     ).toBeInTheDocument();
     expect(loadMonitorRun()).toBeNull();
-    expect(connectGuardStage(loadMonitorRun() !== null)).toBeNull();
+    expect(connectGuardStage()).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -6367,12 +6369,12 @@ describe("LogSession: the claim race — R0 render, R1 committed during the old 
       ...r0,
       summaryTotals: { workElapsedSeconds: 9999, workDistanceMeters: 99999 },
     };
-    const { handoffStore, setReceiptChannel } =
+    const { commit, read, setReceiptChannel } =
       await import("../monitor/handoffStore");
     const receipts: unknown[] = [];
     setReceiptChannel((r) => receipts.push(r));
     const commitR1 = () => {
-      const result = handoffStore.commit(r0.startedAt, 0, r1);
+      const result = commit(r0.startedAt, 0, r1);
       // Fixture sanity: R1 must actually land (revision 0 -> 1) for this
       // test to mean anything — a silently-refused R1 would make every
       // assertion below trivially true for the wrong reason.
@@ -6385,8 +6387,8 @@ describe("LogSession: the claim race — R0 render, R1 committed during the old 
 
     // R1 genuinely landed — the store's own current entry is richer than
     // what the screen rendered from.
-    expect(handoffStore.read()?.revision).toBe(1);
-    expect(handoffStore.read()?.run.summaryTotals).toBeDefined();
+    expect(read()?.revision).toBe(1);
+    expect(read()?.run.summaryTotals).toBeDefined();
 
     await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
@@ -6460,17 +6462,17 @@ describe("LogSession: the door leg — Discard tombstones the key, so a late pro
     // discard that already fired for the identical key/revision — exactly
     // Task 3's I1 shape ("a burst landing in the linger AFTER a rower has
     // already Saved or Discarded").
-    const { handoffStore } = await import("../monitor/handoffStore");
+    const { commit, read } = await import("../monitor/handoffStore");
     const lateBurst = {
       ...run,
       summaryTotals: { workElapsedSeconds: 1, workDistanceMeters: 1 },
     };
-    const result = handoffStore.commit(run.startedAt, 0, lateBurst);
+    const result = commit(run.startedAt, 0, lateBurst);
 
     expect(result).toStrictEqual({ accepted: false, reason: "retired" });
     // No resurrection: neither tier shows the late burst's record.
     expect(loadMonitorRun()).toBeNull();
-    expect(handoffStore.read()).toBeNull();
+    expect(read()).toBeNull();
   });
 });
 
@@ -6486,8 +6488,13 @@ describe("LogSession: the abandon path — claim survives unmount, counted at th
     mockWorkouts([workout]);
     mockBaselines();
 
-    const { handoffStore, setReceiptChannel } =
-      await import("../monitor/handoffStore");
+    const {
+      read,
+      retire,
+      setReceiptChannel,
+      stagedRetireAttemptId,
+      takeStagedRetire,
+    } = await import("../monitor/handoffStore");
     const receipts: unknown[] = [];
     setReceiptChannel((r) => receipts.push(r));
 
@@ -6505,7 +6512,7 @@ describe("LogSession: the abandon path — claim survives unmount, counted at th
     // Abandon: the rower leaves (Back press / unmount) without Save or
     // Discard — no retire fires from this component at all.
     unmount();
-    expect(handoffStore.read()?.sessionKey).toBe(run.startedAt);
+    expect(read()?.sessionKey).toBe(run.startedAt);
 
     // "Next acceptance": some LATER destructive authorization retires this
     // same, still-claimed key. RE-POINTED (plan Task 5, carried from
@@ -6537,11 +6544,9 @@ describe("LogSession: the abandon path — claim survives unmount, counted at th
     );
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    const staged = handoffStore.takeStagedRetire(
-      handoffStore.stagedRetireAttemptId() ?? "",
-    );
+    const staged = takeStagedRetire(stagedRetireAttemptId() ?? "");
     expect(staged).not.toBeNull();
-    handoffStore.retire(staged!, "connect-guard-armed");
+    retire(staged!, "connect-guard-armed");
 
     const retireReceipt = receipts.find(
       (r) => (r as { kind?: string }).kind === "retire",

@@ -95,7 +95,8 @@ import {
 } from "../session/partialGateFixture";
 import { buildMonitorLogSteps } from "../session/logDraft";
 import { measuredIntervalCount } from "../session/summaryModel";
-import { loadMonitorRun, type MonitorRun } from "./monitorRun";
+import type { MonitorRun } from "./monitorRun";
+import { loadMonitorRun } from "./handoffStore";
 import type { RunIdentity } from "./useMonitorSession";
 import { parseRecording, type ParsedRecording } from "./transports/recording";
 import { createReplayTransport, type ReplayResult } from "./transports/replay";

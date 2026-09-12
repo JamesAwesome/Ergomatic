@@ -82,11 +82,16 @@ describe("Today's cold-start guard is untouched by Phase 7B (spec §3)", () => {
     // does (this guard needs a synchronous, un-hydrated, always-fresh raw
     // read at effect time — see `monitorEntry`'s own doc comment in
     // Today.tsx for why the MOUNT SNAPSHOT reads through the store instead).
+    // Phase MD PR 1, Task 4 (minimal update — Task 6 rewrites this file):
+    // `loadMonitorRun` moved into `handoffStore.ts` with the rest of the
+    // persistence half, so the two import lines above became ONE. What the
+    // pin still asserts is unchanged: this guard reads the durable record
+    // DIRECTLY, through a synchronous, un-hydrated, always-fresh raw read
+    // at effect time — not through the store's `read()` (see
+    // `monitorEntry`'s own doc comment in Today.tsx for why the MOUNT
+    // SNAPSHOT reads through the store instead).
     expect(source).toContain(
-      'import { loadMonitorRun } from "../monitor/monitorRun";',
-    );
-    expect(source).toContain(
-      'import {\n  hydrate as hydrateHandoff,\n  read as readHandoff,\n  type HandoffEntry,\n} from "../monitor/handoffStore";',
+      'import {\n  hydrate as hydrateHandoff,\n  loadMonitorRun,\n  read as readHandoff,\n  type HandoffEntry,\n} from "../monitor/handoffStore";',
     );
     expect(source).not.toMatch(/import\s*\{[^}]*\banyLiveSession\b/);
   });

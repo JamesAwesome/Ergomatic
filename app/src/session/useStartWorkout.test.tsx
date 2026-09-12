@@ -11,9 +11,10 @@ import {
 } from "./draft";
 import { buildFreeRowRun, buildRun } from "./engine";
 import { loadRun, saveRun, type SessionRun } from "./run";
-import { loadMonitorRun, type MonitorRun } from "../monitor/monitorRun";
+import type { MonitorRun } from "../monitor/monitorRun";
 import {
   commit as commitHandoff,
+  loadMonitorRun,
   resetForTests as resetHandoffStoreForTests,
 } from "../monitor/handoffStore";
 import { seedMonitorRun } from "../test/seedHandoff";
