@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 
 beforeEach(() => {
   vi.resetModules();
@@ -66,5 +66,29 @@ describe("useStatsRows", () => {
     if (result.current.state !== "error") throw new Error("expected error");
     result.current.retry();
     await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("retry goes back through loading, then ready with the rows the second request returns", async () => {
+    let calls = 0;
+    const apiMock = vi.fn(async () => {
+      calls += 1;
+      return calls === 1
+        ? new Response("nope", { status: 500 })
+        : new Response(JSON.stringify({ rows: [ROW] }), { status: 200 });
+    });
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { useStatsRows } = await import("./useStatsRows");
+    const { result } = renderHook(() => useStatsRows());
+    await waitFor(() => expect(result.current.state).toBe("error"));
+    const errored = result.current;
+    if (errored.state !== "error") throw new Error("expected error");
+    act(() => errored.retry());
+    // Right after the tap the screen shows LOADING again, not the stale
+    // error (the alert must not survive the tap).
+    expect(result.current.state).toBe("loading");
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    const ready = result.current;
+    if (ready.state !== "ready") throw new Error("expected ready");
+    expect(ready.rows.map((r) => r.id)).toStrictEqual(["r1"]);
   });
 });

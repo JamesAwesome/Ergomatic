@@ -33,7 +33,12 @@ export function useStatsRows(): StatsRowsState {
 
   useEffect(() => {
     let cancelled = false;
-    const retry = () => setGeneration((g) => g + 1);
+    // Retry shows LOADING again at once (the stale alert must not survive
+    // the tap), then refetches under a new generation.
+    const retry = () => {
+      setState({ state: "loading" });
+      setGeneration((g) => g + 1);
+    };
     api("/api/stats/rows")
       .then(async (res) => {
         if (cancelled) return;
