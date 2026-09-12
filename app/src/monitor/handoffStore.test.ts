@@ -1329,7 +1329,7 @@ describe("the single-unretired-session invariant, end to end", () => {
 // (P1-1). Every case below distinguishes the two tiers, so a reader wired
 // to the wrong one fails here rather than at a Connect door.
 describe("loadMonitorRun — the raw durable read the Today guard needs (Phase MD PR 1)", () => {
-  it("reads the DURABLE tier only: after a denied durable write the store still holds the entry, and loadMonitorRun says null", () => {
+  it("reads the DURABLE tier only: after a denied durable write the store still holds the entry, and loadMonitorRun says null (todayGuard.pin.test.ts binds the caller; this binds the callee)", () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("denied");
     });
