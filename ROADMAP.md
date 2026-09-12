@@ -558,7 +558,7 @@ later sweep, and the existence of both of these is undecided. Each opens with
 an investigation whose honest answer may be "no PR".
 
 - [x] **PR 1 — one writer for the stored run (TRIAD: stored shape). LANDED
-      as PR #<n> (2026-09-12): one file, 27 exports (from 35),
+      as PR #408 (2026-09-12): one file, 27 exports (from 35),
       `clearMonitorRun` deleted rather than moved (zero production callers —
       plan, "The export count"), `MONITOR_RUN_KEY` kept exported (13
       files import it by name: 11 tests, 2 e2e specs).** Spec:
@@ -2167,7 +2167,7 @@ fixed.
      forever once the symbol cannot exist (RF21), and whose two byte-exact
      import pins that PR breaks anyway by moving `loadMonitorRun`. The row
      stays here as the evidence; the work lands in that PR. **Landed in Phase
-     MD PR 1 (#<n>, 2026-09-12); proposed for STRIKE at that PR's hand-back.**
+     MD PR 1 (#408, 2026-09-12); proposed for STRIKE at that PR's hand-back.**
   2. **The store's standing probe is row 11's tier-precedence COMPOUND
      mutation**, not the single-line reorder — that one is a genuine non-bite.
      Remove the `if (hydrated) return` re-entrancy guard together with forcing
