@@ -24,6 +24,10 @@
 set -uo pipefail
 
 DOCS_ONLY_RE='^(docs/|\.claude/|\.codex/|\.agents/|[^/]*\.md$)'
+# One file under docs/ is CODE: docs/design/career-stats/seed.mjs is a
+# runtime import of app/domain/stats/gate0Seed.test.ts (Phase PS PR 1), so
+# a change to it must run the code jobs. Checked before the docs regex.
+CODE_UNDER_DOCS_RE='^docs/design/career-stats/seed\.mjs$'
 
 run_everything() {
   echo "ci-changes: $1 — running the code jobs" >&2
@@ -60,6 +64,9 @@ FILES="$(git diff --name-only --no-renames "$MERGE_BASE" "$HEAD" 2> /dev/null)" 
 
 while IFS= read -r file; do
   [ -n "$file" ] || continue
+  if printf '%s\n' "$file" | grep -qE "$CODE_UNDER_DOCS_RE"; then
+    run_everything "$file is code that a unit test imports"
+  fi
   if ! printf '%s\n' "$file" | grep -qE "$DOCS_ONLY_RE"; then
     run_everything "$file is not documentation"
   fi
