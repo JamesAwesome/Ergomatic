@@ -81,6 +81,13 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   symbol the spec NAMES against the shipped tree, and diff the spec's
   revision-history section against the PR body's deviation list.** The body is
   where a deviation gets disclosed; the spec is where it gets believed.
+- **A row whose trigger names a phase has FIRED the day that phase opens.** At
+  every phase-OPEN gate, grep `ROADMAP.md` for the phase's own name and check
+  each hit outside its section: a row reading "opens WITH the You-stats phase"
+  (the Wave E generated-columns row, dateless since 2026-09-07) is not waiting
+  any more, it is overdue, and the opening PR is the campsite that owes it a
+  date. Phase OD measured this exact shape — an ACTIVE trigger the row itself
+  recorded as fired, sitting 20 days.
 
 ## Recommendations that turned out wrong
 

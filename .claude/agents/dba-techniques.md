@@ -38,7 +38,10 @@ every engagement asks. Read whole by the `dba` agent; bounded on purpose
    5. Prepend `BENCH_PRE="set max_parallel_workers_per_gather=0;"` — without
    it the planner gave a 674-byte row two workers and a 16-byte row none, and
    the comparison measured CPU count. Report `work_mem`, `shared_buffers`,
-   `jit` from `pg_settings` beside every table.
+   `jit` from `pg_settings` beside every table. The repo's `bench.sh` prints
+   empty medians when its `echo "\\timing"` reaches psql as a tab — use
+   `printf '%s\n' '\timing on'` (scratchpad `bench2.sh`, 2026-09-12) and end
+   every SQL with `;`.
 5. **Explain it** — `explain.sh <Qname>` or `explain (analyze, buffers)` by
    hand — and attach the plan to the ledger entry, never a paraphrase.
 6. **Size the payload against the real route.** Arm the e2e backdoor:
@@ -113,6 +116,13 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
   below `validateMachineSummary` (`routes/data.ts`) enforces a type.
 - **`machine_summary` never TOASTs** (widest row 1932 B < ~2032 B); at the
   200-step cap Postgres pushes `steps` out of line, not the summary.
+- **(2026-09-12) `steps` crossing PG→Node costs 6.2 µs/row and is the whole
+  cost of a per-row projection** (Node query+parse 779 vs 157 ms without it
+  at 100k rows; psql 726 vs 90 ms). A StatsRow serialises to **224.8 B**
+  (uuid + ISO instant + ten keys); gzip 6.4×, but Express sends uncompressed
+  (no middleware in `app/package.json`). **A full-history read ignores the
+  `(user_id, logged_at desc, id desc)` composite** (planner keeps Bitmap
+  Heap Scan + Sort at 100k; 743 vs 726 ms) — it pays only under `LIMIT`.
 
 ## Where the dated record lives
 

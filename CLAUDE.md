@@ -236,13 +236,17 @@ requirements).
     have, on a monitor whose clock keeps running, and the block we drew
     covers the one number that would have told the rower so. We KNEW the
     wire fact the whole time; nobody asked the product question.
-- **Two standing agents, `product-manager` and `antagonist`
-  (`.claude/agents/`), keep ledgers that are part of the repo.** Both
+- **Three standing agents, `product-manager`, `antagonist` and `dba`
+  (`.claude/agents/`), keep ledgers that are part of the repo.** All three
   append what they learn to their ledger at the end of an engagement; a
   dispatch that skips the ledger update wastes the half of them that
   compounds. **They have fixed trigger points (James, 2026-08-14) — these
-  are gates, not suggestions:**
-  - **Both agents are PHASE-GROUPED with a triad override (James,
+  are gates, not suggestions.** **A PR that adds or removes a standing
+  agent under `.claude/agents/` updates this paragraph in the same commit
+  — an agent the corpus does not name is invisible to every future
+  dispatch** (James, 2026-09-12, Phase PS PR 0, which added `dba` while
+  this bullet still said two).
+  - **All three agents are PHASE-GROUPED with a triad override (James,
     2026-08-16 — replaces the per-spec/per-brief triggers; motivation:
     CR2 ran ~9 antagonist dispatches where ~4-5 carried all the catches,
     and every kill-shot in either ledger lived in four classes: invented
@@ -298,6 +302,19 @@ requirements).
     final gates. Pure-UI, infra, and docs PRs no longer get per-PR PM
     verdicts. Present PM verdicts with the artifact they judge; never
     merge on green CI alone where a PM gate applies.
+  - **`dba`, phase-shaped (added 2026-09-12, Phase PS PR 0):** runs at
+    SPEC (the data path a spec implies and its growth assumptions), at
+    PLAN (measure the prescribed query on seeded data before it is built)
+    and as a GATE on any PR touching `app/server/db`, the stores, or a
+    bulk-read route; everything else SKIPS with the reason said aloud.
+    **The TRIAD's stored-shape member is its full-treatment override** —
+    a migration, a column, a generated column, an index or a changed
+    jsonb key set gets the whole gate beside the PM's. Verdicts are
+    PASS / PASS WITH ROWS / FAIL, every one carrying the measured numbers
+    (bytes, milliseconds, the `EXPLAIN` plan, the scale that decided it)
+    and the commands that produced them; a measurement MEASURES, it never
+    rules — a stored-shape change stays James's call. Proposes to
+    `dba-techniques.md` + `dba-ledger.md`, never writes.
   - **Every installation to James's phone requires explicit permission for
     that installation (James, 2026-09-04).** Readiness for setup, permission to
     continue desk work, PM approval, or a previous install authorization does
@@ -349,7 +366,7 @@ requirements).
     retry or typing budgets require a new PM PASS and James's agreement
     before another session. The hardware-walk skill's rowing budget is
     additional to this total-time gate, not a substitute for it.
-  - **They PROPOSE ledger entries; the controller lands them.** Neither
+  - **They PROPOSE ledger entries; the controller lands them.** No
     agent writes to the repo — its own ledger, a spec, or a plan — in ANY
     checkout. The worktree is not an exception: the rule is about who owns
     the commit, not which directory it lands in. The entry comes back in
@@ -358,10 +375,12 @@ requirements).
     `-techniques.md` it reads whole, and the `-ledger.md` dated record it
     greps; an entry is proposed to BOTH, because one that lands only in the
     record is invisible to the next agent.
-  - **NEITHER AGENT RUNS ON FAST-PATH WORK (James, 2026-08-14).** The
+  - **NONE OF THE THREE RUNS ON FAST-PATH WORK (James, 2026-08-14).** The
     fast path has no spec and no task brief, so the antagonist has
     nothing to attack, and by its own criteria a fast-path change cannot
-    alter what the product does — so there is nothing for a PM to judge.
+    alter what the product does — so there is nothing for a PM to judge,
+    and check 1 (zero files under `app/server/`) leaves the DBA nothing
+    to measure.
     **The PM gate is about FUNCTION, not diff size:** it runs when a
     change alters what the app DOES, what a tester RECEIVES as a
     capability, or the shape and sequence of planned work. It does NOT

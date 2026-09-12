@@ -8,6 +8,83 @@ the history of a table you are about to judge again. Every number here
 carries the command that produced it; a section without commands is not a
 DBA entry.
 
+## 2026-09-12 — Phase PS spec pass, `GET /api/stats/rows` shape and growth
+
+**Verdict: PASS WITH ROWS** (one row; the two Wave E rows do NOT open from
+this route). Scale that ruled: the household — 260 rows/user/yr → the route
+costs <10 ms and 58 KB per fetch for a decade of rowing.
+
+**Environment.** `PostgreSQL 18.4 (Debian 18.4-1.pgdg13+1) aarch64`,
+`docker run --rm -d --name erg-dba-pg -p 5434:5432 -e POSTGRES_PASSWORD=dev
+postgres:18.4`; Apple M5, 10 CPUs, 16 GiB (`sysctl`); stock `shared_buffers`
+128 MB, `work_mem` 4 MB, `jit` on; `set max_parallel_workers_per_gather=0`
+on every timing. Schema: all 31 `app/drizzle/*.sql` via
+`psql -v ON_ERROR_STOP=1` (`\d session_logs` shows `session_logs_user_id_idx`
+only). Seed: the 2026-09-07 research dir's `02-gen.sql` `dba_gen_a`
+retargeted at `session_logs` with 40 real `users` rows, user ranges
+1k / 10k / 100k, filled to 1,000,000 rows (56.5 s; `pg_total_relation_size`
+1412 MB). Medians of 5 after a discarded run (`bench2.sh`, psql `\timing`,
+`\o /dev/null`); Node numbers via `pg` from `app/node_modules` +
+`JSON.stringify` (`payload.mjs`). Prod host CPU/RAM UNTESTED (`docs/deploy.md`
+states neither). Container torn down (`docker ps -a` → 0).
+
+**1. Query shape.** The projection needs 13 scalars (`id, logged_at, source,
+workout_type, ended_by, machine_work_*, work_*, rest_*, distance_meters,
+time_seconds`) + `machine_summary->>'totalCalories'` (a narrow extract,
+~free) + the whole `steps` jsonb, because tier `steps` (Σ `actualMeters`,
+gated on `ended_by`) is decided in Node. `WHERE user_id = $1` uses
+`session_logs_user_id_idx` (Bitmap Index Scan at every scale, `rows=`
+estimate within 3% of actual). `ORDER BY logged_at desc, id desc` sorts in
+memory at 1k (`quicksort Memory: 769kB`, `Buffers: shared read=178`) and
+spills at 100k (`Sort Method: external merge Disk: 73680kB`, width=767) —
+15 ms of the 129 ms execution; not the cost.
+
+| rows/user (1M table) | scalar-only psql | slim (spec's shape) psql | EXPLAIN exec | Node query+parse | map+stringify | payload |
+|---|---|---|---|---|---|---|
+| 1k | 0.80 ms | 6.95 ms | 0.94 ms | 7.4 ms | 0.6 ms | 224,781 B |
+| 10k | 7.9 ms | 72.1 ms | — | 71.8 ms | 5.5 ms | 2.14 MiB |
+| 100k | 89.7 ms | 726 ms | 129 ms | 779 ms | 55 ms | 21.4 MiB |
+
+`steps` crossing PG→Node is the whole cost: 6.2 µs/row (779 − 157 ms ÷ 100k),
+5× the scalar query. Pushing the Σ into SQL (`jsonb_array_elements`) saves
+30% (517 vs 726 ms at 100k) but splits the tier rule across SQL and
+`rowContribution` — not recommended, measured so nobody has to guess.
+`select *` is 893 ms.
+
+**2. Growth and payload.** Rows grow with users × sessions only. Measured
+**224.8 B/row**; the spec's ~150 B INFERENCE was 50% low. At 5/week: 260
+rows/yr → **58 KB**, 2,600 (10 yr) → **585 KB**, 100k → 21.4 MiB. gzip
+would cut 6.4× (38.6 KB at 1k) but no compression middleware exists
+(`grep compression app/package.json` → none; live `Accept-Encoding`
+UNTESTED). Prod count on 2026-08-28: 16 rows. "No pagination in PR 1" is
+defensible: the 10k-row user (38 years at 5/week) costs 78 ms server-side
+and 2.1 MiB. **Trigger: any user > 5,000 rows** — the 1 MiB / ~40 ms line,
+`select user_id, count(*) from session_logs group by 1 having count(*) > 5000`.
+
+**3. Generated columns / composite index — neither reachable from this
+shape.** Created `(user_id, logged_at desc, id desc)` at 1M: 425 ms, 56 MB.
+The planner IGNORED it for the full-history read (743 vs 726 ms — noise)
+because it fetches every row anyway; a composite pays only under `LIMIT`. A
+covering index cannot carry `steps` (`INCLUDE` takes columns; steps is up to
+77 KB), and the heap read is 35 ms of 129 — generated columns only help a
+SERVER roll-up (`SUM ... GROUP BY`), which this spec deliberately does not
+do. Both Wave E rows stay closed.
+
+**4. Deletes.** No hazard. `stores.logs.delete` runs one tx (`FOR UPDATE` on
+`plan_state`, then DELETE; `test_history.session_log_id ON DELETE SET NULL`,
+`schema.ts:534`). Both stats reads are plain SELECTs (ACCESS SHARE) on
+separate pool connections at READ COMMITTED; a delete landing between them
+leaves the rows fetch without the row and the trend with its point — exactly
+§14 ruling 4's steady state. INFERENCE on invisibility; PRIMARY on the schema
+and store.
+
+**5. Correctness.** The seed produced 0 `stored`-tier rows (70% machine /
+30% steps); PR 1's fixture must include pre-RC-5 fused rows so the
+`k ROWS PREDATE` count can go red.
+
+**Not measured:** prod host; gzip on the live route; a 1M-row single user
+(1M table, 100k user is the ceiling measured).
+
 ## 2026-09-07 — Phase LP §2.2, jsonb keys vs four columns on `session_logs.machine_summary` (seed entry, transcribed)
 
 Transcribed from `docs/superpowers/research/2026-09-07-machine-summary-jsonb-vs-columns.md`
