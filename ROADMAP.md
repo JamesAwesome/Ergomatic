@@ -2070,24 +2070,19 @@ fixed.
   written out here rather than cited**, because that round's report lives
   under git-excluded `.superpowers/` and a citation into it is unreachable to
   anyone but the session that wrote it (RF16's corollary).
-- **The library seed mints fresh UUIDs on every fresh database, and five
-  captures render one.** `server/seed/seed.ts:79` (`seedGlobalLibrary`)
-  inserts without ids, so `defaultRandom()` re-rolls them on every
-  `pnpm screenshots` boot now that the boot is fresh, and
-  `recovery-read-only-*` (5 files) renders `"workoutId": "<uuid>"` inside a
-  diagnostic JSON blob — 3083 changed px per run, permanent by construction.
-  Introduced by `1d35a704`; the antagonist's verdict is that this is
-  structural, not accept-with-a-row. **The fix is deterministic seed ids
-  (uuidv5 from title)**, which is a real improvement independent of
-  screenshots — seeded rows would have stable identity across every
-  environment — but it reaches `server/seed/` and a stored identity, so it
-  is its own PR with its own gate, not a rider. **What would fix it now and
-  why not:** the uuidv5 change is ~S but touches how every deployed
-  environment's library rows are keyed on next boot; that wants a read of
-  `seedGlobalLibrary`'s upsert path first, not a rider on a docs PR.
-  · dies 2026-10-12 · filed rather than fixed because it changes stored
-  identity and the commit-narrowly rule makes five churning diagnostic
-  captures cost nothing until then.
+- **DONE — the library seed mints deterministic ids (rides the
+  deterministic-seed-ids PR, spec
+  `docs/superpowers/specs/2026-09-12-deterministic-seed-ids-design.md`).**
+  Filed 2026-09-10 as "five captures render a fresh UUID"; the property
+  turned out to be the point, not the symptom. A fresh database now seeds
+  the same 302 `(title, id)` pairs as every other — UUIDv5 from the title
+  under a fixed namespace, applied only on the seed's INSERT branch, so
+  production's existing rows keep their ids and nothing migrates. Five
+  gates, each with a biting mutation; the antagonist pass found the
+  uniqueness gate was over the wrong array (302, not 300) and that a
+  duplicate title now fails boot instead of dropping silently — both
+  written into the spec. The six `recovery-read-only-*` captures were
+  recaptured once in that PR and stop churning.
 - **`src/monitor/useMonitorSession.test.ts` — a pre-existing flake**
   (`listSessionLogs()` expected length 1, got 2: an extra session-log ring
   entry, RF27's own territory) fired once during PR1.75b's coverage runs,
