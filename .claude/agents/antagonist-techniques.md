@@ -162,6 +162,17 @@ toolkit, not a history.
 10. **Diff provenance tags across peer artifacts**, not just values. Confidence
     is what gets inherited downstream, and it inflates at every hop.
 
+11. **A source-text count assertion counts the comments too.** `split("foo(")`
+    over a `?raw` import sees every backticked `foo()` in a doc comment. Strip
+    comments (or exclude backtick-preceded mentions) and RUN the count before
+    writing the expected value — a plan that predicts the post-strip number
+    while prescribing the raw form is telling you which one it reasoned about.
+12. **When a signature narrows a collection to one element, grep the TESTS for
+    the EMPTY and MULTI forms.** Production may only ever pass one; a test is
+    where the degenerate case lives, and four `retire([], …)` calls were the
+    only gate on a sweep the code's own comment calls "previously permanently
+    unreachable".
+
 ## Things attacked and found sound
 
 - The single-writer discipline on the run record, and its refusal to be

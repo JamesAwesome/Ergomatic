@@ -6,6 +6,52 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## Phase MD PR 1 delta pass, 2026-09-12 (the implementation plan — /harden lens 1)
+
+- **"`expect(source.split("loadMonitorRun(")).toHaveLength(2)` pins one raw
+  read in `Today.tsx`."** False: the assertion is RED against the file it was
+  written for. `grep -o 'loadMonitorRun(' src/today/Today.tsx | wc -l` → 4;
+  three are `` `loadMonitorRun()` `` inside `//` comments, and the PR's own
+  tasks keep all three. **Technique: a source-text COUNT over a `?raw` import
+  counts comments — strip them first (the repo's own `stripComments` in
+  `handoffStoreBoundary.test.ts`) or exclude backtick-preceded mentions, and
+  run the count before writing the expected value.** The tell: the plan's two
+  mutation expectations were the post-strip numbers, so the author reasoned
+  about calls and prescribed mentions. (The author's own paste-test found the
+  same defect in parallel and fixed it with the backtick-exclusion regex.)
+
+- **"Rewrite each `retire([…])` test call to the single-entry form."** No
+  target exists for four of them: `handoffStore.test.ts` passes an EMPTY set at
+  four sites inside the two tests that are the only gates on the
+  `durableMalformed` sweep the store's comment calls "previously permanently
+  unreachable". Both improvisations available to an implementer are wrong —
+  widening to `HandoffRef | null` un-closes the interface the task exists to
+  close; deleting them deletes the gate. Portable as
+  `{ sessionKey: "irrelevant-key", revision: 0 }` (the sweep precedes the
+  lookup; a sibling test already uses that form). **Technique: when a
+  signature narrows a collection to one element, grep the TESTS for the empty
+  and multi forms — production's shape is not the interface's shape.**
+
+- **A count the anchor pass itself vetted was wrong, and the plan caught it.**
+  Vetted ground said `RetireReason` was "closable over nine production
+  literals"; reading all 13 arguments individually gives **8**. **Technique:
+  vetted ground is vetted, not proven — a distinct-value count is one `sed -n`
+  away and should be re-run, not inherited.**
+
+- **Attacked and could not break:** the dynamic-import seeding helper
+  (verified against vendored vitest: `resetModules` clears
+  `promise`/`exports`/`evaluated` for every module, so a dynamic import inside
+  a statically-imported helper resolves fresh while its own static binding
+  stays stale); `retire`'s array→entry change (no production caller passes 0
+  or ≥2); `connectGuardStage()` self-reading (both callers hydrate via
+  `currentUnretired()` one statement earlier); the `parseDurableRun` fold (the
+  two hydration branches are verbatim identical); the lifetime table's
+  completeness (10 of 10 stateful bindings) with one cell correction — a
+  failed `safeRemoveItem` leaves bytes a relaunch rehydrates; Task 0's byte
+  gate (`commit`'s first `setItem` IS `performDurableWrite`'s); the 27-export
+  arithmetic; no new cycle via `session/run.ts`; the boundary gate's
+  test-file exemption.
+
 ## Spec-stage pass, 2026-08-15 (Phase CR2 spec 1, "numbers")
 
 - **"A capture-replay test can drive the real driver and exercise an
