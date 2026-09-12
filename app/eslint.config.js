@@ -134,5 +134,32 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Phase PS PR 1 (career-stats spec §4.1): `app/domain/**` is pure Erg
+    // Book logic and may never import `src/**` — nothing enforced it, and
+    // AVG WATTS' formula lived in `src/session/logbookDerived.ts` until
+    // this rule moved it to `domain/logbook.ts`. Mutation: a domain file
+    // importing `../src/platform` makes `pnpm lint` red naming the file.
+    // ONE file is exempt, by name: `domain/monitor/nfc.test.ts` reads its
+    // fixture from `src/monitor/nfc/fixtures` (the rule is red on main
+    // without this line — measured), and moving that fixture is a ROADMAP
+    // row, not this PR's. Every other domain test is under the rule.
+    files: ["domain/**/*.ts"],
+    ignores: ["domain/monitor/nfc.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["../src/*", "../../src/*", "**/src/*", "@/*"],
+              message:
+                "app/domain/** is pure: it never imports src/**. Move the formula into domain/ and re-export it from src/ (career-stats spec §4.1).",
+            },
+          ],
+        },
+      ],
+    },
+  },
   prettierConfig,
 );

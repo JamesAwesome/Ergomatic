@@ -20,21 +20,11 @@
  * `0` is a value. `undefined` means "cannot be derived" and renders as a
  * dash.
  */
-export function logbookWatts(
-  seconds: number,
-  meters: number,
-): number | undefined {
-  if (!(seconds > 0) || !(meters > 0)) return undefined;
-  return Math.round(2.8 / (seconds / meters) ** 3);
-}
-
-export function logbookCalPerHour(
-  calories: number,
-  seconds: number,
-): number | undefined {
-  if (!(seconds > 0)) return undefined;
-  return Math.floor((calories * 3600) / seconds);
-}
+// Phase PS PR 1 (career-stats spec §4.1): both formulas MOVED to
+// `app/domain/logbook.ts` so the domain's AVG WATTS can call them; re-
+// exported here so every existing caller and `logbookDerived.test.ts` are
+// untouched — that test is the gate that the move changed nothing.
+export { logbookCalPerHour, logbookWatts } from "../../domain/logbook.js";
 
 /**
  * The session's stroke rate for the RATE tile (spec §3.2). 0x0039's own
