@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-  PostgreSqlContainer,
-  type StartedPostgreSqlContainer,
-} from "@testcontainers/postgresql";
+import { type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { startPostgres } from "./testing/postgres.js";
 import request from "supertest";
 import type pg from "pg";
 import { createApp } from "./app.js";
@@ -14,7 +12,7 @@ describe("health against real Postgres", () => {
   let pool: pg.Pool;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     pool = createPool(container.getConnectionUri());
   });
 

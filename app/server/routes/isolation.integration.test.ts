@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-  PostgreSqlContainer,
-  type StartedPostgreSqlContainer,
-} from "@testcontainers/postgresql";
+import { type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { startPostgres } from "../testing/postgres.js";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import request from "supertest";
 import type pg from "pg";
@@ -60,7 +58,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
   let app: ReturnType<typeof createApp>;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
     await migrate(db, { migrationsFolder: "drizzle" });
     // Boot-order precondition this whole suite depends on: seed the global
