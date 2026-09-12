@@ -72,10 +72,8 @@ requirements).
 - Local OAuth: `DATABASE_URL=... GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... ALLOWED_EMAILS=you@gmail.com pnpm dev:server`.
   **`SITE_URL` is NOT needed locally** — `server/index.ts:60` already defaults it
   to `http://localhost:5173`, which is the exact redirect URI `docs/deploy.md`
-  tells you to register. This bullet used to say that omitting it makes Google
-  error `redirect_uri_mismatch`; that failure cannot occur, and setting the
-  variable locally is a no-op. Set it only when you genuinely need a different
-  origin.
+  tells you to register. Setting it locally is a no-op. Set it only when you
+  genuinely need a different origin.
 
 ## Rules
 
@@ -130,6 +128,17 @@ requirements).
   lost record, or a wrong device interaction, it is not fast path. If any
   check is uncertain, it is not fast path.** The rule exists to save a
   cycle on trivia, not to be argued into.
+  **Check 5 covers the instruction corpus too** — `CLAUDE.md`,
+  `AGENTS.md`, `.claude/agent-briefing.md`, `.claude/agents/**`, and any
+  `SKILL.md` this repo's agents follow. A wrong edit there is not
+  cosmetic: it changes how every future agent behaves, and nothing runs
+  red. Changing what an existing rule REQUIRES takes the full cycle.
+  **Carve-out:** correcting a single stated fact — a stale number, a
+  dangling path, a sentence the repo has already falsified elsewhere — is
+  cosmetic and stays on the fast path, because a reviewer settles it by
+  reading one thing. `c2182ef5` is the case this exists for: it shipped a
+  175-line forked skill under a message calling it an adapter
+  (`git show --stat c2182ef5`).
   Fast-path changes still get a worktree, failing-test-first,
   self-mutation, the scoped gates, and a PR — Claude implements inline and
   **James is the reviewer**, with the PR carrying screenshots and a
@@ -486,11 +495,9 @@ requirements).
   `--no-verify`; fix the failure. **Root markdown AND everything under `docs/`
   are formatted by NOTHING** — lint-staged's globs are `app/**/*.{ts,tsx}` and
   `app/**/*.{json,css,md,html}`, so `ROADMAP.md`, `CLAUDE.md` and the whole
-  `docs/` tree have never been Prettier-formatted. This bullet used to say
-  "the root docs", which reads as ambiguous: a controller told an implementer
-  `docs/**` WAS Prettier-managed on 2026-09-07 and the implementer had to
-  check `package.json` to find otherwise. Never run `prettier --write` on
-  them to "fix" a failing check: it reflows the whole file and buries a real
+  `docs/` tree have never been Prettier-formatted; `package.json` is the
+  authority if you doubt it. Never run `prettier --write` on them to "fix"
+  a failing check: it reflows the whole file and buries a real
   edit in ~100 lines of rewrapped prose (measured on `ROADMAP.md`, 2026-08-31 —
   226/166 became 118/57 once the reflow was reverted). Wrap by hand to match the
   surrounding text.
@@ -559,8 +566,12 @@ requirements).
 ## Recurring failures — read before you start
 
 Every item below has actually happened here, most of them more than once, and
-each cost a review round or a follow-up fix wave. They are ordered by how
-often they recur.
+each cost a review round or a follow-up fix wave. They are in the order they
+were found — newest last. **The numbers are permanent identifiers**: 1387
+citations across 185 markdown files point at them, so entries are never
+renumbered or reordered
+(`grep -rohiE "RF[0-9]+|recurring failure #?[0-9]+" --include='*.md' . | wc -l`,
+2026-09-12).
 
 1. **Changing UI without running `pnpm e2e`.** Three phases running, a task
    changed a component and left the e2e suite red because only
