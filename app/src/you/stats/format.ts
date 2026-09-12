@@ -1,9 +1,12 @@
 import { fmtDuration } from "../../../domain/duration.js";
 
 /** Hand-rolled thousands separator — `LogRow.tsx`'s own `fmtMeters`, the
- *  house rule (never `Intl`/`toLocaleString`). */
+ *  house rule (never `Intl`/`toLocaleString`). Rounds first: a float sum
+ *  (1000.3000000000001) must never print its tail. */
 export function fmtMeters(meters: number): string {
-  return meters.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return Math.round(meters)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 /** Elapsed seconds as the house positional clock (`3:59:39`, `13:43`). */

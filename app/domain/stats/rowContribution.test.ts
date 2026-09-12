@@ -31,6 +31,25 @@ const EXIT7 = [
 ];
 
 describe("rowContribution — the tier rule transcribed from buildHeroes (spec §3.1)", () => {
+  // PM5 step actuals are FRACTIONAL (`src/monitor/driver.ts`: a finished
+  // frame reads `distanceMeters: 194.1`, another 104.8), so the steps tier
+  // rounds its metres like the machine and work-pair tiers do; seconds stay
+  // verbatim on every tier (parity).
+  it("the steps tier rounds Σ actualMeters like the other tiers and keeps seconds verbatim: 194.1 + 104.8 → 299 m, 64.3 + 86.57 s", () => {
+    const c = rowContribution(
+      input({
+        endedBy: "finished",
+        steps: [
+          { actualMeters: 194.1, actualSeconds: 64.3 },
+          { actualMeters: 104.8, actualSeconds: 86.57 },
+        ],
+      }),
+    );
+    expect(c.tier).toBe("steps");
+    expect(c.workMeters).toBe(299);
+    expect(c.workSeconds).toBeCloseTo(150.87, 6);
+  });
+
   it("machine totals win over a work pair and over steps, metres rounded", () => {
     const c = rowContribution(
       input({

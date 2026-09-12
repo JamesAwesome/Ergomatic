@@ -170,7 +170,10 @@ export function rowContribution(row: StatsRowInput): RowContribution {
     return {
       ...rest,
       tier: "steps",
-      workMeters: sums.meters,
+      // Rounded like the machine and work-pair tiers: PM5 step actuals are
+      // fractional (`src/monitor/driver.ts` reads 194.1 / 104.8 on finished
+      // frames). Seconds stay verbatim on every tier.
+      workMeters: Math.round(sums.meters),
       workSeconds: sums.seconds,
     };
   }
