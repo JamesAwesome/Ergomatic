@@ -221,15 +221,21 @@ export function useArticleReads(): ArticleReadsState {
   read every `.news-row` box and the `.news-whatsnew` box via
   `stableBoundingBox`; release; wait for `6 UNREAD` and the effort-scale row's
   `data-read="true"`; read again; `expect(after).toEqual(before)`.
-- [ ] **Step 2: run against this worktree's stack** —
-  `pnpm e2e news.spec.ts` in `app/` (boots `ergomatic-<hash>` with
-  `--build`). Expected: all News cases pass including the new one.
-- [ ] **Step 3: mutation, built into the stack** — restore
-  `isRead !== undefined &&` before the square in `ArticleRow`, `pnpm e2e
-  news.spec.ts` again (the build must be SEEN to succeed — RF12 corollary),
-  expect the gate red with row boxes differing; `git checkout -- src/news/News.tsx`,
-  rebuild, green.
-- [ ] **Step 4: commit** the spec file.
+- [x] **Step 2: run against this worktree's stack** —
+  `pnpm e2e news.spec.ts` in `app/` booted `ergomatic-27821` (web :8321) with
+  `--build`: `12 passed`, including the new gate.
+- [x] **Step 3: mutations, each built into the stack** (each run's log shows
+  two `built in Nms` lines — web and api — before the result, RF12 corollary;
+  each restored with `git checkout` and followed by a clean rebuild that
+  passed 12/12):
+
+| mutation | red on |
+|---|---|
+| E1: restore `isRead !== undefined &&` before the square (`News.tsx`) | the loading-frame precondition — `.news-square` expected 7, received 0 |
+| E2: remove the `page.route` hold from the test | the loading-frame precondition — `[data-read]` expected 0, received 7 (a warm or unheld fetch cannot make the gate vacuous) |
+| E3: append `.news-square:not([data-read]) { display: none }` to `index.css` — squares present, column not reserved | the box comparison — three rows `height` 66.8→87.6, `y` +21/+21/+42 |
+
+- [x] **Step 4: commit** — `25ed2207` (gate + this plan).
 
 ### Task 5: Review half, PR, hand-back
 
