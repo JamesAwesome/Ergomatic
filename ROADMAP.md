@@ -779,7 +779,7 @@ after being named next; if the front door has not opened by then the north star
 has gone unfunded for a month, and that comes back to James rather than sliding
 another wave.
 
-**PR 1 LANDED — PR #<n>, 2026-09-12: migration 0030 drops NOT NULL from
+**PR 1 LANDED — PR #409, 2026-09-12: migration 0030 drops NOT NULL from
 `users.google_sub`; the store's insert type derives from the table with the
 sub key REQUIRED (`null` = no Google identity); a sub-less user is created,
 given a session and resolved by id in a real-Postgres test; NOT a rollback
@@ -879,7 +879,7 @@ it lands the stranger on this same denial.
       this **a STORED-SHAPE change and a migration on top of the auth change**
       the row already declared. The row read as auth-only; it is not, and the
       spec sizes the migration before the gate rather than discovering it in
-      the build. **The migration landed in PR 1 (#<n>).** The identity-table
+      the build. **The migration landed in PR 1 (#409).** The identity-table
       option is a SUPERSET of it — a backfill, a `UNIQUE (provider, subject)`,
       two rewritten store methods, a dual-read window and a later removal
       migration (`docs/superpowers/audits/2026-09-12-wave-a-pr1-census.md`
