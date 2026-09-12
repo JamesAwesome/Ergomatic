@@ -103,6 +103,12 @@ import { forgetLastDevice } from "./lastDevice";
 import { defaultTransport } from "../adapters/monitorTransport";
 import { registerAppLifecycleListener } from "../adapters/appLifecycle";
 import {
+  deriveAxes,
+  deriveLinkLoss,
+  type ConnectedAxes,
+  type LinkLossAxis,
+} from "./connectedAxes";
+import {
   SILENCE_THRESHOLD_MS,
   type CancelFn,
   type LivenessDeps,
@@ -952,6 +958,14 @@ function defaultSeriesFlushSchedule(cb: () => void, ms: number): () => void {
 
 export interface MonitorSession {
   phase: ConnectedPhase;
+  /** The four axes, derived once here (Phase MD PR 2). Screens read THIS,
+   *  never `phase` — `connectedAxes.ts`'s header says why, and
+   *  `connectedPhaseReaders.test.ts` enforces both halves. */
+  axes: ConnectedAxes;
+  /** Who said the link was gone, when `axes.link` is `"lost"`. Separate from
+   *  `axes` because the axes tuple cannot answer it — see the derivation
+   *  site at the bottom of this hook. */
+  linkLoss: LinkLossAxis;
   /** The app cannot read this monitor: a characteristic failed to decode
    *  steadily and this SITTING has never produced a readable frame. Distinct
    *  from a lost link, which is silence and belongs to the liveness path —
@@ -6486,8 +6500,43 @@ export function useMonitorSession(
     };
   }, []);
 
+  // THE ONE DERIVATION SITE (Phase MD PR 2). Five screens used to rebuild
+  // this input object field-for-field and call `deriveAxes` themselves; they
+  // read `session.axes` now, and `connectedPhaseReaders.test.ts`'s second
+  // scan is what keeps a sixth from appearing.
+  //
+  // `linkLoss` is published BESIDE `axes` rather than folded into it because
+  // it is NOT a function of the axes tuple: `lost|none|none|unknown` is
+  // produced both by `pairing` + `frameSilence` (`linkLoss: "inferred"`) and
+  // by `disconnected` (`"reported"`). Conflating those two is the Phase RN
+  // Gate 0 defect — offering a reconnect that cannot run, because nothing
+  // was disposed on the inferred path. `connectedAxes.ts`'s own sentence
+  // ("exported as its own reader ... because exactly one screen needs it")
+  // is superseded: one derivation site beats one narrow shape.
+  //
+  // THE NOT_A_MACHINE_REFUSAL RULING, re-homed here from
+  // `AxesInput.failureLeavesLinkUp`'s doc comment when that field was
+  // deleted (James, 2026-09-12). The field was `null` at every call site
+  // that ever existed, so `deriveLink`'s `failed` case returned `"lost"`
+  // unconditionally in practice and the `"up"` branch was live code with no
+  // live caller; the branch is gone. The ruling it encoded survives, and
+  // this is the only place a real value could ever be produced: a
+  // transport-side failure reads `"lost"`, and a genuine `ProgramRejection`
+  // the PM5 itself sent reads `"up"`. Whoever first needs that distinction
+  // classifies `ConnectedError.reason` HERE and widens `deriveLink` again —
+  // see `ConnectedInterstitial.tsx`'s NOT_A_MACHINE_REFUSAL markers for what
+  // the distinction is for.
+  const axesInput = {
+    phase: state.phase,
+    frozen: state.frozen,
+    runOpen: state.runOpen,
+    frameSilence: state.frameSilence,
+  };
+
   return {
     phase: state.phase,
+    axes: deriveAxes(axesInput),
+    linkLoss: deriveLinkLoss(axesInput),
     undecodable: state.undecodable,
     error: state.error,
     deviceName: state.deviceName,

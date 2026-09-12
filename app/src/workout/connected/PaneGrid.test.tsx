@@ -63,6 +63,10 @@ import {
   intervalNumbering,
   type JudgedValue,
 } from "./surfaceModel";
+import {
+  withDerivedAxes,
+  type SessionWithoutAxes,
+} from "../../test/sessionAxes";
 
 /** The active row's live cells when the machine has said nothing — enough
  *  for a caption-grammar test, which never looks at them. */
@@ -404,7 +408,8 @@ function actualFor(index: number, program: WorkoutProgram): IntervalActual {
 }
 
 function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
-  return {
+  const { axes, linkLoss, ...rest } = overrides;
+  const base: SessionWithoutAxes = {
     phase: "live" as ConnectedPhase,
     undecodable: false,
     error: null,
@@ -427,8 +432,9 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     retryHandoffSave: vi.fn().mockResolvedValue(undefined),
     proceedHandoff: vi.fn().mockResolvedValue(undefined),
     exportLog: vi.fn().mockReturnValue("[]"),
-    ...overrides,
+    ...rest,
   };
+  return withDerivedAxes(base, { axes, linkLoss });
 }
 
 function renderGrid(

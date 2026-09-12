@@ -14,6 +14,7 @@ import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
+import { withDerivedAxes } from "../test/sessionAxes";
 
 /**
  * THE SEAM, AND IT STARTS UPSTREAM OF THE PRODUCER (recurring failure 24).
@@ -79,7 +80,7 @@ if ("code" in COMPILED) {
 const PROGRAM = COMPILED;
 
 function readySession(): MonitorSession {
-  return {
+  return withDerivedAxes({
     phase: "ready",
     undecodable: false,
     error: null,
@@ -102,7 +103,7 @@ function readySession(): MonitorSession {
     retryHandoffSave: vi.fn().mockResolvedValue(undefined),
     proceedHandoff: vi.fn().mockResolvedValue(undefined),
     exportLog: vi.fn().mockReturnValue("[]"),
-  };
+  });
 }
 
 beforeEach(() => {

@@ -44,6 +44,10 @@ import ConnectedSurface, {
   TRIPLE_TAP_WINDOW_MS,
 } from "../ConnectedSurface";
 import { logLine, parseLogEntries } from "./ConnectionLogSheet";
+import {
+  withDerivedAxes,
+  type SessionWithoutAxes,
+} from "../../test/sessionAxes";
 
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
@@ -146,7 +150,8 @@ function realDriverLog(): string {
 }
 
 function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
-  return {
+  const { axes, linkLoss, ...rest } = overrides;
+  const base: SessionWithoutAxes = {
     phase: "live" as ConnectedPhase,
     undecodable: false,
     error: null,
@@ -169,8 +174,9 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     retryHandoffSave: vi.fn().mockResolvedValue(undefined),
     proceedHandoff: vi.fn().mockResolvedValue(undefined),
     exportLog: vi.fn().mockReturnValue("[]"),
-    ...overrides,
+    ...rest,
   };
+  return withDerivedAxes(base, { axes, linkLoss });
 }
 
 function renderSurface(overrides: Partial<MonitorSession> = {}) {

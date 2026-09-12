@@ -74,6 +74,7 @@ import {
   loadLastDevice,
   saveLastDevice,
 } from "../monitor/lastDevice";
+import { withDerivedAxes, type SessionWithoutAxes } from "../test/sessionAxes";
 
 /** `index.css` with every comment stripped — the same view
  *  `ConnectedSurface.test.tsx` takes of the stylesheet, and for its reason:
@@ -160,7 +161,8 @@ function fillingLow(): {
 const FIXTURE = fillingLow();
 
 function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
-  return {
+  const { axes, linkLoss, ...rest } = overrides;
+  const base: SessionWithoutAxes = {
     phase: "idle",
     undecodable: false,
     error: null,
@@ -183,8 +185,9 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     retryHandoffSave: vi.fn().mockResolvedValue(undefined),
     proceedHandoff: vi.fn().mockResolvedValue(undefined),
     exportLog: vi.fn().mockReturnValue("[]"),
-    ...overrides,
+    ...rest,
   };
+  return withDerivedAxes(base, { axes, linkLoss });
 }
 
 function renderInterstitial(

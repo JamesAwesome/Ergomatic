@@ -22,6 +22,8 @@ import JustRow from "./JustRow";
 import { ProgramRejectionError } from "../monitor/driver";
 import { renderedCopy } from "../test/renderedCopy";
 import { READY_CARD_KEY } from "../you/readyCard";
+import type { MonitorSession } from "../monitor/useMonitorSession";
+import { withDerivedAxes } from "../test/sessionAxes";
 
 const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
 
@@ -429,37 +431,51 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
    *  ready-frame Cancel test at the bottom of this describe. */
   const cancel = vi.fn().mockResolvedValue(undefined);
 
-  function mockSession(overrides: Record<string, unknown>) {
+  function mockSession(overrides: Partial<MonitorSession>) {
     // resetModules FIRST: JustRow was statically imported at this file's
     // top for the earlier describes, and a doMock cannot reach a module
     // already in the cache.
     vi.resetModules();
     vi.doMock("../adapters/keepAwake", () => ({ keepAwakeOn, keepAwakeOff }));
+    // The destructure happens INSIDE the factory, on every render: several
+    // tests below hand this function a MUTABLE object and then edit it
+    // between rerenders, so reading `overrides` once here would freeze the
+    // session at its first phase. The `: MonitorSession` return annotation is
+    // what makes the base literal's 22 members REQUIRED — without it the
+    // literal has no contextual type, which is how `undecodable` went
+    // missing (RF33).
     vi.doMock("../monitor/useMonitorSession", () => ({
-      useMonitorSession: () => ({
-        phase: "idle",
-        error: null,
-        deviceName: null,
-        frame: null,
-        actuals: [],
-        endedBy: null,
-        handoffHeld: false,
-        holdError: null,
-        frozen: false,
-        runOpen: false,
-        frameSilence: false,
-        programDropped: false,
-        closeReason: null,
-        connect,
-        program: vi.fn().mockResolvedValue(undefined),
-        beginFreeRow,
-        endSession: vi.fn().mockResolvedValue(undefined),
-        cancel,
-        retryHandoffSave: vi.fn().mockResolvedValue(undefined),
-        proceedHandoff: vi.fn().mockResolvedValue(undefined),
-        exportLog: vi.fn().mockReturnValue("[]"),
-        ...overrides,
-      }),
+      useMonitorSession: (): MonitorSession => {
+        const { axes, linkLoss, ...rest } = overrides;
+        return withDerivedAxes(
+          {
+            phase: "idle",
+            undecodable: false,
+            error: null,
+            deviceName: null,
+            frame: null,
+            actuals: [],
+            endedBy: null,
+            handoffHeld: false,
+            holdError: null,
+            frozen: false,
+            runOpen: false,
+            frameSilence: false,
+            programDropped: false,
+            closeReason: null,
+            connect,
+            program: vi.fn().mockResolvedValue(undefined),
+            beginFreeRow,
+            endSession: vi.fn().mockResolvedValue(undefined),
+            cancel,
+            retryHandoffSave: vi.fn().mockResolvedValue(undefined),
+            proceedHandoff: vi.fn().mockResolvedValue(undefined),
+            exportLog: vi.fn().mockReturnValue("[]"),
+            ...rest,
+          },
+          { axes, linkLoss },
+        );
+      },
     }));
   }
 
@@ -599,7 +615,7 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
       // rested on how it got there, and nothing asserted it. The mutable
       // `live` object below is read by the hook mock on every render, so the
       // rerender below is the SAME component seeing its link go silent.
-      const live: Record<string, unknown> = {
+      const live: Partial<MonitorSession> = {
         phase: "ready",
         deviceName: "PM5 432331249",
       };
@@ -841,7 +857,7 @@ describe("JustRow: the arm gate, the wake lock and the failure frames", () => {
    * fix's own first patch) → pairing with the name set (driver built).
    */
   it("Lost → Try again on a slow radio arms only once the NEW driver exists", async () => {
-    const state: Record<string, unknown> = {
+    const state: Partial<MonitorSession> = {
       phase: "disconnected",
       deviceName: "PM5 432331249", // retained by the disconnect, on purpose
     };

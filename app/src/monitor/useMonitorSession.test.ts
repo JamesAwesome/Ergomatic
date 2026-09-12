@@ -42,6 +42,7 @@ import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
 import * as appLifecycleModule from "../adapters/appLifecycle";
 import { releasingSchedule } from "../test/statusSubscriptions";
+import { withDerivedAxes } from "../test/sessionAxes";
 import type { MonitorRun } from "./monitorRun";
 import { loadMonitorRun, MONITOR_RUN_KEY } from "./handoffStore";
 import { loadLastDevice, saveLastDevice } from "./lastDevice";
@@ -5911,6 +5912,17 @@ describe('Whole-branch review B1: End under a watchdog-fired banner (phase still
     });
     expect(result.current.frameSilence).toBe(true);
     expect(result.current.phase).toBe("live");
+    // The published tuple at frame silence, by hand (Phase MD PR 2): the
+    // watchdog demotes a live-looking link to `"lost"`, and `linkLoss` says
+    // NOBODY TOLD US — the distinction the axes tuple cannot carry, and the
+    // one Phase RN's Gate 0 defect turned on.
+    expect(result.current.axes).toStrictEqual({
+      link: "lost",
+      program: "armed",
+      session: "live",
+      activity: "moving",
+    });
+    expect(result.current.linkLoss).toBe("inferred");
 
     await act(async () => {
       await result.current.endSession();
@@ -9090,6 +9102,17 @@ describe("useMonitorSession: frozen (the freeze predicate), end to end", () => {
     tick(fake, 100);
     expect(result.current.phase).toBe("live");
     expect(result.current.frozen).toBe(true);
+    // THE PUBLISHED TUPLE, written out by hand (Phase MD PR 2). Never
+    // `deriveAxes(...)` in an expectation — that is the same function the
+    // hook calls, so it would agree with any bug (RF11). This is the ONLY
+    // place the real hook's `axes`/`linkLoss` are asserted at a freeze.
+    expect(result.current.axes).toStrictEqual({
+      link: "up",
+      program: "armed",
+      session: "live",
+      activity: "frozen",
+    });
+    expect(result.current.linkLoss).toBe("none");
 
     // The pause HOLDS across further identical frames (RC-25's fixture
     // extension) — this is what makes the edge-vs-per-frame check below real.
@@ -16281,13 +16304,10 @@ describe("useMonitorSession: an unsupported erg machine", () => {
 // are the seam's contract; every OTHER lifecycle test in this file now
 // rides it instead of `vi.doMock`ing the adapter.
 //
-// A fifth test — `withDerivedAxes` refusing a HALF override of
-// `axes`/`linkLoss` — belongs here per the plan (it is where the helper is
-// already imported) but needs Task 2 Step 4's `src/test/sessionAxes.ts`,
-// which does not exist yet in this commit. Deferred to Task 2, per the
-// plan's own escape valve ("write it in Task 1 and let it be RED until
-// then, or move it into Task 2; say which in the report") and confirmed by
-// the plan's own expected count at Step 6 (322 = 318 + 4, not + 5).
+// A fifth test closes this describe — `withDerivedAxes` refusing a HALF
+// override of `axes`/`linkLoss`. It lives here because this is where the
+// helper is imported, and it landed with Task 2, which created
+// `src/test/sessionAxes.ts`.
 describe("the lifecycle registrar dependency", () => {
   const ATTEMPT_ID = "3c1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
   const targetedRequest = {
@@ -16454,5 +16474,30 @@ describe("the lifecycle registrar dependency", () => {
     // Nothing else diverged: the session still reached pairing.
     expect(calls).toStrictEqual(["first", "second"]);
     expect(result.current.phase).toBe("pairing");
+  });
+
+  it("withDerivedAxes refuses a HALF override — axes and linkLoss travel together", () => {
+    // The helper's one enforced rule, gated where the real hook is already
+    // driven. `base` comes from the PRODUCER — the hook's own published
+    // session with the derived pair stripped off — rather than a hand-built
+    // literal this file does not otherwise have (RF33).
+    const { result, unmount } = renderHook(() => useMonitorSession());
+    const { axes: _axes, linkLoss: _linkLoss, ...base } = result.current;
+    unmount();
+
+    expect(() =>
+      withDerivedAxes(base, {
+        axes: {
+          link: "up",
+          program: "armed",
+          session: "live",
+          activity: "moving",
+        },
+      }),
+    ).toThrow(/override axes and linkLoss together or neither/);
+    expect(() => withDerivedAxes(base, { linkLoss: "reported" })).toThrow(
+      /override axes and linkLoss together or neither/,
+    );
+    expect(() => withDerivedAxes(base)).not.toThrow();
   });
 });

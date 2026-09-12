@@ -75,7 +75,6 @@ import type { WorkoutProgram } from "../../domain/monitor/program.js";
 // the house positional format — the same helper the band's ELAPSED cell
 // reads through the model, so the two cannot drift apart.
 import { fmtDuration } from "../../domain/duration.js";
-import { deriveAxes } from "../monitor/connectedAxes";
 import type { MonitorSession } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import type { EnginePhase } from "../session/engine";
@@ -589,27 +588,9 @@ export default function ConnectedSurface({
   // beats `paused` (the freeze predicate fired) beats `live` (everything
   // else). `ended` is handled above, before axes are even derived.
   //
-  // `failureLeavesLinkUp: null` — the conservative "no evidence of a
-  // surviving link" reading (`AxesInput`'s own doc comment) — is not a
-  // guess this component is dodging: `"failed"` never reaches here at all.
-  // `ConnectedInterstitial.tsx`'s own phase gate renders its OWN screen for
-  // `phase === "failed"` and never hands this component a session in that
-  // phase, so the one axis this argument feeds (`deriveLink`'s `"failed"`
-  // case) is provably never consulted by this call. This is the SECOND of
-  // the two production call sites `AxesInput.failureLeavesLinkUp`'s own
-  // doc comment names as dead-third-fact evidence (M-1, final whole-branch
-  // review): both hardcode `null`, neither call reaches `deriveAxes` with
-  // `phase === "failed"`.
-  const axes = deriveAxes({
-    phase: session.phase,
-    frozen: session.frozen,
-    runOpen: session.runOpen,
-    failureLeavesLinkUp: null,
-    // Phase LL Task 2 (§2a): the one live consumer of this axis —
-    // `deriveLink` routes it onto the EXISTING `"lost"` member, which is
-    // what `linkLost` below reads.
-    frameSilence: session.frameSilence,
-  });
+  // The axes are the hook's now (Phase MD PR 2): it derives them once from
+  // the same four fields this component used to forward by hand.
+  const axes = session.axes;
   // THE LINK, ON ITS OWN. One axis answers it — a real `disconnected`
   // phase or frame silence past the watchdog both land on `"lost"`
   // (`deriveLink`) — and it travels to the model beside `status`, never
