@@ -74,6 +74,8 @@ The controller coordinates. A **fresh subagent implements each task** (Sonnet fo
 
 ### Task 0: Capture the byte-compatibility fixtures FROM MAIN, and the gate that reads them
 
+**DONE by the author, commit `5c4f8665` — gate green on main (20 tests), both mutations measured (results inline below).**
+
 **Run by the plan author, in this worktree, BEFORE any other task changes a line** (spec §5: "captured from `main`, before the first line of the change"). The gate is green on main and must stay green through Task 7.
 
 **Files:**
@@ -505,9 +507,9 @@ git commit -m "Capture the stored run's bytes from main, and gate them"
 git log -1 --oneline
 ```
 
-Mutation 1 — the writer adds a field. In `handoffStore.ts` `performDurableWrite`, change `JSON.stringify(run)` (the primary write) to `JSON.stringify({ ...run, extra: 1 })`. Run the gate. Expected: every (a) case except `thrown-without-series` fails with `expected '{"v":2,...,"extra":1}' to be '{"v":2,...}'`. Revert with `git checkout -- src/monitor/handoffStore.ts` (the file is clean — the commit above landed).
+Mutation 1 — the writer adds a field. In `handoffStore.ts` `performDurableWrite`, change `JSON.stringify(run)` (the primary write) to `JSON.stringify({ ...run, extra: 1 })`. Run the gate. **Measured on main (5c4f8665):** the five shapes whose bytes come from the PRIMARY write fail (`ordinary`, `v1-record`, `partial`, `summary-detail`, `mode-justrow` — `5 failed | 15 passed`); `sacrifice-thrown-with-series` passes because its bytes come from the unmutated RETRY write, and `thrown-without-series` writes nothing. Revert with `git checkout -- src/monitor/handoffStore.ts` (the file is clean — the commit above landed). Note macOS `sed` has no `0,/re/` form; the anchor is unique (`grep -c 'JSON.stringify(run)'` → 1), so a plain `s/…/…/` is the probe.
 
-Mutation 2 — rename `seriesDropped`. In the same function, change `seriesDropped: true` to `seriesTrimmed: true` in the retry's `dropped` record (add `// @ts-expect-error mutation probe` above the line if `MonitorRun` refuses the key, so the probe COMPILES). Run the gate. Expected: ONLY `(a) ... "sacrifice-thrown-with-series"` fails, with the two strings differing at `seriesDropped`/`seriesTrimmed`; every other case passes. Revert. **Record both failure messages verbatim in the task report — the PR body prints them (spec §9.4).**
+Mutation 2 — rename `seriesDropped`. In the same function, change `seriesDropped: true` to `seriesTrimmed: true` in the retry's `dropped` record (add `// @ts-expect-error mutation probe` above the line if `MonitorRun` refuses the key, so the probe COMPILES). Run the gate. **Measured on main (5c4f8665):** ONLY `(a) the writer reproduces the captured bytes for "sacrifice-thrown-with-series"` fails — `1 failed | 19 passed`, `AssertionError: expected '{"v":2,"workoutId":"fl-bytes-fixture"…' to be '{"v":2,…'`, received bytes ending `"terminated":false,"seriesTrimmed":true}`. (`as unknown as MonitorRun` on the mutated literal keeps the probe compiling.) Revert. **The PR body prints both results (spec §9.4).**
 
 ---
 
