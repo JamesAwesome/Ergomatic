@@ -46,6 +46,7 @@ import { withDerivedAxes } from "../test/sessionAxes";
 import type { MonitorRun } from "./monitorRun";
 import { loadMonitorRun, MONITOR_RUN_KEY } from "./handoffStore";
 import { loadLastDevice, saveLastDevice } from "./lastDevice";
+import { resetConnectionAttemptTraceForTests } from "./nfc/connectionAttemptTrace";
 import {
   resetForTests as resetHandoffStore,
   currentUnretired as currentUnretiredHandoffForTest,
@@ -648,6 +649,12 @@ beforeEach(() => {
   // `resetForTests`'s own doc comment in `handoffStore.ts` for the full
   // reasoning and the empirical evidence.
   resetHandoffStore();
+  // Task 5 (Phase MD PR 2): dropping `vi.resetModules()` from the ported
+  // lifecycle blocks means they now share `nfc/connectionAttemptTrace.ts`'s
+  // module-wide `latest` with every other test in the file instead of each
+  // getting its own copy. Reset here so a port that starts leaking a stale
+  // trace fails on its OWN assertion, not a neighbour's.
+  resetConnectionAttemptTraceForTests();
 });
 
 describe("useMonitorSession: connect", () => {
