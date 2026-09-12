@@ -1,5 +1,4 @@
 import type { MonitorRun } from "../monitor/monitorRun";
-import { commit } from "../monitor/handoffStore";
 
 export interface SeededRef {
   readonly sessionKey: string;
@@ -24,18 +23,6 @@ function refuse(reason: string, run: MonitorRun): never {
 export async function seedMonitorRun(run: MonitorRun): Promise<SeededRef> {
   const store = await import("../monitor/handoffStore");
   const result = store.commit(run.startedAt, null, run);
-  if (!result.accepted) refuse(result.reason, run);
-  return { sessionKey: run.startedAt, revision: result.revision };
-}
-
-/** The synchronous form, for a seed that has to land inside a sync
- *  callback (an `onProceed` a component calls and then reads from). It
- *  binds the store instance THIS module loaded, so it is only correct in a
- *  test file that never calls `vi.resetModules()` — in one that does, the
- *  screen would read a different instance and the seed would only reach
- *  it through the durable bytes. */
-export function seedMonitorRunNow(run: MonitorRun): SeededRef {
-  const result = commit(run.startedAt, null, run);
   if (!result.accepted) refuse(result.reason, run);
   return { sessionKey: run.startedAt, revision: result.revision };
 }

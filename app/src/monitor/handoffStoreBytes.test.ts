@@ -1,6 +1,6 @@
 // The byte-compatibility gate (Phase MD PR 1, spec §5 — rebuilt after the
-// anchor pass proved revision 1's could not go red). Three claims, each
-// of which a mutation below can break:
+// anchor pass proved revision 1's could not go red). Three claims; (a) and
+// (c) go red under a production mutation, (b) under a fixture regeneration:
 //
 //  (a) BYTE IDENTITY: the writer, driven with the SAME input the fixture
 //      was captured from, produces the SAME bytes. This is the gate that
@@ -8,7 +8,9 @@
 //      `seriesTrimmed` changes the sacrifice fixture's bytes).
 //  (b) KEY SET: each fixture's parsed key set equals a literal list, so a
 //      reviewer sees a renamed/added field BY NAME rather than as a diff
-//      of 40 KB of program bytes.
+//      of program bytes. This leg pins the FIXTURE FILES, not the writer —
+//      no production change can redden it; it goes red exactly when someone
+//      regenerates the fixtures, which is when a reviewer must look.
 //  (c) OLD BYTES STILL LOAD: bytes main wrote are accepted by the current
 //      reader. `toStrictEqual` here is a courtesy (the reader returns its
 //      parse unmodified — spec §5); the `not.toBeNull()` is the assertion

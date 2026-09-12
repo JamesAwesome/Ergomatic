@@ -48,7 +48,7 @@
 | `handoffStore` namespace object | DELETED | — |
 | `seedMonitorRun(run: MonitorRun): Promise<HandoffRef>` | new test helper, seeds through `commit` | `app/src/test/seedHandoff.ts` (new) |
 
-**The export count.** Baseline: `grep -cE '^export (function|const) ' src/monitor/monitorRun.ts src/monitor/handoffStore.ts` → `19` + `16` = **35**. Target after Task 4 (derived from the lists below; the grep is the gate): `monitorRun.ts` **9** (`createMonitorRun`, `recordActual`, `completeMonitorRun`, `completeInterruptedRun`, `withPartial`, `partialRefusal`, `completeContinuityReset`, `appendSummaryObservations`, `measuredSessionSeconds`) + `handoffStore.ts` **18** (the 15 surviving today's 16 minus the namespace object, plus `MONITOR_RUN_KEY`, `loadMonitorRun`, `connectGuardStage`) = **27** = 35 − 5 deleted (`saveMonitorRun`, `clearMonitorRun`, `anyLiveSession`, `interruptedTotalSeconds` [the alias survives], `handoffStore`) − 3 demoted (`isMonitorRun`, `isPlainRecord` [moves to the shared module, which is outside the two counted files], `stripMalformedSeries`) + 0. `MONITOR_RUN_KEY` stays exported (spec §6's slack: it has 16 test-file importers that seed raw bytes deliberately, and a string literal in 16 files is a worse duplication than one export). `clearMonitorRun` is deleted rather than moved — spec §4 said "move and stay exported" for it, but it has ZERO production callers (`grep -rn 'clearMonitorRun(' src e2e --include='*.ts' --include='*.tsx' | grep -v '\.test\.' | grep -v monitorRun.ts` → comments only), it is a raw `removeItem` that would leave the store's `current` disagreeing with the durable tier, and the boundary gate names it as a legacy writer. Its 13 test call sites become `localStorage.removeItem(MONITOR_RUN_KEY)` (test files are exempt from the gate by pattern, and that is exactly what the function did). RF10: this is a stated deviation from §4, not a silent one; the harden pass rules on it.
+**The export count.** Baseline: `grep -cE '^export (function|const) ' src/monitor/monitorRun.ts src/monitor/handoffStore.ts` → `19` + `16` = **35**. Target after Task 4 (derived from the lists below; the grep is the gate): `monitorRun.ts` **9** (`createMonitorRun`, `recordActual`, `completeMonitorRun`, `completeInterruptedRun`, `withPartial`, `partialRefusal`, `completeContinuityReset`, `appendSummaryObservations`, `measuredSessionSeconds`) + `handoffStore.ts` **18** (the 15 surviving today's 16 minus the namespace object, plus `MONITOR_RUN_KEY`, `loadMonitorRun`, `connectGuardStage`) = **27** = 35 − 5 deleted (`saveMonitorRun`, `clearMonitorRun`, `anyLiveSession`, `interruptedTotalSeconds` [the alias survives], `handoffStore`) − 3 demoted (`isMonitorRun`, `isPlainRecord` [moves to the shared module, which is outside the two counted files], `stripMalformedSeries`) + 0. `MONITOR_RUN_KEY` stays exported (spec §6's slack: 16 files outside the two modules reference it, of which **11 import it by name** — the other five are two e2e specs and the boundary gate holding the literal — and a string literal in 11 test files is a worse duplication than one export; the PR body prints 11). `clearMonitorRun` is deleted rather than moved — spec §4 said "move and stay exported" for it, but it has ZERO production callers (`grep -rn 'clearMonitorRun(' src e2e --include='*.ts' --include='*.tsx' | grep -v '\.test\.' | grep -v monitorRun.ts` → comments only), it is a raw `removeItem` that would leave the store's `current` disagreeing with the durable tier, and the boundary gate names it as a legacy writer. Its 12 test call sites (`grep -rn 'clearMonitorRun(' src --include='*.test.*' | wc -l` → 12, six files) become `localStorage.removeItem(MONITOR_RUN_KEY)` (test files are exempt from the gate by pattern, and that is exactly what the function did). RF10: this is a stated deviation from §4, not a silent one; the harden pass rules on it.
 
 ## The lifetime table (RF27) — every piece of state the store owns
 
@@ -57,7 +57,7 @@ This PR mints NO new session-scoped state. `connectGuardStage` reads through `cu
 | State (`handoffStore.ts`) | Minted | Cleared / reset | Survives hook teardown? | Survives relaunch? | Survives re-arm (new connect, same process)? |
 | --- | --- | --- | --- | --- | --- |
 | `current: HandoffEntry \| null` | `ensureHydrated` (durable → revision 0) or `acceptCommit` | `retire` (per matched key); `resetForTests` | YES (module singleton) | NO — rebuilt from durable bytes at the first non-render access | YES unless the armed handler retires it (`connect-guard-armed`) or `createMonitorRun-defense` retires a different key |
-| `tombstones: Set<string>` | `retire` | `resetForTests` only | YES | NO (and the retired key's bytes were removed, so nothing hydrates) | YES — a retired key stays refused for the process |
+| `tombstones: Set<string>` | `retire` | `resetForTests` only | YES | NO — and normally nothing rehydrates because `retire` removed the bytes; but a `safeRemoveItem` that FAILS is masked (receipted `storage-getter-error`, flag cleared "once the attempt is MADE"), so on that path a relaunch rehydrates the retired record at revision 0. Pre-existing, not this PR's (harden lens 1) | YES — a retired key stays refused for the process |
 | `claims: Map` | `claim` | `retire` (per key); `resetForTests` | YES | NO | YES |
 | `durableStateByKey: Map` | `ensureHydrated`; `performDurableWrite` on a landed write | `retire` (per key); `resetForTests` | YES | NO | YES |
 | `cachedVerdicts: Map` | `ensureHydrated`; `acceptCommit`; `retryDurable` | `retire` (per key); `resetForTests` | YES | NO | YES |
@@ -345,8 +345,8 @@ Expected: seven files; `sacrifice-thrown-with-series.json` has `verdict: "saved-
 
 ```ts
 // The byte-compatibility gate (Phase MD PR 1, spec §5 — rebuilt after the
-// anchor pass proved revision 1's could not go red). Three claims, each
-// of which a mutation below can break:
+// anchor pass proved revision 1's could not go red). Three claims; (a) and
+// (c) go red under a production mutation, (b) under a fixture regeneration:
 //
 //  (a) BYTE IDENTITY: the writer, driven with the SAME input the fixture
 //      was captured from, produces the SAME bytes. This is the gate that
@@ -354,7 +354,9 @@ Expected: seven files; `sacrifice-thrown-with-series.json` has `verdict: "saved-
 //      `seriesTrimmed` changes the sacrifice fixture's bytes).
 //  (b) KEY SET: each fixture's parsed key set equals a literal list, so a
 //      reviewer sees a renamed/added field BY NAME rather than as a diff
-//      of 40 KB of program bytes.
+//      of program bytes. This leg pins the FIXTURE FILES, not the writer —
+//      no production change can redden it; it goes red exactly when someone
+//      regenerates the fixtures, which is when a reviewer must look.
 //  (c) OLD BYTES STILL LOAD: bytes main wrote are accepted by the current
 //      reader. `toStrictEqual` here is a courtesy (the reader returns its
 //      parse unmodified — spec §5); the `not.toBeNull()` is the assertion
@@ -604,7 +606,6 @@ Counts at baseline: `for f in src/session/LogSession.test.tsx src/workout/Workou
 
 ```ts
 import type { MonitorRun } from "../monitor/monitorRun";
-import { commit } from "../monitor/handoffStore";
 
 export interface SeededRef {
   readonly sessionKey: string;
@@ -632,23 +633,11 @@ export async function seedMonitorRun(run: MonitorRun): Promise<SeededRef> {
   if (!result.accepted) refuse(result.reason, run);
   return { sessionKey: run.startedAt, revision: result.revision };
 }
-
-/** The synchronous form, for a seed that has to land inside a sync
- *  callback (an `onProceed` a component calls and then reads from). It
- *  binds the store instance THIS module loaded, so it is only correct in a
- *  test file that never calls `vi.resetModules()` — in one that does, the
- *  screen would read a different instance and the seed would only reach
- *  it through the durable bytes. */
-export function seedMonitorRunNow(run: MonitorRun): SeededRef {
-  const result = commit(run.startedAt, null, run);
-  if (!result.accepted) refuse(result.reason, run);
-  return { sessionKey: run.startedAt, revision: result.revision };
-}
 ```
 
 - [ ] **Step 2: Rewrite the call sites, file by file, running each file after**
 
-The transformation is mechanical: `saveMonitorRun(X);` → `await seedMonitorRun(X);` and the enclosing `it(...)` callback becomes `async` if it is not already. Remove `saveMonitorRun` from each file's `./monitorRun`/`../monitor/monitorRun` import and add `import { seedMonitorRun } from "../test/seedHandoff";` (path relative to the file). If a seed sits inside a nested helper function, make that helper `async` and `await` its callers. **A seed inside a SYNC callback a component invokes** (e.g. an `onProceed` prop) cannot await: use `seedMonitorRunNow(X)` there, which is correct ONLY in a file that never calls `vi.resetModules()` (`ConnectAction.test.tsx` and `useStartWorkout.test.tsx` qualify; `LogSession.test.tsx` and `WorkoutDetail.test.tsx` do NOT — in those, if a sync callback must seed, do `const store = await import("../monitor/handoffStore")` at the top of the test and call `store.commit(run.startedAt, null, run)` inside the callback). **`ConnectAction.test.tsx` is already converted by the author** (its one seed lives in the sync `connectAsTaskFiveWill` helper → `seedMonitorRunNow`); 28/28 green at baseline+helper.
+The transformation is mechanical: `saveMonitorRun(X);` → `await seedMonitorRun(X);` and the enclosing `it(...)` callback becomes `async` if it is not already. Remove `saveMonitorRun` from each file's `./monitorRun`/`../monitor/monitorRun` import and add `import { seedMonitorRun } from "../test/seedHandoff";` (path relative to the file). If a seed sits inside a nested helper function, make that helper `async` and `await` its callers. **A seed inside a SYNC callback a component invokes** (e.g. an `onProceed` prop) cannot await: call the store directly there (`commit(run.startedAt, null, run)` from a static import in a file that never `vi.resetModules()`; from `await import(...)` taken at the top of the test otherwise). **`ConnectAction.test.tsx` was converted by the author and taught something:** its stand-in `onProceed` (`connectAsTaskFiveWill`) runs TWICE in some tests — once as setup, once when the component fires it — and the real writer refuses the second create as `stale` where the raw seeder silently overwrote. The fixture now mirrors the hook's own create-commit (adopt a same-key entry as an update). Task 2's full-suite run is where that surfaced: `Tests 5970 passed` beside `Errors 2` — **read the `Errors` line too, not only `Test Files`/`Tests`.**
 
 **Three exceptions, each with a one-line comment at the site:**
 1. A test whose SUBJECT is the durable-only/reload shape — it asserts hydration receipts, `revision: 0` from hydration, or "a reload sees…" — keeps a raw `localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(run))` seed (test files are exempt from the boundary gate by pattern; the raw seed IS the reload shape). Comment: `// raw bytes on purpose: this test is about what a RELOAD sees`.
@@ -858,7 +847,7 @@ Each `retireHandoff([{ sessionKey: X.sessionKey, revision: X.revision }], R)` be
 
 - [ ] **Step 4: Tests that call with arrays**
 
-`grep -rnE '(retire|stageRetire|takeStagedRetire)(Handoff|ForTest)?\(\s*\[' src --include='*.test.ts' --include='*.test.tsx'` — rewrite each to the single-entry form; reassign the two `test-simulated` reasons per (b). `pnpm typecheck` is the census: it must be clean.
+`grep -rnE '(retire|stageRetire|takeStagedRetire)(Handoff|ForTest)?\(\s*\[' src --include='*.test.ts' --include='*.test.tsx'` — rewrite each one-element call to the single-entry form; reassign the two `test-simulated` reasons per (b). **Four sites pass an EMPTY set** (`handoffStore.test.ts:1023`, `:1024`, `:1025`, `:1038` — harden lens 1): they are the only gates on the `durableMalformed` sweep, and the narrowed `retire` has no empty case. Rewrite each as `store.retire({ sessionKey: "irrelevant-key", revision: 0 }, R)` — the sweep runs BEFORE the per-entry lookup, so a key that matches nothing is the empty set's exact equivalent, and the sibling test at `:1002` already uses that form. **Do NOT widen `retire` to `HandoffRef | null`**: no production producer can emit the empty case (`ConnectAction.tsx` stages 0-or-1; the hook guards on `null`), so a nullable arm would be a shape only tests reach. **Comment sweep in the same step:** `retire`'s doc comment ("Each `{sessionKey, revision}` in `set`…", "its own `set` argument"), the `stagedRetire` binding's own doc comment, `takeStagedRetire`'s and `discardStagedRetire`'s all still describe a SET — reword each to the entry. `pnpm typecheck` is the census: it must be clean.
 
 - [ ] **Step 5: Gates, commit, mutation**
 
@@ -877,6 +866,8 @@ Mutation: in `deriveClaim` change `reason === "save-success"` to `reason === "ma
 
 **Opus.** This is the compile-coupled task: deleting `saveMonitorRun`/`clearMonitorRun` and moving `loadMonitorRun`/`MONITOR_RUN_KEY`/`connectGuardStage` breaks every importer at once, so the whole re-point lands in one commit.
 
+**The author has paste-tested the PRODUCTION half of this task together with Task 3's** (they overlap in `ConnectAction.tsx`, so one patch carries both): `scratchpad/patches/task3+4-production.patch` in the controller's scratchpad, handed over with the dispatch. Against the baseline it typechecks with ZERO non-test errors, lints clean, and measures `grep -cE '^export (function|const) '` → `9` + `18` = 27. Apply it with `git apply --3way` on top of Task 3's commit (Task 3's hunks are already in; expect its `ConnectAction.tsx`/`handoffStore.ts`/`JustRow.tsx` hunks to need a hand-merge), then READ the result against Step 3 below — the step is the authority, the patch is the shortcut. Two things Step 3's prose omitted that the patch has: `monitorRun.ts` loses the `import { isPlainRecord }` Task 1 added (its only consumers moved), and `ConnectAction.tsx` adds `connectGuardStage, type ConnectGuardStage` to its existing `./handoffStore` import (it had a separate `./monitorRun` import for them, now deleted).
+
 **Files:**
 - Modify: `app/src/monitor/handoffStore.ts` (absorbs), `app/src/monitor/monitorRun.ts` (sheds `:28`, `:453-720` persistence half, `:1484-1612` `sessionRunState`/`monitorRunState`/`anyLiveSession`, `:1614-1719` `connectGuardStage`; `measuredSessionSeconds` becomes the function)
 - Modify: `app/src/monitor/handoffStore.test.ts` (gains the tests that move), `app/src/monitor/monitorRun.test.ts` (loses them), `app/scripts/handoffStoreBoundary.test.ts` (extended)
@@ -886,9 +877,11 @@ Mutation: in `deriveClaim` change `reason === "save-success"` to `reason === "ma
 **Interfaces:**
 - Produces: `loadMonitorRun()`, `connectGuardStage()`, `type ConnectGuardStage`, `MONITOR_RUN_KEY` from `handoffStore.ts`; `measuredSessionSeconds` as the function in `monitorRun.ts`.
 
+**The importer census, measured with the production patch applied and Task 3's test fixes NOT yet made** (so it includes Task 3's residue): `pnpm exec tsc -b` → errors in 20 test files — `handoffStore.test.ts` 24, `useMonitorSession.test.ts` 16, `LogSession.test.tsx` 8, `monitorRun.test.ts` 7, `ConnectAction.test.tsx` 5, `Today.test.tsx` 4, and 1-2 each in `burstReplay`, `handoffStoreReplay`, `liveDropSeamReplay`, `partialReplay`, `summaryHoldReplay`, `nfc/useNfcEntry`, `logDraft`, `ReviewSession`, `useStartWorkout`, `ConnectedInterstitial`, `WorkoutDetail.connectedRecovery`, `WorkoutDetail.postReleaseCommit`, `WorkoutDetail.programDropped`, `WorkoutDetail`. The typecheck is the census.
+
 - [ ] **Step 1: Failing tests in `handoffStore.test.ts` (red: the symbols do not exist on the store yet)**
 
-Add a `describe("loadMonitorRun — the raw durable read the Today guard needs (Phase MD PR 1)")`:
+Add a `describe("loadMonitorRun — the raw durable read the Today guard needs (Phase MD PR 1)")` — **paste-tested by the author as a standalone file (`scratchpad/patches/task4-loadMonitorRun-tests.ts`, 6/6 green against the moved store); fold its six `it`s into `handoffStore.test.ts` using that file's `store`/`freshRun` fixtures** (the standalone used `MONITOR_RUN_SHAPES[0].run` for want of `freshRun`). The sixth `it` — `connectGuardStage` staging `"unlogged"` for a memory-only entry after a denied write — is the P1-1 hole the old boolean parameter closed; it goes in with the other five, not only if mutation 3 needs it:
 
 ```ts
 describe("loadMonitorRun — the raw durable read the Today guard needs (Phase MD PR 1)", () => {
@@ -995,7 +988,7 @@ In `app/scripts/handoffStoreBoundary.test.ts`:
 - The module-scope-binding test (`:596`) is unchanged: `STORE_FILE` is still `src/monitor/handoffStore.ts` (one file — spec §10's open question, ruled here: the boundary gate's `STORE_FILE`/exemption constrain a split to cost two constants and a second exemption for nothing; the absorbed half is ~150 lines).
 - Header comment at `:105-118` (the NARROWED paragraph about `monitorRun.ts` holding sanctioned writes): rewrite to say the file now holds none and the count test asserts zero.
 
-Run: `pnpm test --project unit` → the two new tests red (monitorRun.ts still has `localStorage`; the store has `safe*` wrappers so the second may already be green — say which).
+Run: `pnpm test --project unit` → the first new test red (monitorRun.ts still has `localStorage`); the second is green already (the store has exactly three raw calls, one per wrapper — measured). **Measured after Step 3: `Tests 25 passed (25)`** (24 before, one replaced, two added). The exact edit is `scratchpad/patches/task4-boundary-test.patch`.
 
 - [ ] **Step 3: The move**
 
@@ -1146,7 +1139,7 @@ import {
 } from "../monitor/handoffStore";
 ```
 
-and `todayGuard.pin.test.ts:86-91`'s two `toContain` constants are updated to match (assertion 1's guard block is untouched; delete assertion 2's old `import { loadMonitorRun } from "../monitor/monitorRun";` line). `JustRow.tsx:10-17` and `ConnectAction.tsx:9` import `connectGuardStage`/`ConnectGuardStage` from `./handoffStore`/`../monitor/handoffStore` and drop the argument at `JustRow.tsx:663` and `ConnectAction.tsx:217`. `summaryModel.ts:102` keeps its name. Every test file: `MONITOR_RUN_KEY`/`loadMonitorRun` from the store; `clearMonitorRun(...)` → `localStorage.removeItem(MONITOR_RUN_KEY)` (13 test call sites: `grep -rn 'clearMonitorRun(' src --include='*.test.*'`); `LogSession.test.tsx:5197`, `:5210` → `connectGuardStage()`.
+and `todayGuard.pin.test.ts:86-91`'s two `toContain` constants are updated to match (assertion 1's guard block is untouched; delete assertion 2's old `import { loadMonitorRun } from "../monitor/monitorRun";` line). `JustRow.tsx:10-17` and `ConnectAction.tsx:9` import `connectGuardStage`/`ConnectGuardStage` from `./handoffStore`/`../monitor/handoffStore` and drop the argument at `JustRow.tsx:663` and `ConnectAction.tsx:217`. `summaryModel.ts:102` keeps its name. Every test file: `MONITOR_RUN_KEY`/`loadMonitorRun` from the store; `clearMonitorRun(...)` → `localStorage.removeItem(MONITOR_RUN_KEY)` (12 test call sites: `grep -rn 'clearMonitorRun(' src --include='*.test.*'`); `LogSession.test.tsx:5197`, `:5210` → `connectGuardStage()`.
 
 - [ ] **Step 4: Gates, commit**
 
@@ -1154,13 +1147,13 @@ and `todayGuard.pin.test.ts:86-91`'s two `toContain` constants are updated to ma
 pnpm typecheck && pnpm lint
 pnpm test --project unit && pnpm test --project client
 grep -rn 'saveMonitorRun(\|clearMonitorRun(\|anyLiveSession\|monitorRunState' src e2e scripts   # must be EMPTY for call sites; comment hits listed in the report
-grep -cE '^export (function|const) ' src/monitor/monitorRun.ts src/monitor/handoffStore.ts   # expected 9 + 18 = 27
+grep -cE '^export (function|const) ' src/monitor/monitorRun.ts src/monitor/handoffStore.ts   # prints two per-file counts: expected 9 and 18 (sum 27)
 git rev-parse --show-toplevel
 git add -A src scripts
 git commit -m "Move the stored run's persistence half into the store; delete the writer production never called"
 ```
 
-Mutations (commit first, `git log -1`): (1) in `loadMonitorRun` replace `return parseDurableRun(raw.value);` with `ensureHydrated(); return current?.run ?? null;` — the "reads the DURABLE tier only" test must fail (`expected {…} to be null`); (2) in `monitorRun.ts` add `const _probe = localStorage.getItem("x");` at module scope (compiles) — the boundary test's ZERO-references assertion must fail; (3) in `connectGuardStage` swap `currentUnretired() !== null` for `loadMonitorRun() !== null`, then run the moved connectGuardStage tests — say whether any goes red; if none does, the tests seed through `commit` (which also writes bytes) so both reads agree — ADD one test that seeds through `commit` with `setItem` mocked to throw (memory-only entry) and asserts `"unlogged"`; that is the P1-1 hole the parameter closed and the store read keeps closed. Revert each.
+Mutations (commit first, `git log -1`), **all three measured by the author in the scratch tree:** (1) in `loadMonitorRun` replace the WHOLE body (`safeGetItem` … `parseDurableRun`) with `ensureHydrated(); return current?.run ?? null;` — the "reads the DURABLE tier only" test fails (`expected { v: 2, … } to be null`) and the "returns the parsed record" test fails too (memory holds the reference, not the JSON copy). *A weaker mutant that keeps the `raw.value === null` early return is caught ONLY by the second test — the durable-only test never reaches the fallback when no bytes exist; use the whole-body form.* (2) in `monitorRun.ts` append `const _probe = localStorage.getItem("x"); void _probe;` at module scope (compiles) — the boundary gate's ZERO-references test fails (`not to match /localStorage/`, `1 failed | 24 passed`). (3) in `connectGuardStage` swap `currentUnretired() !== null` for `loadMonitorRun() !== null` — the memory-only `it` fails (`expected null to be 'unlogged'`, `1 failed | 5 passed`). Revert each.
 
 Report: the export census (both lists, before and after — spec §9.3), which `monitorRun.test.ts` cases moved / died / stayed with counts, the comment sweep hits, all three mutation outputs.
 
@@ -1224,7 +1217,12 @@ Replace the second `it` (`still reads the monitor record DIRECTLY, never through
     // read in the file, and it is the pinned one. Re-routing the guard
     // through `readHandoff()` fails this AND the byte pin above; adding a
     // second raw read anywhere in the screen fails this alone.
-    expect(source.split("loadMonitorRun(")).toHaveLength(2);
+    // Comments in Today.tsx mention the call in backticks (four
+    // occurrences of `loadMonitorRun(` at baseline, ONE of them code); a
+    // call is never preceded by a backtick or an identifier character, so
+    // those are excluded — measured, not assumed.
+    const calls = source.match(/(^|[^`\w])loadMonitorRun\(\)/gm) ?? [];
+    expect(calls).toHaveLength(1);
     expect(PINNED_GUARD).toContain("loadMonitorRun()");
   });
 ```
@@ -1243,7 +1241,7 @@ git rev-parse --show-toplevel && git add src/today/todayGuard.pin.test.ts src/mo
 git log -1 --oneline
 ```
 
-Mutation A (spec §8's): in `Today.tsx` change the guard's `const monitorRun = loadMonitorRun();` to `const monitorRun = readHandoff()?.run ?? null;` (compiles; `readHandoff` is already imported). Expected: assertion 1 (byte pin) fails AND the new call-count test fails (`expected [ '…' ] to have a length of 2 but got 1`). Mutation B: add a second `loadMonitorRun();` call anywhere else in `Today.tsx` (e.g. inside `UnloggedMonitorRow`). Expected: ONLY the call-count test fails (`got 3`). Revert both; record both messages.
+**Paste-tested by the author (`scratchpad/patches/task6-pin.patch`, 4/4 green against the moved import).** Mutation A (spec §8's): in `Today.tsx` change the guard's `const monitorRun = loadMonitorRun();` to `const monitorRun = readHandoff()?.run ?? null;` (compiles; `readHandoff` is already imported). **Measured:** three tests fail — the byte pin, the call-count test (`expected [] to have a length of 1`), and the occurs-once pin. Mutation B: add a second `loadMonitorRun();` statement OUTSIDE the pinned block (e.g. inside `UnloggedMonitorRow`'s body — NOT at the top of the guard's own `useEffect`, which also breaks the byte pin). Expected: ONLY the call-count test fails (`got 2`). Revert both; record both messages.
 
 ---
 
@@ -1258,6 +1256,7 @@ Mutation A (spec §8's): in `Today.tsx` change the guard's `const monitorRun = l
 2. `## Phase MD` PR 1 row: tick `- [x]` and append `**LANDED as PR #<n>** — one file, 27 exports (from 35), `clearMonitorRun` deleted rather than moved (zero production callers; plan "The export count").`
 3. `## Small, queued` `isPlainRecord` row: prefix `**DONE — folded into Phase MD PR 1 (James's rider, 2026-09-12): one export in `src/isPlainRecord.ts`, four call sites re-pointed.**`. Do NOT strike the row; James rules strikes at the hand-back.
 4. `## Codebase-audit owners`, hand-off residual 1: append `**Landed in Phase MD PR 1 (#<n>); proposed for STRIKE at that PR's hand-back.**`
+5. `## Phase MD` **Exploration A** row: append the verdict paragraph from `docs/superpowers/audits/2026-09-12-architecture-walk/exploration-a-freeze-observer.md` §B.3 ("**Exploration A — answered 2026-09-12: NO PR.** …", verbatim — it is already written as ROADMAP text), and change its `- [ ]` to `- [x]`. That report file rides this PR (it is already in the worktree, uncommitted until Task 7 commits it); its §B.4 riders (three one-line items) belong to PR 2 and are recorded in the controller's memory, not here.
 
 - [ ] **Step 2: The full gate (RF1 — this diff touches `app/src/`)**
 

@@ -11,7 +11,6 @@ import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { saveRun, loadRun, type SessionRun } from "../session/run";
 import { createMonitorRun, loadMonitorRun } from "./monitorRun";
-import { seedMonitorRunNow } from "../test/seedHandoff";
 import {
   commit as commitHandoff,
   currentUnretired as currentUnretiredHandoff,
@@ -132,18 +131,34 @@ function connectAsTaskFiveWill(): void {
   if ("code" in compiled) {
     throw new Error(`fixture failed to compile: ${compiled.code}`);
   }
-  seedMonitorRunNow(
-    createMonitorRun(
-      {
-        workoutId: "fl-connect",
-        title: w.title,
-        program: compiled,
-        deviceName: "PM5 430123456",
-        logSeed: TEST_SEED,
-      },
-      t0,
-    ),
+  const run = createMonitorRun(
+    {
+      workoutId: "fl-connect",
+      title: w.title,
+      program: compiled,
+      deviceName: "PM5 430123456",
+      logSeed: TEST_SEED,
+    },
+    t0,
   );
+  // Mirrors the hook's own create-commit (`useMonitorSession.ts`, the
+  // "ready" branch): a same-key entry left by an EARLIER proceed in the same
+  // test is adopted as an update, never overwritten. The real writer refuses
+  // a second create against a current key ("stale"); the raw seeder this
+  // replaced (Phase MD PR 1) silently overwrote, which is why the double
+  // proceed some tests perform went unnoticed until fixtures went through
+  // `commit`.
+  const stale = currentUnretiredHandoff();
+  const result = commitHandoff(
+    run.startedAt,
+    stale !== null && stale.sessionKey === run.startedAt
+      ? stale.revision
+      : null,
+    run,
+  );
+  if (!result.accepted) {
+    throw new Error(`connectAsTaskFiveWill refused: ${result.reason}`);
+  }
 }
 
 function renderConnect() {
