@@ -76,15 +76,7 @@ function SelectedReview({ search }: { search: string }) {
           onDiscard={() =>
             selected.kind === "timer"
               ? clearSelectedTimer(selected.run, null)
-              : retire(
-                  [
-                    {
-                      sessionKey: selected.entry.sessionKey,
-                      revision: selected.entry.revision,
-                    },
-                  ],
-                  "monitor-discard",
-                )
+              : retire(selected.entry, "monitor-discard")
           }
         />
       );
@@ -109,12 +101,7 @@ function SelectedReview({ search }: { search: string }) {
         <ReadOnlyRecording
           run={entry.run}
           source="PM5"
-          onDiscard={() =>
-            retire(
-              [{ sessionKey: entry.sessionKey, revision: entry.revision }],
-              "monitor-discard",
-            )
-          }
+          onDiscard={() => retire(entry, "monitor-discard")}
         />
       );
     }

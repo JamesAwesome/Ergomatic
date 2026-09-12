@@ -116,10 +116,7 @@ export function useStartWorkout(
       clearRun();
       const stale = currentUnretiredHandoff();
       if (stale !== null) {
-        retireHandoff(
-          [{ sessionKey: stale.sessionKey, revision: stale.revision }],
-          "start-replace",
-        );
+        retireHandoff(stale, "start-replace");
       }
       navigate("/session/countdown");
     } else {

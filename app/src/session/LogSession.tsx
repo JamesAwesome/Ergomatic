@@ -1983,15 +1983,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       discard.disarm();
       const fallenThrough = currentUnretiredHandoff();
       if (fallenThrough !== null) {
-        retireHandoff(
-          [
-            {
-              sessionKey: fallenThrough.sessionKey,
-              revision: fallenThrough.revision,
-            },
-          ],
-          "manual-discard",
-        );
+        retireHandoff(fallenThrough, "manual-discard");
       }
       navigate(`/library/${workoutId}`);
     } else {
@@ -2094,15 +2086,7 @@ export function ProgrammedMonitorSummary({
     saveError,
     submit,
   } = useLogForm((logId) => {
-    retireHandoff(
-      [
-        {
-          sessionKey: monitorEntry.sessionKey,
-          revision: monitorEntry.revision,
-        },
-      ],
-      "save-success",
-    );
+    retireHandoff(monitorEntry, "save-success");
     const offer = pendingOfferRef.current;
     if (offer !== null) {
       if (logId !== null)
@@ -2314,15 +2298,7 @@ export function ProgrammedMonitorSummary({
   function handleMonitorDiscardClick() {
     if (discard.armed) {
       discard.disarm();
-      retireHandoff(
-        [
-          {
-            sessionKey: activeMonitorEntry.sessionKey,
-            revision: activeMonitorEntry.revision,
-          },
-        ],
-        "monitor-discard",
-      );
+      retireHandoff(activeMonitorEntry, "monitor-discard");
       navigate(context.kind === "review" ? "/today" : `/library/${workoutId}`);
     } else {
       discard.arm();

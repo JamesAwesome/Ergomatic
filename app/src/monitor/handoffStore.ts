@@ -11,7 +11,7 @@
 //
 // **Names verbatim from the plan's Global Constraints:** `handoffStore`,
 // `commit(sessionKey, expectedRevision, next)` (`null` = expect-absent),
-// `retryDurable`, `read`/`currentUnretired`, `retire(set, reason)`,
+// `retryDurable`, `read`/`currentUnretired`, `retire(entry, reason)`,
 // tombstones, receipts (`store-second-key-refused`, `handoff-dropped
 // reason=richer-at-save`, retire receipts w/ claim state), `durableRevision`
 // + `durableComplete`. `lastAcceptedRevisionRef` is the HOOK's own ref
@@ -39,8 +39,8 @@
 //     but not HOW that authorization survives from the guard's own read
 //     (well before BLE/programming) to the wire "armed" event (well
 //     after) without being re-read (which would defeat the point — see
-//     `stagedRetireSet`'s own doc comment). This module exposes that as
-//     `stageRetire(set)`/`takeStagedRetire()`, the store's own call —
+//     `stagedRetire`'s own doc comment). This module exposes that as
+//     `stageRetire(entry)`/`takeStagedRetire()`, the store's own call —
 //     the guard and the hook are different files/components with no
 //     prop path between them, so the store is the only place this
 //     hand-off can live without inventing a second mechanism.
@@ -79,6 +79,26 @@ export interface HandoffEntry {
   readonly revision: number;
   readonly run: MonitorRun;
 }
+
+/** The key-and-revision pair every retire/stage call names — a
+ *  `HandoffEntry` satisfies it structurally, so a door passes the entry it
+ *  already holds (Phase MD PR 1: 12 of 13 sites used to wrap it in a
+ *  one-element array). */
+export type HandoffRef = Pick<HandoffEntry, "sessionKey" | "revision">;
+
+/** Every reason a production door gives when it retires the record. CLOSED
+ *  on purpose (Phase MD PR 1): `deriveClaim` branches on `"save-success"`,
+ *  and a free string made that comparison a convention. Tests use these
+ *  same members — a test-only reason would un-close the union. */
+export type RetireReason =
+  | "save-success"
+  | "manual-discard"
+  | "monitor-discard"
+  | "today-discard"
+  | "start-replace"
+  | "row-instead"
+  | "connect-guard-armed"
+  | "createMonitorRun-defense";
 
 /** §1/§7: the three shapes a durable attempt can leave behind. `"saved"` —
  *  the whole record, series included, landed. `"saved-without-series"` —
@@ -304,12 +324,12 @@ const claims = new Map<string, { renderedRevision: number }>();
  *  interstitial state's own "Cancel: nothing lost" promise, caught by
  *  review.
  *
- *  One process-scoped array, not per-key -- there is at most one Connect
+ *  One process-scoped slot, not per-key -- there is at most one Connect
  *  guard in flight at a time (single-tab assumption, same as every other
  *  piece of state in this module). Overwritten on every `stageRetire`
  *  call (never accumulated): `ConnectAction.tsx`'s own `handleConnect`
- *  calls this UNCONDITIONALLY on every press, staging an empty array
- *  when nothing needs protecting -- so a stale set from an earlier,
+ *  calls this UNCONDITIONALLY on every press, staging `null`
+ *  when nothing needs protecting -- so a stale entry from an earlier,
  *  abandoned press (the confirm panel cancelled, or a different
  *  workout's own Connect) can never survive to wrongly authorize a LATER
  *  press's own "armed" event. `useMonitorSession.ts`'s own `cancel()`/
@@ -322,34 +342,42 @@ const claims = new Map<string, { renderedRevision: number }>();
  *  how a future reader mistakes it for a leak).**
  *  `ConnectedInterstitial.tsx`'s `handleTryAgain` reaches `connect()` —
  *  and from there "armed" — WITHOUT going through `ConnectAction.tsx`'s
- *  `handleConnect`, so it never re-stages. The set from the ORIGINAL
+ *  `handleConnect`, so it never re-stages. The entry from the ORIGINAL
  *  press deliberately survives and authorizes the retry's own armed
  *  retire. That is right, not a hole: Try Again is the SAME attempt on
  *  the SAME record the rower was already warned about one screen earlier
- *  (a failed pair, a dropped link), not a second authorization. The set
+ *  (a failed pair, a dropped link), not a second authorization. The entry
  *  is only discarded when the attempt genuinely DIES -- `cancel()`,
  *  `programDropped`, the confirm panel's own Cancel -- each of which
  *  emits `staged-retire-discarded`. */
-let stagedRetireSet: readonly { sessionKey: string; revision: number }[] = [];
-/** Phase NF (design spec 2026-09-03 §3): WHICH attempt staged the set.
+let stagedRetire: HandoffRef | null = null;
+/** Phase NF (design spec 2026-09-03 §3): WHICH attempt staged the entry.
  *  Discard is compare-by-attempt-ID so a late cleanup from attempt A (an
  *  aborted NFC read settling after the rower already pressed Connect)
  *  cannot discard B's authorization. `null` whenever nothing is staged. */
 let stagedRetireAttempt: ConnectionAttemptId | null = null;
 
 /** Records the Connect guard's own authorization at stage time. See
- *  `stagedRetireSet`'s own doc comment above for the full discipline.
+ *  `stagedRetire`'s own doc comment above for the full discipline.
  *  Task 5 re-review (F-4): a non-empty slot being overwritten is
  *  receipted (`stage-retire-replaced`) -- the ordinary case (staging over
  *  an empty slot) stays silent. */
 export function stageRetire(
-  set: readonly { sessionKey: string; revision: number }[],
+  entry: HandoffRef | null,
   attemptId: ConnectionAttemptId,
 ): void {
-  if (stagedRetireSet.length > 0) {
-    emit({ kind: "stage-retire-replaced", discarded: stagedRetireSet });
+  if (stagedRetire !== null) {
+    emit({
+      kind: "stage-retire-replaced",
+      discarded: [
+        {
+          sessionKey: stagedRetire.sessionKey,
+          revision: stagedRetire.revision,
+        },
+      ],
+    });
   }
-  stagedRetireSet = set;
+  stagedRetire = entry;
   stagedRetireAttempt = attemptId;
 }
 
@@ -360,25 +388,24 @@ export function stageRetire(
  *  design. For the "this attempt died with something still staged" path,
  *  use `discardStagedRetire` below instead -- never this one, discarding
  *  its result. */
-export function takeStagedRetire(attemptId: ConnectionAttemptId): readonly {
-  sessionKey: string;
-  revision: number;
-}[] {
-  // Phase NF (antagonist delta pass F7, then hardening lens 2): a set
+export function takeStagedRetire(
+  attemptId: ConnectionAttemptId,
+): HandoffRef | null {
+  // Phase NF (antagonist delta pass F7, then hardening lens 2): an entry
   // staged by attempt A may authorize ONLY attempt A's armed retire.
   // Phase NF creates a state that did not exist before — a rower back on
-  // workout detail with a set still staged after a quiet/inline NFC
+  // workout detail with an entry still staged after a quiet/inline NFC
   // outcome — and JustRow's zero-argument `connect()` mints its own ID and
   // never stages. A mismatched take is a PURE READ: it neither consumes
-  // nor destroys the set (lens 2: destroying it would let another
+  // nor destroys the entry (lens 2: destroying it would let another
   // attempt's armed event orphan A's authorization). Invariant, not
-  // mechanism: a staged set authorizes exactly one attempt ID's armed
+  // mechanism: a staged entry authorizes exactly one attempt ID's armed
   // retire and nothing else.
-  if (stagedRetireAttempt !== attemptId) return [];
-  const set = stagedRetireSet;
-  stagedRetireSet = [];
+  if (stagedRetireAttempt !== attemptId) return null;
+  const entry = stagedRetire;
+  stagedRetire = null;
   stagedRetireAttempt = null;
-  return set;
+  return entry;
 }
 
 /** Task 5 re-review (F-3/F-4, 2026-08-30): the DISCARD path -- a dead
@@ -393,16 +420,19 @@ export function takeStagedRetire(attemptId: ConnectionAttemptId): readonly {
  *  receipt. */
 export function discardStagedRetire(attemptId: ConnectionAttemptId): void {
   // Phase NF: compare-by-attempt-ID. A discard from an attempt that is not
-  // the one that staged the set is a no-op, silently — it is the ordinary
+  // the one that staged the entry is a no-op, silently — it is the ordinary
   // late-cleanup case, not a fault.
   if (stagedRetireAttempt !== attemptId) return;
-  const set = takeStagedRetire(attemptId);
-  if (set.length > 0) {
-    emit({ kind: "staged-retire-discarded", discarded: set });
+  const entry = takeStagedRetire(attemptId);
+  if (entry !== null) {
+    emit({
+      kind: "staged-retire-discarded",
+      discarded: [{ sessionKey: entry.sessionKey, revision: entry.revision }],
+    });
   }
 }
 
-/** Test/diagnostic accessor: which attempt staged the current set. */
+/** Test/diagnostic accessor: which attempt staged the current entry. */
 export function stagedRetireAttemptId(): ConnectionAttemptId | null {
   return stagedRetireAttempt;
 }
@@ -469,7 +499,7 @@ function malformedReceipt(raw: string): HandoffReceipt {
  *    also throws leaves the old garbage exactly where it was, same as
  *    today.
  *  - `retire()` now ALSO sweeps the slot whenever `durableMalformed` is
- *    set, independent of whether its own `set` argument names anything
+ *    set, independent of whether its own entry argument names anything
  *    that exists — this is the leg that was previously permanently
  *    unreachable: a malformed durable blob hydrates to `current === null`,
  *    so `retire`'s per-entry lookup (keyed on `current.sessionKey`) could
@@ -588,7 +618,7 @@ function performDurableWrite(
  */
 function deriveClaim(
   sessionKey: string,
-  reason: string,
+  reason: RetireReason,
 ): { claimState: ClaimState; claimedRenderedRevision?: number } {
   const existing = claims.get(sessionKey);
   if (existing === undefined) return { claimState: "unclaimed" };
@@ -820,15 +850,15 @@ export function currentUnretired(sessionKey?: string): HandoffEntry | null {
 
 /**
  * §1: "the only destructive operation; one receipt per retired entry (key,
- * revision, claim state §6); nothing found → nothing emitted." Each
- * `{sessionKey, revision}` in `set` is looked up by KEY alone — a revision
+ * revision, claim state §6); nothing found → nothing emitted." The
+ * `{sessionKey, revision}` passed is looked up by KEY alone — a revision
  * mismatch (the entry was superseded between authorization and this call)
  * never blocks the retire; it only changes what the receipt reports
  * (`superseded`/`retiredRevision` vs `authorizedRevision`). This is also
  * what makes save-success's own retire "EXEMPT from rejection by
  * construction" (§1) with no special-casing needed here beyond the
  * `reason` string driving `deriveClaimState`/the `handoff-dropped` receipt
- * below: a genuine key MISMATCH (the set names a key that isn't the
+ * below: a genuine key MISMATCH (the entry names a key that isn't the
  * store's current one at all — §1's "receipted-impossible" new-key case)
  * is simply absent from `current`'s perspective and falls into "nothing
  * found," the identical no-op path an ordinary stale lookup takes.
@@ -846,9 +876,9 @@ export function currentUnretired(sessionKey?: string): HandoffEntry | null {
  * the ordinary retire receipt so the failure is at least named, even
  * though nothing downstream branches on it.
  *
- * **Also sweeps a malformed durable slot, independent of `set` finding
+ * **Also sweeps a malformed durable slot, independent of the entry finding
  * anything** (task-2 review, finding I2). Every call to this function —
- * even one whose own `set` matches nothing at all — is the ONE reachable
+ * even one whose own entry matches nothing at all — is the ONE reachable
  * moment nothing else in this module ever gets: `retire` is the only
  * function that ever calls `safeRemoveItem`, so a malformed blob (which
  * hydrates to `current === null` and can therefore never be "found" by
@@ -859,8 +889,8 @@ export function currentUnretired(sessionKey?: string): HandoffEntry | null {
  * failure there emits the identical `storage-getter-error` receipt.
  */
 export function retire(
-  set: readonly { sessionKey: string; revision: number }[],
-  reason: string,
+  { sessionKey, revision: authorizedRevision }: HandoffRef,
+  reason: RetireReason,
 ): void {
   ensureHydrated();
 
@@ -872,55 +902,53 @@ export function retire(
     durableMalformed = false;
   }
 
-  for (const { sessionKey, revision: authorizedRevision } of set) {
-    const entry =
-      current !== null && current.sessionKey === sessionKey ? current : null;
-    if (entry === null) continue; // nothing found -> nothing emitted (§1)
+  const entry =
+    current !== null && current.sessionKey === sessionKey ? current : null;
+  if (entry === null) return; // nothing found -> nothing emitted (§1)
 
-    const { claimState, claimedRenderedRevision } = deriveClaim(
-      sessionKey,
-      reason,
-    );
+  const { claimState, claimedRenderedRevision } = deriveClaim(
+    sessionKey,
+    reason,
+  );
 
-    current = null;
-    tombstones.add(sessionKey);
-    claims.delete(sessionKey);
-    durableStateByKey.delete(sessionKey);
-    cachedVerdicts.delete(sessionKey);
-    const removal = safeRemoveItem(MONITOR_RUN_KEY);
-    if (!removal.ok) {
-      emit({ kind: "storage-getter-error", operation: "remove" });
-    }
+  current = null;
+  tombstones.add(sessionKey);
+  claims.delete(sessionKey);
+  durableStateByKey.delete(sessionKey);
+  cachedVerdicts.delete(sessionKey);
+  const removal = safeRemoveItem(MONITOR_RUN_KEY);
+  if (!removal.ok) {
+    emit({ kind: "storage-getter-error", operation: "remove" });
+  }
 
-    const superseded = entry.revision !== authorizedRevision;
+  const superseded = entry.revision !== authorizedRevision;
+  emit({
+    kind: "retire",
+    sessionKey,
+    authorizedRevision,
+    retiredRevision: entry.revision,
+    superseded,
+    claimState,
+    ...(claimedRenderedRevision !== undefined
+      ? { claimedRenderedRevision }
+      : {}),
+    reason,
+  });
+
+  // task-2 review, minor: gated on STRICTLY GREATER, not merely
+  // `superseded` (`!==`) — "richer-at-save" asserts the current
+  // revision is richer; revisions are monotonic in every reachable
+  // sequence, so this is equivalent in practice, but the label this
+  // receipt carries should never be reachable via a LOWER revision if
+  // some future bug ever produced one.
+  if (reason === "save-success" && entry.revision > authorizedRevision) {
     emit({
-      kind: "retire",
+      kind: "handoff-dropped",
+      reason: "richer-at-save",
       sessionKey,
-      authorizedRevision,
-      retiredRevision: entry.revision,
-      superseded,
-      claimState,
-      ...(claimedRenderedRevision !== undefined
-        ? { claimedRenderedRevision }
-        : {}),
-      reason,
+      claimedRevision: authorizedRevision,
+      currentRevision: entry.revision,
     });
-
-    // task-2 review, minor: gated on STRICTLY GREATER, not merely
-    // `superseded` (`!==`) — "richer-at-save" asserts the current
-    // revision is richer; revisions are monotonic in every reachable
-    // sequence, so this is equivalent in practice, but the label this
-    // receipt carries should never be reachable via a LOWER revision if
-    // some future bug ever produced one.
-    if (reason === "save-success" && entry.revision > authorizedRevision) {
-      emit({
-        kind: "handoff-dropped",
-        reason: "richer-at-save",
-        sessionKey,
-        claimedRevision: authorizedRevision,
-        currentRevision: entry.revision,
-      });
-    }
   }
 }
 
@@ -978,7 +1006,7 @@ export function resetForTests(): void {
   cachedVerdicts.clear();
   hydrated = false;
   durableMalformed = false;
-  stagedRetireSet = [];
+  stagedRetire = null;
   stagedRetireAttempt = null;
   // Reuses `setReceiptChannel(null)` rather than duplicating its
   // `() => undefined` default inline: a second, hand-written copy of that

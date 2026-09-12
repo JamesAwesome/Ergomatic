@@ -3274,10 +3274,7 @@ export function useMonitorSession(
           const sameKeyStale =
             stale !== null && stale.sessionKey === run.startedAt;
           if (stale !== null && !sameKeyStale) {
-            retireHandoff(
-              [{ sessionKey: stale.sessionKey, revision: stale.revision }],
-              "createMonitorRun-defense",
-            );
+            retireHandoff(stale, "createMonitorRun-defense");
           }
           const created = commitHandoff(
             run.startedAt,
@@ -3861,7 +3858,7 @@ export function useMonitorSession(
         // drives.
         //
         // `takeStagedRetireHandoff()` consumes (returns AND clears) the
-        // set unconditionally — a no-op array when `ConnectAction.tsx`
+        // entry unconditionally — `null` when `ConnectAction.tsx`
         // never had anything to stage. Key-bound to whatever was staged:
         // `retire()`'s own key lookup finds and removes the CURRENT entry
         // for that key regardless of the authorized revision, reporting a
@@ -3874,9 +3871,9 @@ export function useMonitorSession(
         // zero-argument connect) authorizes nothing here.
         const staged =
           attemptIdRef.current === null
-            ? []
+            ? null
             : takeStagedRetireHandoff(attemptIdRef.current);
-        if (staged.length > 0) {
+        if (staged !== null) {
           retireHandoff(staged, "connect-guard-armed");
         }
         // The `error: null` is belt-and-braces and known to be so (task-4

@@ -3378,7 +3378,7 @@ describe("LogSession: the log-door miss survives the teardown that follows it", 
 // `handoffStore.retire()` now), so a spy on the old function would never
 // fire regardless of correctness. Same `vi.doMock` + `vi.importActual`
 // wrapping idiom `mockMonitorRunClearSpy` used, now on `retire` itself —
-// records the exact `(set, reason)` pair so a test can assert not just
+// records the exact `(entry, reason)` pair so a test can assert not just
 // THAT a retire happened but which key/revision/reason it carried.
 function mockHandoffRetireSpy() {
   const spy = vi.fn();
@@ -3389,11 +3389,11 @@ function mockHandoffRetireSpy() {
     return {
       ...actual,
       retire: (
-        set: readonly { sessionKey: string; revision: number }[],
-        reason: string,
+        entry: Parameters<typeof actual.retire>[0],
+        reason: Parameters<typeof actual.retire>[1],
       ) => {
-        spy(set, reason);
-        return actual.retire(set, reason);
+        spy(entry, reason);
+        return actual.retire(entry, reason);
       },
     };
   });
@@ -3785,7 +3785,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(loadMonitorRun()).toBeNull();
     expect(retireSpy).toHaveBeenCalledTimes(1);
     expect(retireSpy).toHaveBeenCalledWith(
-      [{ sessionKey: run.startedAt, revision: 0 }],
+      expect.objectContaining({ sessionKey: run.startedAt, revision: 0 }),
       "save-success",
     );
   });
@@ -4307,7 +4307,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(loadMonitorRun()).toBeNull();
     expect(retireSpy).toHaveBeenCalledTimes(1);
     expect(retireSpy).toHaveBeenCalledWith(
-      [{ sessionKey: run.startedAt, revision: 0 }],
+      expect.objectContaining({ sessionKey: run.startedAt, revision: 0 }),
       "save-success",
     );
   });
@@ -4388,7 +4388,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(loadMonitorRun()).toBeNull();
     expect(retireSpy).toHaveBeenCalledTimes(1);
     expect(retireSpy).toHaveBeenCalledWith(
-      [{ sessionKey: run.startedAt, revision: 0 }],
+      expect.objectContaining({ sessionKey: run.startedAt, revision: 0 }),
       "save-success",
     );
 
@@ -4603,7 +4603,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(loadMonitorRun()).toBeNull();
     expect(retireSpy).toHaveBeenCalledTimes(1);
     expect(retireSpy).toHaveBeenCalledWith(
-      [{ sessionKey: run.startedAt, revision: 0 }],
+      expect.objectContaining({ sessionKey: run.startedAt, revision: 0 }),
       "save-success",
     );
   });
@@ -6540,8 +6540,8 @@ describe("LogSession: the abandon path — claim survives unmount, counted at th
     const staged = handoffStore.takeStagedRetire(
       handoffStore.stagedRetireAttemptId() ?? "",
     );
-    expect(staged.length).toBe(1);
-    handoffStore.retire(staged, "connect-guard-armed");
+    expect(staged).not.toBeNull();
+    handoffStore.retire(staged!, "connect-guard-armed");
 
     const retireReceipt = receipts.find(
       (r) => (r as { kind?: string }).kind === "retire",

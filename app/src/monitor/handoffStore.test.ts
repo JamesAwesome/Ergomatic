@@ -24,7 +24,7 @@ import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { MONITOR_RUN_KEY, type MonitorRun } from "./monitorRun";
 import type { SeriesData } from "./seriesRecorder";
-import type { HandoffReceipt } from "./handoffStore";
+import type { HandoffReceipt, RetireReason } from "./handoffStore";
 
 type StoreModule = typeof import("./handoffStore");
 
@@ -481,10 +481,7 @@ describe("tombstones — post-retire refusal and masking", () => {
   it("a commit(create) for a retired key is refused retired, receipted, and the physical bytes are removed", () => {
     const run = freshRun(t0.toISOString());
     store.commit(run.startedAt, null, run);
-    store.retire(
-      [{ sessionKey: run.startedAt, revision: 0 }],
-      "monitor-discard",
-    );
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "monitor-discard");
 
     const resurrection = store.commit(
       run.startedAt,
@@ -513,7 +510,7 @@ describe("tombstones — post-retire refusal and masking", () => {
 
     expect(() =>
       store.retire(
-        [{ sessionKey: run.startedAt, revision: 0 }],
+        { sessionKey: run.startedAt, revision: 0 },
         "monitor-discard",
       ),
     ).not.toThrow();
@@ -534,17 +531,18 @@ describe("tombstones — post-retire refusal and masking", () => {
 describe("staged retire is keyed by attempt ID (Phase NF)", () => {
   const A = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
   const B = "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
-  it("a take under another attempt's ID is a PURE READ — the set stays staged for its owner", () => {
-    store.stageRetire([{ sessionKey: "k", revision: 1 }], A);
-    expect(store.takeStagedRetire(B)).toStrictEqual([]);
+  it("a take under another attempt's ID is a PURE READ — the entry stays staged for its owner", () => {
+    store.stageRetire({ sessionKey: "k", revision: 1 }, A);
+    expect(store.takeStagedRetire(B)).toBeNull();
     expect(store.stagedRetireAttemptId()).toBe(A);
-    expect(store.takeStagedRetire(A)).toStrictEqual([
-      { sessionKey: "k", revision: 1 },
-    ]);
+    expect(store.takeStagedRetire(A)).toStrictEqual({
+      sessionKey: "k",
+      revision: 1,
+    });
     expect(store.stagedRetireAttemptId()).toBeNull();
   });
   it("a discard under another attempt's ID is a no-op; under the owner's ID it discards and receipts", () => {
-    store.stageRetire([{ sessionKey: "k", revision: 1 }], A);
+    store.stageRetire({ sessionKey: "k", revision: 1 }, A);
     store.discardStagedRetire(B);
     expect(store.stagedRetireAttemptId()).toBe(A);
     receipts.length = 0;
@@ -552,12 +550,38 @@ describe("staged retire is keyed by attempt ID (Phase NF)", () => {
     expect(store.stagedRetireAttemptId()).toBeNull();
     expect(receipts.map((r) => r.kind)).toContain("staged-retire-discarded");
   });
+
+  // Harden lens 2 (coordinator addendum, Phase MD PR 1 Task 3): a door
+  // stages the WHOLE `HandoffEntry` it already holds (structural typing
+  // accepts it as a `HandoffRef` — typecheck stays silent), so the entry
+  // sitting in `stagedRetire` carries `run` (program, series, up to
+  // ~14400 samples). The receipt must still narrow to `{sessionKey,
+  // revision}` — every receipt is piped through `JSON.stringify` into the
+  // session ring, and leaking the whole record there on every
+  // replace/discard is the defect this test exists to catch.
+  it("stage-retire-replaced narrows a staged HandoffEntry to sessionKey/revision — the receipt never carries its run", () => {
+    const run = freshRun("2026-08-05T12:00:00.000Z");
+    store.commit(run.startedAt, null, run);
+    const entry = store.currentUnretired()!;
+
+    store.stageRetire(entry, A); // stages the WHOLE entry, `run` included
+    store.stageRetire({ sessionKey: "later-key", revision: 0 }, A); // replaces it
+
+    const receipt = receiptsOfKind("stage-retire-replaced").at(-1)!;
+    expect(receipt.discarded).toStrictEqual([
+      { sessionKey: entry.sessionKey, revision: entry.revision },
+    ]);
+    expect(Object.keys(receipt.discarded[0]!).sort()).toStrictEqual([
+      "revision",
+      "sessionKey",
+    ]);
+  });
 });
 
 describe("retire — sets, per-entry receipts, claim states, no-op", () => {
   it("no-op retire: a set naming a key the store has nothing current for emits NOTHING", () => {
     store.retire(
-      [{ sessionKey: "never-existed", revision: 0 }],
+      { sessionKey: "never-existed", revision: 0 },
       "monitor-discard",
     );
     expect(receipts).toStrictEqual([]);
@@ -579,7 +603,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     expect(keyA).not.toBe(keyB);
     receipts.length = 0;
 
-    store.retire([{ sessionKey: keyA, revision: 0 }], "monitor-discard");
+    store.retire({ sessionKey: keyA, revision: 0 }, "monitor-discard");
 
     // B SURVIVES, whole: still the current unretired entry, at its own
     // revision, still readable, still durable.
@@ -609,7 +633,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     const run = freshRun(t0.toISOString());
     store.commit(run.startedAt, null, run);
 
-    store.retire([{ sessionKey: run.startedAt, revision: 0 }], "today-discard");
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "today-discard");
 
     expect(receiptsOfKind("retire")).toStrictEqual([
       {
@@ -629,10 +653,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     store.commit(run.startedAt, null, run);
     store.claim(run.startedAt, 0);
 
-    store.retire(
-      [{ sessionKey: run.startedAt, revision: 0 }],
-      "manual-discard",
-    );
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "manual-discard");
 
     expect(receiptsOfKind("retire")[0]!.claimState).toBe("claimed");
     expect(receiptsOfKind("retire")[0]!.claimedRenderedRevision).toBe(0);
@@ -643,7 +664,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     store.commit(run.startedAt, null, run);
     store.claim(run.startedAt, 0);
 
-    store.retire([{ sessionKey: run.startedAt, revision: 0 }], "save-success");
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "save-success");
 
     expect(receiptsOfKind("retire")).toStrictEqual([
       {
@@ -670,7 +691,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     store.claim(run.startedAt, 0);
     store.commit(run.startedAt, 0, freshRun(run.startedAt)); // revision 1, unclaimed richer update
 
-    store.retire([{ sessionKey: run.startedAt, revision: 0 }], "save-success");
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "save-success");
 
     expect(receiptsOfKind("retire")).toStrictEqual([
       {
@@ -701,7 +722,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     store.commit(run.startedAt, 0, freshRun(run.startedAt)); // now revision 1
 
     store.retire(
-      [{ sessionKey: run.startedAt, revision: 0 }],
+      { sessionKey: run.startedAt, revision: 0 },
       "connect-guard-armed",
     );
 
@@ -720,7 +741,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
       "2026-08-05T14:00:00.000Z",
       "2026-08-05T15:00:00.000Z",
     ];
-    const reasons = [
+    const reasons: RetireReason[] = [
       "monitor-discard",
       "manual-discard",
       "today-discard",
@@ -730,7 +751,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
       const run = freshRun(keys[i]!);
       store.commit(run.startedAt, null, run);
       store.claim(run.startedAt, 0);
-      store.retire([{ sessionKey: run.startedAt, revision: 0 }], reasons[i]!);
+      store.retire({ sessionKey: run.startedAt, revision: 0 }, reasons[i]!);
     }
 
     const abandonedCount = receiptsOfKind("retire").filter(
@@ -747,18 +768,29 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     const run = freshRun(t0.toISOString());
     store.commit(run.startedAt, null, run);
     store.claim(run.startedAt, 0);
-    store.retire([{ sessionKey: run.startedAt, revision: 0 }], "today-discard");
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "today-discard");
 
     // A DIFFERENT key, never claimed, retiring afterward proves the
     // claims map isn't leaking cross-key state.
     const other = freshRun("2026-08-06T12:00:00.000Z");
     store.commit(other.startedAt, null, other);
-    store.retire(
-      [{ sessionKey: other.startedAt, revision: 0 }],
-      "today-discard",
-    );
+    store.retire({ sessionKey: other.startedAt, revision: 0 }, "today-discard");
 
     expect(receiptsOfKind("retire")[1]!.claimState).toBe("unclaimed");
+  });
+
+  it("the reason is a closed union — a call site passing the entry it already holds needs no array and no cast", () => {
+    const run = freshRun("2026-08-05T12:00:00.000Z");
+    const created = store.commit(run.startedAt, null, run);
+    expect(created.accepted).toBe(true);
+    const entry = store.currentUnretired()!;
+    // Passing the whole HandoffEntry is what 12 of 13 production sites do
+    // after Phase MD PR 1 — structural typing accepts it as a HandoffRef.
+    store.retire(entry, "save-success");
+    expect(store.currentUnretired()).toBeNull();
+    const receipt = receiptsOfKind("retire").at(-1)!;
+    expect(receipt.reason).toBe("save-success");
+    expect(receipt.claimState).toBe("unclaimed");
   });
 });
 
@@ -827,7 +859,7 @@ describe("retryDurable (§1/§7) — never bumps revision", () => {
   it("returns null after the key has been retired", () => {
     const run = freshRun(t0.toISOString());
     store.commit(run.startedAt, null, run);
-    store.retire([{ sessionKey: run.startedAt, revision: 0 }], "today-discard");
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "today-discard");
 
     expect(store.retryDurable(run.startedAt)).toBeNull();
   });
@@ -970,10 +1002,7 @@ describe("hydration — outside render, §8", () => {
       store.commit(run.startedAt, null, run); // write lands — should clear the pending flag
 
       const removeSpy = vi.spyOn(Storage.prototype, "removeItem");
-      store.retire(
-        [{ sessionKey: run.startedAt, revision: 0 }],
-        "today-discard",
-      );
+      store.retire({ sessionKey: run.startedAt, revision: 0 }, "today-discard");
 
       // Exactly the entry's OWN removal — a still-set flag would fire the
       // sweep's own removeItem call first, then the entry's, i.e. twice.
@@ -1005,7 +1034,7 @@ describe("hydration — outside render, §8", () => {
       store.currentUnretired(); // current stays null — nothing for retire to "find"
 
       store.retire(
-        [{ sessionKey: "irrelevant-key", revision: 0 }],
+        { sessionKey: "irrelevant-key", revision: 0 },
         "today-discard",
       );
 
@@ -1020,9 +1049,18 @@ describe("hydration — outside render, §8", () => {
       store.currentUnretired();
       const removeSpy = vi.spyOn(Storage.prototype, "removeItem");
 
-      store.retire([], "today-discard");
-      store.retire([], "today-discard");
-      store.retire([], "today-discard");
+      store.retire(
+        { sessionKey: "irrelevant-key", revision: 0 },
+        "today-discard",
+      );
+      store.retire(
+        { sessionKey: "irrelevant-key", revision: 0 },
+        "today-discard",
+      );
+      store.retire(
+        { sessionKey: "irrelevant-key", revision: 0 },
+        "today-discard",
+      );
 
       expect(removeSpy).toHaveBeenCalledTimes(1);
     });
@@ -1035,7 +1073,12 @@ describe("hydration — outside render, §8", () => {
         throw new DOMException("boom", "SecurityError");
       });
 
-      expect(() => store.retire([], "today-discard")).not.toThrow();
+      expect(() =>
+        store.retire(
+          { sessionKey: "irrelevant-key", revision: 0 },
+          "today-discard",
+        ),
+      ).not.toThrow();
       expect(receiptsOfKind("storage-getter-error")).toStrictEqual([
         { kind: "storage-getter-error", operation: "remove" },
       ]);
@@ -1150,10 +1193,7 @@ describe("the storage getter SecurityError wrap (§1 WHATWG primary)", () => {
     });
 
     expect(() =>
-      store.retire(
-        [{ sessionKey: run.startedAt, revision: 0 }],
-        "today-discard",
-      ),
+      store.retire({ sessionKey: run.startedAt, revision: 0 }, "today-discard"),
     ).not.toThrow();
     expect(receiptsOfKind("storage-getter-error")).toContainEqual({
       kind: "storage-getter-error",
@@ -1213,7 +1253,7 @@ describe("the single-unretired-session invariant, end to end", () => {
     const first = freshRun("2026-08-05T12:00:00.000Z");
     store.commit(first.startedAt, null, first);
     store.retire(
-      [{ sessionKey: first.startedAt, revision: 0 }],
+      { sessionKey: first.startedAt, revision: 0 },
       "connect-guard-armed",
     );
 

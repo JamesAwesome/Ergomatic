@@ -899,7 +899,7 @@ describe("selected recording recovery", () => {
     ).toHaveLength(0);
     const newer = monitor({ startedAt: "2026-09-04T14:00:00.000Z" });
     store.retire(
-      [{ sessionKey: run.startedAt, revision: 0 }],
+      { sessionKey: run.startedAt, revision: 0 },
       "connect-guard-armed",
     );
     store.commit(newer.startedAt, null, newer);

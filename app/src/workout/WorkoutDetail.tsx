@@ -423,10 +423,7 @@ function WorkoutDetailView({
       clearRun();
       const stale = currentUnretiredHandoff();
       if (stale !== null) {
-        retireHandoff(
-          [{ sessionKey: stale.sessionKey, revision: stale.revision }],
-          "row-instead",
-        );
+        retireHandoff(stale, "row-instead");
       }
       navigate("/session/countdown");
     } else {
