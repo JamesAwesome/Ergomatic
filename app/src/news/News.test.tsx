@@ -125,6 +125,8 @@ describe("News", () => {
     expect(container.querySelectorAll(".news-square[data-read]")).toHaveLength(
       0,
     );
+    expect(container.querySelectorAll(".news-row[data-read]")).toHaveLength(0);
+    expect(screen.queryByText(/^ ?(Read|Unread)$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/UNREAD/)).not.toBeInTheDocument();
     // Word-bounded on purpose: the count label is the target ("3 READ"),
     // not any copy that happens to contain the letters — the v0.10.0

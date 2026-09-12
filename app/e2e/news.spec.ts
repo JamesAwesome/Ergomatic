@@ -603,9 +603,20 @@ test("News paints the same row geometry before and after the reads fetch settles
     email: `news-no-shift-${RUN_ID}@e2e.test`,
     name: "News No Shift",
   });
-  // One read on the server first, in its own document.
+  // One read on the server first, in its own document. The reader paints
+  // its title before its own GET resolves and before its mark-read effect
+  // sends the PUT, so the title alone proves nothing about the server —
+  // wait for the PUT's response (review finding: a navigation while it is
+  // in flight aborts it and the count below reads 7, a flake, not a
+  // vacuous green). The route glob below does not match this URL.
+  const put = page.waitForResponse(
+    (r) =>
+      r.request().method() === "PUT" &&
+      r.url().endsWith("/api/article-reads/effort-scale"),
+  );
   await page.goto("/news/effort-scale");
   await expect(page.locator(".reader-title")).toHaveText(EFFORT_SCALE_TITLE);
+  expect((await put).ok()).toBe(true);
 
   let release: () => void = () => {};
   const held = new Promise<void>((resolve) => {

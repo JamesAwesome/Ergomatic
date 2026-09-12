@@ -413,12 +413,21 @@ describe("useArticleReads — last-known cache", () => {
     if (second.result.current.state !== "ready") throw new Error("ready");
     expect(second.result.current.readSlugs.has("baselines")).toBe(true);
 
-    act(() => gets[2]!(okGet(["baselines"])));
-    await waitFor(() => {
-      if (second.result.current.state !== "ready") throw new Error("ready");
-      expect(second.result.current.readSlugs.has("baselines")).toBe(true);
+    // ONCE: a write that overtakes the retry too is dropped without a third
+    // GET — the next mount reconciles (bounded, like the barrier's two
+    // passes). A `while (stale)` loop would issue a fourth GET here.
+    act(() => {
+      markRead("effort-scale");
+    });
+    await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(5));
+    act(() => gets[2]!(okGet(["baselines"]))); // stale again: lacks effort-scale
+    await act(async () => {
+      for (let i = 0; i < 10; i++) await Promise.resolve();
     });
     expect(gets).toHaveLength(3);
+    if (second.result.current.state !== "ready") throw new Error("ready");
+    expect(second.result.current.readSlugs.has("baselines")).toBe(true);
+    expect(second.result.current.readSlugs.has("effort-scale")).toBe(true);
   });
 
   it("C4: clearArticleReadsCache makes the next mount cold", async () => {

@@ -75,7 +75,15 @@ function publish(next: ReadonlySet<string>): void {
 /** Forget the last-known set. Called by `useMe.ts` on every transition to
  *  signed-out (the You button AND the 401 path — on native the next account
  *  signs in inside this same document, so an uncleared set would show the
- *  previous account's squares for one round trip). */
+ *  previous account's squares for one round trip).
+ *
+ *  Does NOT notify listeners: a mounted `ready` instance keeps its state
+ *  object, and its `markRead` becomes a silent no-op (`lastKnown === null`).
+ *  Safe today only because every consumer unmounts at the same transition
+ *  (`App.tsx` renders `<SignIn>` for `out`), and the in-hook `refused` arm
+ *  sets its own instance to `error` itself. A future caller that clears
+ *  WITHOUT unmounting the consumers would need this to publish a cold state
+ *  as well — RF18: this sentence is the tripwire. */
 export function clearArticleReadsCache(): void {
   lastKnown = null;
 }

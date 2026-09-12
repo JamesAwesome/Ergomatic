@@ -27,7 +27,6 @@ export function useMe(): [MeState, () => void, () => void] {
     clearArticleReadsCache();
     setMe({ state: "out" });
   };
-  const signedOut = becomeSignedOut;
   const refetch = () => setGeneration((g) => g + 1);
 
   useEffect(() => {
@@ -50,5 +49,5 @@ export function useMe(): [MeState, () => void, () => void] {
     };
   }, [generation]);
 
-  return [me, signedOut, refetch];
+  return [me, becomeSignedOut, refetch];
 }
