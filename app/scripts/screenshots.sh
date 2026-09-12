@@ -55,4 +55,10 @@ cd app
 # suffix to avoid colliding with a previous run's — and that suffix was the
 # single largest source of screenshot churn, because it carries `Date.now()`
 # and every capture of an account screen renders it. See helpers.ts's RUN_ID.
-ERGOMATIC_STABLE_RUN_ID=1 pnpm exec playwright test --project=screenshots
+# `"$@"` forwards a filter, exactly as e2e.sh:39 does: `pnpm screenshots -g
+# "today-freestyle"` runs only the named captures and leaves the other files
+# untouched on disk. Its absence here was the whole "pnpm screenshots has no
+# filter" premise that four filings carried (antagonist, 2026-09-11) — pnpm
+# forwards fine; this script dropped the args. List names with
+# `pnpm exec playwright test --project=screenshots --list`.
+ERGOMATIC_STABLE_RUN_ID=1 pnpm exec playwright test --project=screenshots "$@"

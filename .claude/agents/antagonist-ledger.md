@@ -10048,3 +10048,76 @@ counting the corpus a different way than the spec counted it.
   `# After the strangers` outside it; and the decision to carry NO census
   table — whose counter-example is `close-phase/SKILL.md`'s own transcribed
   `68/45/177`, already stale against a tree reading 59/57.
+
+## Screenshot churn premise pass, 2026-09-11 (James: "could this be better served by better instructions?")
+
+### 2026-09-11 — Screenshot churn: the missing word was `"$@"`, and the rule was already James's
+
+- **CLAIM (four filings, two sessions of engineering): "`pnpm screenshots` has no
+  filter — it regenerates all 202 every time."** FALSE, and by one word.
+  `app/scripts/e2e.sh:39` ends `--project=chromium "$@"`; `screenshots.sh:40` ended
+  `--project=screenshots` with no `"$@"`. **Technique: when a claim is "the tool
+  can't do X", diff the tool against its own sibling.** I first suspected pnpm
+  (CLAUDE.md records it swallowing scoped flags) and probed that separately with a
+  throwaway package — `pnpm shots -g today` → `ARGS SEEN BY SCRIPT: [-g today]`.
+  pnpm was innocent; the script dropped them. Blaming the documented trap for an
+  undocumented one is how a one-word bug survives four filings.
+
+- **CLAIM: "run-to-run byte stability of `docs/screenshots/` is the goal."** FALSE.
+  **Technique: grep for the CONSUMER before optimising the producer.**
+  `grep -rn "docs/screenshots" --include='*.ts' --include='*.sh' --include='*.yml'`
+  returns five hits, all comments or the spec's own output path; CI runs
+  `--project=chromium` only (`ci.yml:127`, `playwright.config.ts:41`). Nothing
+  automated reads the corpus. The property a reviewer needs is "a moved PNG means a
+  screen the author changed" — a property of what you COMMIT, not of what the
+  browser renders. Two sessions went into the wrong half.
+
+- **AND THE ANSWER WAS ALREADY IN THE REPO, IN JAMES'S OWN WORDS.**
+  `docs/TESTING.md:327-330`, dated 2026-08-27: *"We honestly don't need to run these
+  in ci. It can be part of the release skill and **maybe a scheduled reup**."*
+  Per-PR scoped capture plus a periodic full refresh — the exact process design,
+  two weeks before the engineering started, never implemented. **Technique: before
+  designing a process, grep the repo for a ruling on it.** This is recurring failure
+  18 (re-researching what the repo settled) applied to PROCESS rather than to code,
+  and the second pass was again the shallower one.
+
+- **CLAIM: "freezing `loggedAt` fixes 9 captures."** TRUE and strictly negative.
+  `schema.ts:165` is `uuid().primaryKey().defaultRandom()`; `stores/logs.ts:621-624`
+  and `:699` order by `desc(loggedAt), desc(id)`. Backdating every log to ONE
+  constant collapses the primary key and leaves a **random-UUID tiebreak** deciding
+  row order — a two-glyph churn (`:17`→`:19`) traded for whole-frame reordering,
+  bought with a new authenticated server write route. **Technique: for any fix that
+  FREEZES a value, read what sorts, groups or dedupes on it.** A frozen key is a
+  removed key. (Ruled: REVERTED in full, James 2026-09-12.)
+
+- **CLAIM: "fresh DB + stable RUN_ID closes the identity class."** TRUE, and it
+  opened a permanent one. `seed.ts:79` inserts library rows without ids, so a fresh
+  database mints new UUIDs every run; `recovery-read-only-*` renders one in a
+  diagnostic JSON blob (verified by cropping the PNG and reading it: 3083 changed px,
+  max delta 228, box `[44,371]-[340,402]`, text `"workoutId": "6a330564-…"`). Five
+  captures now churn FOREVER, by construction. **Technique: when a fix makes an
+  environment fresher, enumerate every random default that freshness re-rolls.**
+
+- **CLAIM: "the residual is fixable."** FALSE — and the probe that settled it was the
+  smallest possible one. A single-test scoped run (`-g today-freestyle`) on a fresh
+  database with stable RUN_ID and every frozen clock still produced a churning file
+  at **7 changed pixels, max channel delta 1** — and that file was not in the spec's
+  jitter bucket, i.e. one more member of the rotating cast found in a ONE-TEST run.
+  **Technique: to disprove "we can make this deterministic", shrink the experiment
+  until only the irreducible cause is left.** If one test on an empty database cannot
+  reproduce its own bytes, no amount of fixture work will.
+
+- **METHOD NOTE — probing a worktree with uncommitted binary work.** The branch
+  carried 35 uncommitted PNGs; running the capture suite would have destroyed them
+  irrecoverably (recurring failure 22, in the one form `git status` cannot warn you
+  about). `cp docs/screenshots/*.png <scratch>/ && md5 -r *.png | sort > before.md5`
+  first, restore after, and prove it: `diff before.md5 restored.md5` empty across
+  202 files with `git status` back to 35. **Back up before the probe, and verify the
+  restore by hash, not by eye.**
+
+- **AND MY OWN RECOMMENDATION BIT ME BEFORE I SHIPPED IT.** I proposed deriving the
+  producing test by grepping the capture's filename and walking back to the enclosing
+  `test(`. Run against five stems it returned the WRONG test for `connected-pane-live`
+  — the first textual hit was a comment inside `test("log-monitor-landscape")`, and
+  71 of 202 captures have no literal filename in the spec at all (helpers and template
+  literals). **Run your own recipe on five inputs before writing it into a rule.**

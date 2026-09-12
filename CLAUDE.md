@@ -552,7 +552,11 @@ often they recur.
    diff touches anything under `app/src/`, run the named e2e specs locally
    against an already-booted stack, then read the e2e job on the PR for the
    full suite** — and `pnpm screenshots` too if you changed a screen's
-   layout. **The reason the local half is now NAMED specs is James's
+   layout, **committing only the captures for screens your diff touched;
+   `git checkout -- docs/screenshots/` discards the rest** (TESTING.md §8,
+   "Regenerate broadly; commit narrowly" — a browser does not render
+   deterministically and the noise is discarded, never engineered away).
+   **The reason the local half is now NAMED specs is James's
    decision to tier the gate (2026-09-08, Phase MEM): CI owns the full
    suite, locally you run what your change touches.** It is not a
    wall-clock argument — the Playwright worker cap that costs ~1.5x
@@ -817,6 +821,18 @@ often they recur.
     because", "as long as", and "today":** those phrases mark invariants held
     up by the current call graph, and a new caller is exactly what changes
     it.
+    **AND IT APPLIES TO PROCESS, NOT ONLY CODE (screenshot churn,
+    2026-09-11).** Two sessions and three PRs went into making `pnpm
+    screenshots` byte-stable — a fresh-database boot, a stable `RUN_ID`, a
+    secret-gated server route to rewrite `logged_at` — before an antagonist
+    asked who consumed the bytes (nobody automated) and then grepped
+    `docs/TESTING.md`, where James had already written the answer on
+    2026-08-27: _"maybe a scheduled reup."_ Scoped capture per PR plus a
+    periodic full refresh, ruled two weeks before the engineering started,
+    never implemented. The route was reverted; the rule is now TESTING.md
+    §8. **Before designing a fix for a workflow problem, grep the repo for
+    a ruling on it** — `grep -rn "<the symptom>" docs/ ROADMAP.md CLAUDE.md`
+    — and read the consumer before optimising the producer.
 19. **Trusting a verification stack that stops at the wire.** Our
     instruments all sit at or below the transport seam, so a defect whose
     trigger enters ABOVE it — platform lifecycle, permissions,

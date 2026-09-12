@@ -2041,29 +2041,53 @@ fixed.
   frames a change actually altered — PR #341 reverted 61 by hand twice, and
   Phase MT's PR worked around it by adding only the two frames its rule could
   touch and discarding the rest.
-  **DONE so far:** eight captures fixed and 33 stale ones recaptured (frozen
-  diagnostics clock, pinned suggestions, two settle waits).
-  **STILL OPEN, and each needs a decision because neither is fast path:**
-  (1) the generated identity, ~12 files — the fix is a FRESH DATABASE per
-  screenshots run so a stable `RUN_ID` becomes safe, which also retires the
-  kept-stack idempotency class; its cost is unmeasured. (2) `loggedAt`,
-  ~9 files — `storedSummary.ts:439` formats a Postgres `defaultNow()` and
-  `server/stores/logs.ts:775` says it is "not settable by `create()`'s
-  input", so closing it needs a server seam.
-  **Two traps for whoever picks this up, both measured here:** back-to-back
-  runs MASK the identity cause (the epoch prefix is stable inside an hour and
+  **CLOSED AS A PROCESS RULE, NOT AN ENGINEERING PROBLEM — antagonist
+  premise pass 2026-09-11, adopted by James 2026-09-12.** The goal this row
+  chased, byte-stable captures, was never reachable and never needed:
+  nothing automated reads `docs/screenshots/` (CI runs `--project=chromium`
+  only), the floor is 7 changed pixels on a one-test run with every clock
+  frozen and a fresh database, and **the rule was already James's** —
+  `docs/TESTING.md`'s 2026-08-27 "maybe a scheduled reup", unimplemented for
+  two weeks while two sessions engineered around it (RF18 on process). The
+  rule now lives in TESTING.md §8, "Regenerate broadly; commit narrowly",
+  mirrored in RF1: commit only the captures for screens your diff touched,
+  `git checkout --` the rest, and one full-corpus recapture PR per release
+  tag. **What shipped and stays:** #394's settle waits and pins (RF7 fixes in
+  their own right) and its frozen fixture clocks (they keep a scoped
+  recapture from going inconsistent across dates); the fresh-database boot
+  and stable `RUN_ID` (`1d35a704`, +3.8s/run); and the one-word fix that was
+  the whole "no filter" premise — `screenshots.sh` now forwards `"$@"`, so
+  `pnpm screenshots -g "<test>"` scopes. **What was built and REVERTED:** a
+  secret-gated `loggedAt` backdate route (ruling 2B) — freezing every log to
+  one instant collapsed `ORDER BY logged_at DESC, id DESC` onto a random-UUID
+  tiebreak and traded a two-glyph churn for whole-frame row reordering. A
+  frozen key is a removed key.
+  **Two traps for whoever measures this again, both real:** back-to-back
+  runs MASK time-derived churn (the epoch prefix is stable inside an hour and
   the UI truncates the email), and one pair of runs is an anecdote — 43
   distinct files churned across three pairs and only 9 churned in all three.
   **The 2026-08-30 measurement is
   written out here rather than cited**, because that round's report lives
   under git-excluded `.superpowers/` and a citation into it is unreachable to
-  anyone but the session that wrote it (RF16's corollary). **M** — the
-  largest of the folded rows' own sizings; the 2026-08-28 filing carried
-  **S/M** and the 2026-09-07 and 2026-09-08 filings **M**.
-  · dies 2026-10-10 (dated on the way past, 2026-09-10) · the two remaining
-  causes each need a ruling before they can be built, and a row that has been
-  sighted six times in four weeks has earned a date rather than a seventh
-  sighting.
+  anyone but the session that wrote it (RF16's corollary).
+- **The library seed mints fresh UUIDs on every fresh database, and five
+  captures render one.** `server/seed/seed.ts:79` (`seedGlobalLibrary`)
+  inserts without ids, so `defaultRandom()` re-rolls them on every
+  `pnpm screenshots` boot now that the boot is fresh, and
+  `recovery-read-only-*` (5 files) renders `"workoutId": "<uuid>"` inside a
+  diagnostic JSON blob — 3083 changed px per run, permanent by construction.
+  Introduced by `1d35a704`; the antagonist's verdict is that this is
+  structural, not accept-with-a-row. **The fix is deterministic seed ids
+  (uuidv5 from title)**, which is a real improvement independent of
+  screenshots — seeded rows would have stable identity across every
+  environment — but it reaches `server/seed/` and a stored identity, so it
+  is its own PR with its own gate, not a rider. **What would fix it now and
+  why not:** the uuidv5 change is ~S but touches how every deployed
+  environment's library rows are keyed on next boot; that wants a read of
+  `seedGlobalLibrary`'s upsert path first, not a rider on a docs PR.
+  · dies 2026-10-12 · filed rather than fixed because it changes stored
+  identity and the commit-narrowly rule makes five churning diagnostic
+  captures cost nothing until then.
 - **`src/monitor/useMonitorSession.test.ts` — a pre-existing flake**
   (`listSessionLogs()` expected length 1, got 2: an extra session-log ring
   entry, RF27's own territory) fired once during PR1.75b's coverage runs,
