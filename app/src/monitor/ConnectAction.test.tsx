@@ -156,10 +156,22 @@ function connectAsTaskFiveWill(): void {
       : null,
     run,
   );
-  if (!result.accepted) {
-    throw new Error(`connectAsTaskFiveWill refused: ${result.reason}`);
-  }
+  // A throw here would surface as vitest's `Errors` line beside GREEN
+  // tests (measured on Task 2's full run: `Tests 5970 passed`, `Errors 2`),
+  // so a refusal is RECORDED and asserted empty after every test instead.
+  if (!result.accepted) proceedRefusals.push(result.reason);
 }
+
+let proceedRefusals: string[] = [];
+afterEach(() => {
+  const seen = proceedRefusals;
+  proceedRefusals = [];
+  // A throw in afterEach FAILS the test that just ran (unlike a throw
+  // inside the component's event callback).
+  if (seen.length > 0) {
+    throw new Error(`connectAsTaskFiveWill refused: ${seen.join(", ")}`);
+  }
+});
 
 function renderConnect() {
   render(

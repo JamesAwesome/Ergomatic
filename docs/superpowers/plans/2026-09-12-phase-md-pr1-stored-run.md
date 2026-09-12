@@ -866,7 +866,7 @@ Mutation: in `deriveClaim` change `reason === "save-success"` to `reason === "ma
 
 **Opus.** This is the compile-coupled task: deleting `saveMonitorRun`/`clearMonitorRun` and moving `loadMonitorRun`/`MONITOR_RUN_KEY`/`connectGuardStage` breaks every importer at once, so the whole re-point lands in one commit.
 
-**The author has paste-tested the PRODUCTION half of this task together with Task 3's** (they overlap in `ConnectAction.tsx`, so one patch carries both): `scratchpad/patches/task3+4-production.patch` in the controller's scratchpad, handed over with the dispatch. Against the baseline it typechecks with ZERO non-test errors, lints clean, and measures `grep -cE '^export (function|const) '` → `9` + `18` = 27. Apply it with `git apply --3way` on top of Task 3's commit (Task 3's hunks are already in; expect its `ConnectAction.tsx`/`handoffStore.ts`/`JustRow.tsx` hunks to need a hand-merge), then READ the result against Step 3 below — the step is the authority, the patch is the shortcut. Two things Step 3's prose omitted that the patch has: `monitorRun.ts` loses the `import { isPlainRecord }` Task 1 added (its only consumers moved), and `ConnectAction.tsx` adds `connectGuardStage, type ConnectGuardStage` to its existing `./handoffStore` import (it had a separate `./monitorRun` import for them, now deleted).
+**The author has paste-tested the PRODUCTION half of this task together with Task 3's** (they overlap in `ConnectAction.tsx`, so one patch carries both): `scratchpad/patches/task3+4-production.patch` in the controller's scratchpad, handed over with the dispatch. Against the baseline it typechecks with ZERO non-test errors, lints clean, and measures `grep -cE '^export (function|const) '` → `9` + `18` = 27. Apply it with `git apply --3way` on top of Task 3's commit (Task 3's hunks are already in; expect its `ConnectAction.tsx`/`handoffStore.ts`/`JustRow.tsx` hunks to need a hand-merge), then READ the result against Step 3 below — the step is the authority, the patch is the shortcut. Two things Step 3's prose omitted that the patch has: `monitorRun.ts` loses the `import { isPlainRecord }` Task 1 added (its only consumers moved), and `ConnectAction.tsx` adds `connectGuardStage, type ConnectGuardStage` to its existing `./handoffStore` import (it had a separate `./monitorRun` import for them, now deleted). **One more edit in this task (lens 2):** `src/test/seedHandoff.ts` declares `SeededRef { sessionKey; revision }`, a second spelling of the `HandoffRef` Task 3 exported — replace it with `import type { HandoffRef } from "../monitor/handoffStore"` (a type-only import; the dynamic-import argument does not apply to types).
 
 **Files:**
 - Modify: `app/src/monitor/handoffStore.ts` (absorbs), `app/src/monitor/monitorRun.ts` (sheds `:28`, `:453-720` persistence half, `:1484-1612` `sessionRunState`/`monitorRunState`/`anyLiveSession`, `:1614-1719` `connectGuardStage`; `measuredSessionSeconds` becomes the function)
@@ -925,6 +925,23 @@ describe("loadMonitorRun — the raw durable read the Today guard needs (Phase M
     );
     expect(store.loadMonitorRun()).toStrictEqual(JSON.parse(JSON.stringify(run)));
   });
+
+  it("connectGuardStage reads the store: a memory-only entry (denied write) still stages 'unlogged' — the P1-1 hole the old boolean parameter closed", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("denied");
+    });
+    const run = freshRun("2026-08-05T12:00:00.000Z");
+    store.commit(run.startedAt, null, run);
+    expect(store.connectGuardStage()).toBe("unlogged");
+  });
+
+  it("a denied GETTER is receipted, not silently read as absent — the same storage-getter-error hydration emits", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("denied", "SecurityError");
+    });
+    expect(store.loadMonitorRun()).toBeNull();
+    expect(receiptsOfKind("storage-getter-error")).toHaveLength(1);
+  });
 });
 ```
 
@@ -976,11 +993,18 @@ In `app/scripts/handoffStoreBoundary.test.ts`:
     const source = stripComments(
       readFileSync(join(APP_ROOT, STORE_FILE), "utf8"),
     );
-    const calls = source.match(/localStorage\.(getItem|setItem|removeItem)\(/g);
-    expect(calls).toHaveLength(3);
-    expect(calls!.filter((c) => c.includes("getItem"))).toHaveLength(1);
-    expect(calls!.filter((c) => c.includes("setItem"))).toHaveLength(1);
-    expect(calls!.filter((c) => c.includes("removeItem"))).toHaveLength(1);
+    // Every mention, not only the three method forms — `.clear()`, a bracket
+    // access or an alias would evade a method-name count (lens 2).
+    expect(source.match(/\blocalStorage\b/g)).toHaveLength(3);
+    // …and each mention is the one inside its wrapper, so a raw call that
+    // replaced a wrapper's own keeps the count and still fails.
+    expect(source).toContain("safeStorageOp(() => localStorage.getItem(key))");
+    expect(source).toContain(
+      "safeStorageOp(() => localStorage.setItem(key, value))",
+    );
+    expect(source).toContain(
+      "safeStorageOp(() => localStorage.removeItem(key))",
+    );
   });
 ```
 
@@ -988,7 +1012,7 @@ In `app/scripts/handoffStoreBoundary.test.ts`:
 - The module-scope-binding test (`:596`) is unchanged: `STORE_FILE` is still `src/monitor/handoffStore.ts` (one file — spec §10's open question, ruled here: the boundary gate's `STORE_FILE`/exemption constrain a split to cost two constants and a second exemption for nothing; the absorbed half is ~150 lines).
 - Header comment at `:105-118` (the NARROWED paragraph about `monitorRun.ts` holding sanctioned writes): rewrite to say the file now holds none and the count test asserts zero.
 
-Run: `pnpm test --project unit` → the first new test red (monitorRun.ts still has `localStorage`); the second is green already (the store has exactly three raw calls, one per wrapper — measured). **Measured after Step 3: `Tests 25 passed (25)`** (24 before, one replaced, two added). The exact edit is `scratchpad/patches/task4-boundary-test.patch`.
+**The boundary patch carries the two tests and the allowlist entry removal ONLY — the comment rewrites below are yours** (the empty `Set` still carries the old 11-line "Kept, not deleted…" justification, and the header paragraph still names the deleted "EXACTLY the three" test; both are false after this task). Run: `pnpm test --project unit` → the first new test red (monitorRun.ts still has `localStorage`); the second is green already (the store has exactly three raw calls, one per wrapper — measured). **Measured after Step 3: `Tests 25 passed (25)`** (24 before, one replaced, two added). The exact edit is `scratchpad/patches/task4-boundary-test.patch`.
 
 - [ ] **Step 3: The move**
 
@@ -1046,12 +1070,21 @@ function parseDurableRun(raw: string): MonitorRun | null {
  *  synchronous, un-hydrated, always-fresh read of the BYTES (its pin,
  *  `todayGuard.pin.test.ts`, says why), so this never consults `current`
  *  and never triggers hydration. Garbage, an unknown shape, or a denied
- *  getter all read as `null`; NOTHING is cleared on any path (§8). The
+ *  getter all read as `null` (the denied getter is receipted); NOTHING is
+ *  cleared on any path (§8). The
  *  full history of why the read destroys nothing lives in `Today.tsx`'s
  *  guard comment and the hand-off design spec §8. */
 export function loadMonitorRun(): MonitorRun | null {
   const raw = safeGetItem(MONITOR_RUN_KEY);
-  if (!raw.ok || raw.value === null) return null;
+  if (!raw.ok) {
+    // Denied, not absent — receipted the way hydration receipts the same
+    // failure, so a guard that then discards a draft leaves a record of
+    // WHY it saw nothing (RF25: the owner of "what does Today do when the
+    // origin denies storage" is the receipt channel, not this reader).
+    emit({ kind: "storage-getter-error", operation: "get" });
+    return null;
+  }
+  if (raw.value === null) return null;
   return parseDurableRun(raw.value);
 }
 ```

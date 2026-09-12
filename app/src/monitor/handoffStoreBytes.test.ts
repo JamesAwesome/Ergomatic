@@ -12,9 +12,10 @@
 //      no production change can redden it; it goes red exactly when someone
 //      regenerates the fixtures, which is when a reviewer must look.
 //  (c) OLD BYTES STILL LOAD: bytes main wrote are accepted by the current
-//      reader. `toStrictEqual` here is a courtesy (the reader returns its
-//      parse unmodified — spec §5); the `not.toBeNull()` is the assertion
-//      that bites when a validator is tightened.
+//      reader. `toStrictEqual` here is a courtesy (for these fixtures the
+//      reader returns its parse unmodified — a malformed `series` would be
+//      stripped, and none of the seven carries one); the `not.toBeNull()`
+//      is the assertion that bites when a validator is tightened.
 //
 // Fixtures were captured by `scripts/capture-monitor-run-fixtures.ts`
 // against main at 4aa3d132 (RF11). Never regenerate them to make this
@@ -95,6 +96,14 @@ describe("byte compatibility of the stored run (spec §5)", () => {
     );
     expect(CAPTURED["thrown-without-series"]!.verdict).toBe("failed");
     expect(CAPTURED["thrown-without-series"]!.bytes).toBeNull();
+    // (b)'s table is tied to the capture: an eighth shape cannot be added
+    // and regenerated without a reviewer writing its key list down.
+    expect(Object.keys(EXPECTED_KEYS).sort()).toStrictEqual(
+      Object.values(CAPTURED)
+        .filter((c) => c.bytes !== null)
+        .map((c) => c.name)
+        .sort(),
+    );
   });
 
   for (const shape of MONITOR_RUN_SHAPES) {

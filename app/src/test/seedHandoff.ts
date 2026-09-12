@@ -24,5 +24,11 @@ export async function seedMonitorRun(run: MonitorRun): Promise<SeededRef> {
   const store = await import("../monitor/handoffStore");
   const result = store.commit(run.startedAt, null, run);
   if (!result.accepted) refuse(result.reason, run);
+  if (result.verdict === "failed") {
+    // A memory-only seed is a different fixture, not a quieter version of
+    // this one: a reload would not see it. If that is the point of the
+    // test, call `commit()` directly and assert on the verdict.
+    refuse("durable write denied", run);
+  }
   return { sessionKey: run.startedAt, revision: result.revision };
 }
