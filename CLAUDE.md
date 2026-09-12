@@ -18,6 +18,20 @@ requirements).
 - `app/pnpm-workspace.yaml` is auto-generated pnpm config (`allowBuilds` for esbuild,
   plus other keys pnpm adds during installs) and makes `app/` its own pnpm workspace
   root, so the repo-root `.npmrc` does not apply inside `app/`.
+- `.agents/skills/` holds two populations and both are COMMITTED: our own Codex
+  adapters (`harden`, `close-phase`, `hardware-walk`, `wod-import` — hand-kept
+  copies of `.claude/skills/`), and third-party skills VENDORED from
+  `mattpocock/skills` via the vercel-labs `skills` CLI (James, 2026-09-12).
+  `skills-lock.json` at the root is that CLI's manifest and is committed as a
+  SOURCE-OF-RECORD ONLY — it is not a lock in pnpm's sense and not a drift
+  detector, measured on 2026-09-12: it pins no commit (`experimental_install`
+  fetches upstream HEAD), and its `computedHash` reproduces from the vendored
+  bytes under neither of the CLI's two local hash functions — it is most
+  likely the CLI's server-side blob hash. **The bytes in git are the
+  reviewed instructions agents follow; `git diff` is the drift detector.**
+  Update by re-running the CLI and reviewing the diff like any dependency
+  bump. Claude Code loads `.claude/skills/`, not `.agents/`; the vendored
+  seven reach Codex only unless deliberately exposed here.
 
 ## Commands (run in `app/`)
 
