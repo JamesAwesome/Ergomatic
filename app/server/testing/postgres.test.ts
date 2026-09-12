@@ -75,13 +75,14 @@ describe("startPostgres", () => {
     const later = new Error(
       "Timed out after 30000ms while waiting for container ports to be bound to the host",
     );
+    const second = fakeStarted("second");
     const start = vi
       .fn<() => Promise<StartedPostgreSqlContainer>>()
       .mockRejectedValueOnce(later)
-      .mockResolvedValueOnce(fakeStarted("second"));
+      .mockResolvedValueOnce(second);
     await expect(
       startPostgres({ start, delayMs: 0, warn: () => undefined }),
-    ).resolves.toBe(await start.mock.results[1]?.value);
+    ).resolves.toBe(second);
     expect(start).toHaveBeenCalledTimes(2);
 
     const refused = vi
