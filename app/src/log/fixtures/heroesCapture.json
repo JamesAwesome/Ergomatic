@@ -1,0 +1,42 @@
+[
+  {
+    "id": "tier-A-terminated-null-rest-pair",
+    "distanceMeters": 300,
+    "timeSeconds": 97.9
+  },
+  {
+    "id": "tier-A-build-738",
+    "distanceMeters": 500,
+    "timeSeconds": 124
+  },
+  {
+    "id": "tier-B1-free-row-empty-steps",
+    "distanceMeters": 3012,
+    "timeSeconds": 800.5
+  },
+  {
+    "id": "tier-B2-declined-link-lost",
+    "distanceMeters": 560,
+    "timeSeconds": 150
+  },
+  {
+    "id": "fallback-fused-pre-rc5",
+    "distanceMeters": 6240,
+    "timeSeconds": 1592
+  },
+  {
+    "id": "tier-B2-steps-manual-finished",
+    "distanceMeters": 6000,
+    "timeSeconds": 1550
+  },
+  {
+    "id": "tier-B2-steps-meters-only",
+    "distanceMeters": 500,
+    "timeSeconds": null
+  },
+  {
+    "id": "work-pair-beats-disagreeing-steps",
+    "distanceMeters": 560,
+    "timeSeconds": 150
+  }
+]
