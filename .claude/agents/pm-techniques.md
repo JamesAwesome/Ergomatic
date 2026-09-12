@@ -68,18 +68,19 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   felt like creep to everyone involved. When someone reports scope creep, check
   the phase's own exit for an inversion before accepting the framing.
 
-- **A deviation is stated in the presentation and left wrong in the CENSUS
-  TABLE.** #408 (2026-09-12) disclosed all three of its deviations correctly in
-  its PR body and ROADMAP row, and left all three wrong in the artefacts a later
-  phase quotes as vetted ground: spec §4 still said `MONITOR_RUN_KEY` "becomes
-  private" (it stayed exported), spec §3's census still said **9**
-  `RetireReason` values crediting the anchor pass (**8** shipped), and the plan
-  still said 11 importers one commit after the ROADMAP was corrected to 13. The
-  same PR edited that spec — two lines below the sentence it left false. **At
-  any gate on a PR that amends its own spec, diff the spec's and plan's census
-  tables against the body's stated deviations cell by cell, and count the
-  literals yourself.** #246's pattern at one commit's depth: corrected where
-  argued, left where it will be used.
+- **A deviation is stated in the presentation and left wrong in the SPEC or
+  CENSUS — twice in two days, so check it mechanically.** #408 (2026-09-12)
+  disclosed all three deviations in its body and ROADMAP row and left all three
+  wrong in the artefacts a later phase quotes as vetted ground (a "becomes
+  private" that stayed exported, a 9-vs-8 census count, 11-vs-13 importers).
+  #409 (2026-09-12) did it again with a spec IT HAD ITSELF REVISED: §5
+  prescribed `PRE_0030_TAGS`, "a 30-element contiguous literal"; the shipped
+  test derives the list from the journal, `grep -rn PRE_0030_TAGS app/` returns
+  zero, and the spec's own "what revision 2 changed" section listed four changes
+  and not that one. **At any gate on a PR that amends its own spec: grep every
+  symbol the spec NAMES against the shipped tree, and diff the spec's
+  revision-history section against the PR body's deviation list.** The body is
+  where a deviation gets disclosed; the spec is where it gets believed.
 
 ## Recommendations that turned out wrong
 

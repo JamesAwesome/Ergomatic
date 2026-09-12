@@ -1,0 +1,14 @@
+-- Wave A PR 1 (spec docs/superpowers/specs/2026-09-12-lift-identity-design.md,
+-- 2026-09-12): `users.google_sub` DROP NOT NULL only — no data touched, no
+-- type change, the UNIQUE constraint untouched (Postgres NULLS DISTINCT admits
+-- any number of NULL rows under it). A rower who signs in without Google can
+-- now be stored; nothing yet creates one.
+-- NOT a rollback floor: a server older than this migration inserts a
+-- sub-bearing user unchanged, selects by sub unchanged, and never reads the
+-- column off a row — drizzle's migrator compares only the newest applied
+-- timestamp, so the old binary boots against the widened column without
+-- error (proven against Postgres 18.4 at the spec's antagonist pass). It
+-- BECOMES a floor the moment a NULL-sub row exists, because SET NOT NULL
+-- then fails; the PR that writes the first such row owns that floor entry in
+-- docs/RELEASING.md § Rollback constraints.
+ALTER TABLE "users" ALTER COLUMN "google_sub" DROP NOT NULL;

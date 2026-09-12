@@ -61,8 +61,13 @@ running them.
 
 ## Rollback
 
-> **CHECK THE FLOOR FIRST. `docs/RELEASING.md` § "Rollback constraints" names a
-> version you must never roll back past — today v0.16.0.** Crossing it makes the
+> **CHECK THE FLOOR FIRST. `docs/RELEASING.md` § "Rollback constraints" is the
+> floor: its NEWEST row. Each row names the migration it carries and the first
+> tag that carried it ("untagged" means every build since that migration
+> merged is above the floor). To re-derive a tag from the migration file:
+> `git tag --contains $(git log --diff-filter=A --format=%h -- app/drizzle/00NN_*.sql) --sort=v:refname | head -1`.
+> This sentence carries no version of its own because the last one it
+> carried (v0.16.0) stayed after the table grew five rows.** Crossing it makes the
 > seed DELETE renamed global rows and null every `session_logs.workout_id` that
 > pointed at them. That is unrecoverable link loss, and rolling forward again
 > does not bring the links back. **Recovery is a database backup, and no backup

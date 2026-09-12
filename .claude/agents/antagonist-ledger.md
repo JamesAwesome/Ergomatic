@@ -6,6 +6,38 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## Wave A PR 1 anchor pass, 2026-09-12 (drop NOT NULL on `users.google_sub` — TRIAD: stored shape, auth-adjacent)
+
+Spec draft attacked at main `deb50b77`. Core design HELD; three spec-level breaks.
+
+- **BROKEN — "`Pick<InferInsertModel<typeof users>, …>` is RF33's fix."** It is
+  RF33's failure: a nullable drizzle column is OPTIONAL in the insert model, so
+  `createUser({ email, name })` compiles and writes NULL. No reachable producer
+  today, so hardening debt — but it is the method the policy PR will add a
+  caller to. **Technique:** paste-test the prescribed type with `tsc --strict`,
+  asserting the OMISSION case. Fix: `Pick<Insert,"email"|"name"> &
+  Required<Pick<Insert,"googleSub">>`.
+- **BROKEN — invariant 2, "a column added … is a compile error at the store".**
+  True BEFORE the PR too (`.values(input)` goes red under the hand-written
+  type). Only WIDENING is caught by derivation alone. RF26 shape. The
+  excess-key `@ts-expect-error` probe was satisfied under both types (RF21).
+- **BROKEN — the rollback sentence was prescribed into `docs/deploy.md`**, which
+  only QUOTES `docs/RELEASING.md`'s table ("today v0.16.0" — stale by six
+  rows), and invented a version. The table already carries a "Not a floor"
+  paragraph for 0025, which is 0030's shape.
+- **HELD, upgraded to PRIMARY by running it.** `drizzle-kit generate` emits
+  exactly one `DROP NOT NULL` and a three-line snapshot diff. Against Postgres
+  18.4: pre-0030 NULL insert → 23502; post-0030 two NULL inserts OK, duplicate
+  non-null → 23505; then `migrate()` with the OLD folder against the ahead
+  DB → no error. Mechanism: `pg-core/dialect.js` compares only
+  `max(created_at)`.
+- **HELD.** The ten staged migration suites cannot see idx 30; a missing tag
+  makes `readMigrationFiles` throw loudly. `resolveSession`'s innerJoin is the
+  only id-keyed read; the e2e backdoor still supplies a sub; `ALLOWED_EMAILS`
+  is email-keyed.
+- **Gap noted:** `testing/fakes.ts` casts `as unknown as UserStore`, so no
+  unit test can go red on any store type change.
+
 ## Phase MD PR 3 spec pass, 2026-09-12 (one `Sample` shape — TRIAD: stored shape)
 
 - **The zero-byte hinge HELD, attacked four ways.** `r: true | undefined` as a

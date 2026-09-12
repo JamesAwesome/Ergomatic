@@ -5,6 +5,47 @@ engagement. **Not read up front** — the bounded, always-read half is
 `pm-techniques.md`, and an entry is proposed to both. Grep this file for the
 detail behind a ruling, or for the history of a phase you are about to judge.
 
+## 2026-09-12 — Wave A PR 1 final gate (#409, TRIAD: stored shape, auth-adjacent)
+
+**Verdict:** PASS WITH CONDITIONS. Five blocking, none about behaviour — a
+spec-vs-code symbol that does not exist, CI in flight at head, a 183-word fold,
+an operator sentence left unresolvable, and one hazard with no owner. All
+discharged on the branch before merge.
+
+- **The unblocked half of a blocked wave, shipped.** The Phase MD open gate
+  measured Wave A sitting 8 days and 111 commits while its PR 1 was
+  "schedulable now, decision-free"; James ordered it ahead of MD PR 2 at #408's
+  hand-back and it landed the same day. **The wave-level form of Phase OD's
+  rule works: give the unblocked half its own `dies` date and it moves.**
+- **"The same migration whichever door" was false, and the PR was still
+  right.** The census proved the identity-table option a SUPERSET (six more
+  items). What rescued the schedule was checking that the ALTER is required
+  under BOTH doors — expand-only means `google_sub` cannot drop in the same
+  deploy. **When a row's premise is falsified, ask whether the delivered part
+  survives every door the row named.**
+- **A gate that cannot be decoration, and it was free.** The type assertion is
+  a `@ts-expect-error` in an integration test; an UNUSED `@ts-expect-error` is
+  itself a tsc error, so `pnpm typecheck` going green proves the directive
+  bites. **Prefer this shape to a mutation report for type-level invariants.**
+- **The hazard the column newly admits, found by reading the table not the
+  diff:** `users.email` has no unique constraint and the allowlist is keyed on
+  email, while the only identity lookup is by sub. Duplicate emails become
+  reachable the moment the policy PR writes its first sub-less user. Disposed
+  as a CLAUSE on the existing policy row. **Ask of any constraint you relax:
+  what OTHER column was being kept honest by it?**
+- **A correction that removes a false number can leave an unanswerable
+  instruction.** `deploy.md`'s fix pointed at "the NEWEST version in that
+  table" whose rows named migrations, not versions. Now every row names its
+  first tag (measured with `git tag --contains`) and the pointer says how to
+  re-derive one. **Fixing a stale operator fact is only done when the
+  instruction is runnable again (RF13).**
+- **Release: not needed, no tag — and say why that is not the whole answer.**
+  `ci.yml` deploys every push to main, so the migration reaches production at
+  MERGE. For a schema PR the release gate is RF28's post-merge run on main.
+- Fold-word series: #248 274, #249 225, #258 134, #268 186, #272 153, #408 295,
+  **#409 183 → trimmed**. Regression source: proof parentheticals inside
+  outcome bullets, where the Record already carried the proof.
+
 ## 2026-09-12 — Phase MD PR 1 final gate (#408, TRIAD: stored shape)
 
 **Verdict:** PASS WITH CONDITIONS. Four blocking, none about behaviour — CI

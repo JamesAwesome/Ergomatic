@@ -17,7 +17,13 @@ import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  googleSub: text("google_sub").notNull().unique(),
+  // Wave A PR 1 (2026-09-12, spec 2026-09-12-lift-identity-design.md):
+  // NULLABLE since migration 0030 — a rower who signs in without Google has
+  // nothing to be stored here. The UNIQUE stays and admits any number of
+  // NULLs (Postgres NULLS DISTINCT, recorded `nullsNotDistinct: false` in the
+  // snapshot). No production code writes a NULL yet; the policy PR that does
+  // becomes the rollback floor (docs/RELEASING.md § Rollback constraints).
+  googleSub: text("google_sub").unique(),
   email: text("email").notNull(),
   name: text("name").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
