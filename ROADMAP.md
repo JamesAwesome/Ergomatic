@@ -613,7 +613,22 @@ an investigation whose honest answer may be "no PR".
       and a byte-compatibility gate whose fixtures are captured by driving the
       writer — including a thrown write, the only shape that can catch a
       renamed `seriesDropped`.
-- [ ] **PR 2 — a lifecycle seam on `useMonitorSession`, and publish `axes`.**
+- [x] **PR 2 — a lifecycle seam on `useMonitorSession`, and publish `axes`. LANDED
+      as PR #413 (2026-09-12) — one dep (`registerAppLifecycleListener`, plus
+      `createTransport` widened to take the liveness deps), one derivation
+      site (`session.axes` and `session.linkLoss`), 26 appLifecycle doMock
+      STATEMENTS retired under `src/monitor/` (29 → 3 repo-wide, in the
+      adapter's own test and `JustRow.test.tsx`). Three of this row's figures
+      were wrong (RF10): 29/32 were raw line counts including prose (26/29
+      statements); "five sites build `AxesInput`" is four for `deriveAxes` and
+      one for `deriveLinkLoss`, which is why `linkLoss` is published too (the
+      axes tuple `lost|none|none|unknown` cannot tell `pairing` from
+      `disconnected`); "stop exporting `ConnectedPhase`" was NOT done —
+      `connectedAxes.ts` needs the type and five test files cast to it, and
+      the readers pin's allowlist is unchanged. The ring records a failed
+      session-listener registration now (RF19), and the dead `AxesInput`
+      link-up field is gone with its ruling re-homed at the hook's
+      derivation (spec §4).**
       **Carries three one-line riders from Exploration A (2026-09-12):** (1)
       drop the dead `export` on `ROWING_ACTIVE_FALLBACK_FRAMES` (zero
       importers); (2) `resumeEdgeArmedRef`'s doc claims to mirror
@@ -744,6 +759,8 @@ an investigation whose honest answer may be "no PR".
       foreground handler, with lifecycle injected, still reads as a module
       wanting an owner.
 - [ ] **Exploration B — one replay harness. Runs after PR 2, never before.**
+      · dies 2026-10-13 (campsite: given the phase's own date on the way past
+      by PR 2, 2026-09-12; its opener has always been "maybe no PR") ·
       Eight session-level replay specs — the `src/monitor/*Replay*.test.ts`
       files that drive `renderHook`: `burstReplay`, `lifecycleReplay`,
       `summaryHoldReplay`, `handoffStoreReplay`, `justRowReplay`,
@@ -2632,7 +2649,13 @@ fixed.
   entry, RF27's own territory) fired once during PR1.75b's coverage runs,
   reported 2026-09-02, and passed on three isolated re-runs plus the very
   next full coverage run. Not in that PR's diff (last touched at a prior
-  commit, `10b8aa94`). **Written out here rather than cited to the report
+  commit, `10b8aa94`). **CLOSED 2026-09-12 by Phase MD PR 2 (#413):**
+  mechanism bounded to cross-test leakage through the suite's single
+  `beforeEach` reset (INFERENCE — the only producer consistent with three
+  green isolated re-runs); unreproduced; NO hunt was run, because a filtered
+  re-run removes the very producers the mechanism needs and a timer-flushing
+  `afterEach` would mutate a file carrying 28 `useFakeTimers` calls;
+  re-opens on the next firing. **Written out here rather than cited to the report
   that found it**, because that report lives under git-excluded
   `.superpowers/` (recurring failure 16's corollary) — the same reason the
   screenshot-flakiness item above is inlined. Rides the next PR touching

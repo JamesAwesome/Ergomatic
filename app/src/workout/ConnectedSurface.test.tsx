@@ -64,6 +64,7 @@ import ConnectedSurface, {
   LAST_PANE_KEY,
   loadLastPane,
 } from "./ConnectedSurface";
+import { withDerivedAxes, type SessionWithoutAxes } from "../test/sessionAxes";
 
 // A spy over the REAL implementation, not a stub (the same
 // `vi.importActual` idiom `ConnectedInterstitial.test.tsx` uses for
@@ -237,7 +238,8 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
 }
 
 function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
-  return {
+  const { axes, linkLoss, ...rest } = overrides;
+  const base: SessionWithoutAxes = {
     phase: "live" as ConnectedPhase,
     undecodable: false,
     error: null,
@@ -260,8 +262,9 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     retryHandoffSave: vi.fn().mockResolvedValue(undefined),
     proceedHandoff: vi.fn().mockResolvedValue(undefined),
     exportLog: vi.fn().mockReturnValue("[]"),
-    ...overrides,
+    ...rest,
   };
+  return withDerivedAxes(base, { axes, linkLoss });
 }
 
 function renderSurface(

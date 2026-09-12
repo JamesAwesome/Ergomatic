@@ -25,6 +25,7 @@ import { seedMonitorRun } from "../test/seedHandoff";
 import { compileProgram } from "../../domain/monitor/program.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { WorkoutType } from "../../domain/types.js";
+import { withDerivedAxes, type SessionWithoutAxes } from "../test/sessionAxes";
 
 // 6k baseline 2:02.0 (122s); off -2 -> 120s target; distance step reads its
 // meters, never an estimated duration. (It opened with a `wu` row until
@@ -1972,7 +1973,8 @@ describe("RC-37 ([R5]): the nudge survives Menu-at-READY, the same way it surviv
     let currentSession: Session;
     const mockUseMonitorSession = vi.fn(() => currentSession);
     function baseSession(overrides: Partial<Session>): Session {
-      return {
+      const { axes, linkLoss, ...rest } = overrides;
+      const base: SessionWithoutAxes = {
         phase: "idle",
         undecodable: false,
         error: null,
@@ -1995,8 +1997,9 @@ describe("RC-37 ([R5]): the nudge survives Menu-at-READY, the same way it surviv
         retryHandoffSave: vi.fn().mockResolvedValue(undefined),
         proceedHandoff: vi.fn().mockResolvedValue(undefined),
         exportLog: vi.fn().mockReturnValue("[]"),
-        ...overrides,
+        ...rest,
       };
+      return withDerivedAxes(base, { axes, linkLoss });
     }
     currentSession = baseSession({});
     vi.doMock("../monitor/useMonitorSession", () => ({

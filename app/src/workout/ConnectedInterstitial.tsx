@@ -28,7 +28,6 @@ import type { ConnectionAttemptTrace } from "../monitor/nfc/connectionAttemptTra
 import { claimMountLease, onMountLeaseLost } from "../monitor/mountLease";
 import type { Baselines } from "../../domain/types.js";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
-import { deriveAxes } from "../monitor/connectedAxes";
 import ChecklistLine from "./ChecklistLine";
 import ConnectionLogSheet from "./connected/ConnectionLogSheet";
 import { DASH } from "./connected/surfaceModel";
@@ -916,21 +915,7 @@ export default function ConnectedInterstitial({
   // task). `axes.link` is unconditionally `"lost"` whenever `phase` is
   // `"disconnected"` (`deriveLink`'s own switch), so the phase check below
   // already carries that half of the spec's rule.
-  const axes = deriveAxes({
-    phase: session.phase,
-    frozen: session.frozen,
-    runOpen: session.runOpen,
-    // Always `null` here: `session.phase === "failed"` already returned
-    // above, so `deriveLink`'s `"failed"` case never runs off this call
-    // (M-1, `AxesInput.failureLeavesLinkUp`'s own doc comment).
-    failureLeavesLinkUp: null,
-    // Phase LL Task 2 (§2a): threaded for completeness — this call site's
-    // own branch below reads `axes.session`, never `axes.link`, so
-    // `frameSilence` has no effect on what this component renders (it
-    // matters at `ConnectedSurface.tsx`'s own call, which does read
-    // `axes.link`).
-    frameSilence: session.frameSilence,
-  });
+  const axes = session.axes;
   if (session.phase === "disconnected" && axes.session === "none") {
     return renderFailureScreen(LINK_LOST_NO_RUN_ERROR);
   }

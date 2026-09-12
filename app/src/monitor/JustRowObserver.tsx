@@ -1,6 +1,5 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { canConnectMonitor } from "../adapters/bluetoothCapability";
-import { deriveAxes } from "./connectedAxes";
 import {
   useMonitorSession,
   type MonitorSession,
@@ -36,13 +35,7 @@ type ObserverState =
   | { kind: "failed" };
 
 function observerState(session: MonitorSession): ObserverState {
-  const axes = deriveAxes({
-    phase: session.phase,
-    frozen: session.frozen,
-    runOpen: session.runOpen,
-    failureLeavesLinkUp: null,
-    frameSilence: session.frameSilence,
-  });
+  const axes = session.axes;
 
   if (axes.program === "failed") return { kind: "failed" };
   if (axes.link === "connecting") return { kind: "connecting" };

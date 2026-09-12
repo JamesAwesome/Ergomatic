@@ -6,6 +6,42 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## Phase MD PR 2 plan pass, 2026-09-12 (/harden lens 1, DELTA on the plan)
+
+- **"Swap `frozen: state.frozen` for `frozen: false`; `ConnectedSurface.test.tsx`
+  and `JustRow.test.tsx` both go red."** False, and it was the ONLY probe on
+  the derivation the PR exists to create: one file builds `session()` as a
+  PROP, the other `vi.doMock`s the hook. The plan's own self-review confirmed
+  the probe was never run. `linkLoss` had no probe at all. **Technique: grep
+  each named file for the producer's instantiation before believing "must go
+  red"; a fixture helper that calls the same derive function is a mirror
+  (RF11).**
+- **"Retype the overrides `Partial<MonitorSession>` so the compiler becomes
+  the gate."** Insufficient: the hazard is the unannotated BASE literal
+  returned from a `doMock` factory. **Technique: annotate the RETURN, not the
+  parameter.**
+- **"22 hits at baseline" / clear sites in `fail()`/`teardown()`/`cancel()`.**
+  25 hits; the four paired sites are `handleEvent` ×2, `teardown`, `fail`, and
+  the bare `= null` is in `connect()`. `cancel()` holds none. Closure identity
+  of the `.catch` guard HELD.
+- **"20 hook blocks + 5 replay specs", "24 of 26 blocks freed".** 26 is a
+  STATEMENT count; three of the twenty live in shared setup helpers (8 + 4 + 2
+  callers), so the reach is 31 `it` blocks. **The delta pass's own
+  "count per block" technique, re-broken one revision later — assign each hit
+  to its enclosing `it(` OR function.**
+- **"`SCAFFOLD_PREFIX = "test/"` skips the new helper."** It skips the whole
+  directory for one file with no detector case that can fail. One-entry
+  allowlist folded into the existing no-dead-entries mirror.
+- **"The derivation and the deletion cannot be separate commits."** Half true;
+  the field deletion plus its own table-test fix is a green standalone commit.
+- **Attacked and could not break:** all four Task 1 mutations; the ring
+  assertion's discrimination; both corrected exit-criterion greps (run on
+  main); the whole-line-only comment stripper; the single new import; no
+  production spread of a `MonitorSession`.
+- **Could not establish:** whether dropping `vi.resetModules()` from 22 blocks
+  changes any assertion that turns on the hook and the test holding two
+  `handoffStore` instances. Filed as a second clause on Task 5's rule (iv).
+
 ## Phase MD PR 3 plan pass, 2026-09-12 (one `Sample` shape — /harden lens 1, DELTA)
 
 - **"No compiler crosses `src/` → `server/`; one test does" (spec §3 invariant

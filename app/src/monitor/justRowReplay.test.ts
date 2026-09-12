@@ -81,8 +81,6 @@ const FIXED_NOW = new Date("2026-08-31T09:00:00.000Z");
 
 describe("the free row, wire to log door (RF24: one test upstream of the producer)", () => {
   afterEach(() => {
-    vi.doUnmock("../adapters/monitorTransport");
-    vi.doUnmock("../adapters/appLifecycle");
     vi.doUnmock("../api");
     vi.doUnmock("../api/useWorkouts");
     vi.doUnmock("../api/useBaselines");
@@ -103,24 +101,23 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
       onRecovery: () => undefined,
     });
 
-    vi.doMock("../adapters/monitorTransport", () => ({
-      defaultTransport: vi.fn(() => transport),
-    }));
-    vi.doMock("../adapters/appLifecycle", () => ({
-      registerAppLifecycleListener: vi.fn(() => (): void => undefined),
-    }));
-    // The api mock, in the SAME epoch as the door import below — so the
-    // Save press at the end of this test posts through the real submit
-    // pipeline into a body this test can read (PM final gate, B2).
+    // THE SEAM (Phase MD PR 2): `registerAppLifecycleListener`/
+    // `createTransport` are passed as deps below, never `vi.doMock`ed. The
+    // api mock stays a `vi.doMock` — it is a THIRD module (rule iv) — in the
+    // SAME epoch as the door import below, so the Save press at the end of
+    // this test posts through the real submit pipeline into a body this test
+    // can read (PM final gate, B2). `vi.resetModules()` + the dynamic
+    // re-import survive for that reason: reaching `../api`'s mock AND
+    // sharing ONE module epoch for the hook, the store and the door — a
+    // static import at the top of this file would be a different store
+    // instance and would read null forever (handoffStoreReplay.test.ts's own
+    // rule).
     const apiFn = vi.fn<
       (path: string, init?: RequestInit) => Promise<Response>
     >(async () => new Response(JSON.stringify({ id: "log-replay-1" })));
     vi.doMock("../api", () => ({ api: apiFn }));
     vi.resetModules();
 
-    // ONE module epoch for the hook, the store and the door — a static
-    // import at the top of this file would be a different store instance
-    // and would read null forever (handoffStoreReplay.test.ts's own rule).
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
     const freshStore = await import("./handoffStore");
@@ -128,6 +125,8 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     const { result } = renderHook(() =>
       freshUseMonitorSession({
         now: () => FIXED_NOW,
+        createTransport: () => transport,
+        registerAppLifecycleListener: () => (): void => undefined,
         driverOptions: {
           now: () => replay.clock.now(),
           schedule: releasingSchedule((cb, ms) =>

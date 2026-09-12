@@ -1,17 +1,12 @@
 // Four axes derived — never invented — from today's `ConnectedPhase` plus
-// the FOUR facts the hook does not publish on its own (design spec
+// the THREE facts `ConnectedPhase` does not carry (design spec
 // docs/superpowers/specs/2026-08-15-connected-axes-design.md §1, widened by
 // Phase LL Task 2/§2a): the freeze predicate's own verdict (`frozen`,
 // mirrors `useMonitorSession`'s `freezeRef` via `isPausedRun`), whether this
 // hook's own record is still open (`runOpen`, mirrors `runRef` —
 // `disconnected` deliberately leaves the record open, so `phase` alone
-// cannot say what `session` should read), whether a `failed` program
-// attempt left the transport connected (`failureLeavesLinkUp`, computed by
-// the CALLER from `ConnectedError.reason` — a genuine `ProgramRejection` the
-// PM5 itself sent leaves the link up; a radio/transport failure on our own
-// side does not — this module only consumes the already-computed boolean,
-// it does not classify reasons), and whether the frame stream is currently
-// suspect (`frameSilence`, published by the liveness watchdog and an
+// cannot say what `session` should read), and whether the frame stream is
+// currently suspect (`frameSilence`, published by the liveness watchdog and an
 // app-lifecycle resume WHOSE MEASURED GAP EXCEEDED THE THRESHOLD alike
 // (2026-08-26: a resume no longer latches on its own) — §2a's own
 // `deriveLink` reads it to demote a
@@ -26,7 +21,7 @@
 // guards, an unenumerated phase laundered by `?? "live"` into a full live
 // surface).
 //
-// WHAT THE CALLER MAKES OF THESE FOUR (this module still answers four
+// WHAT THE CALLER MAKES OF THESE FOUR AXES (this module still answers four
 // separate questions, never one — the collapse lives in the CALLER).
 // `ConnectedSurface.tsx` reads them into TWO independent facts, not one
 // ranked list:
@@ -108,32 +103,6 @@ export interface AxesInput {
   /** Mirrors `useMonitorSession`'s `runRef`: `true` iff a record is open
    *  (`runRef.current !== null && runRef.current.completedAt === null`). */
   runOpen: boolean;
-  /** Whether the most recent `failed` phase left the transport connected.
-   *  `null` when there is nothing to ask (every phase but `failed`) — and,
-   *  at `failed`, `null` reads exactly like `false`: no evidence of a
-   *  surviving link is not evidence of one.
-   *
-   *  THE DEAD THIRD FACT (M-1, final whole-branch review). This input is
-   *  `null` at BOTH production call sites today — `ConnectedInterstitial.
-   *  tsx` and `ConnectedSurface.tsx` each hardcode `failureLeavesLinkUp:
-   *  null` and neither ever calls `deriveAxes` while `session.phase ===
-   *  "failed"` (`ConnectedInterstitial.tsx`'s own early return on that
-   *  phase, `ConnectedSurface.tsx`'s own comment on why `"failed"` never
-   *  reaches it) — so `deriveLink`'s `"failed"` case is live CODE with no
-   *  live CALLER: `failureLeavesLinkUp === true` never actually happens.
-   *  "Failed" never reaches a consumer, in other words, not because the
-   *  axis is wrong but because nothing today passes a real value.
-   *
-   *  This is a DOCUMENTED GAP, not a defect to close here — building a
-   *  consumer is out of scope for this task. Whoever FIRST passes a real
-   *  (non-null) value inherits the NOT_A_MACHINE_REFUSAL-semantics ruling
-   *  this axis was built against (a transport-side failure reads `"lost"`,
-   *  a genuine `ProgramRejection` the PM5 itself sent reads `"up"` —
-   *  `deriveLink`'s own case, above), and the enum-deletion spec that
-   *  eventually retires `ConnectedPhase`'s `"failed"` member inherits this
-   *  same gap: it cannot verify the `"up"` branch is reachable from real
-   *  code either, only that the TYPE still allows it. */
-  failureLeavesLinkUp: boolean | null;
   /** Phase LL Task 2 (link-truth design spec §2a): mirrors
    *  `useMonitorSession`'s `SessionState.frameSilence` at the instant of
    *  derivation — `true` whenever the liveness watchdog has declared the
@@ -165,7 +134,7 @@ function assertNever(value: never): never {
 // otherwise, exactly the kind of gap recurring failure #2 warns about.
 
 export function deriveLink(input: AxesInput): LinkAxis {
-  const { phase, failureLeavesLinkUp, frameSilence } = input;
+  const { phase, frameSilence } = input;
   switch (phase) {
     case "idle":
       return "none";
@@ -196,7 +165,14 @@ export function deriveLink(input: AxesInput): LinkAxis {
       // AFTER connect).
       return frameSilence ? "lost" : "up";
     case "failed":
-      return failureLeavesLinkUp === true ? "up" : "lost";
+      // UNCONDITIONALLY `"lost"`. This case used to read
+      // `failureLeavesLinkUp === true ? "up" : "lost"`; that input was `null`
+      // at every call site that ever existed, so the `"up"` branch was live
+      // code with no live caller, and the field was deleted (James,
+      // 2026-09-12). The NOT_A_MACHINE_REFUSAL ruling it carried did NOT die
+      // with it — it is re-homed at `useMonitorSession.ts`'s own axes
+      // derivation, the only place a real value could ever be produced.
+      return "lost";
     case "disconnected":
       return "lost";
     case "ended":
@@ -302,8 +278,12 @@ export function deriveActivity(input: AxesInput): ActivityAxis {
  *  that cannot happen (Phase RN, Gate 0 round 2).
  *
  *  Exported as its own reader rather than added to `ConnectedAxes` because
- *  exactly one screen needs it, and widening the shared shape for one caller
- *  buys every other consumer a field to ignore. */
+ *  the axes tuple CANNOT answer it: `lost|none|none|unknown` is produced both
+ *  by `pairing` + `frameSilence` (`"inferred"`) and by `disconnected`
+ *  (`"reported"`), and conflating those two is the Phase RN Gate 0 defect.
+ *  (An earlier version of this sentence said "because exactly one screen
+ *  needs it"; that reason is superseded — `useMonitorSession` publishes
+ *  `linkLoss` beside `axes` for every screen now, Phase MD PR 2.) */
 export type LinkLossAxis = "none" | "reported" | "inferred";
 
 export function deriveLinkLoss(input: AxesInput): LinkLossAxis {

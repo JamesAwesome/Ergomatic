@@ -270,6 +270,20 @@ toolkit, not a history.
 25. **A payload assertion that depends on two derivations DIFFERING must
     assert that they differ.** Pin the divergence, or a capture swap silently
     retires every assertion beneath it (RF21).
+26. **A mutation on a newly published field must be run in a file that
+    INSTANTIATES the producer.** Before writing "both these files must go
+    red", grep each for `renderHook`/the producer's own `doMock`: a screen
+    test that builds its own `session` fixture, or that `vi.doMock`s the hook
+    outright, sits downstream of the break and cannot fail for a change
+    inside it. And when the fixture helper calls the SAME derive function the
+    producer calls, every ported test is a mirror, not an oracle — the gate
+    has to live where the producer runs.
+27. **Classify a lifetime table's clear sites by their ENCLOSING FUNCTION
+    with a script, not from memory.** Walking backward from each `grep -n`
+    hit to the nearest `const X = useCallback(` moved four "cancel/teardown"
+    sites to `handleEvent` ×2 / `teardown` / `fail` + `connect` — and
+    `handleEvent` being an owner is the lifetime fact the table existed to
+    surface (a mid-session drop marks the attempt cancelled).
 
 ## Things attacked and found sound
 
