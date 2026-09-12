@@ -32,7 +32,9 @@ describe("freeRowTotals — the headline pair's one source", () => {
         // A trace whose tail DISAGREES, and must lose: the summary is the
         // machine's own record of the whole row, the tail is a bucketed
         // sample. Tenths and decimetres, the recorder's own units.
-        series: { samples: [{ t: 3900, d: 13800, p: 1410, spm: 22 }] },
+        series: {
+          samples: [{ t: 3900, d: 13800, p: 1410, spm: 22, r: undefined }],
+        },
       }),
     );
     expect(totals).toStrictEqual({ seconds: 393.6, meters: 1396 });
@@ -51,8 +53,8 @@ describe("freeRowTotals — the headline pair's one source", () => {
           // size; this fixture is in the units PRODUCTION writes, which is
           // the only fixture that can catch that again.
           samples: [
-            { t: 10, d: 40, p: 1400, spm: 22 },
-            { t: 1600, d: 6400, p: 1250, spm: 22 },
+            { t: 10, d: 40, p: 1400, spm: 22, r: undefined },
+            { t: 1600, d: 6400, p: 1250, spm: 22, r: undefined },
           ],
         },
       }),
@@ -68,7 +70,7 @@ describe("freeRowTotals — the headline pair's one source", () => {
         closedFreeRow({
           endedBy: "interrupted",
           series: {
-            samples: [{ t: 143990, d: 431970, p: 1250, spm: 22 }],
+            samples: [{ t: 143990, d: 431970, p: 1250, spm: 22, r: undefined }],
             truncated: true,
           },
         }),

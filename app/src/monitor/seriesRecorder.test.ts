@@ -15,7 +15,11 @@ import { fromHexString, parseRecording } from "./transports/recording.js";
 import { createEventLog } from "./eventLog.js";
 import { createSubscribedDriver } from "../test/statusSubscriptions";
 import { createReplayTransport } from "./transports/replay.js";
-import { createSeriesRecorder, SERIES_SAMPLE_CAP } from "./seriesRecorder.js";
+import {
+  createSeriesRecorder,
+  SERIES_SAMPLE_CAP,
+  type Sample,
+} from "./seriesRecorder.js";
 
 // ---------------------------------------------------------------------
 // Real-wire replay helper (the oracle grounding, same idiom as
@@ -1074,10 +1078,74 @@ describe("createSeriesRecorder — trace-truth Task 2: rests are marked (real ca
     expect(samples).toHaveLength(419);
     const rested = samples.filter((s) => s.r === true);
     expect(rested).toHaveLength(21);
-    // work samples carry NO key at all — absent, not false (the `hr` idiom)
-    expect(Object.keys(samples.find((s) => s.r === undefined)!)).not.toContain(
-      "r",
+    // A work sample costs ZERO SERIALIZED bytes. This used to read
+    // `Object.keys(...).not.toContain("r")`, which was a PROXY for that: it
+    // was true only while `r` was an optional key. Phase MD PR 3 made `r` a
+    // REQUIRED key valued `true | undefined`, so the key is present in
+    // memory and the proxy went red while the invariant it stood for was
+    // untouched. Asserting on the JSON is strictly stronger — it is the
+    // thing that reaches localStorage, the POST body and the jsonb column.
+    expect(
+      JSON.stringify(samples.find((s) => s.r === undefined)!),
+    ).not.toContain('"r"');
+  });
+
+  it("serializes a work sample and a rest sample to exactly these bytes, and the recorder obeys the same rule on both arms", () => {
+    // INDEPENDENT literals for the BYTES (RF21): the expected strings are
+    // written out by hand, so a change to `Sample` or to the recorder's
+    // constants cannot retune them. The literals themselves are ANNOTATED
+    // `Sample`, deliberately — untyped, this test would only have been
+    // exercising `JSON.stringify`, and a field added to or renamed on
+    // `Sample` would have left it green. With the annotation the same edit
+    // reds `pnpm typecheck` here.
+    const work: Sample = { t: 1, d: 4, p: 121, spm: 25, hr: 140, r: undefined };
+    const rest: Sample = { t: 2, d: 8, p: 122, spm: 25, hr: 141, r: true };
+    expect(JSON.stringify(work)).toBe(
+      '{"t":1,"d":4,"p":121,"spm":25,"hr":140}',
     );
+    expect(JSON.stringify(rest)).toBe(
+      '{"t":2,"d":8,"p":122,"spm":25,"hr":141,"r":true}',
+    );
+
+    // And the RECORDER's own output obeys the same rule on both arms. A
+    // rowing frame's sample carries no `r` in its JSON; a resting frame's
+    // carries `"r":true`. The second leg is what stops the first from
+    // passing against a recorder that simply never writes the flag.
+    const frame = (state: MonitorFrame["state"]): MonitorFrame => ({
+      elapsedSeconds: 1,
+      distanceMeters: 5,
+      sessionElapsedSeconds: 1,
+      sessionDistanceMeters: 5,
+      currentSplit: 120,
+      spm: 22,
+      heartRateBpm: 140,
+      rowingActive: state === "rowing",
+      splitAvgPace: null,
+      restSeconds: 0,
+      intervalIndex: null,
+      intervalRemaining: null,
+      intervalAccrued: null,
+      state,
+    });
+    const rowing = createSeriesRecorder();
+    rowing.onFrame(frame("rowing"));
+    expect(JSON.stringify(rowing.snapshot()!.samples[0]!)).not.toContain('"r"');
+    const resting = createSeriesRecorder();
+    resting.onFrame(frame("resting"));
+    expect(JSON.stringify(resting.snapshot()!.samples[0]!)).toContain(
+      '"r":true',
+    );
+  });
+
+  it("refuses to compile a Sample built without spelling `r`", () => {
+    // The compile-time half of the change, proved the repo's own way
+    // (`useMonitorSession.test.ts`'s directive idiom): `@ts-expect-error` is
+    // itself an error when the line below compiles, so this file stops
+    // typechecking the moment `r` goes back to being optional. Delete the
+    // directive and `pnpm typecheck` reports TS2741 on the literal.
+    // @ts-expect-error `r` is a REQUIRED key valued `true | undefined`
+    const missing: Sample = { t: 0, d: 0, p: 0, spm: 0 };
+    expect(missing.r).toBeUndefined();
   });
 });
 

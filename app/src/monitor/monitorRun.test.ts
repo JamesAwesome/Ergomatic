@@ -960,6 +960,7 @@ describe("S4: the worst-case series serializes fast enough for a 30s flush caden
         p: Math.round(120 * 10 + (i % 40)),
         spm: 20 + (i % 10),
         hr: 130 + (i % 60),
+        r: undefined,
       }),
     );
     const run: MonitorRun = {
@@ -1016,6 +1017,7 @@ describe("S4: the worst-case series serializes fast enough for a 30s flush caden
         p: Math.round(120 * 10 + (i % 40)),
         spm: 20 + (i % 10),
         hr: 130 + (i % 60),
+        r: undefined,
       }),
     );
     const run: MonitorRun = {

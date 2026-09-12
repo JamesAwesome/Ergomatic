@@ -136,7 +136,11 @@
 // measured 2.23 frames/s desktop, 90-180ms iOS) already drops its
 // non-winning frames.
 
-import type { MonitorFrame } from "../../domain/monitor/types.js";
+import type {
+  MonitorFrame,
+  Sample,
+  SeriesData,
+} from "../../domain/monitor/types.js";
 
 /** Ruling 2: 4 hours of 1 Hz samples. At the cap, appending stops and
  *  `truncated` is set exactly once — no eviction machinery. */
@@ -194,7 +198,13 @@ const HR_MAX = 254;
 const SPM_MIN = 10;
 const SPM_MAX = 60;
 
-/** C2 logbook stroke-object shape (§1's Shape row, memo Q3, PRIMARY):
+/** The recorded sample and its container. BOTH ARE DECLARED IN
+ *  `domain/monitor/types.ts` since Phase MD PR 3 and re-exported here, so
+ *  this module's importers keep their import path while every consumer in
+ *  `domain/` derives from the one declaration (RF33). The recorder still
+ *  owns the VALUES, and the reasoning for them stays here:
+ *
+ *  C2 logbook stroke-object shape (§1's Shape row, memo Q3, PRIMARY):
  *  cumulative tenths of a second, cumulative decimeters, tenths of a
  *  second per 500m, whole strokes/min. `hr` is ABSENT (never
  *  `undefined`-but-present) when the wire's own heart-rate sentinel
@@ -216,32 +226,7 @@ const SPM_MAX = 60;
  *  every `Sample` as immutable; the freeze makes a mutation attempt throw
  *  in strict mode (every ESM module in this codebase) rather than silently
  *  corrupting this recorder's own internal history. */
-export interface Sample {
-  readonly t: number;
-  readonly d: number;
-  readonly p: number;
-  readonly spm: number;
-  readonly hr?: number;
-  /** trace-truth Task 2 (spec §3, James's ruling: rests are DRAWN, but
-   *  MARKED). Present and `true` ONLY for a sample recorded while the
-   *  winning frame's own `state` was `"resting"` — ABSENT means work, the
-   *  same absent-not-false idiom `hr` above already uses, so a work
-   *  sample costs zero extra bytes. The renderer cannot recover this
-   *  later (a stored log's steps never carry a warm-up row — nothing has
-   *  PRODUCED one since Phase WU, and `buildMonitorLogSteps` still skips a
-   *  legacy warm-up seed step on the one population that can persist the
-   *  string, its own KEEP guard — and no step carries a marker to key a
-   *  positional derivation off either, so anything positional derived from
-   *  steps lands displaced); the recorder is the only place that ever saw
-   *  the wire's own state byte, so it must mark the sample at
-   *  construction. */
-  readonly r?: true;
-}
-
-export interface SeriesData {
-  samples: Sample[];
-  truncated?: true;
-}
+export type { Sample, SeriesData };
 
 /** Guards the whole-second `Math.floor` bucket against a value that is
  *  mathematically exactly on an integer boundary landing a hair under it
@@ -420,9 +405,12 @@ export function createSeriesRecorder(): SeriesRecorder {
         ? { hr: f.heartRateBpm }
         : {}),
       // trace-truth Task 2 (spec §3): the WINNING frame's own state marks
-      // the sample. Same conditional-spread idiom as `hr` above — absent
-      // means work, costing zero extra bytes on a work sample.
-      ...(f.state === "resting" ? { r: true as const } : {}),
+      // the sample. `r` is a REQUIRED key valued `true | undefined` (Phase
+      // MD PR 3), so this cannot be the conditional spread `hr` above
+      // uses — a spread cannot satisfy a required key. The OUTPUT is
+      // unchanged: `JSON.stringify` drops an `undefined`-valued key, so a
+      // work sample still costs zero SERIALIZED bytes.
+      r: f.state === "resting" ? true : undefined,
     };
     samples.push(Object.freeze(sample));
   }

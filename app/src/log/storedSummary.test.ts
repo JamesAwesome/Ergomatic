@@ -296,7 +296,10 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
       p: 1250,
       spm: 24,
       ...(hr === undefined ? {} : { hr }),
-      ...(resting === undefined ? {} : { r: resting }),
+      // `r` is a REQUIRED key valued `true | undefined` (Phase MD PR 3), so
+      // it is spelled here rather than conditionally spread; `undefined`
+      // serializes to nothing, exactly as the absent key did.
+      r: resting,
     });
     const withTrace = (samples: ReturnType<typeof at>[]) =>
       buildStoredSummary(
@@ -347,8 +350,8 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
         // A trace that would derive 100, so the two cannot be confused.
         series: {
           samples: [
-            { t: 0, d: 0, p: 1250, spm: 24, hr: 100 },
-            { t: 10, d: 40, p: 1250, spm: 24, hr: 100 },
+            { t: 0, d: 0, p: 1250, spm: 24, hr: 100, r: undefined },
+            { t: 10, d: 40, p: 1250, spm: 24, hr: 100, r: undefined },
           ],
         },
         steps: [measuredStep(600, 2400, 125)],

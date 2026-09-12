@@ -124,6 +124,29 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
   `(user_id, logged_at desc, id desc)` composite** (planner keeps Bitmap
   Heap Scan + Sort at 100k; 743 vs 726 ms) — it pays only under `LIMIT`.
 
+- **(2026-09-12, PR #412) A required key valued `undefined` costs zero stored
+  bytes, measured end to end.** `Sample.r` became `r: true | undefined`
+  (required) instead of `r?: true`; driving the real recorder over
+  `walk-2026-08-16/session-2-wu-4unequal.jsonl` through the real POST route
+  into real Postgres gave `md5(series::text)` `fcc401bda2b5b8a26b0dea3ee1bd9d45`
+  on BOTH trees, `pg_column_size` 1580 B both. Same at the 14,400-sample cap
+  (`a2c5f84e…`, 163,347 B both). PRIMARY for why: drizzle's
+  `pg-core/columns/jsonb.js:21` `mapToDriverValue` and `pg/lib/utils.js:82`
+  are both `JSON.stringify`, which drops an `undefined`-valued key.
+- **jsonb at the series cap is TOAST-compressed ~4.7×, so a wire cost and a
+  storage cost are different numbers (RF11).** Writing the feared `r: null`
+  instead of `undefined` at 14,400 samples costs **+18.2 % of `::text`
+  characters** (763,396 → 901,996) but only **+2.95 % of `pg_column_size`**
+  (163,347 → 168,170). A ROADMAP row quoting a jsonb size increase must say
+  which oracle it used.
+- **The cheapest proof that a store's query shape did not change** is a
+  comment-stripped diff of the store file, not a grep:
+  `git show <sha>:app/server/stores/logs.ts | perl -0pe 's{/\*.*?\*/}{}gs' |
+  sed 's://.*::' | grep -vE '^[[:space:]]*$'` on both sides, then `diff`.
+- **To see the SQL a route really emits, log it in the container, don't read
+  the ORM**: `alter system set log_statement='all'; select pg_reload_conf();`
+  then `docker logs <c> | grep 'execute <unnamed>: insert into'`. Reset after.
+
 ## Where the dated record lives
 
 `dba-ledger.md`, one section per engagement with its environment table and

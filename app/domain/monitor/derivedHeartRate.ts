@@ -47,26 +47,27 @@
  * a stall counting as much as a second of rowing.
  */
 
-/** The recorder's own `Sample`, narrowed to the three fields this needs.
- *  The names are NOT a paraphrase: `r` is what `src/monitor/seriesRecorder.ts`
- *  writes and `server/stores/logs.ts` mirrors. This interface first spelled it
- *  `rest`, and because the field is optional, structural typing accepted the
- *  real `Sample` with the key simply absent — so the rest exclusion never
- *  fired on any production path while every test, which built `rest` by hand,
- *  proved that it did. Diff a narrowed input interface against the producer's
- *  real declaration field by field; a renamed optional is invisible to the
- *  compiler in exactly the direction that matters. */
-export interface HeartRateSample {
-  /** DECISECONDS on the run's own work clock — `Math.round(seconds * 10)` at
-   *  `seriesRecorder.ts`'s construction site. Not seconds. Every threshold
-   *  below is in these units for that reason, and a weighted mean is
-   *  scale-invariant, so no assertion on the RESULT can catch a unit error
-   *  here; only a threshold can. */
-  readonly t: number;
-  readonly hr?: number;
-  /** Present and `true` only for a sample the monitor itself called resting. */
-  readonly r?: true;
-}
+import type { Sample } from "./types.js";
+
+/** The recorder's own `Sample`, narrowed to the three fields this needs —
+ *  and DERIVED from it since Phase MD PR 3, so the narrowing is the
+ *  compiler's and a rename cannot diverge.
+ *
+ *  Why that matters: this interface was hand-written and first spelled the
+ *  rest flag `rest`. Because the field was optional, structural typing
+ *  accepted the real `Sample` with the key simply absent — so the rest
+ *  exclusion never fired on any production path while every test, which
+ *  built `rest` by hand, proved that it did (RF33). A `Pick` cannot spell
+ *  a field the producer does not have, and `r` is now a REQUIRED key
+ *  valued `true | undefined`, so a caller that does not spell it does not
+ *  compile.
+ *
+ *  `t` is DECISECONDS on the run's own work clock —
+ *  `Math.round(seconds * 10)` at `seriesRecorder.ts`'s construction site,
+ *  not seconds. Every threshold below is in these units for that reason,
+ *  and a weighted mean is scale-invariant, so no assertion on the RESULT
+ *  can catch a unit error here; only a threshold can. */
+export type HeartRateSample = Pick<Sample, "t" | "hr" | "r">;
 
 /** Six seconds, in the deciseconds `t` carries. A longer gap is a dropout or
  *  a reconnect rather than the next reading, and weighting by it would let one

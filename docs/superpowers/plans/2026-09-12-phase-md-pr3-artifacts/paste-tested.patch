@@ -1,0 +1,1354 @@
+diff --git a/app/domain/monitor/derivedHeartRate.ts b/app/domain/monitor/derivedHeartRate.ts
+index e5f6447a..1c914a95 100644
+--- a/app/domain/monitor/derivedHeartRate.ts
++++ b/app/domain/monitor/derivedHeartRate.ts
+@@ -47,26 +47,27 @@
+  * a stall counting as much as a second of rowing.
+  */
+ 
+-/** The recorder's own `Sample`, narrowed to the three fields this needs.
+- *  The names are NOT a paraphrase: `r` is what `src/monitor/seriesRecorder.ts`
+- *  writes and `server/stores/logs.ts` mirrors. This interface first spelled it
+- *  `rest`, and because the field is optional, structural typing accepted the
+- *  real `Sample` with the key simply absent — so the rest exclusion never
+- *  fired on any production path while every test, which built `rest` by hand,
+- *  proved that it did. Diff a narrowed input interface against the producer's
+- *  real declaration field by field; a renamed optional is invisible to the
+- *  compiler in exactly the direction that matters. */
+-export interface HeartRateSample {
+-  /** DECISECONDS on the run's own work clock — `Math.round(seconds * 10)` at
+-   *  `seriesRecorder.ts`'s construction site. Not seconds. Every threshold
+-   *  below is in these units for that reason, and a weighted mean is
+-   *  scale-invariant, so no assertion on the RESULT can catch a unit error
+-   *  here; only a threshold can. */
+-  readonly t: number;
+-  readonly hr?: number;
+-  /** Present and `true` only for a sample the monitor itself called resting. */
+-  readonly r?: true;
+-}
++import type { Sample } from "./types.js";
++
++/** The recorder's own `Sample`, narrowed to the three fields this needs —
++ *  and DERIVED from it since Phase MD PR 3, so the narrowing is the
++ *  compiler's and a rename cannot diverge.
++ *
++ *  Why that matters: this interface was hand-written and first spelled the
++ *  rest flag `rest`. Because the field was optional, structural typing
++ *  accepted the real `Sample` with the key simply absent — so the rest
++ *  exclusion never fired on any production path while every test, which
++ *  built `rest` by hand, proved that it did (RF33). A `Pick` cannot spell
++ *  a field the producer does not have, and `r` is now a REQUIRED key
++ *  valued `true | undefined`, so a caller that does not spell it does not
++ *  compile.
++ *
++ *  `t` is DECISECONDS on the run's own work clock —
++ *  `Math.round(seconds * 10)` at `seriesRecorder.ts`'s construction site,
++ *  not seconds. Every threshold below is in these units for that reason,
++ *  and a weighted mean is scale-invariant, so no assertion on the RESULT
++ *  can catch a unit error here; only a threshold can. */
++export type HeartRateSample = Pick<Sample, "t" | "hr" | "r">;
+ 
+ /** Six seconds, in the deciseconds `t` carries. A longer gap is a dropout or
+  *  a reconnect rather than the next reading, and weighting by it would let one
+diff --git a/app/domain/monitor/types.ts b/app/domain/monitor/types.ts
+index 37c0dc4a..0371420d 100644
+--- a/app/domain/monitor/types.ts
++++ b/app/domain/monitor/types.ts
+@@ -770,3 +770,61 @@ export function hasTargetedScan(
+ ): t is Transport & TargetedScanTransport {
+   return typeof (t as Partial<TargetedScanTransport>).scanTarget === "function";
+ }
++
++// ---------------------------------------------------------------------
++// The recorded series: one sample per whole second of a connected piece.
++//
++// Phase MD PR 3 moved this pair here from `src/monitor/seriesRecorder.ts`
++// so that every consumer in `domain/` derives from ONE declaration rather
++// than re-spelling the field names (RF33: `derivedHeartRate.ts` once
++// spelled the rest flag `rest`, structural typing accepted the real
++// `Sample` with the key simply absent, and the rest exclusion was dead on
++// every production path while every test passed). The recorder still owns
++// the VALUES and re-exports both names, so its 21 importers are unchanged;
++// this file owns the SHAPE.
++//
++// The SERVER derives from here too: `server/stores/logs.ts`'s
++// `LogSeriesSample`/`LogSeries` are `-readonly` mapped types of this pair,
++// which the old "server code never imports from `src/`" rule permits
++// because this file is `domain/`, not `src/` — `tsconfig.server.json`
++// includes `domain` and server modules already import from it. What the
++// server still owns alone is the BOUNDS: `routes/data.ts`'s validator is
++// the trust boundary for an untrusted POST body, and sharing the shape does
++// not share the bands. `server/routes/seriesSeam.test.ts` is the RUNTIME
++// gate over that chain (validator, store, mapping).
++
++export interface Sample {
++  readonly t: number;
++  readonly d: number;
++  readonly p: number;
++  readonly spm: number;
++  readonly hr?: number;
++  /** trace-truth Task 2 (spec §3, James's ruling: rests are DRAWN, but
++   *  MARKED). `true` ONLY for a sample recorded while the winning frame's
++   *  own `state` was `"resting"`; `undefined` means work.
++   *
++   *  A REQUIRED KEY whose value may be `undefined` (Phase MD PR 3), not an
++   *  optional key: `JSON.stringify` drops an `undefined`-valued key, so a
++   *  work sample still costs zero SERIALIZED bytes — the key is present in
++   *  memory and absent on disk and on the wire. What the required key buys
++   *  is that a hand-built sample which does not SPELL `r` fails to
++   *  compile, which is the exact defect RF33 recorded.
++   *
++   *  On every READ path (a `localStorage` parse, a jsonb read-back, a POST
++   *  body) the key is genuinely absent while this type says required —
++   *  these types describe construction sites, and `s.r === true` is correct
++   *  either way. `exactOptionalPropertyTypes` is set in none of the repo's
++   *  tsconfigs; if it is ever enabled this inverts (an explicit `undefined`
++   *  becomes the error) and the producer line stops compiling.
++   *
++   *  The renderer cannot recover this later (a stored log's steps never
++   *  carry a warm-up row, and no step carries a marker to key a positional
++   *  derivation off), so the recorder — the only place that ever saw the
++   *  wire's own state byte — must mark the sample at construction. */
++  readonly r: true | undefined;
++}
++
++export interface SeriesData {
++  samples: Sample[];
++  truncated?: true;
++}
+diff --git a/app/server/concept2/mapping.test.ts b/app/server/concept2/mapping.test.ts
+index 89a3d4c6..f0ade593 100644
+--- a/app/server/concept2/mapping.test.ts
++++ b/app/server/concept2/mapping.test.ts
+@@ -1096,9 +1096,9 @@ describe("buildC2Payload — heart_rate.average is derived when the monitor send
+   // Deciseconds, the unit `Sample.t` actually carries.
+   const trace = {
+     samples: [
+-      { t: 0, hr: 100 },
+-      { t: 10, hr: 140 },
+-      { t: 60, hr: 140 },
++      { t: 0, hr: 100, r: undefined },
++      { t: 10, hr: 140, r: undefined },
++      { t: 60, hr: 140, r: undefined },
+     ],
+   };
+ 
+@@ -1115,9 +1115,9 @@ describe("buildC2Payload — heart_rate.average is derived when the monitor send
+   it("EXCLUDES resting strokes, so the wire agrees with the screen", () => {
+     const resting = {
+       samples: [
+-        { t: 0, hr: 100 },
++        { t: 0, hr: 100, r: undefined },
+         { t: 10, hr: 140, r: true as const },
+-        { t: 60, hr: 140 },
++        { t: 60, hr: 140, r: undefined },
+       ],
+     };
+     // With the middle stretch resting, only the opening second counts.
+@@ -1164,8 +1164,8 @@ describe("buildC2Payload — heart_rate.average is derived when the monitor send
+           ...FINISHED_ROW,
+           series: {
+             samples: [
+-              { t: 0, hr: 19 },
+-              { t: 10, hr: 19 },
++              { t: 0, hr: 19, r: undefined },
++              { t: 10, hr: 19, r: undefined },
+             ],
+           },
+         },
+diff --git a/app/server/concept2/mapping.ts b/app/server/concept2/mapping.ts
+index 075c65f5..e3ac0cf6 100644
+--- a/app/server/concept2/mapping.ts
++++ b/app/server/concept2/mapping.ts
+@@ -9,7 +9,7 @@
+ // here rather than a shared import.
+ 
+ import type { LogSource } from "../../domain/types.js";
+-import type { LogStep } from "../stores/logs.js";
++import type { LogSeriesSample, LogStep } from "../stores/logs.js";
+ import { buildC2Intervals } from "./intervals.js";
+ import { wireVerificationCode } from "../../domain/monitor/verificationCode.js";
+ import { c2Tenths, sendableInt } from "./tenths.js";
+@@ -57,11 +57,15 @@ export interface SessionLogRow {
+   machineWorkSeconds: number | null;
+   machineSummary: Record<string, unknown> | null;
+   /** The trace, needed for the ONE field the monitor never
+-   *  fills — see the heart-rate block in `buildC2Payload`. Structurally the
+-   *  store's `LogSeries`, typed loosely here for the same reason
+-   *  `machineSummary` is: `routes/data.ts` owns its bands. */
++   *  fills — see the heart-rate block in `buildC2Payload`. DERIVED from the
++   *  store's own `LogSeriesSample` since Phase MD PR 3 (it was a hand-spelled
++   *  inline literal, and a rename of `r` here would have silently stopped
++   *  excluding rest from a rower's logbook heart-rate — RF33 one layer up).
++   *  Narrowed to the three fields this file reads; `routes/data.ts` still
++   *  owns the bands. `samples` stays optional and `truncated` stays absent:
++   *  neither is read on this path (`?? []` absorbs the first). */
+   series?: {
+-    samples?: readonly { t: number; hr?: number; r?: true }[];
++    samples?: readonly Pick<LogSeriesSample, "t" | "hr" | "r">[];
+   } | null;
+   source: LogSource;
+   endedBy: string | null;
+diff --git a/app/server/db/schema.test.ts b/app/server/db/schema.test.ts
+index 5585dfeb..a2006b54 100644
+--- a/app/server/db/schema.test.ts
++++ b/app/server/db/schema.test.ts
+@@ -1,41 +1,39 @@
+-import { describe, expect, it } from "vitest";
+-import { endedByEnum } from "./schema.js";
+-import type { EndedBy } from "../stores/logs.js";
+-
+-// Whole-branch review nit: five independent copies of the "what can
+-// `endedBy` be" list exist across this codebase (the pgEnum here, the
+-// `MonitorRun.endedBy?` TS union, that field's own runtime validator,
+-// `server/stores/logs.ts`'s `EndedBy` type, and `server/routes/data.ts`'s
+-// `ENDED_BY_VALUES` request-validation array) — nothing ties them
+-// together, so a widened union that forgets one silently drifts.
++// The `ended_by` value set, pinned against six independent literals.
+ //
+-// This pin ties the DB's own source of truth (the pgEnum) to the
+-// SERVER-SIDE TS union (`EndedBy`, `server/stores/logs.ts`) — the copy
+-// every other server-side list (`server/routes/data.ts`'s
+-// `ENDED_BY_VALUES`, cast against `EndedBy` at every use site) is already
+-// typed against, so pinning this one link is the cheapest single check
+-// that also indirectly guards those.
++// Phase MD PR 3 REPLACED the `EXHAUSTIVE` pin that used to live here. That
++// one tied this file's `endedByEnum` to `server/stores/logs.ts`'s `EndedBy`
++// union with `Record<EndedBy, true>`, and it was a real gate for as long as
++// `EndedBy` was a hand-copied literal union. `EndedBy` is now
++// `(typeof endedByEnum.enumValues)[number]`, so both sides are the same
++// expression and that assertion could not have gone red whatever anyone did
++// to either — RF21: a green check nobody can make fail is decoration that
++// reads as evidence, and it is worse than no gate because it retires the
++// suspicion that would have found the drift.
+ //
+-// `EXHAUSTIVE` is typed as `Record<EndedBy, true>` — TypeScript itself
+-// rejects a missing OR an extra key, so this object literal can only
+-// compile when its keys are EXACTLY `EndedBy`'s members. `Object.keys`
+-// then turns that COMPILE-TIME guarantee into a RUNTIME array comparable
+-// against the pgEnum's own `enumValues`. Widen `EndedBy` without updating
+-// this object: a compile error, not a silent drift. Widen the pgEnum
+-// without updating `EndedBy`: this test reds.
+-const EXHAUSTIVE: Record<EndedBy, true> = {
+-  finished: true,
+-  rower: true,
+-  "link-lost": true,
+-  "program-failed": true,
+-  "program-dropped": true,
+-  interrupted: true,
+-};
++// The pin below is what replaces it, and it is strictly stronger than the
++// one it replaces in the direction that matters: the literals are written
++// out here and owned by nothing else, so a member ADDED to the pgEnum reds
++// it, and so does one removed or renamed. What it deliberately does NOT do
++// is tie the DB to a TS type — there is no longer a type to tie it to.
++//
++// The other two gates on this value set, stated honestly because the
++// previous wording overstated them: `server/routes/endedBy.integration.test.ts`
++// round-trips each value through real Postgres, and `data.test.ts`'s POST
++// loop asserts 201 for each of its own six literals — that loop catches a
++// member REMOVED from the enum (the POST 400s) and stays GREEN on one added,
++// because an added member widens the route automatically.
++import { describe, expect, it } from "vitest";
++import { endedByEnum } from "./schema.js";
+ 
+-describe("endedByEnum (server/db/schema.ts) matches the EndedBy TS union (server/stores/logs.ts) exactly", () => {
+-  it("the pgEnum's own runtime values are exactly EndedBy's members — no more, no fewer", () => {
+-    expect(new Set(endedByEnum.enumValues)).toStrictEqual(
+-      new Set(Object.keys(EXHAUSTIVE)),
+-    );
++describe("endedByEnum (server/db/schema.ts) is the one source for ended_by", () => {
++  it("carries exactly these six values, pinned by independent literals", () => {
++    expect([...endedByEnum.enumValues]).toStrictEqual([
++      "finished",
++      "rower",
++      "link-lost",
++      "program-failed",
++      "program-dropped",
++      "interrupted",
++    ]);
+   });
+ });
+diff --git a/app/server/routes/concept2.test.ts b/app/server/routes/concept2.test.ts
+index ff800974..13ad2385 100644
+--- a/app/server/routes/concept2.test.ts
++++ b/app/server/routes/concept2.test.ts
+@@ -3301,9 +3301,9 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
+       // DECISECONDS, uneven gaps inside the cap: 133 weighted, 120 not.
+       series: {
+         samples: [
+-          { t: 0, d: 0, p: 1250, spm: 24, hr: 100 },
+-          { t: 10, d: 4, p: 1250, spm: 24, hr: 140 },
+-          { t: 60, d: 84, p: 1250, spm: 24, hr: 140 },
++          { t: 0, d: 0, p: 1250, spm: 24, hr: 100, r: undefined },
++          { t: 10, d: 4, p: 1250, spm: 24, hr: 140, r: undefined },
++          { t: 60, d: 84, p: 1250, spm: 24, hr: 140, r: undefined },
+         ],
+       },
+     });
+diff --git a/app/server/routes/concept2.ts b/app/server/routes/concept2.ts
+index 96a1a3fd..f1ea742b 100644
+--- a/app/server/routes/concept2.ts
++++ b/app/server/routes/concept2.ts
+@@ -26,7 +26,7 @@ import {
+   type Concept2Store,
+   type LinkSurface,
+ } from "../stores/concept2.js";
+-import type { LogStep, LogsStore } from "../stores/logs.js";
++import type { LogSeriesSample, LogStep, LogsStore } from "../stores/logs.js";
+ import { tzError } from "./data.js";
+ 
+ // Wave E PR1 Task 6, rebuilt at PR1.75a
+@@ -246,11 +246,15 @@ function toMappingRow(row: {
+     steps: Array.isArray(row.steps) ? (row.steps as LogStep[]) : [],
+     // The trace feeds the derived heart-rate average. Untyped off
+     // `store.get` like its neighbours; a shape the write path never admits
+-    // reads as no samples rather than a partial trace.
++    // reads as no samples rather than a partial trace. The cast names the
++    // store's own `LogSeriesSample` (Phase MD PR 3) instead of re-spelling
++    // its field names — this cast is UPSTREAM of `mapping.ts`'s
++    // `SessionLogRow.series`, so a rename that fixed that one and not this
++    // one would still have broken the rest exclusion silently.
+     series:
+       typeof row.series === "object" && row.series !== null
+         ? (row.series as {
+-            samples?: readonly { t: number; hr?: number; r?: true }[];
++            samples?: readonly Pick<LogSeriesSample, "t" | "hr" | "r">[];
+           })
+         : null,
+     source: row.source,
+diff --git a/app/server/routes/data.ts b/app/server/routes/data.ts
+index c1380c6c..558f4534 100644
+--- a/app/server/routes/data.ts
++++ b/app/server/routes/data.ts
+@@ -18,6 +18,7 @@ import {
+ } from "../stores/baselines.js";
+ import {
+   CursorNotFoundError,
++  ENDED_BY_VALUES,
+   type ActualSource,
+   type EndedBy,
+   type HeldResult,
+@@ -58,19 +59,6 @@ const THUMBS_VALUES: Thumbs[] = ["up", "down"];
+ // values `server/db/schema.ts`'s `endedByEnum` accepts. `endedByError`
+ // below is the "validateSeriesSample's cousin" the brief names: known
+ // value or absent, reject anything else.
+-// Wave F PR 1 (lifecycle design spec §1, "The migration, owned"): a third
+-// independent mirror of the same value set (alongside the pgEnum and
+-// `server/stores/logs.ts`'s `EndedBy`) — `"program-dropped"` moves here
+-// in the same commit as those two, or an unwidened validator 400s every
+-// program-dropped save outright.
+-const ENDED_BY_VALUES: EndedBy[] = [
+-  "finished",
+-  "rower",
+-  "link-lost",
+-  "program-failed",
+-  "program-dropped",
+-  "interrupted",
+-];
+ const PLAN_KEYS: PlanKey[] = ["sprint", "head"];
+ const ACCENT_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+ // Conservative slug shape, validated here rather than against the bundled
+@@ -172,7 +160,11 @@ function endedByError(value: unknown): string | null {
+     value !== null &&
+     !ENDED_BY_VALUES.includes(value as EndedBy)
+   ) {
+-    return "endedBy must be one of finished|rower|link-lost|program-failed|program-dropped|interrupted or null";
++    // The value list is DERIVED (Phase MD PR 3), not typed out: this prose
++    // was the fourth hand-copy of the enum and could go stale without any
++    // gate noticing. `data.test.ts` keeps the full string as an INDEPENDENT
++    // literal, which is what pins the wording.
++    return `endedBy must be one of ${ENDED_BY_VALUES.join("|")} or null`;
+   }
+   return null;
+ }
+@@ -809,11 +801,14 @@ const SERIES_D_MAX = 1_000_000 * 10;
+ // tenths unit.
+ const SERIES_P_MAX = PM5_MAX_SPLIT_SECONDS * 10;
+ // spm's honest wire ceiling: 0x0032's own stroke-rate byte is a plain u8
+-// (`domain/monitor/pm5/parse.ts`'s `spm: readU8(bytes, 5)`), and the
+-// recorder stores it unbanded (`seriesRecorder.ts`'s `spm: f.spm ?? 0` —
+-// no drop-if-out-of-band the way `logDraft.ts`'s AUTHORED/matched-actual
+-// fields get). The full representable range, not the narrower 10..60/
+-// 0..99 bands those separately-purposed fields apply.
++// (`domain/monitor/pm5/parse.ts`'s `spm: readU8(bytes, 5)`), so 255 is what
++// the WIRE can represent and this route trusts nothing narrower from a
++// client it did not write. The recorder itself bands harder (RC-6:
++// `seriesRecorder.ts` collapses anything outside 10..60 to `0`), so a
++// well-behaved client never posts a value this ceiling has to catch — which
++// is the point: this is a trust boundary, not a mirror of the producer.
++// (Corrected in Phase MD PR 3; the previous wording claimed the recorder
++// stored spm unbanded, which RC-6 had already falsified.)
+ const SERIES_SPM_MAX = 255;
+ 
+ function validateSeriesSample(
+@@ -889,9 +884,34 @@ function validateSeriesSample(
+   // input" discipline `validateLogStepEntry` above already uses — any
+   // extra keys the client sent (the POST idiom: unknown sample keys are
+   // ignored, never rejected) are silently dropped, not persisted.
+-  const sample: LogSeriesSample = { t, d, p, spm };
+-  if (hr !== undefined) sample.hr = hr;
+-  if (r === true) sample.r = true;
++  //
++  // THIS LIST IS THE ONE THAT DROPS A FIELD SILENTLY. A field added to the
++  // domain's `Sample` (which `LogSeriesSample` now maps from) and not added
++  // here never reaches the column, and no band check would be missing to
++  // notice. `SERIES_SAMPLE_FIELDS` (the `Record<keyof LogSeriesSample,
++  // true>` witness beside that type) is asserted in `seriesSeam.test.ts`
++  // against the KEY UNION over every sample this function rebuilt on the far
++  // side of a real POST — the union, because no single stored sample carries
++  // every field.
++  //
++  // `hr` is SPREAD rather than assigned, and that is load-bearing: the
++  // spread leaves the key genuinely ABSENT in memory when there is no
++  // reading, which is what keeps every `toStrictEqual` comparing a stored
++  // sample against a hand-built one honest. `r` cannot do the same — it is a
++  // required key, and its present-but-undefined value is exactly what the
++  // compile gate buys. Key ORDER is NOT load-bearing here: Postgres
++  // normalizes jsonb keys by length then bytewise on ingest (measured on
++  // 18.4: `{"t":1,"d":4,"p":121,"spm":25,"hr":140}::jsonb` reads back
++  // `{"d": 4, "p": 121, "t": 1, "hr": 140, "spm": 25}`), so no ordering here
++  // survives the column.
++  const sample: LogSeriesSample = {
++    t,
++    d,
++    p,
++    spm,
++    ...(hr !== undefined ? { hr } : {}),
++    r: r === true ? true : undefined,
++  };
+   return { ok: true, sample };
+ }
+ 
+diff --git a/app/server/stores/contracts/storeContracts.ts b/app/server/stores/contracts/storeContracts.ts
+index d8854253..e18a7952 100644
+--- a/app/server/stores/contracts/storeContracts.ts
++++ b/app/server/stores/contracts/storeContracts.ts
+@@ -21,6 +21,24 @@ import type { NewWorkoutInput, WorkoutsStore } from "../workouts.js";
+ // in-memory fake) a fresh `makeStores()` call produces.
+ const NON_EXISTENT_UUID = "00000000-0000-0000-0000-000000000000";
+ 
++/** A value as the jsonb COLUMN can hold it.
++ *
++ *  Phase MD PR 3 made `Sample.r` (and so `LogSeriesSample.r`) a REQUIRED key
++ *  whose value may be `undefined`, so a sample built in memory carries
++ *  `r: undefined` while the column carries no `r` at all — `JSON.stringify`
++ *  drops an `undefined`-valued key, which is the whole reason the change
++ *  costs zero stored bytes.
++ *
++ *  Wrap the EXPECTED side ONLY. The ACTUAL side is what the backend handed
++ *  back and must be compared as it is, or these cases stop being able to see
++ *  a backend returning a key the column cannot hold — which is precisely
++ *  what the in-memory fake was doing until this PR taught its `create` to
++ *  round-trip `series` the way jsonb does.
++ *
++ *  `src/test/asSerialized.ts` is the client tree's copy under the same name;
++ *  server code never imports from `src/`. */
++const asSerialized = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
++
+ /** `listPlanLinks` also returns each winning row's save-time workout
+  *  snapshot, pinned in full by the two dedicated `listPlanLinks` cases
+  *  below. The DELETE suite's subject is only ever WHICH LOG holds an
+@@ -1247,7 +1265,9 @@ export function describeStoreContracts(
+           await stores.logs.create(
+             userId,
+             logInput({
+-              series: { samples: [{ t: 10, d: 23, p: 140, spm: 24 }] },
++              series: {
++                samples: [{ t: 10, d: 23, p: 140, spm: 24, r: undefined }],
++              },
+             }),
+           );
+           const list = await stores.logs.list(userId, 10);
+@@ -1257,10 +1277,12 @@ export function describeStoreContracts(
+         it("get still returns the full row, series included", async () => {
+           const stores = await makeStores();
+           const userId = await stores.makeUser();
+-          const series = { samples: [{ t: 10, d: 23, p: 140, spm: 24 }] };
++          const series = {
++            samples: [{ t: 10, d: 23, p: 140, spm: 24, r: undefined }],
++          };
+           const { id } = await stores.logs.create(userId, logInput({ series }));
+           const row = await stores.logs.get(userId, id);
+-          expect(row).toMatchObject({ series });
++          expect(row).toMatchObject({ series: asSerialized(series) });
+         });
+ 
+         // RC-2/RC-3 wave: `machineSummary` joins `steps`/`series` in the
+@@ -1563,14 +1585,14 @@ export function describeStoreContracts(
+           const userId = await stores.makeUser();
+           const series = {
+             samples: [
+-              { t: 10, d: 23, p: 1400, spm: 24, hr: 138 },
+-              { t: 20, d: 47, p: 1350, spm: 25 },
++              { t: 10, d: 23, p: 1400, spm: 24, hr: 138, r: undefined },
++              { t: 20, d: 47, p: 1350, spm: 25, r: undefined },
+             ],
+             truncated: true as const,
+           };
+           const { id } = await stores.logs.create(userId, logInput({ series }));
+           const row = await stores.logs.get(userId, id);
+-          expect(row!.series).toStrictEqual(series);
++          expect(row!.series).toStrictEqual(asSerialized(series));
+         });
+ 
+         // S5 (§4's table): the full 14,400-sample worst case (ruling 2's
+@@ -1589,11 +1611,12 @@ export function describeStoreContracts(
+             p: 1400 + (i % 500),
+             spm: 20 + (i % 10),
+             ...(i % 3 === 0 ? { hr: 120 + (i % 100) } : {}),
++            r: undefined,
+           }));
+           const series = { samples, truncated: true as const };
+           const { id } = await stores.logs.create(userId, logInput({ series }));
+           const row = await stores.logs.get(userId, id);
+-          expect(row!.series).toStrictEqual(series);
++          expect(row!.series).toStrictEqual(asSerialized(series));
+         });
+       });
+ 
+diff --git a/app/server/stores/logs.ts b/app/server/stores/logs.ts
+index 0de29f28..3efbdc38 100644
+--- a/app/server/stores/logs.ts
++++ b/app/server/stores/logs.ts
+@@ -1,5 +1,6 @@
+ import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+ import { isFreeRow, type LogSource } from "../../domain/types.js";
++import type { Sample, SeriesData } from "../../domain/monitor/types.js";
+ import type { Db } from "../db/index.js";
+ import { endedByEnum, planState, sessionLogs, workouts } from "../db/schema.js";
+ import type { PlanKey } from "./planState.js";
+@@ -38,19 +39,23 @@ export type Thumbs = "up" | "down";
+ // pgEnum (`server/db/schema.ts`'s `endedByEnum`) is the value authority;
+ // this type mirrors it the same way `HeldResult`/`Thumbs` above already
+ // mirror theirs.
+-// Wave F PR 1 (lifecycle design spec §1, "The migration, owned"): this is
+-// a HAND-COPIED literal union, not derived from `CloseReason` — widening
+-// the client union typechecks clean and fails only at runtime on a phone
+-// unless this mirror (and `server/db/schema.ts`'s `endedByEnum`, and
+-// `server/routes/data.ts`'s `ENDED_BY_VALUES`) moves in the same commit.
+-// `"program-dropped"` added here for exactly that reason.
+-export type EndedBy =
+-  | "finished"
+-  | "rower"
+-  | "link-lost"
+-  | "program-failed"
+-  | "program-dropped"
+-  | "interrupted";
++// DERIVED from the pgEnum since Phase MD PR 3, not hand-copied. It was a
++// literal union, and so was `server/routes/data.ts`'s `ENDED_BY_VALUES`, and
++// so was the prose inside that route's own error message — four copies of
++// one value set, each of which typechecked clean while disagreeing with the
++// column. Widening now happens once, in `server/db/schema.ts`. The same
++// expression already compiles a few hundred lines below, in
++// `PARTIAL_ENDED_BY`'s `satisfies` clause, which is where the idiom comes
++// from; drizzle types `enumValues` as the literal tuple inferred at the
++// `pgEnum` call site, not `string[]`.
++export type EndedBy = (typeof endedByEnum.enumValues)[number];
++
++/** The same six values as a runtime array, for the route's own bounds check
++ *  and for the message it prints when that check refuses. Exported from here
++ *  rather than re-typed in `routes/data.ts`: that file already imports
++ *  `EndedBy` from this module and does not import `db/schema.js` at all, so
++ *  this adds no import edge into the schema for the route layer. */
++export const ENDED_BY_VALUES = endedByEnum.enumValues;
+ 
+ // Amendment (2026-08-02, Phase 6C Task 1.5): targetSplit is now OPTIONAL (an
+ // effort step's frozen split is an estimate, never a prescription — the 5G
+@@ -117,31 +122,74 @@ export interface LogStep {
+   machineRestMeters?: number;
+ }
+ 
+-// Series capture spec (2026-08-19), §1/§3: a server-side MIRROR of the
+-// client's `src/monitor/seriesRecorder.ts` `Sample`/`SeriesData` shapes —
+-// not a shared import. Server code never imports from `src/` (the client
+-// tree); this is the same "independent, own-bounds mirror" idiom `LogStep`
+-// above already uses for the pm5-sourced fields it duplicates from
+-// `logDraft.ts` rather than sharing a type across the client/server
+-// boundary. `routes/data.ts`'s `validateSeries` is what actually
+-// constructs a value of this shape — every field here has already passed
+-// its own band check by the time it reaches this store.
+-export interface LogSeriesSample {
+-  t: number;
+-  d: number;
+-  p: number;
+-  spm: number;
+-  hr?: number;
+-  /** trace-truth Task 2 (spec §3): mirrors the client's `Sample.r` —
+-   *  present and `true` only for a sample recorded while the machine was
+-   *  resting; absent means work, same idiom as `hr` above. */
+-  r?: true;
+-}
++// Series capture spec (2026-08-19), §1/§3, re-decided in Phase MD PR 3:
++// DERIVED from the domain's own `Sample`/`SeriesData`, not mirrored.
++//
++// This block used to be a hand-written copy, and its comment gave the
++// reason: "server code never imports from `src/`". That reason does not
++// reach this case any more. `Sample` no longer lives in `src/` — it lives
++// in `domain/monitor/types.ts`, which `tsconfig.server.json` already
++// includes and which server files already import from (`grep -rl 'domain/'
++// server --include='*.ts' | wc -l`). `server/concept2/mapping.ts` imports
++// `deriveAverageHeartRate` from the very module whose input type is a
++// `Pick` of this shape, so the compiler edge exists today; a hand-copy
++// beside it buys nothing and can drift, which is exactly the RF33 defect
++// this PR exists to close — a renamed field must be a compile error on
++// BOTH sides, and a copy cannot do that.
++//
++// What is still the server's own, and is the actual trust boundary: the
++// BOUNDS. `routes/data.ts`'s `validateSeries` is what constructs a value of
++// this shape from an untrusted body, and every field has passed its own
++// band check before it reaches this store. Sharing the SHAPE with the
++// domain does not share the bands, and does not make the route trust the
++// client. (`LogStep` above is still an independent own-bounds mirror; its
++// twin is `logDraft.ts` in the CLIENT tree, so the old reason does still
++// reach it.)
++//
++// Mutable, unlike the domain's `readonly` fields: `-readonly` is the whole
++// of the difference, and writing it as a mapped type means a field added to
++// `Sample` appears here with no edit and no chance of divergence.
++export type LogSeriesSample = { -readonly [K in keyof Sample]: Sample[K] };
++// `SeriesData`'s own two fields are already mutable, so this mapped type is
++// an alias in practice and `LogSeries["samples"]` is `Sample[]` — a stored
++// sample's FIELDS stay `readonly`, which nothing on this path assigns to.
++// Written as the mapping anyway so the two derivations read alike and a
++// later `readonly` on `SeriesData` needs no edit here.
++export type LogSeries = { -readonly [K in keyof SeriesData]: SeriesData[K] };
+ 
+-export interface LogSeries {
+-  samples: LogSeriesSample[];
+-  truncated?: true;
+-}
++/** Every field of `LogSeriesSample`, as a runtime array.
++ *
++ *  The exhaustiveness witness is `Record<keyof LogSeriesSample, true>`:
++ *  TypeScript rejects a MISSING key (TS2741) and an EXTRA one, so this
++ *  literal compiles only when its keys are exactly the interface's — and
++ *  since Phase MD PR 3 that interface derives from the DOMAIN's `Sample`,
++ *  so this is a runtime array of the domain shape's own field names. The
++ *  weaker `as const satisfies readonly (keyof LogSeriesSample)[]` was the
++ *  first draft and is silent on an omission — it cannot go red on the
++ *  defect this exists for (RF21).
++ *
++ *  What it gates: `routes/data.ts`'s `validateSeriesSample` REBUILDS its
++ *  result from an explicit field list rather than spreading the raw input,
++ *  and a field added to the domain shape without being added to that list
++ *  is silently dropped from every stored trace — the compiler cannot see
++ *  that, because the list produces a valid `LogSeriesSample` either way
++ *  for any field whose value may be `undefined`. It does NOT gate the six
++ *  per-field predicates: those are six different checks with four
++ *  different ceilings and are deliberately written out one by one.
++ *  `server/routes/seriesSeam.test.ts` is what turns this array into a
++ *  runtime assertion: it compares it against the KEY UNION over every sample
++ *  the real recorder produced AND over every sample the real validator
++ *  rebuilt on the far side of a real POST. The union, not a single sample —
++ *  `hr` and `r` are absent from most samples individually, so only the union
++ *  can see a field the list dropped. */
++export const SERIES_SAMPLE_FIELDS = Object.keys({
++  t: true,
++  d: true,
++  p: true,
++  spm: true,
++  hr: true,
++  r: true,
++} satisfies Record<keyof LogSeriesSample, true>);
+ 
+ export interface LogInput {
+   workoutId: string | null;
+diff --git a/app/server/testing/fakes.ts b/app/server/testing/fakes.ts
+index 37d9a09a..f611508c 100644
+--- a/app/server/testing/fakes.ts
++++ b/app/server/testing/fakes.ts
+@@ -15,6 +15,7 @@ import {
+   CursorNotFoundError,
+   PARTIAL_ENDED_BY,
+   type LogInput,
++  type LogSeries,
+   type LogPatch,
+   type LogsStore,
+   type PlanLink,
+@@ -682,7 +683,34 @@ function makeFakeLogsStore(
+       // all), so the real store's `list` can never return it. Spreading the
+       // whole `input` here used to leak it into this fake's `list` (and thus
+       // `GET /api/logs`) — a shape production can never produce.
+-      const { advancesPlan, ...stored } = input;
++      const { advancesPlan, series: rawSeries, ...rest } = input;
++      // jsonb IS a serializer, and this fake stands in for the column. Phase
++      // MD PR 3 made `Sample.r` a required key whose value may be
++      // `undefined`; `JSON.stringify` drops such a key, so real Postgres
++      // hands back a sample with no `r` while this fake, keeping the object
++      // it was handed, handed back one WITH it. Three store-contract cases
++      // passed here and failed against real Postgres because of it, which is
++      // the one thing a contract suite must not do. Round-trip `series` so
++      // both backends agree.
++      //
++      // `steps` and `machineSummary` are jsonb too and are deliberately NOT
++      // round-tripped: nothing writes an undefined-valued key into either
++      // today, so the infidelity is unobservable, and widening this to every
++      // jsonb column is a change with no failing case behind it. The
++      // ROADMAP carries the row.
++      // The cast below is deliberately WIDER than the value it produces: on
++      // the read side `r` is absent, exactly as it is off a real jsonb read,
++      // and `LogSeries` says the key is required. That is the shape's own
++      // stated posture (`domain/monitor/types.ts`: the required key is a
++      // CONSTRUCTION-SITE gate, and `s.r === true` is correct either way),
++      // not a hole this fake opens.
++      const stored = {
++        ...rest,
++        series:
++          rawSeries === undefined
++            ? undefined
++            : (JSON.parse(JSON.stringify(rawSeries)) as LogSeries | null),
++      };
+ 
+       // From-the-log spec (2026-08-18), §2: mirrors the real store's
+       // reordered create() — the plan_state bump runs FIRST (still gated
+diff --git a/app/src/justrow/totals.test.ts b/app/src/justrow/totals.test.ts
+index 62f56a4c..74485d61 100644
+--- a/app/src/justrow/totals.test.ts
++++ b/app/src/justrow/totals.test.ts
+@@ -32,7 +32,9 @@ describe("freeRowTotals — the headline pair's one source", () => {
+         // A trace whose tail DISAGREES, and must lose: the summary is the
+         // machine's own record of the whole row, the tail is a bucketed
+         // sample. Tenths and decimetres, the recorder's own units.
+-        series: { samples: [{ t: 3900, d: 13800, p: 1410, spm: 22 }] },
++        series: {
++          samples: [{ t: 3900, d: 13800, p: 1410, spm: 22, r: undefined }],
++        },
+       }),
+     );
+     expect(totals).toStrictEqual({ seconds: 393.6, meters: 1396 });
+@@ -51,8 +53,8 @@ describe("freeRowTotals — the headline pair's one source", () => {
+           // size; this fixture is in the units PRODUCTION writes, which is
+           // the only fixture that can catch that again.
+           samples: [
+-            { t: 10, d: 40, p: 1400, spm: 22 },
+-            { t: 1600, d: 6400, p: 1250, spm: 22 },
++            { t: 10, d: 40, p: 1400, spm: 22, r: undefined },
++            { t: 1600, d: 6400, p: 1250, spm: 22, r: undefined },
+           ],
+         },
+       }),
+@@ -68,7 +70,7 @@ describe("freeRowTotals — the headline pair's one source", () => {
+         closedFreeRow({
+           endedBy: "interrupted",
+           series: {
+-            samples: [{ t: 143990, d: 431970, p: 1250, spm: 22 }],
++            samples: [{ t: 143990, d: 431970, p: 1250, spm: 22, r: undefined }],
+             truncated: true,
+           },
+         }),
+diff --git a/app/src/log/FromTheLog.test.tsx b/app/src/log/FromTheLog.test.tsx
+index bf7d6698..f119cdf8 100644
+--- a/app/src/log/FromTheLog.test.tsx
++++ b/app/src/log/FromTheLog.test.tsx
+@@ -121,7 +121,7 @@ function realisticSeries(): SeriesData {
+     [114, 27, 150],
+     [112, 28, 152],
+   ] as const) {
+-    samples.push({ t: t * 10, d: t * 4, p: pace * 10, spm, hr });
++    samples.push({ t: t * 10, d: t * 4, p: pace * 10, spm, hr, r: undefined });
+     t += 20;
+   }
+   return { samples };
+diff --git a/app/src/log/storedSummary.test.ts b/app/src/log/storedSummary.test.ts
+index 2b789a5a..f1a547a7 100644
+--- a/app/src/log/storedSummary.test.ts
++++ b/app/src/log/storedSummary.test.ts
+@@ -296,7 +296,10 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
+       p: 1250,
+       spm: 24,
+       ...(hr === undefined ? {} : { hr }),
+-      ...(resting === undefined ? {} : { r: resting }),
++      // `r` is a REQUIRED key valued `true | undefined` (Phase MD PR 3), so
++      // it is spelled here rather than conditionally spread; `undefined`
++      // serializes to nothing, exactly as the absent key did.
++      r: resting,
+     });
+     const withTrace = (samples: ReturnType<typeof at>[]) =>
+       buildStoredSummary(
+@@ -347,8 +350,8 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
+         // A trace that would derive 100, so the two cannot be confused.
+         series: {
+           samples: [
+-            { t: 0, d: 0, p: 1250, spm: 24, hr: 100 },
+-            { t: 10, d: 40, p: 1250, spm: 24, hr: 100 },
++            { t: 0, d: 0, p: 1250, spm: 24, hr: 100, r: undefined },
++            { t: 10, d: 40, p: 1250, spm: 24, hr: 100, r: undefined },
+           ],
+         },
+         steps: [measuredStep(600, 2400, 125)],
+diff --git a/app/src/log/traceModel.test.ts b/app/src/log/traceModel.test.ts
+index 937a239f..c9862c6e 100644
+--- a/app/src/log/traceModel.test.ts
++++ b/app/src/log/traceModel.test.ts
+@@ -456,9 +456,9 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not
+   it("marks trace points recorded during a rest", () => {
+     const series = {
+       samples: [
+-        { t: 10, d: 40, p: 1200, spm: 20 },
++        { t: 10, d: 40, p: 1200, spm: 20, r: undefined },
+         { t: 20, d: 45, p: 1400, spm: 18, r: true as const },
+-        { t: 30, d: 80, p: 1200, spm: 20 },
++        { t: 30, d: 80, p: 1200, spm: 20, r: undefined },
+       ],
+     };
+     const model = buildTrace(series, "pace")!;
+@@ -473,9 +473,9 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not
+     // same series: exactly ONE segment, not three
+     const series = {
+       samples: [
+-        { t: 10, d: 40, p: 1200, spm: 20 },
++        { t: 10, d: 40, p: 1200, spm: 20, r: undefined },
+         { t: 20, d: 45, p: 1400, spm: 18, r: true as const },
+-        { t: 30, d: 80, p: 1200, spm: 20 },
++        { t: 30, d: 80, p: 1200, spm: 20, r: undefined },
+       ],
+     };
+     expect(buildTrace(series, "pace")!.points).toHaveLength(1);
+@@ -540,9 +540,9 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not
+   it("buildSummary names no rest spans when the trace has none", () => {
+     const series = {
+       samples: [
+-        { t: 10, d: 40, p: 1200, spm: 20 },
+-        { t: 20, d: 45, p: 1400, spm: 18 },
+-        { t: 30, d: 80, p: 1200, spm: 20 },
++        { t: 10, d: 40, p: 1200, spm: 20, r: undefined },
++        { t: 20, d: 45, p: 1400, spm: 18, r: undefined },
++        { t: 30, d: 80, p: 1200, spm: 20, r: undefined },
+       ],
+     };
+     const trace = buildTrace(series, "pace")!;
+diff --git a/app/src/monitor/derivedHeartRate.replay.test.ts b/app/src/monitor/derivedHeartRate.replay.test.ts
+index 193adde8..3bfafd03 100644
+--- a/app/src/monitor/derivedHeartRate.replay.test.ts
++++ b/app/src/monitor/derivedHeartRate.replay.test.ts
+@@ -58,7 +58,7 @@ function samplesFrom(file: string): HeartRateSample[] {
+         // dead rest-guard and a 10x dropout cap both pass for a whole round.
+         t: Math.round(a.elapsedSeconds * 10),
+         hr: a.heartRateBpm,
+-        ...(resting ? { r: true as const } : {}),
++        r: resting ? (true as const) : undefined,
+       });
+     }
+   }
+@@ -93,7 +93,11 @@ describe("deriveAverageHeartRate, against real captures", () => {
+     const samples = samplesFrom(
+       "walk-2026-08-25/rests-finished-recording.jsonl.gz",
+     );
+-    const withRestCounted = samples.map(({ t, hr }) => ({ t, hr }));
++    const withRestCounted = samples.map(({ t, hr }) => ({
++      t,
++      hr,
++      r: undefined,
++    }));
+     expect(deriveAverageHeartRate(samples)).toBe(103);
+     expect(deriveAverageHeartRate(withRestCounted)).toBe(103);
+     // …and on the capture where they genuinely diverge, the two differ by a
+@@ -105,9 +109,11 @@ describe("deriveAverageHeartRate, against real captures", () => {
+     // which is the whole of option A versus option B.
+     const four = samplesFrom("walk-2026-08-16/session-2-wu-4unequal.jsonl");
+     expect(deriveAverageHeartRate(four)).toBe(133);
+-    expect(deriveAverageHeartRate(four.map(({ t, hr }) => ({ t, hr })))).toBe(
+-      134,
+-    );
++    expect(
++      deriveAverageHeartRate(
++        four.map(({ t, hr }) => ({ t, hr, r: undefined })),
++      ),
++    ).toBe(134);
+   });
+ 
+   it("pins the dropout cap at SIX seconds, in the deciseconds t carries", () => {
+@@ -119,14 +125,14 @@ describe("deriveAverageHeartRate, against real captures", () => {
+     // the second case return 100 instead of null.
+     expect(
+       deriveAverageHeartRate([
+-        { t: 0, hr: 100 },
+-        { t: 59, hr: 180 },
++        { t: 0, hr: 100, r: undefined },
++        { t: 59, hr: 180, r: undefined },
+       ]),
+     ).toBe(100);
+     expect(
+       deriveAverageHeartRate([
+-        { t: 0, hr: 100 },
+-        { t: 60, hr: 180 },
++        { t: 0, hr: 100, r: undefined },
++        { t: 60, hr: 180, r: undefined },
+       ]),
+     ).toBeNull();
+   });
+@@ -136,27 +142,29 @@ describe("deriveAverageHeartRate, against real captures", () => {
+     // live MonitorRun trace has not been through the server's validator.
+     expect(
+       deriveAverageHeartRate([
+-        { t: 0, hr: 19 },
+-        { t: 10, hr: 19 },
++        { t: 0, hr: 19, r: undefined },
++        { t: 10, hr: 19, r: undefined },
+       ]),
+     ).toBeNull();
+     expect(
+       deriveAverageHeartRate([
+-        { t: 0, hr: 255 },
+-        { t: 10, hr: 255 },
++        { t: 0, hr: 255, r: undefined },
++        { t: 10, hr: 255, r: undefined },
+       ]),
+     ).toBeNull();
+     expect(
+       deriveAverageHeartRate([
+-        { t: 0, hr: 20 },
+-        { t: 10, hr: 20 },
++        { t: 0, hr: 20, r: undefined },
++        { t: 10, hr: 20, r: undefined },
+       ]),
+     ).toBe(20);
+   });
+ 
+   it("returns null rather than a number when nothing usable is there", () => {
+     expect(deriveAverageHeartRate([])).toBeNull();
+-    expect(deriveAverageHeartRate([{ t: 0, hr: 120 }])).toBeNull();
++    expect(
++      deriveAverageHeartRate([{ t: 0, hr: 120, r: undefined }]),
++    ).toBeNull();
+     expect(
+       deriveAverageHeartRate([
+         { t: 0, hr: 120, r: true },
+@@ -167,9 +175,9 @@ describe("deriveAverageHeartRate, against real captures", () => {
+     // must not dominate the mean.
+     expect(
+       deriveAverageHeartRate([
+-        { t: 0, hr: 200 },
+-        { t: 6000, hr: 100 },
+-        { t: 6010, hr: 100 },
++        { t: 0, hr: 200, r: undefined },
++        { t: 6000, hr: 100, r: undefined },
++        { t: 6010, hr: 100, r: undefined },
+       ]),
+     ).toBe(100);
+   });
+@@ -227,7 +235,7 @@ describe("deriveAverageHeartRate over the RECORDER's own samples", () => {
+     return frames;
+   }
+ 
+-  it("excludes the rest the RECORDER marked, without this test naming the field", () => {
++  it("excludes the rest the RECORDER marked", () => {
+     const recorder = createSeriesRecorder();
+     for (const f of framesFrom("walk-2026-08-16/session-2-wu-4unequal.jsonl")) {
+       recorder.onFrame(f);
+@@ -239,13 +247,19 @@ describe("deriveAverageHeartRate over the RECORDER's own samples", () => {
+     const derived = deriveAverageHeartRate(produced);
+     expect(derived).not.toBeNull();
+ 
+-    // Strip whatever marks rest, by rebuilding each sample from the two
+-    // fields the derivation reads by value. If the exclusion is live, the two
+-    // answers differ; if the flag is misnamed or ignored, they are equal and
+-    // this fails — which is exactly what the first version of this change did.
++    // Strip the mark and re-derive: if the exclusion is live the two answers
++    // differ, and if it is ignored they are equal and this fails. This test
++    // no longer has to avoid NAMING the field — since Phase MD PR 3 a rename
++    // is caught by the compiler (`HeartRateSample` is a `Pick` of the
++    // recorder's own `Sample`), so what is left for this leg to prove is that
++    // the exclusion RUNS over real recorder output.
++    // `r` is a REQUIRED key valued `true | undefined` since Phase MD PR 3,
++    // so `"r" in s` is now true of EVERY sample and does no discriminating;
++    // `s.r === true` is what counts the rests. Kept as-is because the count
++    // it produces is still the producer-side assertion this leg needs.
+     const rest = produced.filter((s) => "r" in s && s.r === true);
+     expect(rest.length).toBeGreaterThan(0);
+-    const withoutFlag = produced.map(({ t, hr }) => ({ t, hr }));
++    const withoutFlag = produced.map(({ t, hr }) => ({ t, hr, r: undefined }));
+     expect(deriveAverageHeartRate(withoutFlag)).not.toBe(derived);
+   });
+ });
+diff --git a/app/src/monitor/fixtures/monitorRunShapes.ts b/app/src/monitor/fixtures/monitorRunShapes.ts
+index 61ce1762..5bfbd088 100644
+--- a/app/src/monitor/fixtures/monitorRunShapes.ts
++++ b/app/src/monitor/fixtures/monitorRunShapes.ts
+@@ -75,10 +75,14 @@ function base(): MonitorRun {
+   };
+ }
+ 
++// `r: undefined` on the two work samples is REQUIRED-KEY bookkeeping from
++// Phase MD PR 3, not a shape change: `JSON.stringify` drops an
++// `undefined`-valued key, so these three samples serialize byte-identically
++// to the captured fixtures and leg (a) stays green without a recapture.
+ const SERIES = {
+   samples: [
+-    { t: 0, d: 0, p: 120, spm: 24 },
+-    { t: 1, d: 4, p: 121.5, spm: 25, hr: 140 },
++    { t: 0, d: 0, p: 120, spm: 24, r: undefined },
++    { t: 1, d: 4, p: 121.5, spm: 25, hr: 140, r: undefined },
+     { t: 2, d: 8, p: 122, spm: 25, r: true as const },
+   ],
+ };
+diff --git a/app/src/monitor/handoffStore.test.ts b/app/src/monitor/handoffStore.test.ts
+index 5ec347bc..a4224def 100644
+--- a/app/src/monitor/handoffStore.test.ts
++++ b/app/src/monitor/handoffStore.test.ts
+@@ -33,6 +33,7 @@ import { loadRun, RUN_KEY, saveRun, type SessionRun } from "../session/run";
+ // through the freshly re-imported `store`.
+ import { MONITOR_RUN_KEY } from "./handoffStore";
+ import type { HandoffReceipt, RetireReason } from "./handoffStore";
++import { asSerialized } from "../test/asSerialized";
+ 
+ type StoreModule = typeof import("./handoffStore");
+ 
+@@ -100,7 +101,7 @@ function freshRun(
+ }
+ 
+ const SERIES: SeriesData = {
+-  samples: [{ t: 0, d: 0, p: 120, spm: 24 }],
++  samples: [{ t: 0, d: 0, p: 120, spm: 24, r: undefined }],
+ };
+ 
+ let store: StoreModule;
+@@ -1626,7 +1627,7 @@ describe("loadMonitorRun's validator: what it admits, and what it refuses withou
+   it("a record whose series is ALREADY valid is untouched by the strip — only a malformed series is ever stripped", () => {
+     const withValid = freshRun(t0.toISOString(), { series: SERIES });
+     store.commit(withValid.startedAt, null, withValid);
+-    expect(store.loadMonitorRun()!.series).toStrictEqual(SERIES);
++    expect(store.loadMonitorRun()!.series).toStrictEqual(asSerialized(SERIES));
+   });
+ 
+   // Door spec §5.1: `partial` is additive-optional, NO `v` bump. Starts at
+diff --git a/app/src/monitor/monitorRun.test.ts b/app/src/monitor/monitorRun.test.ts
+index b9a2f813..4038934c 100644
+--- a/app/src/monitor/monitorRun.test.ts
++++ b/app/src/monitor/monitorRun.test.ts
+@@ -960,6 +960,7 @@ describe("S4: the worst-case series serializes fast enough for a 30s flush caden
+         p: Math.round(120 * 10 + (i % 40)),
+         spm: 20 + (i % 10),
+         hr: 130 + (i % 60),
++        r: undefined,
+       }),
+     );
+     const run: MonitorRun = {
+@@ -1016,6 +1017,7 @@ describe("S4: the worst-case series serializes fast enough for a 30s flush caden
+         p: Math.round(120 * 10 + (i % 40)),
+         spm: 20 + (i % 10),
+         hr: 130 + (i % 60),
++        r: undefined,
+       }),
+     );
+     const run: MonitorRun = {
+diff --git a/app/src/monitor/seriesRecorder.test.ts b/app/src/monitor/seriesRecorder.test.ts
+index 412e00a2..7ca2fdf2 100644
+--- a/app/src/monitor/seriesRecorder.test.ts
++++ b/app/src/monitor/seriesRecorder.test.ts
+@@ -15,7 +15,11 @@ import { fromHexString, parseRecording } from "./transports/recording.js";
+ import { createEventLog } from "./eventLog.js";
+ import { createSubscribedDriver } from "../test/statusSubscriptions";
+ import { createReplayTransport } from "./transports/replay.js";
+-import { createSeriesRecorder, SERIES_SAMPLE_CAP } from "./seriesRecorder.js";
++import {
++  createSeriesRecorder,
++  SERIES_SAMPLE_CAP,
++  type Sample,
++} from "./seriesRecorder.js";
+ 
+ // ---------------------------------------------------------------------
+ // Real-wire replay helper (the oracle grounding, same idiom as
+@@ -1074,10 +1078,74 @@ describe("createSeriesRecorder — trace-truth Task 2: rests are marked (real ca
+     expect(samples).toHaveLength(419);
+     const rested = samples.filter((s) => s.r === true);
+     expect(rested).toHaveLength(21);
+-    // work samples carry NO key at all — absent, not false (the `hr` idiom)
+-    expect(Object.keys(samples.find((s) => s.r === undefined)!)).not.toContain(
+-      "r",
++    // A work sample costs ZERO SERIALIZED bytes. This used to read
++    // `Object.keys(...).not.toContain("r")`, which was a PROXY for that: it
++    // was true only while `r` was an optional key. Phase MD PR 3 made `r` a
++    // REQUIRED key valued `true | undefined`, so the key is present in
++    // memory and the proxy went red while the invariant it stood for was
++    // untouched. Asserting on the JSON is strictly stronger — it is the
++    // thing that reaches localStorage, the POST body and the jsonb column.
++    expect(
++      JSON.stringify(samples.find((s) => s.r === undefined)!),
++    ).not.toContain('"r"');
++  });
++
++  it("serializes a work sample and a rest sample to exactly these bytes", () => {
++    // INDEPENDENT literals for the BYTES (RF21): the expected strings are
++    // written out by hand, so a change to `Sample` or to the recorder's
++    // constants cannot retune them. The literals themselves are ANNOTATED
++    // `Sample`, deliberately — untyped, this test would only have been
++    // exercising `JSON.stringify`, and a field added to or renamed on
++    // `Sample` would have left it green. With the annotation the same edit
++    // reds `pnpm typecheck` here.
++    const work: Sample = { t: 1, d: 4, p: 121, spm: 25, hr: 140, r: undefined };
++    const rest: Sample = { t: 2, d: 8, p: 122, spm: 25, hr: 141, r: true };
++    expect(JSON.stringify(work)).toBe(
++      '{"t":1,"d":4,"p":121,"spm":25,"hr":140}',
+     );
++    expect(JSON.stringify(rest)).toBe(
++      '{"t":2,"d":8,"p":122,"spm":25,"hr":141,"r":true}',
++    );
++
++    // And the RECORDER's own output obeys the same rule on both arms. A
++    // rowing frame's sample carries no `r` in its JSON; a resting frame's
++    // carries `"r":true`. The second leg is what stops the first from
++    // passing against a recorder that simply never writes the flag.
++    const frame = (state: MonitorFrame["state"]): MonitorFrame => ({
++      elapsedSeconds: 1,
++      distanceMeters: 5,
++      sessionElapsedSeconds: 1,
++      sessionDistanceMeters: 5,
++      currentSplit: 120,
++      spm: 22,
++      heartRateBpm: 140,
++      rowingActive: state === "rowing",
++      splitAvgPace: null,
++      restSeconds: 0,
++      intervalIndex: null,
++      intervalRemaining: null,
++      intervalAccrued: null,
++      state,
++    });
++    const rowing = createSeriesRecorder();
++    rowing.onFrame(frame("rowing"));
++    expect(JSON.stringify(rowing.snapshot()!.samples[0]!)).not.toContain('"r"');
++    const resting = createSeriesRecorder();
++    resting.onFrame(frame("resting"));
++    expect(JSON.stringify(resting.snapshot()!.samples[0]!)).toContain(
++      '"r":true',
++    );
++  });
++
++  it("refuses to compile a Sample built without spelling `r`", () => {
++    // The compile-time half of the change, proved the repo's own way
++    // (`useMonitorSession.test.ts`'s directive idiom): `@ts-expect-error` is
++    // itself an error when the line below compiles, so this file stops
++    // typechecking the moment `r` goes back to being optional. Delete the
++    // directive and `pnpm typecheck` reports TS2741 on the literal.
++    // @ts-expect-error `r` is a REQUIRED key valued `true | undefined`
++    const missing: Sample = { t: 0, d: 0, p: 0, spm: 0 };
++    expect(missing.r).toBeUndefined();
+   });
+ });
+ 
+diff --git a/app/src/monitor/seriesRecorder.ts b/app/src/monitor/seriesRecorder.ts
+index b98e923b..49171703 100644
+--- a/app/src/monitor/seriesRecorder.ts
++++ b/app/src/monitor/seriesRecorder.ts
+@@ -136,7 +136,11 @@
+ // measured 2.23 frames/s desktop, 90-180ms iOS) already drops its
+ // non-winning frames.
+ 
+-import type { MonitorFrame } from "../../domain/monitor/types.js";
++import type {
++  MonitorFrame,
++  Sample,
++  SeriesData,
++} from "../../domain/monitor/types.js";
+ 
+ /** Ruling 2: 4 hours of 1 Hz samples. At the cap, appending stops and
+  *  `truncated` is set exactly once — no eviction machinery. */
+@@ -194,7 +198,13 @@ const HR_MAX = 254;
+ const SPM_MIN = 10;
+ const SPM_MAX = 60;
+ 
+-/** C2 logbook stroke-object shape (§1's Shape row, memo Q3, PRIMARY):
++/** The recorded sample and its container. BOTH ARE DECLARED IN
++ *  `domain/monitor/types.ts` since Phase MD PR 3 and re-exported here, so
++ *  this module's importers keep their import path while every consumer in
++ *  `domain/` derives from the one declaration (RF33). The recorder still
++ *  owns the VALUES, and the reasoning for them stays here:
++ *
++ *  C2 logbook stroke-object shape (§1's Shape row, memo Q3, PRIMARY):
+  *  cumulative tenths of a second, cumulative decimeters, tenths of a
+  *  second per 500m, whole strokes/min. `hr` is ABSENT (never
+  *  `undefined`-but-present) when the wire's own heart-rate sentinel
+@@ -216,32 +226,7 @@ const SPM_MAX = 60;
+  *  every `Sample` as immutable; the freeze makes a mutation attempt throw
+  *  in strict mode (every ESM module in this codebase) rather than silently
+  *  corrupting this recorder's own internal history. */
+-export interface Sample {
+-  readonly t: number;
+-  readonly d: number;
+-  readonly p: number;
+-  readonly spm: number;
+-  readonly hr?: number;
+-  /** trace-truth Task 2 (spec §3, James's ruling: rests are DRAWN, but
+-   *  MARKED). Present and `true` ONLY for a sample recorded while the
+-   *  winning frame's own `state` was `"resting"` — ABSENT means work, the
+-   *  same absent-not-false idiom `hr` above already uses, so a work
+-   *  sample costs zero extra bytes. The renderer cannot recover this
+-   *  later (a stored log's steps never carry a warm-up row — nothing has
+-   *  PRODUCED one since Phase WU, and `buildMonitorLogSteps` still skips a
+-   *  legacy warm-up seed step on the one population that can persist the
+-   *  string, its own KEEP guard — and no step carries a marker to key a
+-   *  positional derivation off either, so anything positional derived from
+-   *  steps lands displaced); the recorder is the only place that ever saw
+-   *  the wire's own state byte, so it must mark the sample at
+-   *  construction. */
+-  readonly r?: true;
+-}
+-
+-export interface SeriesData {
+-  samples: Sample[];
+-  truncated?: true;
+-}
++export type { Sample, SeriesData };
+ 
+ /** Guards the whole-second `Math.floor` bucket against a value that is
+  *  mathematically exactly on an integer boundary landing a hair under it
+@@ -420,9 +405,12 @@ export function createSeriesRecorder(): SeriesRecorder {
+         ? { hr: f.heartRateBpm }
+         : {}),
+       // trace-truth Task 2 (spec §3): the WINNING frame's own state marks
+-      // the sample. Same conditional-spread idiom as `hr` above — absent
+-      // means work, costing zero extra bytes on a work sample.
+-      ...(f.state === "resting" ? { r: true as const } : {}),
++      // the sample. `r` is a REQUIRED key valued `true | undefined` (Phase
++      // MD PR 3), so this cannot be the conditional spread `hr` above
++      // uses — a spread cannot satisfy a required key. The OUTPUT is
++      // unchanged: `JSON.stringify` drops an `undefined`-valued key, so a
++      // work sample still costs zero SERIALIZED bytes.
++      r: f.state === "resting" ? true : undefined,
+     };
+     samples.push(Object.freeze(sample));
+   }
+diff --git a/app/src/session/LogSession.test.tsx b/app/src/session/LogSession.test.tsx
+index c9daed16..bb615a4e 100644
+--- a/app/src/session/LogSession.test.tsx
++++ b/app/src/session/LogSession.test.tsx
+@@ -39,6 +39,7 @@ import { loadMonitorRun, MONITOR_RUN_KEY } from "../monitor/handoffStore";
+ import { seedMonitorRun } from "../test/seedHandoff";
+ import type { SeriesData } from "../monitor/seriesRecorder";
+ import type { MonitorLogEntry } from "../monitor/eventLog";
++import { asSerialized } from "../test/asSerialized";
+ const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
+ const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
+ 
+@@ -3486,11 +3487,11 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
+   it("renders the trace chart below the intervals block when the loaded run carries a series", async () => {
+     const series: SeriesData = {
+       samples: [
+-        { t: 0, d: 0, p: 1400, spm: 22, hr: 128 },
+-        { t: 200, d: 80, p: 1350, spm: 23, hr: 132 },
+-        { t: 400, d: 165, p: 1250, spm: 24, hr: 138 },
+-        { t: 600, d: 255, p: 1200, spm: 25, hr: 142 },
+-        { t: 800, d: 350, p: 1150, spm: 26, hr: 148 },
++        { t: 0, d: 0, p: 1400, spm: 22, hr: 128, r: undefined },
++        { t: 200, d: 80, p: 1350, spm: 23, hr: 132, r: undefined },
++        { t: 400, d: 165, p: 1250, spm: 24, hr: 138, r: undefined },
++        { t: 600, d: 255, p: 1200, spm: 25, hr: 142, r: undefined },
++        { t: 800, d: 350, p: 1150, spm: 26, hr: 148, r: undefined },
+       ],
+     };
+     const { run, workout } = buildMonitorFixture({ series });
+@@ -4274,8 +4275,8 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
+   it("attaches series on the wire body when the run has one — the success leg", async () => {
+     const series: SeriesData = {
+       samples: [
+-        { t: 10, d: 23, p: 1400, spm: 24, hr: 138 },
+-        { t: 20, d: 47, p: 1350, spm: 25 },
++        { t: 10, d: 23, p: 1400, spm: 24, hr: 138, r: undefined },
++        { t: 20, d: 47, p: 1350, spm: 25, r: undefined },
+       ],
+     };
+     const { run, workout } = buildMonitorFixture({ series });
+@@ -4298,7 +4299,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
+     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+     expect(logCalls(apiFn)).toHaveLength(1);
+     const body = parsedBodies(apiFn)[0]!;
+-    expect(body.series).toStrictEqual(series);
++    expect(body.series).toStrictEqual(asSerialized(series));
+     expect(loadMonitorRun()).toBeNull();
+     expect(retireSpy).toHaveBeenCalledTimes(1);
+     expect(retireSpy).toHaveBeenCalledWith(
+@@ -4313,7 +4314,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
+   // than failing outright.
+   it("the sacrifice retry: a 413 on the first POST retries once without series, and the log saves series-less", async () => {
+     const series: SeriesData = {
+-      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
++      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138, r: undefined }],
+     };
+     const { run, workout } = buildMonitorFixture({ series });
+     await seedMonitorRun(run);
+@@ -4368,7 +4369,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
+     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+     expect(logCalls(apiFn)).toHaveLength(2);
+     const bodies = parsedBodies(apiFn);
+-    expect(bodies[0]!.series).toStrictEqual(series);
++    expect(bodies[0]!.series).toStrictEqual(asSerialized(series));
+     expect("series" in bodies[1]!).toBe(false);
+     // The retried body is otherwise byte-identical — only `series` is
+     // genuinely gone (not present-and-undefined: `bodies[1]` came back
+@@ -4433,7 +4434,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
+   // log's own ring).
+   it("the POST sacrifice's own ring append is capped at 500 entries, oldest dropped first — the same discipline eventLog.ts's record() applies", async () => {
+     const series: SeriesData = {
+-      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
++      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138, r: undefined }],
+     };
+     const { run, workout } = buildMonitorFixture({ series });
+     await seedMonitorRun(run);
+@@ -4496,7 +4497,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
+ 
+   it("the sacrifice retry ALSO fails: surfaces the genuine error, MonitorRun survives for a real retry", async () => {
+     const series: SeriesData = {
+-      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
++      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138, r: undefined }],
+     };
+     const { run, workout } = buildMonitorFixture({ series });
+     await seedMonitorRun(run);
+@@ -4540,7 +4541,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
+   // surfacing a failure §3 promises can never happen.
+   it("MED-1: workoutId correction survives into the sacrifice — deleted workout + series both recoverable, the log saves series-less", async () => {
+     const series: SeriesData = {
+-      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
++      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138, r: undefined }],
+     };
+     const { run, workout } = buildMonitorFixture({ series });
+     await seedMonitorRun(run);
+@@ -4586,11 +4587,11 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
+     expect(logCalls(apiFn)).toHaveLength(3);
+     const bodies = parsedBodies(apiFn);
+     expect(bodies[0]!.workoutId).toBe(MONITOR_WORKOUT_ID);
+-    expect(bodies[0]!.series).toStrictEqual(series);
++    expect(bodies[0]!.series).toStrictEqual(asSerialized(series));
+     // Leg 2: the correction carried forward — workoutId null, series
+     // STILL present (this is what the original bug discarded).
+     expect(bodies[1]!.workoutId).toBeNull();
+-    expect(bodies[1]!.series).toStrictEqual(series);
++    expect(bodies[1]!.series).toStrictEqual(asSerialized(series));
+     // Leg 3: BOTH corrections present at once — the workoutId fix from
+     // leg 2 survives, AND series is now gone.
+     expect(bodies[2]!.workoutId).toBeNull();
+diff --git a/app/src/session/PostWorkoutSummary.test.tsx b/app/src/session/PostWorkoutSummary.test.tsx
+index b1104f2f..48bdf019 100644
+--- a/app/src/session/PostWorkoutSummary.test.tsx
++++ b/app/src/session/PostWorkoutSummary.test.tsx
+@@ -126,7 +126,7 @@ function realisticSeries(): SeriesData {
+     [114, 27, 150],
+     [112, 28, 152],
+   ] as const) {
+-    samples.push({ t: t * 10, d: t * 4, p: pace * 10, spm, hr });
++    samples.push({ t: t * 10, d: t * 4, p: pace * 10, spm, hr, r: undefined });
+     t += 20;
+   }
+   return { samples };
+diff --git a/app/src/workout/WorkoutDetail.postReleaseCommit.test.tsx b/app/src/workout/WorkoutDetail.postReleaseCommit.test.tsx
+index e5c51efe..4994128b 100644
+--- a/app/src/workout/WorkoutDetail.postReleaseCommit.test.tsx
++++ b/app/src/workout/WorkoutDetail.postReleaseCommit.test.tsx
+@@ -207,6 +207,7 @@ import { createFakeTransport } from "../monitor/transports/fake";
+ import type { FakeControls } from "../monitor/transports/fake";
+ import WorkoutDetail from "./WorkoutDetail";
+ import LogSession from "../session/LogSession";
++import { asSerialized } from "../test/asSerialized";
+ 
+ /** One effort-only distance step, so no baselines question is entangled
+  *  with this file's subject — `connectedRecovery`'s own fixture shape and
+@@ -720,7 +721,7 @@ describe("§10 row 2 through the real destination seam: a producer update after
+     expect(body.workoutId).toBe(WORKOUT.id);
+     expect(body.deviceName).toBe(DEVICE);
+     expect(body.endedBy).toBe("rower");
+-    expect(body.series).toStrictEqual(atRelease!.run.series);
++    expect(body.series).toStrictEqual(asSerialized(atRelease!.run.series));
+   }, 20000);
+ 
+   // ---------------------------------------------------------------------
