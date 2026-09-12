@@ -809,11 +809,14 @@ const SERIES_D_MAX = 1_000_000 * 10;
 // tenths unit.
 const SERIES_P_MAX = PM5_MAX_SPLIT_SECONDS * 10;
 // spm's honest wire ceiling: 0x0032's own stroke-rate byte is a plain u8
-// (`domain/monitor/pm5/parse.ts`'s `spm: readU8(bytes, 5)`), and the
-// recorder stores it unbanded (`seriesRecorder.ts`'s `spm: f.spm ?? 0` —
-// no drop-if-out-of-band the way `logDraft.ts`'s AUTHORED/matched-actual
-// fields get). The full representable range, not the narrower 10..60/
-// 0..99 bands those separately-purposed fields apply.
+// (`domain/monitor/pm5/parse.ts`'s `spm: readU8(bytes, 5)`), so 255 is what
+// the WIRE can represent and this route trusts nothing narrower from a
+// client it did not write. The recorder itself bands harder (RC-6:
+// `seriesRecorder.ts` collapses anything outside 10..60 to `0`), so a
+// well-behaved client never posts a value this ceiling has to catch — which
+// is the point: this is a trust boundary, not a mirror of the producer.
+// (Corrected in Phase MD PR 3; the previous wording claimed the recorder
+// stored spm unbanded, which RC-6 had already falsified.)
 const SERIES_SPM_MAX = 255;
 
 function validateSeriesSample(
@@ -889,9 +892,34 @@ function validateSeriesSample(
   // input" discipline `validateLogStepEntry` above already uses — any
   // extra keys the client sent (the POST idiom: unknown sample keys are
   // ignored, never rejected) are silently dropped, not persisted.
-  const sample: LogSeriesSample = { t, d, p, spm };
-  if (hr !== undefined) sample.hr = hr;
-  if (r === true) sample.r = true;
+  //
+  // THIS LIST IS THE ONE THAT DROPS A FIELD SILENTLY. A field added to the
+  // domain's `Sample` (which `LogSeriesSample` now maps from) and not added
+  // here never reaches the column, and no band check would be missing to
+  // notice. `SERIES_SAMPLE_FIELDS` (the `Record<keyof LogSeriesSample,
+  // true>` witness beside that type) is asserted in `seriesSeam.test.ts`
+  // against the KEY UNION over every sample this function rebuilt on the far
+  // side of a real POST — the union, because no single stored sample carries
+  // every field.
+  //
+  // `hr` is SPREAD rather than assigned, and that is load-bearing: the
+  // spread leaves the key genuinely ABSENT in memory when there is no
+  // reading, which is what keeps every `toStrictEqual` comparing a stored
+  // sample against a hand-built one honest. `r` cannot do the same — it is a
+  // required key, and its present-but-undefined value is exactly what the
+  // compile gate buys. Key ORDER is NOT load-bearing here: Postgres
+  // normalizes jsonb keys by length then bytewise on ingest (measured on
+  // 18.4: `{"t":1,"d":4,"p":121,"spm":25,"hr":140}::jsonb` reads back
+  // `{"d": 4, "p": 121, "t": 1, "hr": 140, "spm": 25}`), so no ordering here
+  // survives the column.
+  const sample: LogSeriesSample = {
+    t,
+    d,
+    p,
+    spm,
+    ...(hr !== undefined ? { hr } : {}),
+    r: r === true ? true : undefined,
+  };
   return { ok: true, sample };
 }
 

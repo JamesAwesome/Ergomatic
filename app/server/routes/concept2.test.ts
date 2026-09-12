@@ -3301,9 +3301,9 @@ describe("upload (POST /api/concept2/results/:logId)", () => {
       // DECISECONDS, uneven gaps inside the cap: 133 weighted, 120 not.
       series: {
         samples: [
-          { t: 0, d: 0, p: 1250, spm: 24, hr: 100 },
-          { t: 10, d: 4, p: 1250, spm: 24, hr: 140 },
-          { t: 60, d: 84, p: 1250, spm: 24, hr: 140 },
+          { t: 0, d: 0, p: 1250, spm: 24, hr: 100, r: undefined },
+          { t: 10, d: 4, p: 1250, spm: 24, hr: 140, r: undefined },
+          { t: 60, d: 84, p: 1250, spm: 24, hr: 140, r: undefined },
         ],
       },
     });

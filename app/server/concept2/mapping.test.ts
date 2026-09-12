@@ -1096,9 +1096,9 @@ describe("buildC2Payload — heart_rate.average is derived when the monitor send
   // Deciseconds, the unit `Sample.t` actually carries.
   const trace = {
     samples: [
-      { t: 0, hr: 100 },
-      { t: 10, hr: 140 },
-      { t: 60, hr: 140 },
+      { t: 0, hr: 100, r: undefined },
+      { t: 10, hr: 140, r: undefined },
+      { t: 60, hr: 140, r: undefined },
     ],
   };
 
@@ -1115,9 +1115,9 @@ describe("buildC2Payload — heart_rate.average is derived when the monitor send
   it("EXCLUDES resting strokes, so the wire agrees with the screen", () => {
     const resting = {
       samples: [
-        { t: 0, hr: 100 },
+        { t: 0, hr: 100, r: undefined },
         { t: 10, hr: 140, r: true as const },
-        { t: 60, hr: 140 },
+        { t: 60, hr: 140, r: undefined },
       ],
     };
     // With the middle stretch resting, only the opening second counts.
@@ -1164,8 +1164,8 @@ describe("buildC2Payload — heart_rate.average is derived when the monitor send
           ...FINISHED_ROW,
           series: {
             samples: [
-              { t: 0, hr: 19 },
-              { t: 10, hr: 19 },
+              { t: 0, hr: 19, r: undefined },
+              { t: 10, hr: 19, r: undefined },
             ],
           },
         },

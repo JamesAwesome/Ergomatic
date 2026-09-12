@@ -770,3 +770,61 @@ export function hasTargetedScan(
 ): t is Transport & TargetedScanTransport {
   return typeof (t as Partial<TargetedScanTransport>).scanTarget === "function";
 }
+
+// ---------------------------------------------------------------------
+// The recorded series: one sample per whole second of a connected piece.
+//
+// Phase MD PR 3 moved this pair here from `src/monitor/seriesRecorder.ts`
+// so that every consumer in `domain/` derives from ONE declaration rather
+// than re-spelling the field names (RF33: `derivedHeartRate.ts` once
+// spelled the rest flag `rest`, structural typing accepted the real
+// `Sample` with the key simply absent, and the rest exclusion was dead on
+// every production path while every test passed). The recorder still owns
+// the VALUES and re-exports both names, so its 21 importers are unchanged;
+// this file owns the SHAPE.
+//
+// The SERVER derives from here too: `server/stores/logs.ts`'s
+// `LogSeriesSample`/`LogSeries` are `-readonly` mapped types of this pair,
+// which the old "server code never imports from `src/`" rule permits
+// because this file is `domain/`, not `src/` — `tsconfig.server.json`
+// includes `domain` and server modules already import from it. What the
+// server still owns alone is the BOUNDS: `routes/data.ts`'s validator is
+// the trust boundary for an untrusted POST body, and sharing the shape does
+// not share the bands. `server/routes/seriesSeam.test.ts` is the RUNTIME
+// gate over that chain (validator, store, mapping).
+
+export interface Sample {
+  readonly t: number;
+  readonly d: number;
+  readonly p: number;
+  readonly spm: number;
+  readonly hr?: number;
+  /** trace-truth Task 2 (spec §3, James's ruling: rests are DRAWN, but
+   *  MARKED). `true` ONLY for a sample recorded while the winning frame's
+   *  own `state` was `"resting"`; `undefined` means work.
+   *
+   *  A REQUIRED KEY whose value may be `undefined` (Phase MD PR 3), not an
+   *  optional key: `JSON.stringify` drops an `undefined`-valued key, so a
+   *  work sample still costs zero SERIALIZED bytes — the key is present in
+   *  memory and absent on disk and on the wire. What the required key buys
+   *  is that a hand-built sample which does not SPELL `r` fails to
+   *  compile, which is the exact defect RF33 recorded.
+   *
+   *  On every READ path (a `localStorage` parse, a jsonb read-back, a POST
+   *  body) the key is genuinely absent while this type says required —
+   *  these types describe construction sites, and `s.r === true` is correct
+   *  either way. `exactOptionalPropertyTypes` is set in none of the repo's
+   *  tsconfigs; if it is ever enabled this inverts (an explicit `undefined`
+   *  becomes the error) and the producer line stops compiling.
+   *
+   *  The renderer cannot recover this later (a stored log's steps never
+   *  carry a warm-up row, and no step carries a marker to key a positional
+   *  derivation off), so the recorder — the only place that ever saw the
+   *  wire's own state byte — must mark the sample at construction. */
+  readonly r: true | undefined;
+}
+
+export interface SeriesData {
+  samples: Sample[];
+  truncated?: true;
+}

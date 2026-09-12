@@ -75,10 +75,14 @@ function base(): MonitorRun {
   };
 }
 
+// `r: undefined` on the two work samples is REQUIRED-KEY bookkeeping from
+// Phase MD PR 3, not a shape change: `JSON.stringify` drops an
+// `undefined`-valued key, so these three samples serialize byte-identically
+// to the captured fixtures and leg (a) stays green without a recapture.
 const SERIES = {
   samples: [
-    { t: 0, d: 0, p: 120, spm: 24 },
-    { t: 1, d: 4, p: 121.5, spm: 25, hr: 140 },
+    { t: 0, d: 0, p: 120, spm: 24, r: undefined },
+    { t: 1, d: 4, p: 121.5, spm: 25, hr: 140, r: undefined },
     { t: 2, d: 8, p: 122, spm: 25, r: true as const },
   ],
 };

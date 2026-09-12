@@ -456,9 +456,9 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
   it("marks trace points recorded during a rest", () => {
     const series = {
       samples: [
-        { t: 10, d: 40, p: 1200, spm: 20 },
+        { t: 10, d: 40, p: 1200, spm: 20, r: undefined },
         { t: 20, d: 45, p: 1400, spm: 18, r: true as const },
-        { t: 30, d: 80, p: 1200, spm: 20 },
+        { t: 30, d: 80, p: 1200, spm: 20, r: undefined },
       ],
     };
     const model = buildTrace(series, "pace")!;
@@ -473,9 +473,9 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
     // same series: exactly ONE segment, not three
     const series = {
       samples: [
-        { t: 10, d: 40, p: 1200, spm: 20 },
+        { t: 10, d: 40, p: 1200, spm: 20, r: undefined },
         { t: 20, d: 45, p: 1400, spm: 18, r: true as const },
-        { t: 30, d: 80, p: 1200, spm: 20 },
+        { t: 30, d: 80, p: 1200, spm: 20, r: undefined },
       ],
     };
     expect(buildTrace(series, "pace")!.points).toHaveLength(1);
@@ -540,9 +540,9 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
   it("buildSummary names no rest spans when the trace has none", () => {
     const series = {
       samples: [
-        { t: 10, d: 40, p: 1200, spm: 20 },
-        { t: 20, d: 45, p: 1400, spm: 18 },
-        { t: 30, d: 80, p: 1200, spm: 20 },
+        { t: 10, d: 40, p: 1200, spm: 20, r: undefined },
+        { t: 20, d: 45, p: 1400, spm: 18, r: undefined },
+        { t: 30, d: 80, p: 1200, spm: 20, r: undefined },
       ],
     };
     const trace = buildTrace(series, "pace")!;
