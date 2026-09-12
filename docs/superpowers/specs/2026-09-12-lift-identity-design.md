@@ -148,9 +148,11 @@ fixture behave exactly as today.
   = NULL` through raw SQL → expect the NOT NULL violation (`23502`); migrate
   the real folder; the same insert succeeds; a second NULL-sub insert ALSO
   succeeds (pins the NULLS DISTINCT sentence); a duplicate NON-null sub still
-  fails `23505`. `PRE_0030_TAGS` is a 30-element contiguous literal and the
-  loop is positional (`padStart(4, "0")` must line up with the journal); a
-  mistyped tag makes `readMigrationFiles` throw `No file … found` — loud.
+  fails `23505`. The pre-0030 tag list is DERIVED from the real journal
+  (`entries.filter(e => e.idx <= 29)`, asserted to be 30 long) rather than
+  hand-typed like the ten older suites — thirty tags is where a positional
+  transcription slip stops being findable by eye; a missing file still makes
+  `readMigrationFiles` throw `No file … found` — loud.
   Mutation: replace the migration's statement with a VALID but WRONG one
   (`ALTER TABLE "users" ALTER COLUMN "email" DROP NOT NULL;`) so the
   assertion is proven to key on the right column — never an empty file,
@@ -197,3 +199,4 @@ fixture behave exactly as today.
 - Invariant 2 claimed a benefit the hand-written type already had; now names the one direction derivation buys (widening) and the fake's blind spot.
 - The rollback record was prescribed into `deploy.md`, which only quotes RELEASING.md's table and was stale by six rows; now the table, in its own "Not a floor" shape, with the stale quote corrected.
 - The excess-key `@ts-expect-error` probe deleted (gated nothing); the migration mutation is a wrong-column statement, not an empty file.
+- (Folded from the PM final gate, 2026-09-12.) §5 prescribed a hand-typed 30-element `PRE_0030_TAGS` literal; the shipped test derives the list from the journal, and this section said nothing about it — the PM caught the spec-vs-code gap. Corrected above.

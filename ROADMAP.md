@@ -883,7 +883,12 @@ it lands the stranger on this same denial.
       option is a SUPERSET of it — a backfill, a `UNIQUE (provider, subject)`,
       two rewritten store methods, a dual-read window and a later removal
       migration (`docs/superpowers/audits/2026-09-12-wave-a-pr1-census.md`
-      §4b) — and is priced here with the rest of the option list.
+      §4b) — and is priced here with the rest of the option list. **And the
+      spec decides what IDENTIFIES a sub-less user** (PM gate on #409):
+      `users.email` carries no unique constraint and the allowlist is keyed on
+      email while the only identity lookup is by sub, so duplicate emails —
+      unreachable while `google_sub` was NOT NULL — become reachable the
+      moment the first sub-less user is written.
 - [ ] **In-app account deletion.** No DELETE-user route and no UI exist
       anywhere (checked across `app/server` and `app/src`: baselines reset and
       logs delete, but nothing removes a user). The spec enumerates exactly
