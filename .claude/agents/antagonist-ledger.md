@@ -41,6 +41,55 @@ to touch.
 - **Could not establish:** whether dropping `vi.resetModules()` from 22 blocks
   changes any assertion that turns on the hook and the test holding two
   `handoffStore` instances. Filed as a second clause on Task 5's rule (iv).
+## Phase PS anchor pass, 2026-09-12 (career stats, TRIAD: a number's meaning)
+
+Target: `docs/superpowers/specs/2026-09-12-career-stats-design.md` + ROADMAP
+Phase PS, at `93b91d66`. Full pass (TRIAD).
+
+**HELD (the vetted ground for PS).** §3.1's four-tier table is a faithful
+field-by-field transcription of `buildHeroes` (`storedSummary.ts:840-971`) —
+gates, `Math.round` placement, the `isReconstructableClose` allowlist, the
+un-rounded steps sum; no row where the two differ. MACHINE-by-door is coherent
+and its `link-lost`/tier-`stored` case is real (`storedSummary.test.ts:938`).
+Avg watts as `logbookWatts(Σs, Σm)` is right and pin-able. Concept2 §1 claims
+1-5 verified verbatim against log.concept2.com/help and the API doc, divisor
+absence included. `machineSummary`'s two type views are mutually assignable.
+`totalCalories` is value-validated on the write path (`data.ts:999-1006`).
+Rest = the RC-1 pair only (`buildStoredRest:711`, fed an empty `stepSums` on
+every branch PS reads). "No `SUM` in `app/server`" — grep confirms.
+`test_history.sessionLogId` is `ON DELETE SET NULL` (`schema.ts:531-537`).
+PR 1 is one risk model; the `buildHeroes` refactor is not a hidden second
+product change.
+
+**BROKEN.**
+1. §4.1's "assignable without adaptation" — TS2322 on `endedBy?:` (probe).
+2. §3.1 cites `:780` for a finite-integer calories guard that is not there;
+   the real guard is `data.ts:999-1006`.
+3. §8.4/§10's grep is case-sensitive and blind to `useConcept2Link`;
+   its mutation names a nonexistent module.
+4. §8.4's scan omits `src/You.tsx`, which already imports `Concept2Row`.
+5. §8.1's mutation (swap work-pair/steps order) cannot move the declined-B2
+   fixture it names — that row has no work pair and declines on `endedBy`.
+6. §8.2's mutation only bites if the seeded tier-A row's `distanceMeters`
+   differs from `machineWorkMeters`; a realistic post-RC-5 save makes them
+   equal.
+7. No `TZ` pinned anywhere → §8.3's season/week pins cannot catch a
+   UTC-parse date bug in CI; §6's "§8.3 pins it" is false as written.
+8. §4.3's ~150 B/row inference is a PAYLOAD estimate and omits the READ:
+   `steps` and `machineSummary` are both excluded from `LOG_LIST_COLUMNS`
+   *for size*, and the row-side computation forces both. `newest first` has
+   no consumer, and is the only reason the `(user_id, logged_at)` index is
+   "missing".
+9. `logbookWatts` lives in `src/session/`, not `domain/`; `domain/` has never
+   imported `src/` and nothing lint-enforces it. §4.1 omits watts entirely.
+10. Invariant 1's "what the log's own hero shows" is false for the history
+    list, which has no `steps` tier (`LogRow.tsx:110-123`, its own comment).
+11. The MACHINE caption's "WORK METRES" governs calories and watts too
+    (RF34); watts is the figure most amplified by the RC-5 fused seam and §6
+    names only metres.
+
+**Could not establish:** the SECONDARY work+rest forum claim (c2forum.com
+behind a Cloudflare JS challenge). Nothing in the design depends on it.
 
 ## Wave A PR 1 anchor pass, 2026-09-12 (drop NOT NULL on `users.google_sub` — TRIAD: stored shape, auth-adjacent)
 

@@ -144,6 +144,21 @@ toolkit, not a history.
   appears; only `Record<keyof T, true>` errors (`TS2741`). To test an
   exhaustiveness pin, delete one member and run `tsc` — silence means
   decoration (RF21).
+- **"`StoredLog` is structurally assignable to a domain input with every field
+  REQUIRED, so the refactor is a call, not a mapping."** False on exactly one
+  field, and it is the load-bearing one: `endedBy` is declared `endedBy?: … |
+  null`, so TS2322 fires and the `steps`-tier gate's own input needs a `??
+  null`. **Technique:** paste the spec's prescribed interface into a scratch
+  file at a REAL path and run the project's tsc — and check WHICH tsconfig
+  covers that path first (`tsconfig.json` here compiles no `src/` file at all;
+  the probe silently passed until a deliberate `const bite: number = "x"`
+  proved the file was never in the program).
+- **"A structural text scan gates `no Concept2 dependency`."** The scan's own
+  grep is case-sensitive and the module is `useConcept2Link` — a file importing
+  it matches nothing. **Technique:** for any identifier-scan gate, take the
+  REAL name of the thing it forbids, paste an import of it into a scratch file,
+  and run the gate's literal command. The spec's own mutation named a module
+  (`concept2Link`) that does not exist.
 
 ## Attacked and NOT broken
 
@@ -216,8 +231,23 @@ toolkit, not a history.
     precedent for exactly this case); `docs/deploy.md`'s sentence is a QUOTE of
     it, and had been stale for six table rows. Adding a new fact beside a stale
     quote is the partial-reconciliation failure.
+17. **A date gate that never pins `TZ` is green by environment.** Nothing in
+    `vitest.config.ts` or the workflows sets it, so Actions runs UTC and every
+    `new Date("YYYY-MM-DD")`-plus-local-getter bug is invisible. Only pins on a
+    week/season BOUNDARY day can move at all, and only at a non-zero offset.
+18. **`Record<string, unknown>` assigns BOTH WAYS to an all-optional narrowed
+    view.** The compiler is never the gate on a jsonb blob's values — find the
+    runtime validator (here `validateMachineSummary`, the route, not the view)
+    before crediting a type with the guard.
+19. **A structural gate scoped to NEW directories cannot go red in the OLD file
+    the change edits.** `You.tsx` already imports `Concept2Row`; the scan
+    covered `src/you/stats/` and missed it.
+20. **Ask which fixture the prescribed mutation can actually MOVE.** A spec
+    named "swap the work-pair and steps gates" against a fixture with
+    `workMeters: null` and a declining `endedBy` — nothing to reorder, result
+    identical both ways. Read the fixture's fields, not its name.
 
-17. **A mutation on a newly published field must be run in a file that
+21. **A mutation on a newly published field must be run in a file that
     INSTANTIATES the producer.** Before writing "both these files must go
     red", grep each for `renderHook`/the producer's own `doMock`: a screen
     test that builds its own `session` fixture, or that `vi.doMock`s the hook
@@ -225,7 +255,7 @@ toolkit, not a history.
     inside it. And when the fixture helper calls the SAME derive function the
     producer calls, every ported test is a mirror, not an oracle — the gate
     has to live where the producer runs.
-18. **Classify a lifetime table's clear sites by their ENCLOSING FUNCTION
+22. **Classify a lifetime table's clear sites by their ENCLOSING FUNCTION
     with a script, not from memory.** Walking backward from each `grep -n`
     hit to the nearest `const X = useCallback(` moved four "cancel/teardown"
     sites to `handleEvent` ×2 / `teardown` / `fail` + `connect` — and
