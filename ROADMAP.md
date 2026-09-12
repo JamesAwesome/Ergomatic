@@ -469,6 +469,53 @@ web build against the post-PR-2 server saves `pain: 3`, reads back
 `effort: 3`, and a workout it creates carries a derived difficulty)
 recorded in PR 2's body; release note in rower words (spec §6.6).
 
+## The free row's rate tile disagrees with itself
+
+**Status: SCHEDULED 2026-09-12 — one small PR, not a phase item and not fast
+path (it changes what a rower reads). S.** · dies 2026-09-19 · a wrong number
+on a screen today with a one-clause fix and no migration; a week is generous
+and anything longer means a refactor phase outranked a defect, which is the
+exact trade the PM gate refused.
+
+**What a rower sees.** Finish a connected free row and the RATE tile reads the
+monitor's own average — 25 spm on the capture we hold. Reopen that same row
+from History and it reads `—`. Same row, same trace, two screens, one number
+present and one gone.
+
+**Why.** The tier is derived twice and the two derivations disagree.
+`summaryModel.ts:1255` (live) sets `finished: run.endedBy === "finished" ||
+run.mode === "justrow"`. `storedSummary.ts:780` (reopened) sets
+`finished = row.endedBy === "finished" || row.endedBy == null` — and `StoredLog`
+has no `mode`. A connected free row's `endedBy` is always `"rower"` and it
+stores `steps: []`, so the reopened door takes the terminated branch with no
+weighable split and `sessionStrokeRate` (`logbookDerived.ts:53-62`) returns
+`undefined`. The per-interval table beside it IS correctly shared by both
+doors; only the hero tile skipped the pattern.
+
+**The fix is one clause.** `StoredLog` already carries `workoutId` and
+`workoutType`, and `domain/types.ts:38` already exports `isFreeRow`. No column,
+no migration, no stored-shape change — which is why this is not TRIAD despite
+touching a number, and why deferring it was never worth what it cost to defer.
+
+**Its gate is the whole point, and neither suite has it.** One test that saves
+a connected free row through the live door and reads it back through the stored
+door, asserting the two RATE values are EQUAL — RF24's producer-to-consumer
+shape. No existing test pairs a `workoutId: null` fixture with a rate
+assertion, which is exactly why three green suites never saw this.
+
+**Evidence status.** The divergence is confirmed in code, read at all four
+sites by the controller and independently at the PM gate. That a saved free row
+carries `endedBy: "rower"` rests on `summaryModel.ts:1247-1249`'s own measured
+comment and the fixture at `storedSummary.test.ts:1866`, not on a run against a
+real row. The test above settles it either way, and if it comes back green the
+row closes with that recorded rather than being quietly dropped.
+
+**Found by** the 2026-09-12 architecture walk
+([findings](docs/superpowers/audits/2026-09-12-architecture-walk/findings.md),
+S1). Left out of Phase MD because it is a defect, not a deepening; scheduled
+here because the PM gate priced the fix and ruled that "out of scope for this
+phase" is not a reason to leave a wrong number on a screen.
+
 ## Phase MD — the monitor cluster's shallow seams
 
 **Status: OPEN 2026-09-12 — four PRs and two explorations; PR 1 next.**
@@ -684,6 +731,13 @@ nullable, or its own table — is the same migration whichever door the gate
 picks. **It is schedulable now, before the policy question is answered**, and
 doing it first means the policy PR is a policy PR rather than a policy PR
 carrying a migration.
+· dies 2026-09-26 (set 2026-09-12, James, at the Phase MD open gate) · the PM
+gate measured this row sitting still for 8 days and 111 commits while the
+reflex explanation — "the new phase is displacing it" — was false: Wave A is
+blocked on a policy question, and THIS PR is not. Two weeks is enough to fit it
+around Phase MD PR 1 and still land a fortnight inside the wave's own
+2026-10-10, so it can never become the reason the wave slipped. **A wave's
+unblocked half gets its own date; that is what this row exists to prove.**
 
 **Goal:** someone you have never met installs the build, gets an account, rows,
 and can delete everything from inside the app.
