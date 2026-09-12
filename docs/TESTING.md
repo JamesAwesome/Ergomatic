@@ -141,7 +141,10 @@ is either a real gap (write the killing test) or genuinely equivalent code
 panic at this number later.** `vitest.stryker.config.ts` scopes mutation to
 the `unit` Vitest project only (the `integration` project spins up a
 Testcontainers Postgres per test file; running it per-mutant would be
-prohibitively slow and would force Docker onto every mutation run). Unit
+prohibitively slow and would force Docker onto every mutation run).
+`app/server/testing/postgres.ts` is where every integration file starts that
+container, and it retries once on testcontainers' hardcoded 10s port-bind
+timeout before giving up. Unit
 tests only exercise the in-memory fakes, never the real Drizzle-backed store
 files — so mutating the real store implementations against unit-only
 coverage produces almost entirely `[NoCoverage]` mutants: the mutated line

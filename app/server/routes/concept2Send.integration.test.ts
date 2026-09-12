@@ -7,10 +7,8 @@ import {
   afterAll,
   vi,
 } from "vitest";
-import {
-  PostgreSqlContainer,
-  type StartedPostgreSqlContainer,
-} from "@testcontainers/postgresql";
+import { type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { startPostgres } from "../testing/postgres.js";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import request from "supertest";
 import type pg from "pg";
@@ -189,7 +187,7 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
   let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
     await migrate(db, { migrationsFolder: "drizzle" });
 

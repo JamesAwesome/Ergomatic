@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-  PostgreSqlContainer,
-  type StartedPostgreSqlContainer,
-} from "@testcontainers/postgresql";
+import { type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { startPostgres } from "../testing/postgres.js";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import type pg from "pg";
 import { createDb, type Db } from "../db/index.js";
@@ -60,7 +58,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
   }
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
     await migrate(db, { migrationsFolder: "drizzle" });
     users = createUserStore(db);
@@ -114,7 +112,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
     // can go red on random ids — a second CONTAINER has never seen the
     // first's rows, so every id is freshly minted unless the seed decides
     // them itself.
-    const other = await new PostgreSqlContainer("postgres:18.4").start();
+    const other = await startPostgres();
     const { pool: otherPool, db: otherDb } = createDb(other.getConnectionUri());
     try {
       await migrate(otherDb, { migrationsFolder: "drizzle" });
