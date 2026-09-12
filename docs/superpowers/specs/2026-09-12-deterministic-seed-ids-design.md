@@ -17,9 +17,12 @@ existing rows keep the ids they were minted with — see §Invariant — and sta
 the one environment that differs until someone chooses to run a backfill,
 which this is not.
 
-The immediate trigger was the `recovery-read-only-*` screenshot family (six
-files) rendering a library UUID that re-rolls on every fresh boot (filed in
-ROADMAP by #395). That is the symptom; the property is the point.
+The immediate trigger was the `recovery-read-only-*` screenshot family
+rendering a library UUID that re-rolls on every fresh boot (filed in ROADMAP
+by #395). Five of its six members render the id in-frame; the sixth,
+`recovery-read-only-landscape.png`, shows only the blob's opening `{` at
+844×390 and never churned in any of eight measured runs. That is the
+symptom; the property is the point.
 
 **Brittleness class:** the derivation is DETERMINISTIC — `v5(namespace,
 title)` over a value we author ourselves. No threshold, no heuristic, no
@@ -31,12 +34,15 @@ about the design.
 Every claim names its command. PRIMARY = a measurement or a line of our own
 source; INFERENCE = a reading.
 
-**1. The ids differ, 300 of 300, across two fresh databases.** PRIMARY.
+**1. The ids differ, 302 of 302, across two fresh databases.** PRIMARY.
+(Commit `6773ef77`'s message and the first draft of this fact said 300 —
+the count of `LIBRARY_WORKOUTS`, not of `GLOBAL_LIBRARY_SEED`, which the
+test actually compares; the same two onboarding rows fact 5 is about.)
 Commit `6773ef77` adds one integration case to
 `server/seed/seed.integration.test.ts`: start a second
 `PostgreSqlContainer`, migrate it, run `seedGlobalLibrary` on both, compare
 `(title, id)` pairs. It fails, and the antagonist re-ran it:
-`Tests 1 failed | 15 passed (16)`, a 300-row diff at `:131`.
+`Tests 1 failed | 15 passed (16)`, a 302-row diff.
 
 **2. The existing "identical ids" test cannot catch this, by construction.**
 PRIMARY. `seed.integration.test.ts:95` runs both seeds on ONE database; the
@@ -91,6 +97,13 @@ ends in a pass-through cast (`domain/validate.ts:146`), so
 `req.body.id` at runtime today. It never lands only because `create`'s
 column list omits it and `id` on `NewWorkoutInput` is currently a type
 error. After this change the second guard is gone. G3 replaces it.
+**And `createMany` has a user-scoped caller:** `POST /api/workouts/bulk`
+(`data.ts:1412`) calls `createMany(req.user!.id, toCreate)`. Its inputs come
+from `parseBulk`, which cannot emit an `id` (`domain/bulk.ts:157,365`) — but
+"the seed is the only chooser of ids" should not rest on a parser happening
+not to. **So `createMany` honours `input.id` ONLY when `userId === null`**
+(review + PM gate, 2026-09-12); a user-scoped batch takes the mint, and the
+contract suite pins all three arms.
 
 **7. The v5 derivation is twelve lines on `node:crypto`, and it matches the
 published vector — RFC 9562, not 4122.** PRIMARY, citation corrected.
@@ -220,8 +233,10 @@ diffs. `createMany` ignores `input.id` — same.
   we were entitled to rely on is weakened; and the rows are `user_id IS
   NULL`, read-only (`PUT`/`DELETE` → `starterReadonly`, `data.ts:1355`),
   and already listed in full to every account. One consequence worth a
-  sentence: the `recovery-read-only-*` captures will carry a
-  production-identical library id permanently. Public data; noted.
+  sentence: the `recovery-read-only-*` captures now carry the DERIVED id
+  permanently — which, per fact 3, is exactly the id production does NOT
+  have (rev 2 said "production-identical"; the PM gate caught the
+  contradiction with fact 3). Public data either way; noted.
 
 ## What this does NOT do
 
@@ -229,7 +244,7 @@ diffs. `createMany` ignores `input.id` — same.
   backfill over `session_logs.workout_id`; not this.
 - Does not make `title` unique at the DB. Uniqueness is pinned on the seed
   FILE (G1).
-- Does not touch the six captures directly. They stop churning because
+- Does not touch the captures directly. The five that render the id stop churning because
   `pnpm screenshots` boots fresh (`screenshots.sh:50`, unconditional
   `down -v`) and now seeds the same ids; recaptured once, in this PR.
 

@@ -95,9 +95,11 @@ requirements).
   writes there have happened four times and are only cheap to fix while the
   branch still exists. **Teardown also downs the worktree's compose stack**
   with `docker compose -p <its ergomatic-NNNNN name> down -v`. **`E2E_KEEP=0`
-  is NOT an equivalent** — `e2e.sh:31` and `screenshots.sh:31` both run
-  `docker compose ... down` with no `-v`, so the per-worktree `pgdata` volume
-  survives; only the explicit form reclaims it — per-worktree stacks outlive
+  is NOT an equivalent** — `e2e.sh`'s cleanup trap and `screenshots.sh`'s
+  cleanup trap both run `docker compose ... down` with no `-v`, so the
+  per-worktree `pgdata` volume survives; only the explicit form reclaims it
+  (`screenshots.sh`'s BOOT path has been an unconditional `down -v` since
+  #395, but that runs before a capture, not at teardown) — per-worktree stacks outlive
   their worktrees
   otherwise; `app/scripts/stack-reap.sh` reaps forgotten ones at the next
   e2e/screenshots boot, but four orphaned stacks (twelve containers) had

@@ -227,12 +227,13 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
     // per-input loop would. `userId: null` seeds globals, exactly as
     // seedGlobalLibrary does against Postgres.
     async createMany(userId: string | null, inputs: NewWorkoutInput[]) {
-      // Mirrors the real store: `createMany` writes `input.id` when the
-      // caller chose one (only the seed does — deterministic seed ids,
-      // 2026-09-12), and the column default otherwise.
+      // Mirrors the real store: `createMany` writes `input.id` for a GLOBAL
+      // row when the caller chose one (only the seed does — deterministic
+      // seed ids, 2026-09-12); a user-scoped batch (the bulk door) and an
+      // absent id both take the mint.
       const rows: WorkoutRow[] = inputs.map((input) => ({
         ...newWorkoutRow(input, userId),
-        ...(input.id !== undefined ? { id: input.id } : {}),
+        ...(userId === null && input.id !== undefined ? { id: input.id } : {}),
       }));
       const target = userId === null ? globals : forUser(userId);
       for (const row of rows) target.set(row.id, row);

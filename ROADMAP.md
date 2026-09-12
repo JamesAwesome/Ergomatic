@@ -2081,8 +2081,10 @@ fixed.
   gates, each with a biting mutation; the antagonist pass found the
   uniqueness gate was over the wrong array (302, not 300) and that a
   duplicate title now fails boot instead of dropping silently — both
-  written into the spec. The six `recovery-read-only-*` captures were
-  recaptured once in that PR and stop churning.
+  written into the spec. Five of the six `recovery-read-only-*` captures
+  were recaptured once in that PR and stop churning; the sixth,
+  `recovery-read-only-landscape.png`, never rendered the id in its 844×390
+  frame and never churned in any of eight measured runs.
 - **`src/monitor/useMonitorSession.test.ts` — a pre-existing flake**
   (`listSessionLogs()` expected length 1, got 2: an extra session-log ring
   entry, RF27's own territory) fired once during PR1.75b's coverage runs,

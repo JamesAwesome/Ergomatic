@@ -20,6 +20,13 @@ export const SEED_NAMESPACE = "c030fc9a-98a3-4de1-99b6-aeedcae43cd1";
  */
 export function uuidV5(namespace: string, name: string): string {
   const ns = Buffer.from(namespace.replace(/-/g, ""), "hex");
+  // `Buffer.from(…, "hex")` truncates silently at the first non-hex byte, so
+  // a malformed namespace would hash the NAME ALONE and still return a
+  // well-formed id (review, 2026-09-12: "", "zz" and "not-a-uuid" all
+  // yielded the same value). Loud instead.
+  if (ns.length !== 16) {
+    throw new Error(`uuidV5: namespace is not a 16-byte UUID: ${namespace}`);
+  }
   const hash = createHash("sha1")
     .update(Buffer.concat([ns, Buffer.from(name, "utf8")]))
     .digest();

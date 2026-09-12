@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { seedWorkoutId, uuidV5 } from "./seedId.js";
+import { assertDistinctSeedTitles } from "./seed.js";
 import { GLOBAL_LIBRARY_SEED } from "./library/index.js";
 import { LEGACY_TITLE_RENAMES } from "../../domain/onboarding.js";
 
@@ -10,7 +11,7 @@ import { LEGACY_TITLE_RENAMES } from "../../domain/onboarding.js";
 // proves the NAMESPACE, and only the second goes red on a namespace edit.
 
 describe("uuidV5", () => {
-  it("reproduces RFC 9562 Appendix A.4's published vector — proves the algorithm, version nibble and variant bits", () => {
+  it("reproduces RFC 9562 Appendix A.4's published vector — proves the algorithm and the version nibble", () => {
     // Verbatim from rfc9562.txt, Appendix A.4, Figure 23.
     expect(
       uuidV5("6ba7b810-9dad-11d1-80b4-00c04fd430c8", "www.example.com"),
@@ -23,6 +24,18 @@ describe("seedWorkoutId", () => {
     expect(seedWorkoutId("Sea Fret")).toBe(
       "96fa2455-b89b-5c2b-81fb-6c96d412fd44",
     );
+  });
+
+  it("pins a title whose raw SHA-1 variant byte has top bits 10 — the A.4 and Sea Fret vectors are both raw 01, so a variant-mask bug (`^ 0xc0`) passed them both (review, 2026-09-12); this one goes red", () => {
+    // Independent oracle: Python's uuid.uuid5 under the same namespace.
+    expect(seedWorkoutId("Afterglow")).toBe(
+      "d9dbdd3b-e208-5e9e-90ca-dedbb71b31bc",
+    );
+  });
+
+  it("throws on a malformed namespace rather than hashing the name alone", () => {
+    expect(() => uuidV5("not-a-uuid", "x")).toThrow(/16-byte/);
+    expect(() => uuidV5("", "x")).toThrow(/16-byte/);
   });
 
   it("is a pure function of the title", () => {
@@ -42,6 +55,18 @@ describe("the seed file, as the derivation's domain", () => {
   it("G1 — titles are distinct over GLOBAL_LIBRARY_SEED, the array the seed actually converges (not LIBRARY_WORKOUTS, which omits the two onboarding rows)", () => {
     const titles = GLOBAL_LIBRARY_SEED.map((w) => w.title);
     expect(new Set(titles).size).toBe(titles.length);
+  });
+
+  it("the boot-time guard names the offending TITLE, not a UUID — what a reader of the boot log actually needs", () => {
+    const dup = [
+      GLOBAL_LIBRARY_SEED[0]!,
+      GLOBAL_LIBRARY_SEED[1]!,
+      GLOBAL_LIBRARY_SEED[0]!,
+    ];
+    expect(() => assertDistinctSeedTitles(dup)).toThrow(
+      `duplicate seed title "${GLOBAL_LIBRARY_SEED[0]!.title}"`,
+    );
+    expect(() => assertDistinctSeedTitles(GLOBAL_LIBRARY_SEED)).not.toThrow();
   });
 
   it("G2 — no legacy title in LEGACY_TITLE_RENAMES is a live seed title: a renamed row keeps v5(legacyTitle), so re-adding that title would collide with it", () => {

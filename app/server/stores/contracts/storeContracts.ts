@@ -247,7 +247,7 @@ export function describeStoreContracts(
       // `input.id` left `routes/data.test.ts` green). The contract runs
       // against both stores. `createMany` honouring the id is the seed's
       // path and is asserted in the same breath so the asymmetry is pinned.
-      it("create() ignores a caller-supplied id; createMany() honours one — the seed is the only chooser of ids", async () => {
+      it("a caller-supplied id is honoured ONLY by createMany(null, …), the seed's path — create() and a user-scoped createMany (the bulk door) both ignore it", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
         const chosen = "96fa2455-b89b-5c2b-81fb-6c96d412fd44";
@@ -256,10 +256,17 @@ export function describeStoreContracts(
           ...({ id: chosen } as object),
         });
         expect(created.id).not.toBe(chosen);
-        const [many] = await stores.workouts.createMany(userId, [
+        // The bulk door reaches createMany WITH a user id. `parseBulk` cannot
+        // emit an `id` today, but the invariant is held here rather than
+        // there (review + PM gate, 2026-09-12).
+        const [userMany] = await stores.workouts.createMany(userId, [
+          { ...workoutInput({ title: "Bulk id" }), id: chosen },
+        ]);
+        expect(userMany!.id).not.toBe(chosen);
+        const [seeded] = await stores.workouts.createMany(null, [
           { ...workoutInput({ title: "Seed id" }), id: chosen },
         ]);
-        expect(many!.id).toBe(chosen);
+        expect(seeded!.id).toBe(chosen);
       });
 
       // Phase DE PR 1 (spec §3.2): the product has no difficulty, but the
