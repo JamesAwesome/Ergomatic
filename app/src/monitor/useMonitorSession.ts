@@ -1011,15 +1011,16 @@ export interface MonitorSession {
   /** Mirrors `freezeRef` — `isPausedRun(freezeRef.current)` at the instant
    *  of the last `update()`. Published for `connectedAxes.ts`'s `activity`
    *  axis (design spec §1) — read-only, derived, not a second source of
-   *  truth (`freezeRef` still owns the write). Consumed since task 2:
-   *  `ConnectedSurface.tsx`'s `deriveAxes` call feeds this straight through. */
+   *  truth (`freezeRef` still owns the write). Consumed by THIS hook's own
+   *  `deriveAxes` call (Phase MD PR 2 — the one derivation site; screens
+   *  read `session.axes` and no longer call `deriveAxes` themselves). */
   frozen: boolean;
   /** Mirrors `runRef`: `true` iff this hook's own record is open
    *  (`runRef.current !== null && runRef.current.completedAt === null`) at
    *  the instant of the last `update()`. Published for `connectedAxes.ts`'s
    *  `session` axis (design spec §1) — at `disconnected` the record
-   *  deliberately stays open, so `phase` alone cannot say. Consumed since
-   *  task 2, the same call `frozen` is. */
+   *  deliberately stays open, so `phase` alone cannot say. Consumed by the
+   *  same `deriveAxes` call `frozen` is (Phase MD PR 2). */
   runOpen: boolean;
   /** Mirrors `SessionState.frameSilence` (Phase LL Task 2). Published for
    *  `connectedAxes.ts`'s `deriveLink` — routed through the EXISTING lost
@@ -1521,7 +1522,7 @@ const NO_FREEZE: FreezeRun = {
  * path below is UNCHANGED — a machine that says Active still promotes on
  * the very first frame, and this counter never runs on that path.
  */
-export const ROWING_ACTIVE_FALLBACK_FRAMES = 5;
+const ROWING_ACTIVE_FALLBACK_FRAMES = 5;
 
 /** The run of consecutive strictly-progressing rowing frames seen while the
  *  session sits at `ready`. `distanceMeters` is the previous frame's reading,
@@ -1978,13 +1979,17 @@ export function useMonitorSession(
    *  ever written while the phase is `ready`; once the session is live it is
    *  dead weight until the next `cancel()` clears it. */
   const rowingStreakRef = useRef<RowingStreak | null>(null);
-  /** HAS THIS SITTING EVER PRODUCED A READABLE FRAME? Minted at mount,
-   *  cleared at teardown, and NOT at `connect()` — which is the whole point.
-   *  `createPm5Driver`'s closure is rebuilt on every connect, including the
-   *  one the rower's own Try again button triggers after a BLE drop, so the
-   *  driver's own latches cannot answer this without calling a
-   *  proven-readable monitor unreadable. RF27 lifetime table lives in the
-   *  design spec. */
+  /** HAS THIS SITTING EVER PRODUCED A READABLE FRAME? Minted `false` at
+   *  mount and never cleared — its lifetime IS the mount (Task 6
+   *  exploration, Phase MD PR 2: `grep -n 'framesEverEmittedRef'` returns
+   *  exactly three hits — the `useRef(false)`, one `= true` write, one
+   *  read — no clear site anywhere). The old wording here claimed "cleared
+   *  at teardown, and NOT at `connect()`"; that was wrong on both halves —
+   *  there is no teardown clear either. NOT at `connect()` is still the
+   *  point: `createPm5Driver`'s closure is rebuilt on every connect,
+   *  including the one the rower's own Try again button triggers after a
+   *  BLE drop, so the driver's own latches cannot answer this without
+   *  calling a proven-readable monitor unreadable. */
   const framesEverEmittedRef = useRef(false);
   /** Door spec (2026-09-02) §5.3's LIFETIME TABLE, in one ref.
    *
@@ -2121,15 +2126,24 @@ export function useMonitorSession(
    *  `gapMs`/`framesWhileHidden` readings that `app-lifecycle`/
    *  `resume-frames` already record, reused rather than re-derived — and
    *  consumed by the very next `handleFrame` call, whatever phase it
-   *  arrives in. Mirrors `framesWhileHiddenRef`'s own "armed here,
-   *  consumed there, then cleared" lifetime for the CONNECTION (reset at
-   *  `connect()`, below). It ALSO gets the same per-run discard
+   *  arrives in. Mirrors `framesWhileHiddenRef`'s "armed here, consumed
+   *  there" ARMING PATTERN only, not its clear-site count — the two are
+   *  NOT lockstep (Task 6 exploration, Phase MD PR 2: five clear sites
+   *  here against `framesWhileHiddenRef`'s two, `connect()` plus its own
+   *  foreground consumption). This ref ALSO gets the same per-run discard
    *  `freezeRef`/`rowingStreakRef` use — a stale armed edge from a resume
    *  that happened before a fresh arm (`program()` or `beginFreeRow()`,
    *  or the RC-37 programDropped/ready exit) must not be consumed by that
    *  NEW run's own first frame — cleared at all three of those sites for
-   *  the identical reason
-   *  `rowingStreakRef` is. `null` when no resume is currently awaiting its
+   *  the identical reason `rowingStreakRef` is, on top of `connect()` and
+   *  its own consumption. `framesWhileHiddenRef` gets none of those three
+   *  per-run clears, and that absence is DELIBERATE, not an oversight to
+   *  fix: it reaches exactly one `resume-frames` ring string, has one test
+   *  consumer, and feeds no predicate — a value carried across a per-run
+   *  reset can misreport that one string's count but cannot misdecide
+   *  anything. The first real (non-logging) consumer of `resume-frames`
+   *  is what should re-open this question, not a symmetry argument with
+   *  `resumeEdgeArmedRef`. `null` when no resume is currently awaiting its
    *  first post-resume frame. */
   const resumeEdgeArmedRef = useRef<{
     gapMs: number | null;
