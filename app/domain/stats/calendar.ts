@@ -117,3 +117,16 @@ export function customRange(
 ): DateRange | null {
   return compareDates(from, to) > 0 ? null : { from, to };
 }
+
+/** `YYYY-MM-DD` — what `<input type="date">` speaks and what the seed
+ *  tables are written in. `parseDate` accepts exactly that shape and
+ *  nothing else: `""` (a cleared field) and any other string are `null`,
+ *  never a guess. The ONE pair for every converter in the app. */
+export function fmtDate({ y, m, d }: CalendarDate): string {
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+export function parseDate(value: string): CalendarDate | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return null;
+  return { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) };
+}

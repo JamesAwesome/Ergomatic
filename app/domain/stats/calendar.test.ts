@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays,
+  fmtDate,
+  parseDate,
   compareDates,
   customRange,
   fromDayNumber,
@@ -90,5 +92,15 @@ describe("calendar — pure { y, m, d } arithmetic (spec §3.3, invariant 14)", 
     const d = { y: 2026, m: 9, d: 12 };
     expect(customRange(d, d)).toStrictEqual({ from: d, to: d });
     expect(customRange({ y: 2026, m: 9, d: 13 }, d)).toBeNull();
+  });
+});
+
+describe("parseDate / fmtDate — the one YYYY-MM-DD pair (spec §3: the domain never parses a date it did not write)", () => {
+  it("round-trips the input format and refuses anything else", () => {
+    expect(parseDate("2026-08-14")).toStrictEqual({ y: 2026, m: 8, d: 14 });
+    expect(fmtDate({ y: 2026, m: 8, d: 4 })).toBe("2026-08-04");
+    expect(parseDate("")).toBeNull(); // a cleared <input type="date">
+    expect(parseDate("2026-9-1")).toBeNull(); // not the input's own format
+    expect(parseDate("2026-09-01T00:00:00Z")).toBeNull();
   });
 });

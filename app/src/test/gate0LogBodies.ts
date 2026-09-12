@@ -5,6 +5,7 @@
  * `loggedAt` to. `gate0LogBodies.test.ts` holds every body's tier and
  * figures equal to `domain/stats/gate0Seed.ts` through `rowContribution`.
  */
+import { fmtDate } from "../../domain/stats/calendar.js";
 import { GATE0_ROWS } from "../../domain/stats/gate0Seed.js";
 
 export const GATE0_TODAY_ISO = "2026-09-12";
@@ -88,7 +89,7 @@ export const GATE0_LOG_BODIES: Gate0LogBody[] = GATE0_ROWS.map((r) => {
   }
   return {
     id: r.id,
-    date: `${r.date.y}-${String(r.date.m).padStart(2, "0")}-${String(r.date.d).padStart(2, "0")}`,
+    date: fmtDate(r.date),
     body,
   };
 });

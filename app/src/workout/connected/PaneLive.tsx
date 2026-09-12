@@ -81,6 +81,7 @@
 // and the measured contrast.
 
 import type { Judgement } from "../../../domain/judge.js";
+import { fmtMeters as fmtMetersHouse } from "../../../domain/format.js";
 import ConnectedProgressBar from "./ConnectedProgressBar";
 import { type SurfaceModel } from "./surfaceModel";
 
@@ -147,7 +148,9 @@ function judgedClass(
  *  what the summary hero displays at the finish. The walk's same-frame
  *  protocol compares this to the hero; both round. */
 function fmtMeters(meters: number): string {
-  return `${new Intl.NumberFormat("en-US").format(Math.round(meters))}m`;
+  // The one house formatter (domain/format.ts, hand-rolled commas, rounds
+  // first) — this was the third copy, and the only one on `Intl`.
+  return `${fmtMetersHouse(meters)}m`;
 }
 
 export default function PaneLive({ model }: { model: SurfaceModel }) {

@@ -5,7 +5,7 @@
  * asserted against it is a figure `compute.mjs` printed. `loggedAt` is
  * noon UTC of the seed date — an instant no reader here parses.
  */
-import type { CalendarDate } from "./calendar.js";
+import { parseDate, type CalendarDate } from "./calendar.js";
 import type { DatedStatsRow } from "./statsRow.js";
 
 export const GATE0_TODAY: CalendarDate = { y: 2026, m: 9, d: 12 };
@@ -39,9 +39,13 @@ const SEED: SeedRow[] = [
   ["R13", "2026-09-11", "pm5",    "machine",   "TR", 2000,  455.8,  0,    121],
 ];
 
+/** The seed's dates through the domain's one parser (`calendar.ts`); a
+ *  malformed row in the table is a thrown error at import, never a quiet
+ *  null. */
 export function parseSeedDate(date: string): CalendarDate {
-  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
-  return { y, m, d };
+  const parsed = parseDate(date);
+  if (parsed === null) throw new Error(`gate0Seed: bad date ${date}`);
+  return parsed;
 }
 
 export const GATE0_ROWS: readonly DatedStatsRow[] = SEED.map(

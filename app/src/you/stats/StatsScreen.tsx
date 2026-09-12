@@ -14,20 +14,11 @@ import {
 } from "../../../domain/stats/calendar.js";
 import { useStatsRows } from "../../api/useStatsRows";
 import BackLink from "../../shell/BackLink";
-import { fmtDate } from "./format";
+import { fmtDate, parseDate } from "./format";
 import StatsFilterBar, { type CustomProblem } from "./StatsFilterBar";
 import TimeByTypeGroup from "./TimeByTypeGroup";
 import TotalsGroup from "./TotalsGroup";
 import { NO_ROWS_YET } from "./YouStatsHero";
-
-/** `<input type="date">` speaks `YYYY-MM-DD`; a value that is not one (the
- *  field cleared — the only non-date a date input can hand over) is "not a
- *  date": the previous range stays and the bar says ENTER BOTH DATES. */
-function parseInputDate(value: string): CalendarDate | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!m) return null;
-  return { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) };
-}
 
 /**
  * `/you/stats` (career-stats spec §5, PR 1's half): the filter bar, TOTALS
@@ -47,8 +38,8 @@ export default function StatsScreen() {
 
   function handleCustom(next: { from: string; to: string }) {
     setCustom(next);
-    const from = parseInputDate(next.from);
-    const to = parseInputDate(next.to);
+    const from = parseDate(next.from);
+    const to = parseDate(next.to);
     const r = from && to ? customRange(from, to) : null;
     if (r) setApplied(r);
   }
@@ -110,8 +101,8 @@ function Body({
   onCustom: (c: { from: string; to: string }) => void;
   applied: DateRange | null;
 }) {
-  const from = parseInputDate(custom.from);
-  const to = parseInputDate(custom.to);
+  const from = parseDate(custom.from);
+  const to = parseDate(custom.to);
   // Two ways the pair can be unusable, each with its own sentence; while
   // either holds, `applied` (the last VALID range) is what renders.
   const customProblem: CustomProblem =

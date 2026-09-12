@@ -1,4 +1,5 @@
 import TypeBadge from "../components/TypeBadge";
+import { fmtMeters } from "../../domain/format.js";
 import { fmtDuration } from "../../domain/duration.js";
 import FreeRowChip from "../workout/FreeRowChip";
 import { fmtSplit } from "../../domain/format.js";
@@ -49,9 +50,8 @@ function formatLogDate(loggedAt: string): string {
 // the runtime's default locale isn't guaranteed `en-US` across every
 // environment this app's tests and builds run in, and a comma is the only
 // separator the design ever shows).
-function fmtMeters(meters: number): string {
-  return meters.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
+// Phase PS PR 1 fix round: the formatter itself now lives in
+// `domain/format.ts` (the one copy); the rule above is its doc comment.
 
 // RC-5 (hero-truth design spec) §3, Task 4: the list's own tier gate,
 // mirroring `storedSummary.ts`'s `buildHeroes` — TRUE exactly when the
