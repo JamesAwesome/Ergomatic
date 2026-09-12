@@ -693,19 +693,24 @@ function makeFakeLogsStore(
       // the one thing a contract suite must not do. Round-trip `series` so
       // both backends agree.
       //
-      // `steps` and `machineSummary` are jsonb too and are deliberately NOT
-      // round-tripped: nothing writes an undefined-valued key into either
-      // today, so the infidelity is unobservable, and widening this to every
-      // jsonb column is a change with no failing case behind it. The
-      // ROADMAP carries the row.
+      // `steps` and `machineSummary` are jsonb too and get the SAME
+      // round-trip (PM gate on #412: the invariant is "this fake stands in
+      // for a jsonb column", and closing it for one column leaves the other
+      // two as the next counterexample). Nothing writes an undefined-valued
+      // key into either today, so this half is ungated — it removes a
+      // fake/real divergence rather than catching one.
       // The cast below is deliberately WIDER than the value it produces: on
       // the read side `r` is absent, exactly as it is off a real jsonb read,
       // and `LogSeries` says the key is required. That is the shape's own
       // stated posture (`domain/monitor/types.ts`: the required key is a
       // CONSTRUCTION-SITE gate, and `s.r === true` is correct either way),
       // not a hole this fake opens.
+      const roundTrip = <T>(value: T): T =>
+        value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
       const stored = {
         ...rest,
+        steps: roundTrip(rest.steps),
+        machineSummary: roundTrip(rest.machineSummary),
         series:
           rawSeries === undefined
             ? undefined

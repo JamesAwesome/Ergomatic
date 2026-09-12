@@ -89,6 +89,21 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   date. Phase OD measured this exact shape — an ACTIVE trigger the row itself
   recorded as fired, sitting 20 days.
 
+- **An auto-merge that produces no conflict can still corrupt a numbered
+  record.** #412 (2026-09-12): two branches each appended to
+  `antagonist-techniques.md`'s numbered list at different line ranges, so git
+  merged both cleanly and the tree carried `17,18,19,20` twice; the only
+  conflict git raised was in a different file. **At any gate where two live
+  branches touch the same numbered list, run `git merge-tree --write-tree HEAD
+  origin/main` and read the merged FILE, not the conflict list.** The second
+  branch to merge always renumbers.
+- **The claim-in-one-artefact pattern reaches CODE COMMENTS, which outlive
+  every other carrier.** #408 left a deviation wrong in a census, #409 in a spec
+  it had itself revised, #412 in `server/testing/fakes.ts`: a shipped comment
+  read "The ROADMAP carries the row" while the row was only proposed at the
+  hand-back. **Grep every ROADMAP/spec/ledger reference a PR's new comments
+  make, against the file it names, before the gate passes.**
+
 ## Recommendations that turned out wrong
 
 - **2026-08-13 — the CR2 item 0 hypothesis and its oracle.** Both written into
