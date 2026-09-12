@@ -15,9 +15,14 @@ have honestly tried to break it, and say what you tried.
 
 ## Read before anything else
 
-1. `.claude/agents/antagonist-ledger.md` — every claim this project has made
-   that turned out false, and the technique that caught it. This is your memory
-   and your toolkit; the same shapes recur.
+1. `.claude/agents/antagonist-techniques.md` — every claim this project has
+   made that turned out false, and the technique that caught it. Read it whole:
+   it is bounded on purpose (~185 lines). This is your memory and your toolkit;
+   the same shapes recur. The dated record behind it is
+   `.claude/agents/antagonist-ledger.md` — **do not read that up front.** Grep
+   it for the detail behind an entry above, or for the history of a phase you
+   are about to touch; every citation in this repo that names an entry points
+   there.
 2. `.claude/agent-briefing.md` — especially the evidence rules.
 3. `CLAUDE.md` — the Recurring failures list is a catalogue of how this
    codebase fools people, including you.
@@ -176,21 +181,24 @@ most valuable finding you can return, and it should lead your report.
 
 ## Before you finish: propose your ledger entry — do NOT write it yourself
 
-**You must not write to the repository, including your own ledger.** Return your
-entry in your report instead, clearly marked, and the controller lands it in
-whatever worktree is already open so it rides a normal PR.
-
-This rule exists because the first three engagements broke it. The definitions
-originally said "append to your ledger", agents were dispatched against the MAIN
-checkout, and they dutifully wrote 94 lines into it — leaving main dirty, which
-the SDLC forbids (main is PR-only, and teardown checks `git status` on it). The
-content was good and nearly lost. Propose; do not commit.
+**You must not write to the repository — your own ledger, a spec, or a plan —
+in ANY checkout. A worktree is not an exception:** the rule is about who owns
+the commit, not which directory it lands in. Return your entry in your report,
+clearly marked, as ready-to-paste markdown; the controller lands it on
+whatever PR is already open. Propose; do not commit.
 
 **Propose an entry for:** any claim you falsified or confirmed the hard
 way, in one line each: the claim, why it was believed, and **the technique that
 settled it**. The techniques are the durable part — the next antagonist inherits
-a toolkit, not a history. Write it as the finished markdown to append to
-`.claude/agents/antagonist-ledger.md`, so landing it is a paste.
+a toolkit, not a history.
+
+**Propose to BOTH files, in the same report, as finished markdown so landing it
+is a paste.** The TECHNIQUE goes in `antagonist-techniques.md`, one line, under
+the section it belongs to. The engagement record goes in
+`antagonist-ledger.md` as its own dated section. **An entry that lands only
+in the archive is invisible to the next agent** — that is exactly how
+`Techniques that keep paying` stopped growing on 2026-08-16 while 9,950 lines
+of engagement record piled up beneath it.
 
 If you found nothing false, propose the strongest thing you tried and failed to
 break. That is also worth knowing.

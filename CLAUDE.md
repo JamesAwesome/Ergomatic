@@ -325,13 +325,12 @@ requirements).
   - **They PROPOSE ledger entries; the controller lands them.** Neither
     agent writes to the repo — its own ledger, a spec, or a plan — in ANY
     checkout. The worktree is not an exception: the rule is about who owns
-    the commit, not which directory it lands in (an agent committed design
-    rev 3 of PR1.75 inside its worktree on 2026-09-02, and the old wording
-    here read as inapplicable there). The
-    definitions originally said "append", three engagements did exactly
-    that, and 94 good lines sat uncommitted in the main checkout until
-    someone noticed. The entry comes back in the report as ready-to-paste
-    markdown and rides whatever PR is already open.
+    the commit, not which directory it lands in. The entry comes back in
+    the report as ready-to-paste markdown and rides whatever PR is already
+    open. **Each agent's memory is two files** — a bounded
+    `-techniques.md` it reads whole, and the `-ledger.md` dated record it
+    greps; an entry is proposed to BOTH, because one that lands only in the
+    record is invisible to the next agent.
   - **NEITHER AGENT RUNS ON FAST-PATH WORK (James, 2026-08-14).** The
     fast path has no spec and no task brief, so the antagonist has
     nothing to attack, and by its own criteria a fast-path change cannot
@@ -529,12 +528,10 @@ requirements).
   - Everything else — evidence, probe outputs, cross-refs, risk notes,
     agent context — goes in a collapsed `<details>` block titled
     **"Record (for agents and audits)"**. Depth lives there, not up top.
-  - The test: the top reads aloud in 30 seconds. The `product-manager`
-    final-PR gate checks this and fails the PR presentation on it.
-    **Countable form (PM gate, 2026-08-30, after #228 and #230 both
-    failed the prose version at ~270 and 266 words): ~120 words above
-    the fold, ~25 words per bullet. Check it the way `git diff --stat`
-    checks the fast path — count, don't feel.**
+  - The test: the top reads aloud in 30 seconds — James learns what the
+    work did and what he now has without opening the Record block. The
+    `product-manager` final-PR gate fails a presentation that does not,
+    and carries the word counts it checks against.
   - Specs open with a plain-language "What and why" paragraph before any
     machinery, and a SUMMARY of a spec is that paragraph plus bullets —
     never a tour of its sections.

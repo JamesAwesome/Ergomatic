@@ -57,7 +57,7 @@ each one already cost somebody a round somewhere.
   The only name reachable on that path is `loadLastDevice()`, a best-effort
   LAST-USED name, and posting it was already rejected in writing at the site
   (`src/log/storedSummary.ts:66-73`) and by a recorded PM ruling
-  (`pm-ledger.md:2710-2716`, _"Prefer the false negative."_).
+  (`pm-ledger.md`, "PM final-PR gate, PR #198" — _"prefer the false negative"_).
 - **The biconditional SURVIVES:** `deviceName ≠ null ⟺ source = 'pm5'`.
   `pm5` REQUIRES a name; `timer`, `manual` and `no-reading` all FORBID one.
   `server/logSource.ts`'s switch widens to four cases saying exactly that.
@@ -1192,7 +1192,7 @@ time. No migration, no stored shape, nothing to roll back. An old client
 reading a new list response ignores an unknown key.
 
 - [ ] **Step 1: The failing list/detail agreement test** (the gate
-      `pm-ledger.md:2596` asks for, and RF24's "start upstream of the
+      `pm-ledger.md`'s "PM final-PR gate, PR #194" asks for, and RF24's "start upstream of the
       producer" — it POSTs through the real route, then reads through BOTH
       endpoints):
 

@@ -158,10 +158,12 @@ A plan gets both.
 ## The ledger
 
 ONE entry per hardening run, not per pass. Eleven entries for one plan added
-549 lines to a ledger every future antagonist must read
+549 lines to what was then a single ledger every future antagonist had to read
 (`git diff --numstat 606d3f72 15fb3c61 -- .claude/agents/antagonist-ledger.md`,
 branch `wave-e-pr175b-native`), which made each pass more expensive than the
-one before it.
+one before it. The ledger is now two files and the archive is no longer read up
+front, so the cost of an extra entry is smaller — but it is not zero, because
+the TECHNIQUE line still lands in the file every antagonist reads whole.
 
 The entry carries TECHNIQUES, not history: for each real find, the claim, why
 it was believed, and the technique that settled it. Bookkeeping findings do

@@ -2752,7 +2752,8 @@ describe("LogSession: a connected arrival with no record (Phase LM Task 4)", () 
   // posts the new `no-reading` member, not `manual`, and carries no
   // `deviceName` (§2.2's corrected decision: the only name reachable here
   // is a best-effort LAST-USED name, rejected in writing at
-  // `storedSummary.ts:66-73` and by PM ruling `pm-ledger.md:2710-2716`).
+  // `storedSummary.ts:66-73` and by PM ruling `pm-ledger.md`, "PM final-PR gate,
+  // PR #198").
   it("posts source: no-reading, with no deviceName key at all", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
