@@ -827,8 +827,8 @@ behaviour (RF26).
   descendant — navigates to `/you/stats`; `.you-doors` has exactly four
   children and none reads STATS. Mutation: wrap the legend in its own
   `<Link>` → the count assertion fails naming two focusables.
-- e2e (`e2e/stats.spec.ts`): seed the 13 rows and 6 test rows through the
-  API with the clock and zone pinned; open You, assert the LIFETIME line
+- e2e (`e2e/stats.spec.ts`): seed the 13 LOG rows through the API with the
+  clock and zone pinned (the 6 test rows seed in PR 2, with the trend); open You, assert the LIFETIME line
   reads `56,752` and SEASON `43,012` (RF7 — hand-recomputed above and in
   `compute.mjs`), Tab to the hero and assert it is focused with name
   `Stats`, tap the LEGEND and assert `/you/stats`; assert ALL `56,752` and

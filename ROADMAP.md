@@ -643,8 +643,9 @@ WORK-ONLY TOTALS · NOT IN AVG WATTS`), never corrected.
       gate-order mutation can move, against output captured from `main`
       before the refactor; one test seeding through `POST /api/logs` (the
       tier-A row FUSED on purpose) and reading the new route (RF24); e2e
-      seeding the Gate 0 seed itself (`seed.mjs`: 13 rows + 6 test rows,
-      clock and zone pinned to 2026-09-12) and asserting `compute.mjs`'s
+      seeding the Gate 0 seed itself (`seed.mjs`'s 13 log rows — its 6
+      test rows ride PR 2 with the trend — clock and zone pinned to
+      2026-09-12) and asserting `compute.mjs`'s
       figures as literals — lifetime 56,752 m / 3:59:39 / 13, season 43,012
       m, MACHINE 36,752 m, 8 OF 10, rest 718, cal 1,731, 176 W, `1 ROW
       PREDATES` (RF7); PM final gate.
