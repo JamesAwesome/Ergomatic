@@ -11,5 +11,6 @@ Ergomatic skills are canonical in `.claude/skills/` and reach you through the
 ten-line adapters in `.agents/skills/`; the skills vendored from
 `mattpocock/skills` are canonical in `.agents/skills/` and reach Claude Code
 through symlinks at `.claude/skills/<name>`. `scripts/skills-parity.sh` gates
-that both roots hold the same names. Do not resolve the asymmetry by
+that both roots hold the same names, and nothing more — it cannot tell a
+symlink from a copy. So this part is on you: do not resolve the asymmetry by
 flattening a pointer or a symlink into a second copy of the instructions.

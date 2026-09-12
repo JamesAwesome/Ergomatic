@@ -36,22 +36,21 @@ requirements).
   `.agents/skills/`; neither harness sees the other's directory, and a skill
   present in only one is invisible to half the agents here with no error
   anywhere.** So the two roots are kept at PARITY, gated by
-  `scripts/skills-parity.sh` in CI's always-run `scripts` job: every name
-  exists in both with identical `name` / `description` /
-  `disable-model-invocation`. The vendored eight are canonical in `.agents/`
+  `scripts/skills-parity.sh` in CI's always-run `scripts` job. It checks ONE
+  thing — both roots hold the same names — and deliberately not frontmatter
+  (for a symlinked pair both paths are the same inode, so that compare is
+  `cmp(x, x)`) nor whether a skill REFERENCED by another skill exists at all.
+  The vendored eight are canonical in `.agents/`
   and reach Claude Code through SYMLINKS at `.claude/skills/<name>`; the four
   owned skills are canonical in `.claude/` and reach Codex through the
   ten-line adapters. Pointers in both directions, copies in neither. **If the
   `skills` CLI vendors a ninth skill, add its symlink in the same commit** —
   the gate goes red otherwise, which is the whole point of it.
-  **`domain-modeling` is pinned `user-invocable-only` in `.claude/settings.json`**
-  (the vendor's own mechanism for a skill whose `SKILL.md` you do not want to
-  edit, which keeps the vendored bytes unforked). Its trigger is "discussing
-  codebase terminology" — most of a session here — and on firing it CREATES
-  `CONTEXT.md` and `docs/adr/`, neither of which exists: a fourth
-  decision-record system, unprompted repo writes, no `dies` date, no gate.
-  James still has `/domain-modeling`. Verified 2026-09-12: the listing drops
-  37 → 36 and the slash command still loads the whole skill.
+  **`skillOverrides` is keyed per skill NAME, not per turn** (measured
+  2026-09-12): pinning a skill `user-invocable-only` also refuses the nested
+  `Skill` calls that `grill-with-docs`, `wayfinder` and
+  `improve-codebase-architecture` make into `domain-modeling`, even when
+  James typed the parent himself. Check a skill's callers before pinning it.
 
 ## Commands (run in `app/`)
 
