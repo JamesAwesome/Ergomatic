@@ -516,8 +516,8 @@ exploration reports.
       the constraint is restated as a comment three times
       (`monitorRun.ts:735`, `:1696`, and `createMonitorRun`'s doc comment).
       The costs are countable: `saveMonitorRun` (`:600`) has ZERO production
-      callers and 148 test-fixture occurrences across 10 files, so ~150 seeds
-      enter past the real producer — RF24's exact shape — while duplicating
+      callers and 127 fixture call sites across 5 files, every one of which
+      seeds past the real producer — RF24's exact shape — while duplicating
       `performDurableWrite`'s series-sacrifice ordering verbatim;
       `connectGuardStage(hasUnretiredMonitorRun: boolean)` (`:1704`) takes a
       boolean two callers compute from the store purely because the import is
@@ -532,7 +532,7 @@ exploration reports.
       under Codebase-audit owners) — the "whoever next touches these
       functions owns the decision" flag fires here. Tests: the two suites
       (2343 + 1273 lines) become one driving commit → read → retire →
-      rehydrate through the merged interface, and the 148 `saveMonitorRun`
+      rehydrate through the merged interface, and the 127 `saveMonitorRun`
       seeds become the call production makes.
 - [ ] **PR 2 — a lifecycle seam on `useMonitorSession`.**
       `MonitorSessionDeps` (`:1112`) carries nine injectable deps and no

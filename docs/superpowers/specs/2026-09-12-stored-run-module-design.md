@@ -15,7 +15,7 @@ kept in step by comment, and three of those comments exist only to say so.
 
 Nothing a rower sees changes. What changes is that the next person who has to
 answer "what happens to the saved run when X" reads one module instead of two,
-and that the ~150 test fixtures which currently write the key with a function
+and that the 127 test fixtures which currently write the key with a function
 production never calls start writing it the way production does.
 
 **The honest version of the claim, up front:** merging two files is not by
@@ -57,7 +57,7 @@ measurement wins and the difference is noted.
 | Claim | Measured | Command |
 | --- | --- | --- |
 | `saveMonitorRun` production callers | **0** | `grep -rn 'saveMonitorRun(' src e2e --include='*.ts' --include='*.tsx' \| grep -v '\.test\.' \| grep -v monitorRun.ts` → empty |
-| `saveMonitorRun` test occurrences | **148** across **10** files | same grep, `.test.`/e2e retained (report said 11 files) |
+| `saveMonitorRun` fixture CALL SITES | **127** across **5** files | `grep -rn 'saveMonitorRun(' src e2e --include='*.ts' --include='*.tsx' \| grep '\.test\.\|e2e/'` — `LogSession.test.tsx` 76, `monitorRun.test.ts` 34, `WorkoutDetail.test.tsx` 11, `useStartWorkout.test.tsx` 5, `ConnectAction.test.tsx` 1 |
 | `retire` call sites | **13**, of which **12** wrap an entry in a one-element array | `grep -rnE '(^\|[^A-Za-z])retireHandoff\(\|(^\|[^A-Za-z.])retire\('` non-comment |
 | `anyLiveSession()` production call sites | **0** | `grep -rnE '(^\|[^A-Za-z_.])anyLiveSession\('` non-comment, outside its own file → empty |
 | `monitorRunState()` production call sites | **0**; it is PRIVATE (`monitorRun.ts:1515`), called only by `anyLiveSession` | as above |
@@ -125,7 +125,7 @@ per-attempt, cleared per-teardown, and claimed to be per-session.
   stay where they are or move with it — the plan decides one file or two, and
   either is acceptable as long as §6's count holds. What is NOT acceptable is
   two files that both write.
-- `saveMonitorRun` is deleted. Its 148 test occurrences become `commit(...)`,
+- `saveMonitorRun` is deleted. Its 127 fixture call sites become `commit(...)`,
   which is what production does. This is the whole point: the fixtures stop
   seeding past the producer (RF24).
 - `retire(set, reason: string)` becomes `retire(entry, reason: RetireReason)`.
@@ -248,7 +248,7 @@ next touches these functions", and the work does not start until he rules.
   one suite driving commit → read → retire → rehydrate through the merged
   interface. Old tests that reach past the interface are deleted, not ported;
   the interface is the test surface.
-- The 148 `saveMonitorRun` fixture seeds become `commit(...)`. This is the
+- The 127 `saveMonitorRun` fixture seeds become `commit(...)`. This is the
   change that closes RF24 on this key, and it is the bulk of the diff.
 - **One test must start upstream of the producer**: it commits, then mounts
   the reader, and asserts what the reader shows — no seeded record, no mocked
