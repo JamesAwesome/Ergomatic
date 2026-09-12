@@ -11,6 +11,7 @@ import { createUserStore, type UserStore } from "../auth/users.js";
 import { createWorkoutsStore, type WorkoutsStore } from "../stores/workouts.js";
 import { createLogsStore, type LogsStore } from "../stores/logs.js";
 import { seedGlobalLibrary, SEED_LOCK_KEY } from "./seed.js";
+import { seedWorkoutId } from "./seedId.js";
 import { GLOBAL_LIBRARY_SEED, LIBRARY_WORKOUTS } from "./library/index.js";
 import {
   ONBOARDING_TITLES,
@@ -103,6 +104,82 @@ describe("seedGlobalLibrary against real Postgres", () => {
     const idsAfterSecond = (await wk.listGlobals()).map((w) => w.id).sort();
 
     expect(idsAfterSecond).toStrictEqual(idsAfterFirst);
+  });
+
+  it("seeds the SAME ids on two separate fresh databases — a library row is the same row in every environment", async () => {
+    // The existing "twice from empty" case above runs on ONE database, so
+    // it proves convergence is a no-op and nothing about identity: it passes
+    // with `defaultRandom()` ids because the second run finds the first
+    // run's rows by title and inserts nothing. This case is the one that
+    // can go red on random ids — a second CONTAINER has never seen the
+    // first's rows, so every id is freshly minted unless the seed decides
+    // them itself.
+    const other = await new PostgreSqlContainer("postgres:18.4").start();
+    const { pool: otherPool, db: otherDb } = createDb(other.getConnectionUri());
+    try {
+      await migrate(otherDb, { migrationsFolder: "drizzle" });
+      await db.delete(workouts);
+      await seedGlobalLibrary(db);
+      await seedGlobalLibrary(otherDb);
+
+      const here = (await wk.listGlobals())
+        .map((w) => [w.title, w.id] as const)
+        .sort();
+      const there = (await createWorkoutsStore(otherDb).listGlobals())
+        .map((w) => [w.title, w.id] as const)
+        .sort();
+      expect(there).toHaveLength(GLOBAL_LIBRARY_SEED.length);
+      expect(there).toStrictEqual(here);
+    } finally {
+      await otherPool.end();
+      await other.stop();
+    }
+  });
+
+  it("G5 — the INCREMENTAL path: a title added to the library after a seed gets its derived id, and every pre-existing id is byte-identical (the only path production will ever take)", async () => {
+    await db.delete(workouts);
+    await seedGlobalLibrary(db);
+    const before = new Map(
+      (await wk.listGlobals()).map((w) => [w.title, w.id] as const),
+    );
+    expect(before.size).toBe(GLOBAL_LIBRARY_SEED.length);
+
+    const added = {
+      ...LIBRARY_WORKOUTS[0]!,
+      title: "Brand New Weather",
+      sortOrder: 999,
+    };
+    // ONE existing entry with its content changed, so the incremental seed
+    // takes the `updateGlobal` arm for it. Without this the arm is never
+    // reached — every unchanged row is `contentEqual` and skips it — and a
+    // mutant that rewrites `id` inside `updateGlobal` stayed GREEN against
+    // the first draft of this test (measured 2026-09-12; RF35's shape).
+    const edited = {
+      ...GLOBAL_LIBRARY_SEED[1]!,
+      effort: GLOBAL_LIBRARY_SEED[1]!.effort === 5 ? 4 : 5,
+    };
+    const library = GLOBAL_LIBRARY_SEED.map((w) =>
+      w.title === edited.title ? edited : w,
+    );
+    await seedGlobalLibrary(db, [...library, added]);
+
+    const after = new Map(
+      (await wk.listGlobals()).map((w) => [w.title, w.id] as const),
+    );
+    expect(after.size).toBe(GLOBAL_LIBRARY_SEED.length + 1);
+    // The new row's id is the derivation, not a mint.
+    expect(after.get("Brand New Weather")).toBe(
+      seedWorkoutId("Brand New Weather"),
+    );
+    // The edited row went through updateGlobal and its content moved…
+    const editedRow = (await wk.listGlobals()).find(
+      (w) => w.title === edited.title,
+    );
+    expect(editedRow?.effort).toBe(edited.effort);
+    // …and NOTHING that already existed changed id — the edited row
+    // included. This half is what proves production's first boot after the
+    // change, and every library edit after it, is a no-op on identity.
+    for (const [title, id] of before) expect(after.get(title)).toBe(id);
   });
 
   it("is visible to any user (new or old) via list(), without per-user seeding", async () => {

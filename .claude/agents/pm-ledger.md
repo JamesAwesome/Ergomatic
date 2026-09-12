@@ -6447,3 +6447,45 @@ docs-only allowlist, so the mechanism PR pays the full gate while the
 ROADMAP-only PRs skip it — and no CI job ever checks the real `ROADMAP.md`,
 which is the correct consequence of James choosing advisory over blocking, and
 the second reason the skill belongs on the close.
+
+## Final-PR gate, 2026-09-12 (PR #396, deterministic seed ids — triad: stored identity)
+
+- **A capture family named by a glob is checkable BY RUNNING THE GLOB, and three
+  documents said six where `ls` says five.** #396's body, its ROADMAP row and its
+  commit message all read "the six `recovery-read-only-*` captures". The family has
+  six members; **five moved**, `recovery-read-only-landscape.png` did not, and the
+  sixth file in the diff was `recovery-missing-type-portrait-actions.png` — a
+  different family whose `workoutId` is the literal `"missing-library-record"`
+  (`screenshots.spec.ts`), which deterministic ids cannot touch. The arithmetic
+  is the small half. The real defect is that **nobody asked why the one member that
+  should have moved didn't**: it shows only the blob's opening `{` at 844×390 —
+  the claim was over-broad, and the PR distinguished neither reading until asked.
+  At any gate touching captures, run `ls docs/screenshots/ | grep '<family>'` and
+  diff it against `gh pr diff --name-only`; a family claim is an `ls` away from
+  settled and, unchecked, it lands in the ROADMAP where it outlives the PR.
+- **The first PR gated against a freshly adopted rule is the one that breaks it.**
+  `docs/TESTING.md` — *"A PNG in your commit means a screen you changed"* — was
+  adopted by James on 2026-09-12. #396 opened the same day and committed a capture
+  from the still-OPEN antialiasing class that #394 had measured at 729 px / max
+  delta 227 and explicitly left unresolved. **A PR that fixes one churn cause must
+  not sweep up a capture from a cause that is still open**, because the sweep reads
+  as "fixed" and closes the row over it. When a row closes citing a prior
+  investigation, open that investigation's own "still open" list and check the
+  closing PR's diff against it.
+- **Scope ruling, for reuse: no backfill of production ids, and the asymmetry is
+  accepted knowingly.** Production stays the only environment where
+  `v5(title) != id`. Backfill cost = rewriting the PK of every global row while
+  `session_logs.workout_id` (FK, `onDelete: set null`) points at them; benefit =
+  nothing consumes a derived id today. The residual risk is RF11's shape and worth
+  naming at any future gate: **code deriving an id from a title passes every gate we
+  own — all of which run on fresh, now-deterministic databases — and fails only in
+  production.** Mitigation accepted as prose (`seed.ts`'s insert comment plus the
+  spec's explicit "deliberately NOT the invariant"), not a gate, at household-cohort
+  scale.
+- **A loud failure still has to be legible.** Agreed that a duplicate seed title
+  failing boot beats the old silent drop (a silent drop is RF25's exact shape). But
+  as first shipped it surfaced as a raw `23505 on workouts_pkey` naming a UUID, not
+  the offending title, and it downs the whole app rather than the library. When a
+  gate converts silent-wrong into loud-dead, ask what the person reading the log at
+  2am sees: "loud" is only better if the noise names its own cause. (Ruled and
+  built in the same round: `assertDistinctSeedTitles` throws naming the title.)

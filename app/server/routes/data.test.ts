@@ -628,6 +628,26 @@ describe("workouts CRUD", () => {
     expect(list.body[0]).toMatchObject({ title: "Global Leader" });
   });
 
+  // G3 (design spec 2026-09-12, deterministic seed ids) — the ROUTE half.
+  // The store-level gate lives in `stores/contracts/storeContracts.ts`
+  // ("create() ignores a caller-supplied id"), where it runs against the
+  // real store too; this case only pins that the route does not add its own
+  // path around it. Measured before it was moved: mutating the real
+  // `create()` to write `input.id` left this test green, because it runs
+  // against the fake — so on its own it was decoration (RF35).
+  it("POST ignores a client-supplied id rather than honoring it — the seed is the only chooser of ids", async () => {
+    const app = appFor(makeStores());
+    const chosen = "96fa2455-b89b-5c2b-81fb-6c96d412fd44";
+    const created = await asA(request(app).post("/api/workouts")).send({
+      ...validWorkoutBody(),
+      id: chosen,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.id).not.toBe(chosen);
+    const res = await asA(request(app).get(`/api/workouts/${chosen}`));
+    expect(res.status).toBe(404);
+  });
+
   it("GET /:id returns the workout", async () => {
     const app = appFor(makeStores());
     const created = await asA(request(app).post("/api/workouts")).send(

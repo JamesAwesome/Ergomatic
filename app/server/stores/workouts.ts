@@ -13,6 +13,19 @@ export type WorkoutSource = "starter" | "user";
 export type NewWorkoutInput = WorkoutInput & {
   source: WorkoutSource;
   sortOrder?: number | null;
+  /** Set ONLY by `seedGlobalLibrary` (`seed/seedId.ts`), so a fresh
+   *  database seeds the same library ids as every other. Absent means the
+   *  column default (`gen_random_uuid()`), which is every personal row and
+   *  every pre-existing global row — Drizzle emits `default`, never NULL,
+   *  for an undefined value here (measured on drizzle-orm 0.45.2 via
+   *  `.toSQL()`, design spec 2026-09-12 fact 4). Honoured by `createMany`
+   *  for GLOBAL rows only (`userId === null`): the bulk door reaches
+   *  `createMany` with a user id, and "the seed is the only chooser of
+   *  ids" is held structurally here rather than by `parseBulk` happening
+   *  not to emit one. `create()` never reads it. Both pinned by
+   *  `stores/contracts/storeContracts.ts` against the fake AND the real
+   *  store — the route test alone could not see a real-store regression. */
+  id?: string;
 };
 
 // user_id NULL marks a global starter-library row (seeded once at boot,
@@ -97,6 +110,7 @@ export function createWorkoutsStore(db: Db) {
           .insert(workouts)
           .values(
             inputs.map((input) => ({
+              id: userId === null ? input.id : undefined,
               userId,
               sortOrder: input.sortOrder ?? null,
               title: input.title,

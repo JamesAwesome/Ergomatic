@@ -5,6 +5,7 @@ import type { WorkoutInput } from "../../domain/types.js";
 import { createWorkoutsStore } from "../stores/workouts.js";
 import { GLOBAL_LIBRARY_SEED } from "./library/index.js";
 import { LEGACY_TITLE_RENAMES } from "../../domain/onboarding.js";
+import { seedWorkoutId } from "./seedId.js";
 
 // Arbitrary but fixed application-wide key for the seed advisory lock. Any
 // constant works; it only has to be the same in every process. Exported so
@@ -76,10 +77,33 @@ const contentEqual = (
  * unique, so the mutual exclusion is now explicit. The loser simply sees the
  * winner's rows and no-ops.
  */
+/** A duplicate title in the seed file used to be dropped silently ("first
+ *  row per title wins", below). With derived ids (seedId.ts) two rows with
+ *  one title share a PRIMARY KEY, and `createMany`'s single multi-row
+ *  INSERT rolls back entirely on `workouts_pkey` — the whole app fails to
+ *  boot, for every user, on a 23505 naming a UUID. Loud beats silent, but
+ *  the log at 2am should name the TITLE, not the hash (PM gate, 2026-09-12).
+ *  G1 in seedId.test.ts keeps this from ever firing in CI; this is what a
+ *  reader sees if it fires anyway. */
+export function assertDistinctSeedTitles(
+  library: readonly LibraryEntry[],
+): void {
+  const seen = new Set<string>();
+  for (const w of library) {
+    if (seen.has(w.title)) {
+      throw new Error(
+        `seedGlobalLibrary: duplicate seed title "${w.title}" — two rows would share one derived id`,
+      );
+    }
+    seen.add(w.title);
+  }
+}
+
 export async function seedGlobalLibrary(
   db: Db,
   library: readonly LibraryEntry[] = GLOBAL_LIBRARY_SEED,
 ): Promise<void> {
+  assertDistinctSeedTitles(library);
   await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(${SEED_LOCK_KEY})`);
     const workouts = createWorkoutsStore(tx as unknown as Db);
@@ -119,7 +143,15 @@ export async function seedGlobalLibrary(
     if (toInsert.length > 0)
       await workouts.createMany(
         null,
-        toInsert.map((w) => ({ ...w, source: "starter" as const })),
+        toInsert.map((w) => ({
+          ...w,
+          source: "starter" as const,
+          // The only place an id is ever chosen rather than minted: a fresh
+          // database seeds the same ids as every other (seedId.ts). Rows
+          // that already exist never reach this branch, so production's
+          // pre-existing ids are untouched.
+          id: seedWorkoutId(w.title),
+        })),
       );
   });
 }

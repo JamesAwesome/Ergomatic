@@ -10121,3 +10121,68 @@ counting the corpus a different way than the spec counted it.
   — the first textual hit was a comment inside `test("log-monitor-landscape")`, and
   71 of 202 captures have no literal filename in the spec at all (helpers and template
   literals). **Run your own recipe on five inputs before writing it into a rule.**
+
+## Deterministic seed ids — spec pass, 2026-09-12 (TRIAD: stored identity; theory HELD, spec needed five corrections)
+
+- **"The seed's titles are unique — `grep 'title: "…"' library/*.ts | uniq -d` is
+  empty, 300 of them."** True and irrelevant: the array `seedGlobalLibrary`
+  actually converges is `GLOBAL_LIBRARY_SEED` (302), and the two extra entries
+  write `title: ONBOARDING_TITLES.k6` — a CONSTANT, invisible to a string-literal
+  grep. The spec's proposed gate ("unit test over `LIBRARY_WORKOUTS`") was both
+  redundant with an existing test and blind to exactly the two rows it had to
+  cover. **Technique:** when a measurement counts N and the code path consumes
+  M, count PER FILE and reconcile — `for f in <dir>/*.ts; do echo -n "$f "; grep
+  -c <pattern> "$f"; done` put a `0` next to the one file that mattered. A regex
+  over source can only see the values that were spelled out; follow the DEFAULT
+  ARGUMENT of the function under discussion to the array it really reads.
+
+- **"A duplicate seed title would be caught by a unit test, so the DB
+  consequence doesn't matter."** False, and the consequence inverted: today
+  `seed.ts`'s "first row per title wins" DROPS the second silently; with derived
+  ids the two rows share a primary key, and a multi-row INSERT with a duplicate
+  key rolls back ENTIRELY (`rows_after = 0`, 23505 on `<table>_pkey`), inside the
+  boot-time seed whose only catch absorbs a `StoreConflictError` that nothing in
+  the codebase throws any more. Silent data loss became a total boot outage.
+  **Technique:** for any change that makes a previously-impossible constraint
+  violation possible, run the violating statement against a real Postgres and
+  read the ROW COUNT after, not just the error; then grep the call chain for who
+  catches it (`grep -rn <ErrorClass> server/ | grep -v test` returned the
+  definition and the catch, and NO throw site — the guard was already dead).
+
+- **"`renameGlobalByTitle` keeps the row's id, and that's fine."** True, and one
+  step short. A row inserted under title L carries `v5(L)` forever while showing
+  title C; if L is ever re-added to the library, the insert derives `v5(L)` and
+  collides with it. Unreachable today only because the two legacy titles were
+  only ever inserted BEFORE derived ids existed — the design holds by accident,
+  not by construction, and one future `LEGACY_TITLE_RENAMES` entry arms it.
+  **Technique:** when a spec says "X is deliberately NOT the invariant" and lists
+  the cases where the derivation and the stored value diverge, take each
+  divergence and ask what happens if the derivation is RE-RUN on the diverged
+  input. A stated exception is a spec-shaped hint about where the collision
+  lives.
+
+- **"Drizzle needs a conditional spread so an absent optional id doesn't write
+  NULL."** False. Measured on the repo's own `drizzle-orm@0.45.2` via
+  `db.insert(t).values(v).toSQL()` with no database at all: `{id: undefined}` and
+  a missing key BOTH emit `values (default, $1)`, and a mixed batch emits
+  `values ($1,$2), (default,$3)`. A plain `id: input.id` is safe.
+  **Technique:** `.toSQL()` settles an ORM-emission question in seconds with no
+  container, no migration and no test file — use it before writing a defensive
+  branch, and before a spec prescribes one.
+
+- **"The published RFC vector confirms our v5 (RFC 4122 §4.3)."** The vector is
+  real; the citation is not. RFC 4122 contains NO v5 test vector — its only
+  worked example (Appendix B) is a v3/MD5 value — and it is OBSOLETED
+  ("Obsoletes: 4122" in RFC 9562's header). `2ed6657d-e927-568b-95e1-2665a8aea6a2`
+  is RFC 9562 Appendix A.4, Figure 23. **Technique:** for a "checked against the
+  published example" claim, `curl` the RFC's .txt and `awk '/^A\.4\./,/^A\.5\./'`
+  it. The section that defines an ALGORITHM is almost never the section that
+  carries its VECTOR, and a citation to the former reads exactly like the latter.
+
+- **Own-footgun, promoted because it will recur:** piping a test run to `tail`
+  (`pnpm exec vitest … 2>&1 | tail -60`) reports the PIPELINE's exit status —
+  `tail`'s 0 — so a genuinely red suite came back "exited with code 0". The same
+  command unpiped returns 1. This is RF40's shape one machine over: there
+  `pnpm exec` collapsed a signal death to 1, here a pipe collapsed a failure to
+  0. **Technique:** never read a gate's exit status through a pipe. Redirect to a
+  file and `echo $?`, or use `PIPESTATUS`.
