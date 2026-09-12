@@ -88,7 +88,12 @@ export function summarize(
       caloriesRows,
       avgWatts: logbookWatts(wattsSeconds, wattsMeters),
     },
-    storedTierRows: inR.filter((r) => r.tier === "stored").length,
+    // James's ruling 17 (2026-09-12): the seam count covers ONLY monitor
+    // rows — a timer or manual row in the stored tier is what the rower
+    // typed, work by definition, never "predating work-only totals". The
+    // watts exclusion above is already pm5-only (it loops MACHINE rows).
+    storedTierRows: inR.filter((r) => r.source === "pm5" && r.tier === "stored")
+      .length,
   };
 }
 

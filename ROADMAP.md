@@ -713,7 +713,10 @@ pair (`machineSummary.totalRestMeters` stays provenance, unread); the
 avg-m/day divisor counts today (May 1 → 1); the test trend SHOWS points
 whose log was deleted; CALORIES & WATTS are rows of TOTALS, not a group;
 AVG WATTS EXCLUDES stored-tier rows (metres, time and sessions still count
-them, and the seam line says so); the phase's ONLY external oracle is James
+them, and the seam line says so) — and both the exclusion and the seam count
+cover ONLY `source = 'pm5'` rows in that tier (ruling 17, PR 1's fix round:
+a timer or manual row is what the rower typed, work by definition, never in
+k); the phase's ONLY external oracle is James
 comparing LIFETIME and THIS SEASON against his own Concept2 logbook page,
 once, by eye, on the TestFlight build (exit criterion below, RF11);
 `CLAUDE.md` names three standing agents, the `dba` described beside the

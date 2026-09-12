@@ -250,6 +250,11 @@ are absent (hard delete, `data.ts:1583`).
   watts of the range's average pace, never a mean of per-row watts.
   `undefined` (a dash) when either sum is 0. Metres, time and sessions still
   count `stored`-tier rows; the row's caption names the exclusion (§5).
+  **The exclusion and the `k ROWS PREDATE` count cover ONLY `source ===
+  "pm5"` rows in the stored tier (§14 ruling 17):** a timer or manual row
+  in that tier is what the rower typed — work by definition — so it is
+  never in k, and being outside the MACHINE column (ruling 1) it never
+  enters the watts figure either way.
 - **Time by type** = Σ `workSeconds` grouped by `workoutType` ∈ {AN, AT, O2,
   TR} plus NO TYPE for `null` — five buckets, one stacked bar in the STACK
   ORDER `AN · AT · O2 · TR · NO TYPE` (§14 ruling 13: the dataviz palette
@@ -1072,6 +1077,15 @@ the record.
     range the REST METRES / CALORIES / AVG WATTS rows are hidden and the
     MACHINE column keeps its own empty line reading `NO MONITOR ROWS YET`;
     at zero rows of any kind the filter bar is hidden too (§5, §8.5).
+17. **The seam count and the watts exclusion are monitor-only (PR 1 fix
+    round, 2026-09-12).** `k ROWS PREDATE WORK-ONLY TOTALS` counts only
+    `source === "pm5"` rows in the stored tier, and ruling 6's exclusion
+    reads the same set. A timer row (`LogSession.tsx` saves only
+    `timeSeconds`/`distanceMeters`, so it lands in the stored tier by
+    shape) and a manual row are what the rower typed: work by definition,
+    counted in every ALL figure and never in k. Implemented in
+    `aggregate.ts`'s `storedTierRows`; gated by a `source: "timer"` fixture
+    (§3.2).
 
 ## 15. Gate record (PR 0, at `93b91d66`)
 

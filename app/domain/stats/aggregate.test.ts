@@ -50,6 +50,39 @@ describe("summarize — the Gate 0 seed, today = 2026-09-12 (spec §8.5, invaria
     ).toBe(174);
   });
 
+  // James's ruling 17 (2026-09-12): the seam count and the watts exclusion
+  // cover ONLY `source === "pm5"` rows in the stored tier. A timer row is
+  // what the rower typed — `LogSession.tsx`'s save carries only
+  // timeSeconds/distanceMeters and no steps actuals, so it lands in the
+  // stored tier by shape, and it is work by definition: never in k. (It is
+  // not a MACHINE row either — ruling 1 — so the MACHINE column's watts
+  // figure does not see it; nothing on the surface excludes it.)
+  it("ruling 17: a timer row in the stored tier is never counted in k ROWS PREDATE, and counts in ALL metres and time", () => {
+    const timer = {
+      id: "T-timer",
+      loggedAt: "2026-09-10T12:00:00.000Z",
+      date: { y: 2026, m: 9, d: 10 },
+      source: "timer" as const,
+      workoutType: "AT" as const,
+      tier: "stored" as const,
+      workMeters: 2000,
+      workSeconds: 480,
+      restMeters: null,
+      restSeconds: null,
+      calories: null,
+    };
+    const s = summarize(
+      [...GATE0_ROWS, timer],
+      presetRange("all", GATE0_TODAY),
+    );
+    expect(s.storedTierRows).toBe(1); // still R1 alone
+    expect(s.all.meters).toBe(58752);
+    expect(s.all.sessions).toBe(14);
+    expect(s.machine.avgWatts).toBe(176);
+    const timerOnly = summarize([timer], presetRange("all", GATE0_TODAY));
+    expect(timerOnly.storedTierRows).toBe(0);
+  });
+
   it("an empty range: every total 0, sessions 0, avg watts undefined (a dash)", () => {
     const empty = summarize(GATE0_ROWS, {
       from: { y: 2030, m: 1, d: 1 },
