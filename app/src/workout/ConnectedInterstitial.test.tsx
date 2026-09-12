@@ -2633,7 +2633,7 @@ describe("targeted failures (Phase NF)", () => {
     const store = await import("../monitor/handoffStore");
     store.resetForTests();
     store.stageRetire(
-      [{ sessionKey: "2020-01-01T00:00:00.000Z", revision: 1 }],
+      { sessionKey: "2020-01-01T00:00:00.000Z", revision: 1 },
       TARGET_REQUEST.attemptId,
     );
     const current = session({ phase: "picking" });

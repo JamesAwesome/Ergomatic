@@ -22,9 +22,17 @@ import {
 import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
-import { MONITOR_RUN_KEY, type MonitorRun } from "./monitorRun";
+import type { MonitorRun } from "./monitorRun";
 import type { SeriesData } from "./seriesRecorder";
-import type { HandoffReceipt } from "./handoffStore";
+import { completeInterruptedRun } from "./monitorRun";
+import { loadRun, RUN_KEY, saveRun, type SessionRun } from "../session/run";
+// The durable key by name from the module that owns it (Phase MD PR 1).
+// A VALUE import here, unlike `store` below, on purpose: the key is a
+// constant string, so the load-time module instance this pulls in is never
+// the instance under test — every test still reads and writes the store
+// through the freshly re-imported `store`.
+import { MONITOR_RUN_KEY } from "./handoffStore";
+import type { HandoffReceipt, RetireReason } from "./handoffStore";
 
 type StoreModule = typeof import("./handoffStore");
 
@@ -481,10 +489,7 @@ describe("tombstones — post-retire refusal and masking", () => {
   it("a commit(create) for a retired key is refused retired, receipted, and the physical bytes are removed", () => {
     const run = freshRun(t0.toISOString());
     store.commit(run.startedAt, null, run);
-    store.retire(
-      [{ sessionKey: run.startedAt, revision: 0 }],
-      "monitor-discard",
-    );
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "monitor-discard");
 
     const resurrection = store.commit(
       run.startedAt,
@@ -513,7 +518,7 @@ describe("tombstones — post-retire refusal and masking", () => {
 
     expect(() =>
       store.retire(
-        [{ sessionKey: run.startedAt, revision: 0 }],
+        { sessionKey: run.startedAt, revision: 0 },
         "monitor-discard",
       ),
     ).not.toThrow();
@@ -534,17 +539,18 @@ describe("tombstones — post-retire refusal and masking", () => {
 describe("staged retire is keyed by attempt ID (Phase NF)", () => {
   const A = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
   const B = "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
-  it("a take under another attempt's ID is a PURE READ — the set stays staged for its owner", () => {
-    store.stageRetire([{ sessionKey: "k", revision: 1 }], A);
-    expect(store.takeStagedRetire(B)).toStrictEqual([]);
+  it("a take under another attempt's ID is a PURE READ — the entry stays staged for its owner", () => {
+    store.stageRetire({ sessionKey: "k", revision: 1 }, A);
+    expect(store.takeStagedRetire(B)).toBeNull();
     expect(store.stagedRetireAttemptId()).toBe(A);
-    expect(store.takeStagedRetire(A)).toStrictEqual([
-      { sessionKey: "k", revision: 1 },
-    ]);
+    expect(store.takeStagedRetire(A)).toStrictEqual({
+      sessionKey: "k",
+      revision: 1,
+    });
     expect(store.stagedRetireAttemptId()).toBeNull();
   });
   it("a discard under another attempt's ID is a no-op; under the owner's ID it discards and receipts", () => {
-    store.stageRetire([{ sessionKey: "k", revision: 1 }], A);
+    store.stageRetire({ sessionKey: "k", revision: 1 }, A);
     store.discardStagedRetire(B);
     expect(store.stagedRetireAttemptId()).toBe(A);
     receipts.length = 0;
@@ -552,12 +558,38 @@ describe("staged retire is keyed by attempt ID (Phase NF)", () => {
     expect(store.stagedRetireAttemptId()).toBeNull();
     expect(receipts.map((r) => r.kind)).toContain("staged-retire-discarded");
   });
+
+  // Harden lens 2 (coordinator addendum, Phase MD PR 1 Task 3): a door
+  // stages the WHOLE `HandoffEntry` it already holds (structural typing
+  // accepts it as a `HandoffRef` — typecheck stays silent), so the entry
+  // sitting in `stagedRetire` carries `run` (program, series, up to
+  // ~14400 samples). The receipt must still narrow to `{sessionKey,
+  // revision}` — every receipt is piped through `JSON.stringify` into the
+  // session ring, and leaking the whole record there on every
+  // replace/discard is the defect this test exists to catch.
+  it("stage-retire-replaced narrows a staged HandoffEntry to sessionKey/revision — the receipt never carries its run", () => {
+    const run = freshRun("2026-08-05T12:00:00.000Z");
+    store.commit(run.startedAt, null, run);
+    const entry = store.currentUnretired()!;
+
+    store.stageRetire(entry, A); // stages the WHOLE entry, `run` included
+    store.stageRetire({ sessionKey: "later-key", revision: 0 }, A); // replaces it
+
+    const receipt = receiptsOfKind("stage-retire-replaced").at(-1)!;
+    expect(receipt.discarded).toStrictEqual([
+      { sessionKey: entry.sessionKey, revision: entry.revision },
+    ]);
+    expect(Object.keys(receipt.discarded[0]!).sort()).toStrictEqual([
+      "revision",
+      "sessionKey",
+    ]);
+  });
 });
 
 describe("retire — sets, per-entry receipts, claim states, no-op", () => {
   it("no-op retire: a set naming a key the store has nothing current for emits NOTHING", () => {
     store.retire(
-      [{ sessionKey: "never-existed", revision: 0 }],
+      { sessionKey: "never-existed", revision: 0 },
       "monitor-discard",
     );
     expect(receipts).toStrictEqual([]);
@@ -579,7 +611,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     expect(keyA).not.toBe(keyB);
     receipts.length = 0;
 
-    store.retire([{ sessionKey: keyA, revision: 0 }], "monitor-discard");
+    store.retire({ sessionKey: keyA, revision: 0 }, "monitor-discard");
 
     // B SURVIVES, whole: still the current unretired entry, at its own
     // revision, still readable, still durable.
@@ -609,7 +641,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     const run = freshRun(t0.toISOString());
     store.commit(run.startedAt, null, run);
 
-    store.retire([{ sessionKey: run.startedAt, revision: 0 }], "today-discard");
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "today-discard");
 
     expect(receiptsOfKind("retire")).toStrictEqual([
       {
@@ -629,10 +661,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     store.commit(run.startedAt, null, run);
     store.claim(run.startedAt, 0);
 
-    store.retire(
-      [{ sessionKey: run.startedAt, revision: 0 }],
-      "manual-discard",
-    );
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "manual-discard");
 
     expect(receiptsOfKind("retire")[0]!.claimState).toBe("claimed");
     expect(receiptsOfKind("retire")[0]!.claimedRenderedRevision).toBe(0);
@@ -643,7 +672,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     store.commit(run.startedAt, null, run);
     store.claim(run.startedAt, 0);
 
-    store.retire([{ sessionKey: run.startedAt, revision: 0 }], "save-success");
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "save-success");
 
     expect(receiptsOfKind("retire")).toStrictEqual([
       {
@@ -670,7 +699,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     store.claim(run.startedAt, 0);
     store.commit(run.startedAt, 0, freshRun(run.startedAt)); // revision 1, unclaimed richer update
 
-    store.retire([{ sessionKey: run.startedAt, revision: 0 }], "save-success");
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "save-success");
 
     expect(receiptsOfKind("retire")).toStrictEqual([
       {
@@ -701,7 +730,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     store.commit(run.startedAt, 0, freshRun(run.startedAt)); // now revision 1
 
     store.retire(
-      [{ sessionKey: run.startedAt, revision: 0 }],
+      { sessionKey: run.startedAt, revision: 0 },
       "connect-guard-armed",
     );
 
@@ -720,7 +749,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
       "2026-08-05T14:00:00.000Z",
       "2026-08-05T15:00:00.000Z",
     ];
-    const reasons = [
+    const reasons: RetireReason[] = [
       "monitor-discard",
       "manual-discard",
       "today-discard",
@@ -730,7 +759,7 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
       const run = freshRun(keys[i]!);
       store.commit(run.startedAt, null, run);
       store.claim(run.startedAt, 0);
-      store.retire([{ sessionKey: run.startedAt, revision: 0 }], reasons[i]!);
+      store.retire({ sessionKey: run.startedAt, revision: 0 }, reasons[i]!);
     }
 
     const abandonedCount = receiptsOfKind("retire").filter(
@@ -747,18 +776,29 @@ describe("retire — sets, per-entry receipts, claim states, no-op", () => {
     const run = freshRun(t0.toISOString());
     store.commit(run.startedAt, null, run);
     store.claim(run.startedAt, 0);
-    store.retire([{ sessionKey: run.startedAt, revision: 0 }], "today-discard");
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "today-discard");
 
     // A DIFFERENT key, never claimed, retiring afterward proves the
     // claims map isn't leaking cross-key state.
     const other = freshRun("2026-08-06T12:00:00.000Z");
     store.commit(other.startedAt, null, other);
-    store.retire(
-      [{ sessionKey: other.startedAt, revision: 0 }],
-      "today-discard",
-    );
+    store.retire({ sessionKey: other.startedAt, revision: 0 }, "today-discard");
 
     expect(receiptsOfKind("retire")[1]!.claimState).toBe("unclaimed");
+  });
+
+  it("the reason is a closed union — a call site passing the entry it already holds needs no array and no cast", () => {
+    const run = freshRun("2026-08-05T12:00:00.000Z");
+    const created = store.commit(run.startedAt, null, run);
+    expect(created.accepted).toBe(true);
+    const entry = store.currentUnretired()!;
+    // Passing the whole HandoffEntry is what 12 of 13 production sites do
+    // after Phase MD PR 1 — structural typing accepts it as a HandoffRef.
+    store.retire(entry, "save-success");
+    expect(store.currentUnretired()).toBeNull();
+    const receipt = receiptsOfKind("retire").at(-1)!;
+    expect(receipt.reason).toBe("save-success");
+    expect(receipt.claimState).toBe("unclaimed");
   });
 });
 
@@ -827,7 +867,7 @@ describe("retryDurable (§1/§7) — never bumps revision", () => {
   it("returns null after the key has been retired", () => {
     const run = freshRun(t0.toISOString());
     store.commit(run.startedAt, null, run);
-    store.retire([{ sessionKey: run.startedAt, revision: 0 }], "today-discard");
+    store.retire({ sessionKey: run.startedAt, revision: 0 }, "today-discard");
 
     expect(store.retryDurable(run.startedAt)).toBeNull();
   });
@@ -970,10 +1010,7 @@ describe("hydration — outside render, §8", () => {
       store.commit(run.startedAt, null, run); // write lands — should clear the pending flag
 
       const removeSpy = vi.spyOn(Storage.prototype, "removeItem");
-      store.retire(
-        [{ sessionKey: run.startedAt, revision: 0 }],
-        "today-discard",
-      );
+      store.retire({ sessionKey: run.startedAt, revision: 0 }, "today-discard");
 
       // Exactly the entry's OWN removal — a still-set flag would fire the
       // sweep's own removeItem call first, then the entry's, i.e. twice.
@@ -1005,7 +1042,7 @@ describe("hydration — outside render, §8", () => {
       store.currentUnretired(); // current stays null — nothing for retire to "find"
 
       store.retire(
-        [{ sessionKey: "irrelevant-key", revision: 0 }],
+        { sessionKey: "irrelevant-key", revision: 0 },
         "today-discard",
       );
 
@@ -1020,9 +1057,18 @@ describe("hydration — outside render, §8", () => {
       store.currentUnretired();
       const removeSpy = vi.spyOn(Storage.prototype, "removeItem");
 
-      store.retire([], "today-discard");
-      store.retire([], "today-discard");
-      store.retire([], "today-discard");
+      store.retire(
+        { sessionKey: "irrelevant-key", revision: 0 },
+        "today-discard",
+      );
+      store.retire(
+        { sessionKey: "irrelevant-key", revision: 0 },
+        "today-discard",
+      );
+      store.retire(
+        { sessionKey: "irrelevant-key", revision: 0 },
+        "today-discard",
+      );
 
       expect(removeSpy).toHaveBeenCalledTimes(1);
     });
@@ -1035,7 +1081,12 @@ describe("hydration — outside render, §8", () => {
         throw new DOMException("boom", "SecurityError");
       });
 
-      expect(() => store.retire([], "today-discard")).not.toThrow();
+      expect(() =>
+        store.retire(
+          { sessionKey: "irrelevant-key", revision: 0 },
+          "today-discard",
+        ),
+      ).not.toThrow();
       expect(receiptsOfKind("storage-getter-error")).toStrictEqual([
         { kind: "storage-getter-error", operation: "remove" },
       ]);
@@ -1150,10 +1201,7 @@ describe("the storage getter SecurityError wrap (§1 WHATWG primary)", () => {
     });
 
     expect(() =>
-      store.retire(
-        [{ sessionKey: run.startedAt, revision: 0 }],
-        "today-discard",
-      ),
+      store.retire({ sessionKey: run.startedAt, revision: 0 }, "today-discard"),
     ).not.toThrow();
     expect(receiptsOfKind("storage-getter-error")).toContainEqual({
       kind: "storage-getter-error",
@@ -1213,7 +1261,7 @@ describe("the single-unretired-session invariant, end to end", () => {
     const first = freshRun("2026-08-05T12:00:00.000Z");
     store.commit(first.startedAt, null, first);
     store.retire(
-      [{ sessionKey: first.startedAt, revision: 0 }],
+      { sessionKey: first.startedAt, revision: 0 },
       "connect-guard-armed",
     );
 
@@ -1269,5 +1317,456 @@ describe("the single-unretired-session invariant, end to end", () => {
         existingKey: yesterday.startedAt,
       },
     ]);
+  });
+});
+
+// The raw durable read and the Connect guard, both moved into this module
+// by Phase MD PR 1 (spec §4). The point of these cases is the TIER each
+// one reads: `loadMonitorRun` answers from the BYTES and never from
+// `current`, and `connectGuardStage` answers from `current` and never from
+// the bytes — which is exactly the pair the old boolean parameter could
+// not express, since its caller computed one answer and passed it in
+// (P1-1). Every case below distinguishes the two tiers, so a reader wired
+// to the wrong one fails here rather than at a Connect door.
+describe("loadMonitorRun — the raw durable read the Today guard needs (Phase MD PR 1)", () => {
+  it("reads the DURABLE tier only: after a denied durable write the store still holds the entry, and loadMonitorRun says null (todayGuard.pin.test.ts binds the caller; this binds the callee)", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("denied");
+    });
+    const run = freshRun("2026-08-05T12:00:00.000Z");
+    const result = store.commit(run.startedAt, null, run);
+    expect(result.accepted && result.verdict).toBe("failed");
+    expect(store.currentUnretired()).not.toBeNull();
+    expect(store.loadMonitorRun()).toBeNull();
+  });
+
+  it("returns the parsed record for bytes the writer produced, and null for nothing", () => {
+    expect(store.loadMonitorRun()).toBeNull();
+    const run = freshRun("2026-08-05T12:00:00.000Z");
+    store.commit(run.startedAt, null, run);
+    expect(store.loadMonitorRun()).toStrictEqual(
+      JSON.parse(JSON.stringify(run)),
+    );
+  });
+
+  it("returns null for garbage JSON and LEAVES THE BYTES ALONE (§8: a read destroys nothing)", () => {
+    localStorage.setItem(store.MONITOR_RUN_KEY, "{not json");
+    expect(store.loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(store.MONITOR_RUN_KEY)).toBe("{not json");
+  });
+
+  it("returns null when the GETTER throws — denial reads as absent, nothing cleared, nothing thrown", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("denied", "SecurityError");
+    });
+    expect(() => store.loadMonitorRun()).not.toThrow();
+    expect(store.loadMonitorRun()).toBeNull();
+  });
+
+  it("strips a malformed `series` before validating, so the rest of a good record still loads", () => {
+    const run = freshRun("2026-08-05T12:00:00.000Z");
+    localStorage.setItem(
+      store.MONITOR_RUN_KEY,
+      JSON.stringify({ ...run, series: "not a series" }),
+    );
+    expect(store.loadMonitorRun()).toStrictEqual(
+      JSON.parse(JSON.stringify(run)),
+    );
+  });
+
+  it("connectGuardStage reads the store: a memory-only entry (denied write) still stages 'unlogged' — the P1-1 hole the old boolean parameter closed", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("denied");
+    });
+    const run = freshRun("2026-08-05T12:00:00.000Z");
+    store.commit(run.startedAt, null, run);
+    expect(store.connectGuardStage()).toBe("unlogged");
+  });
+
+  it("a denied GETTER is receipted, not silently read as absent — the same storage-getter-error hydration emits", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("denied", "SecurityError");
+    });
+    expect(store.loadMonitorRun()).toBeNull();
+    expect(receiptsOfKind("storage-getter-error")).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------
+// THE VALIDATOR'S OWN CASES, moved here from `monitorRun.test.ts` with the
+// code they test (Phase MD PR 1, spec §4/§8). Each one asserts a READER
+// behaviour — what `isMonitorRun`/`stripMalformedSeries` admit, reject, or
+// strip, and that a rejected record's BYTES survive the read (§8: a read
+// destroys nothing). The round-trips that only proved `JSON.stringify`
+// through the deleted `saveMonitorRun` did NOT come with them: byte
+// identity is Task 0's gate (`handoffStoreBytes.test.ts`), driven through
+// the real writer. Where a case needs a record on record, it commits
+// through `store.commit` — the producer production uses (RF24).
+// ---------------------------------------------------------------------
+
+/** Hand-built `SessionRun`, matching `run.test.ts`'s own field set — the
+ *  phone-timer record `connectGuardStage` reads FIRST. Deliberately not a
+ *  `buildRun` call: none of these cases depend on the engine's real phase
+ *  content. */
+function fakeSessionRun(completedAt: string | null): SessionRun {
+  return {
+    v: 1,
+    mode: "workout",
+    workoutId: "sr-workout-id",
+    title: "Some Session",
+    phases: [],
+    index: 0,
+    phaseStartedAt: t0.toISOString(),
+    pausedAt: null,
+    pausedTotalMs: 0,
+    actuals: {},
+    startedAt: t0.toISOString(),
+    completedAt,
+  };
+}
+
+describe("loadMonitorRun's validator: what it admits, and what it refuses without destroying", () => {
+  it("MONITOR_RUN_KEY and RUN_KEY are distinct storage keys — the two records never collide", () => {
+    expect(MONITOR_RUN_KEY).not.toBe(RUN_KEY);
+  });
+
+  // Folded from eleven near-identical `it`s in `monitorRun.test.ts`, one
+  // per field, that differed only in which field carried which bad value.
+  // Every field they covered is still here, and each case still asserts
+  // the bytes survive.
+  it.each([
+    ["the whole record is a bare number", "42"],
+    ["the whole record is JSON null", "null"],
+    ["the whole record is an array", "[]"],
+    ["the record is a bare {v:1} with no load-bearing fields", '{"v":1}'],
+  ])("returns null when %s, bytes intact", (_label, raw) => {
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
+    expect(store.loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
+  });
+
+  it.each([
+    ["v", 3],
+    ["workoutId", 5],
+    ["title", 5],
+    ["program", []],
+    ["actuals", {}],
+    ["deviceName", 5],
+    ["startedAt", 1],
+    ["completedAt", 5],
+    ["terminated", "true"],
+    ["mode", "corrupt"],
+    ["endedBy", "garbage"],
+    // A plausible-but-unlisted sixth close reason: the union is a CLOSED
+    // set at the validator, not a type-only contract.
+    ["endedBy", "reconnected"],
+    // Only the literal `true` means "a trace was sacrificed"; `false` is
+    // not a quieter way of saying no.
+    ["seriesDropped", false],
+    ["logSeed", "nope"],
+  ] as [string, unknown][])(
+    "returns null when `%s` has the wrong shape, and LEAVES THE BYTES ALONE",
+    (field, badValue) => {
+      const raw = JSON.stringify({
+        ...freshRun(t0.toISOString()),
+        [field]: badValue,
+      });
+      localStorage.setItem(MONITOR_RUN_KEY, raw);
+      expect(store.loadMonitorRun()).toBeNull();
+      expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
+    },
+  );
+
+  it.each([
+    ["program.intervals is an object, not an array", { intervals: {} }],
+  ])("returns null when %s, bytes intact", (_label, program) => {
+    const raw = JSON.stringify({ ...freshRun(t0.toISOString()), program });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
+    expect(store.loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
+  });
+
+  it("returns null when logSeed.steps is an object, not an array, bytes intact", () => {
+    const raw = JSON.stringify({
+      ...freshRun(t0.toISOString()),
+      logSeed: { steps: {}, paces: {} },
+    });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
+    expect(store.loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
+  });
+
+  it("an unknown version leaves BOTH its own bytes and a SessionRun (a separate key) untouched", () => {
+    const sessionRun = fakeSessionRun(null);
+    saveRun(sessionRun);
+    const raw = JSON.stringify({ ...freshRun(t0.toISOString()), v: 3 });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
+
+    expect(store.loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBe(raw);
+    expect(loadRun()).toStrictEqual(sessionRun);
+  });
+
+  // 7C Task 1 (spec §2: "a v1 record loads as today"). A hand-built v1 JSON
+  // string, not a `freshRun` run through `JSON.stringify` — the point is
+  // proving a record written by CODE THAT PREDATES `logSeed` (never having
+  // `v: 2` in scope, never having the key at all, not just "the field
+  // happens to be absent from an object built by today's code") still
+  // loads clean. The interval carries no `type` either: code predating
+  // `logSeed` predates `ProgramInterval.type` by two more phases, and a v1
+  // record carrying it is not a v1 record (RF3 — the only fixture in the
+  // repo claiming to be a pre-change record had once been quietly taught
+  // the post-change shape).
+  it("loads a v1 record with no logSeed field at all — no throw, no migration, simply no seed", () => {
+    const v1Json = JSON.stringify({
+      v: 1,
+      workoutId: "fl-workout-id",
+      title: "Filling Low",
+      program: {
+        intervals: [
+          {
+            kind: "time",
+            value: 480,
+            targetSplit: null,
+            displaySpm: null,
+            restSeconds: 0,
+          },
+        ],
+      },
+      actuals: [],
+      deviceName: "PM5 12345",
+      startedAt: t0.toISOString(),
+      completedAt: null,
+      terminated: false,
+    });
+    localStorage.setItem(MONITOR_RUN_KEY, v1Json);
+
+    const loaded = store.loadMonitorRun();
+
+    expect(loaded).not.toBeNull();
+    expect(loaded!.v).toBe(1);
+    expect(loaded!.logSeed).toBeUndefined();
+    // The interval really is missing `type`, and the record loaded anyway:
+    // the shallow program check is deliberate, stated out loud rather than
+    // left implicit in the fixture. What saves a rower from that gap is not
+    // the validator — it is that no reader of a loaded program consults
+    // `type`; `logDraft.test.ts`'s own legacy-record test pins that side.
+    expect(loaded!.program.intervals[0]).not.toHaveProperty("type");
+    expect(loaded).toStrictEqual(JSON.parse(v1Json));
+  });
+
+  // Every `endedBy` the union admits, through the REAL writer and back out
+  // of the durable bytes — the widening's own acceptance half, whose
+  // rejection half is the `it.each` above.
+  it.each([
+    "interrupted",
+    "finished",
+    "rower",
+    "link-lost",
+    "program-failed",
+    "program-dropped",
+  ] as const)("admits endedBy: %s, committed and read back whole", (value) => {
+    const run = freshRun(t0.toISOString(), {
+      completedAt: "2026-08-16T10:00:00.000Z",
+      terminated: value !== "finished",
+      endedBy: value,
+    });
+    expect(store.commit(run.startedAt, null, run).accepted).toBe(true);
+
+    const loaded = store.loadMonitorRun();
+    expect(loaded).toStrictEqual(JSON.parse(JSON.stringify(run)));
+    expect(loaded!.endedBy).toBe(value);
+  });
+
+  it("a record without endedBy loads unchanged — never-migrate: absent reads as normal completion", () => {
+    const run = freshRun(t0.toISOString(), {
+      completedAt: "2026-08-16T10:00:00.000Z",
+    });
+    store.commit(run.startedAt, null, run);
+
+    const loaded = store.loadMonitorRun();
+    expect(loaded!.endedBy).toBeUndefined();
+    expect(loaded).toStrictEqual(JSON.parse(JSON.stringify(run)));
+  });
+
+  // Exit criterion 5's own words: "legacy `interrupted` rows read back
+  // unchanged." A v1 record written before EITHER `logSeed` existed or the
+  // union widened — seeded as raw bytes, because no writer in this build
+  // produces a v1 record at all.
+  it("a v1 LEGACY record with endedBy: interrupted (predating both logSeed and the widened union) reads back byte-identical", () => {
+    const { logSeed: _drop, ...v1Shaped } = freshRun(t0.toISOString());
+    const legacy = {
+      ...v1Shaped,
+      v: 1 as const,
+      completedAt: "2026-08-16T10:00:00.000Z",
+      endedBy: "interrupted" as const,
+    };
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(legacy));
+
+    const loaded = store.loadMonitorRun();
+    expect(loaded).toStrictEqual(JSON.parse(JSON.stringify(legacy)));
+    expect(loaded!.endedBy).toBe("interrupted");
+    expect(loaded!.logSeed).toBeUndefined();
+  });
+
+  it("a malformed series.samples (an object, not an array) is stripped the same way a malformed series is, key intact", () => {
+    const run = freshRun(t0.toISOString());
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify({ ...run, series: { samples: {} } }),
+    );
+
+    const loaded = store.loadMonitorRun();
+
+    expect(loaded).not.toBeNull();
+    expect(loaded!.series).toBeUndefined();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).not.toBeNull();
+  });
+
+  it("a record whose series is ALREADY valid is untouched by the strip — only a malformed series is ever stripped", () => {
+    const withValid = freshRun(t0.toISOString(), { series: SERIES });
+    store.commit(withValid.startedAt, null, withValid);
+    expect(store.loadMonitorRun()!.series).toStrictEqual(SERIES);
+  });
+
+  // Door spec §5.1: `partial` is additive-optional, NO `v` bump. Starts at
+  // the WRITER, asserts after the READER (RF24).
+  it("round-trips a partial byte for byte, writer to reader — additive, no v bump", () => {
+    const run = freshRun(t0.toISOString(), {
+      partial: { intervalIndex: 1, meters: 312, seconds: 61 },
+    });
+    store.commit(run.startedAt, null, run);
+
+    const loaded = store.loadMonitorRun();
+    expect(loaded).toStrictEqual(JSON.parse(JSON.stringify(run)));
+    expect(loaded?.partial).toStrictEqual({
+      intervalIndex: 1,
+      meters: 312,
+      seconds: 61,
+    });
+  });
+
+  // Door spec §5.1: "the validator tolerates new fields" — the tolerance
+  // belongs to its general no-unknown-key-check policy, not to `partial`
+  // specifically. This leg proves that: a record carrying `partial` PLUS a
+  // key this build has never heard of still loads whole, unknown key
+  // included.
+  it("tolerates an unknown key beside partial — the tolerance is the validator's, not that field's", () => {
+    const raw = JSON.stringify({
+      ...freshRun(t0.toISOString()),
+      partial: { intervalIndex: 1, meters: 312, seconds: 61 },
+      someFutureField: "whatever",
+    });
+    localStorage.setItem(MONITOR_RUN_KEY, raw);
+
+    const loaded = store.loadMonitorRun();
+
+    expect(loaded).not.toBeNull();
+    expect(loaded?.partial).toStrictEqual({
+      intervalIndex: 1,
+      meters: 312,
+      seconds: 61,
+    });
+    expect((loaded as unknown as Record<string, unknown>).someFutureField).toBe(
+      "whatever",
+    );
+  });
+
+  it("admits a record carrying summary observations — v stays 2, no migration", () => {
+    const run = freshRun(t0.toISOString(), {
+      completedAt: "2026-08-16T10:00:00.000Z",
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 1200, workDistanceMeters: 5000 },
+    });
+    store.commit(run.startedAt, null, run);
+
+    const loaded = store.loadMonitorRun();
+    expect(loaded?.v).toBe(2);
+    expect(loaded).toStrictEqual(JSON.parse(JSON.stringify(run)));
+  });
+});
+
+// Phase 7B Task 2, spec §3. The predicate half of the Connect guard; the
+// staged confirm it feeds is `ConnectAction.test.tsx`'s.
+//
+// MOVED here with the function (Phase MD PR 1, spec §4). What changed with
+// the move: `connectGuardStage()` takes no parameter and reads the store
+// itself, so these cases no longer hand it a boolean derived from a
+// durable read — which means this block now covers the MEMORY-ONLY tier
+// too (the "denied write still stages 'unlogged'" case above), the gap
+// this describe used to disclaim and hand to `ConnectAction.test.tsx`.
+// The two `DISAGREES with anyLiveSession()` cases did NOT come with it:
+// their subject was deleted (spec §7), and the rule they pinned now lives
+// in `connectGuardStage`'s own doc comment.
+describe("connectGuardStage: the Connect door's lock", () => {
+  const finishedAt = "2026-08-05T13:00:00.000Z";
+
+  it("nothing on record: null — Connect proceeds with no ceremony", () => {
+    expect(store.connectGuardStage()).toBeNull();
+  });
+
+  it("a finished-but-unlogged SessionRun: 'unlogged' — the F5 record", () => {
+    saveRun(fakeSessionRun(finishedAt));
+    expect(store.connectGuardStage()).toBe("unlogged");
+  });
+
+  it("a live SessionRun: 'in-progress' — destroyed just as completely, lesser loss", () => {
+    saveRun(fakeSessionRun(null));
+    expect(store.connectGuardStage()).toBe("in-progress");
+  });
+
+  // A finished-but-unlogged `MonitorRun` (7C's prefill input) is exactly as
+  // real a record as the `SessionRun` case above, and the doors behind
+  // Connect retire it. The guard reads it.
+  it("a finished-but-unlogged MonitorRun (no SessionRun on record): 'unlogged' — 7C's prefill input", () => {
+    const run = freshRun(t0.toISOString(), { completedAt: finishedAt });
+    store.commit(run.startedAt, null, run);
+    expect(store.connectGuardStage()).toBe("unlogged");
+  });
+
+  it("a live MonitorRun (no SessionRun on record): 'unlogged' — dead-run truth: any MonitorRun visible at Connect's door is dead (the connected session lives on WorkoutDetail's surface, and reload/navigation tears it down), so completedAt === null here means interrupted, not running (F6 spec 2b, exit criterion 5)", () => {
+    const run = freshRun(t0.toISOString());
+    store.commit(run.startedAt, null, run);
+    expect(store.connectGuardStage()).toBe("unlogged");
+  });
+
+  // Pin, not a red-first case: `completedAt !== null` already mapped to
+  // "unlogged". Recorded because `completeInterruptedRun`'s stamp is the
+  // shape Today's own "end this interrupted session" door produces, and
+  // this guard must agree with it.
+  it("a MonitorRun stamped via completeInterruptedRun: 'unlogged' too", () => {
+    const stamped = completeInterruptedRun(
+      freshRun(t0.toISOString()),
+      new Date(finishedAt),
+    );
+    store.commit(stamped.startedAt, null, stamped);
+    expect(store.connectGuardStage()).toBe("unlogged");
+  });
+
+  it("a SessionRun on record wins over a MonitorRun — same descending-severity order handleStart already uses", () => {
+    saveRun(fakeSessionRun(finishedAt));
+    const run = freshRun(t0.toISOString());
+    store.commit(run.startedAt, null, run);
+    expect(store.connectGuardStage()).toBe("unlogged");
+  });
+
+  it("both records finished-but-unlogged: staged ONCE, not twice — a single ConnectGuardStage value, the SessionRun's own sentence", () => {
+    saveRun(fakeSessionRun(finishedAt));
+    const run = freshRun(t0.toISOString(), { completedAt: finishedAt });
+    store.commit(run.startedAt, null, run);
+    expect(store.connectGuardStage()).toBe("unlogged");
+  });
+
+  it("garbage in RUN_KEY falls through to the MonitorRun check (loadRun's own Resilience #5)", () => {
+    localStorage.setItem(RUN_KEY, "{{ not json");
+    const run = freshRun(t0.toISOString(), { completedAt: finishedAt });
+    store.commit(run.startedAt, null, run);
+    expect(store.connectGuardStage()).toBe("unlogged");
+  });
+
+  it("garbage in both keys: null — nothing at risk", () => {
+    localStorage.setItem(RUN_KEY, "{{ not json");
+    localStorage.setItem(MONITOR_RUN_KEY, "{{ not json");
+    expect(store.connectGuardStage()).toBeNull();
   });
 });

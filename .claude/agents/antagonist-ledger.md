@@ -6,6 +6,139 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## Phase MD PR 3 spec pass, 2026-09-12 (one `Sample` shape — TRIAD: stored shape)
+
+- **The zero-byte hinge HELD, attacked four ways.** `r: true | undefined` as a
+  required key is byte-identical to an absent key through `JSON.stringify`,
+  drizzle 0.45.2's `pg-core/columns/jsonb.js:22` `mapToDriverValue`, `pg`'s
+  `lib/utils.js:82` `prepareValue`, and the Concept2 POST (one integer,
+  `heart_rate.average`, never `samples`). `exactOptionalPropertyTypes` is
+  absent from all six tsconfigs. **Technique: follow the field to every
+  serializer by READING the driver's column class, not by trusting that
+  "it's all JSON".**
+- **Four in-memory witnesses see what the bytes do not** — and one was a
+  shipped assertion (`seriesRecorder.test.ts:1077`, `Object.keys` as a proxy
+  for zero bytes). Re-pointed at `JSON.stringify` output.
+- **`satisfies readonly (keyof T)[]` cannot catch a missing field** (`tsc`
+  probe: silent on the omission, `TS2741` on `Record<keyof T, true>`).
+- **Two exit criteria were green before the work started.** A one-line
+  string grep for a union prettier had wrapped across six lines; a
+  `readonly r` alternation matching `readonly reason`/`revision`/`run`.
+  **Technique: run every exit grep against the UNCHANGED tree first — a
+  criterion that already passes measures nothing.**
+- **The named precedent was the wrong file, and the right one was better.**
+  `partial.integration.test.ts` needs Docker; `data.test.ts:15` already
+  imports across `server/` → `src/` in the Docker-free `unit` project, and
+  there are four such files. **Technique: for "the one place X happens", grep
+  the pattern before quoting the comment that claims it.**
+- **A spec and its own census contradicted each other on PR 1's fixtures.**
+  "Do not touch the `SERIES` literal" vs a required key that makes it a
+  compile error. The invariant is the literal's OUTPUT, not its text.
+  **Technique: when an order says "do not touch X", ask whether the
+  invariant is X's text or X's output; the byte gate only ever saw the
+  output.**
+- **Attacked and could not break:** the zero-byte claim on all four
+  serializers; `exactOptionalPropertyTypes` unset across six configs;
+  `.includes` compiling against drizzle's `Writable<T>` tuple; no lint rule
+  restricting `domain/`; the seam test running DOM-free in `unit`;
+  `schema.test.ts`'s `EXHAUSTIVE` genuinely becoming tautological once
+  `EndedBy` derives.
+
+## Phase MD PR 2 delta pass, 2026-09-12 (lifecycle seam + publish `axes`)
+
+- **"The session listener's registration failure is recorded through the same
+  `trace?.record` the scan lease uses."** False, twice over. `trace` is a
+  `connect()` parameter, in scope at both sites — but the hook copies its
+  entries into the session ring and calls `complete()` (which snapshots
+  `entries.slice()` into the module-level `latest`) before the post-GATT site
+  runs, so a record added there reaches nothing; and `trace` is `undefined` on
+  every non-NFC connect. The instrument written to close an RF19 hole would
+  have re-created it. **Technique: check which side of the recorder's CLOSE
+  your new line sits on, not merely whether the recorder is in scope.** The
+  right recorder was the session ring `log`, already closed over by the same
+  handler forty lines down.
+- **"29 / 32 `vi.doMock` occurrences, exactly the ROADMAP's numbers."** Raw
+  line counts: three are PROSE explaining why the idiom exists, so the
+  statement counts are 26 / 29 and an exit criterion of `→ 0` could only be
+  met by deleting audit comments. Same shape the anchor pass blocked PR 1 on —
+  **the second instance in one phase, from a census that had itself corrected
+  the first.** Run the command the table prints, and subtract the comments.
+- **"The PR re-homes the ruling, gated by `grep -n NOT_A_MACHINE_REFUSAL`."**
+  That grep hits on main today. RF21: an exit check green before the work.
+  **Technique: run every exit-criterion grep against the CURRENT tree and
+  require it to be red.**
+- **"Publishing `linkLoss` is needed because the fifth site calls a different
+  function."** True but weak; the strong reason is that `linkLoss` is not
+  derivable from `axes` at all. **Technique: bundle the real derivation
+  (`node --experimental-strip-types`, the one `import type` stubbed) and
+  enumerate the whole input cross-product, then group by the published
+  tuple.** 15 tuples, exactly one collision: `lost|none|none|unknown` is
+  `pairing`+frameSilence (`inferred`) and `disconnected` (`reported`) — the
+  pair whose conflation is the Phase RN Gate 0 defect.
+- **"Tests then deliver lifecycle events by passing a function" (29 mocks
+  go).** Per `it`-block: 13 of 19 blocks also mock `../adapters/
+  monitorTransport` and keep `resetModules` + dynamic import; only 6 are
+  freed. Cause: `createTransport?: () => …` takes no arguments while the
+  default path calls `defaultTransport(livenessDepsRef.current)`.
+  **Technique: count the win per TEST BLOCK, not per occurrence — a mock
+  removed from a block that keeps another mock buys nothing.**
+- **"Run the flaky assertions 20× shuffled."** The hypothesised producer is
+  cross-test leakage, and running a filtered subset deletes the producers.
+  **Technique: before funding a flake hunt, check that the harness still
+  contains the mechanism being hunted.**
+- **Attacked and could not break:** the depsRef seam's production safety (only
+  an inline test closure diverges, via the `update({phase:"pairing"})` commit
+  between the sites); `vi.spyOn` on an ESM namespace under vitest 4.1.11
+  (probed); the `ConnectedPhase` allowlist surviving (`ConnectedSurface.tsx`
+  on a single line); `lifecycleAttempt.cancelled` as the guard under a
+  never-settling registrar; rider (b)'s comment-only fix.
+
+## Phase MD PR 1 delta pass, 2026-09-12 (the implementation plan — /harden lens 1)
+
+- **"`expect(source.split("loadMonitorRun(")).toHaveLength(2)` pins one raw
+  read in `Today.tsx`."** False: the assertion is RED against the file it was
+  written for. `grep -o 'loadMonitorRun(' src/today/Today.tsx | wc -l` → 4;
+  three are `` `loadMonitorRun()` `` inside `//` comments, and the PR's own
+  tasks keep all three. **Technique: a source-text COUNT over a `?raw` import
+  counts comments — strip them first (the repo's own `stripComments` in
+  `handoffStoreBoundary.test.ts`) or exclude backtick-preceded mentions, and
+  run the count before writing the expected value.** The tell: the plan's two
+  mutation expectations were the post-strip numbers, so the author reasoned
+  about calls and prescribed mentions. (The author's own paste-test found the
+  same defect in parallel and fixed it with the backtick-exclusion regex.)
+
+- **"Rewrite each `retire([…])` test call to the single-entry form."** No
+  target exists for four of them: `handoffStore.test.ts` passes an EMPTY set at
+  four sites inside the two tests that are the only gates on the
+  `durableMalformed` sweep the store's comment calls "previously permanently
+  unreachable". Both improvisations available to an implementer are wrong —
+  widening to `HandoffRef | null` un-closes the interface the task exists to
+  close; deleting them deletes the gate. Portable as
+  `{ sessionKey: "irrelevant-key", revision: 0 }` (the sweep precedes the
+  lookup; a sibling test already uses that form). **Technique: when a
+  signature narrows a collection to one element, grep the TESTS for the empty
+  and multi forms — production's shape is not the interface's shape.**
+
+- **A count the anchor pass itself vetted was wrong, and the plan caught it.**
+  Vetted ground said `RetireReason` was "closable over nine production
+  literals"; reading all 13 arguments individually gives **8**. **Technique:
+  vetted ground is vetted, not proven — a distinct-value count is one `sed -n`
+  away and should be re-run, not inherited.**
+
+- **Attacked and could not break:** the dynamic-import seeding helper
+  (verified against vendored vitest: `resetModules` clears
+  `promise`/`exports`/`evaluated` for every module, so a dynamic import inside
+  a statically-imported helper resolves fresh while its own static binding
+  stays stale); `retire`'s array→entry change (no production caller passes 0
+  or ≥2); `connectGuardStage()` self-reading (both callers hydrate via
+  `currentUnretired()` one statement earlier); the `parseDurableRun` fold (the
+  two hydration branches are verbatim identical); the lifetime table's
+  completeness (10 of 10 stateful bindings) with one cell correction — a
+  failed `safeRemoveItem` leaves bytes a relaunch rehydrates; Task 0's byte
+  gate (`commit`'s first `setItem` IS `performDurableWrite`'s); the 27-export
+  arithmetic; no new cycle via `session/run.ts`; the boundary gate's
+  test-file exemption.
+
 ## Spec-stage pass, 2026-08-15 (Phase CR2 spec 1, "numbers")
 
 - **"A capture-replay test can drive the real driver and exercise an

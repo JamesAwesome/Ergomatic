@@ -6,11 +6,12 @@ import type { NfcCapability } from "../adapters/nfcReader";
 import { loadRun } from "../session/run";
 import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
 import { mintAttemptId } from "./nfc/attemptIdMint";
-import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
 import {
   currentUnretired as currentUnretiredHandoff,
   discardStagedRetire as discardStagedRetireHandoff,
   stageRetire as stageRetireHandoff,
+  connectGuardStage,
+  type ConnectGuardStage,
 } from "./handoffStore";
 
 /**
@@ -64,13 +65,15 @@ import {
  * history — WILL be gone once a connected session gets underway, 6B's F5
  * incident's shape, once removed from the trigger by however long pairing
  * and programming take. `connectGuardStage()` reads that record directly
- * rather than through `anyLiveSession()`; its own doc comment quotes
- * ROADMAP M-1 on why, and that choice is what the "route it through
- * `anyLiveSession()`" mutation targets.
+ * rather than through a live-only collapsing helper (the deleted
+ * `anyLiveSession()` — `connectGuardStage`'s doc comment in
+ * `handoffStore.ts` keeps the anti-pattern's record); its own doc comment
+ * quotes ROADMAP M-1 on why, and that choice is what the "route it through
+ * `anyLiveSession()`" mutation used to target.
  *
  * **CORRECTED (Task 5 review fix round, 2026-08-30): the paragraph above
  * describes `SessionRun` truthfully but is no longer the whole picture
- * for a `MonitorRun` — read `stagedRetireSet`'s own doc comment
+ * for a `MonitorRun` — read `stagedRetire`'s own doc comment
  * (`handoffStore.ts`) for the full account.** The FIRST version of this
  * component's "Connect anyway" retired a staged `MonitorRun` entry
  * IMMEDIATELY, at that press — before BLE, before programming, before
@@ -182,12 +185,12 @@ export default function ConnectAction({
   }
 
   // Task 5 review fix round: stages the AUTHORIZATION in the STORE, not
-  // local state — `handoffStore.ts`'s own `stagedRetireSet` doc comment
+  // local state — `handoffStore.ts`'s own `stagedRetire` doc comment
   // has the full discipline (why the execution moved to the hook's
   // "armed" event, why this call is UNCONDITIONAL on every press, and —
   // added 2026-08-30 — why `ConnectedInterstitial.handleTryAgain` reaches
   // "armed" WITHOUT passing through here and correctly inherits the
-  // original press's set: Try Again is the same attempt on the same
+  // original press's entry: Try Again is the same attempt on the same
   // record, not a second authorization). This component no longer retires
   // anything itself — "Connect anyway" below goes straight to
   // `onProceed`, the shape this component shipped with before the retire
@@ -203,18 +206,8 @@ export default function ConnectAction({
       Number(run !== null && run.completedAt !== null) +
         Number(monitorEntry !== null),
     );
-    stageRetireHandoff(
-      monitorEntry !== null
-        ? [
-            {
-              sessionKey: monitorEntry.sessionKey,
-              revision: monitorEntry.revision,
-            },
-          ]
-        : [],
-      attemptId,
-    );
-    const staged = connectGuardStage(monitorEntry !== null);
+    stageRetireHandoff(monitorEntry, attemptId);
+    const staged = connectGuardStage();
     if (staged !== null) {
       setPending({ kind, attemptId });
       setStage(staged);

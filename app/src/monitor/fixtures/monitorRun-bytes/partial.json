@@ -1,0 +1,5 @@
+{
+  "name": "partial",
+  "verdict": "saved",
+  "bytes": "{\"v\":2,\"workoutId\":\"fl-bytes-fixture\",\"title\":\"Filling Low\",\"program\":{\"intervals\":[{\"type\":\"work\",\"kind\":\"distance\",\"value\":2000,\"targetSplit\":124,\"displaySpm\":22,\"restSeconds\":180},{\"type\":\"work\",\"kind\":\"distance\",\"value\":2000,\"targetSplit\":124,\"displaySpm\":22,\"restSeconds\":180},{\"type\":\"work\",\"kind\":\"distance\",\"value\":2000,\"targetSplit\":124,\"displaySpm\":22,\"restSeconds\":180},{\"type\":\"work\",\"kind\":\"distance\",\"value\":2000,\"targetSplit\":124,\"displaySpm\":22,\"restSeconds\":180}]},\"logSeed\":{\"steps\":[{\"label\":\"8:00 warm-up\",\"kind\":\"work\"}],\"paces\":{}},\"actuals\":[],\"deviceName\":\"PM5 430123456\",\"startedAt\":\"2026-08-05T12:00:00.000Z\",\"completedAt\":\"2026-08-05T12:20:00.000Z\",\"terminated\":false,\"endedBy\":\"rower\",\"partial\":{\"intervalIndex\":0,\"meters\":250,\"seconds\":60.5}}"
+}

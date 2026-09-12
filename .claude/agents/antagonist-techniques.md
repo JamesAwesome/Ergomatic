@@ -129,6 +129,22 @@ toolkit, not a history.
   enumerate the real corpus and compare the new worst case against the worst case
   ALREADY SHIPPING, rather than measuring one example in a browser.
 
+- **"Making an optional field a required key valued `true | undefined` is
+  byte-free, so nothing existing changes."** The bytes held under every
+  serializer (`JSON.stringify`, drizzle's `jsonb.mapToDriverValue`, `pg`'s
+  `prepareValue` — the last two both being `JSON.stringify` again), but four
+  IN-MEMORY witnesses distinguish present-undefined from absent and one of
+  them was a shipped test: `Object.keys`, `"k" in o`, `hasOwnProperty`, and
+  vitest's `toStrictEqual`. For a "costs zero bytes" claim, enumerate the
+  SERIALIZERS and the in-memory KEY WITNESSES separately, and re-point any
+  proxy assertion at `JSON.stringify` output.
+- **"`as const satisfies readonly (keyof T)[]` pins the field list against
+  drift."** False in the direction that matters: `satisfies` on an array
+  checks that each member is assignable, never that every union member
+  appears; only `Record<keyof T, true>` errors (`TS2741`). To test an
+  exhaustiveness pin, delete one member and run `tsc` — silence means
+  decoration (RF21).
+
 ## Attacked and NOT broken
 
 - **Is the swipe handler or its CSS defective?** No, not as Chromium implements
@@ -161,6 +177,26 @@ toolkit, not a history.
    value.
 10. **Diff provenance tags across peer artifacts**, not just values. Confidence
     is what gets inherited downstream, and it inflates at every hop.
+
+11. **A source-text count assertion counts the comments too.** `split("foo(")`
+    over a `?raw` import sees every backticked `foo()` in a doc comment. Strip
+    comments (or exclude backtick-preceded mentions) and RUN the count before
+    writing the expected value — a plan that predicts the post-strip number
+    while prescribing the raw form is telling you which one it reasoned about.
+12. **When a signature narrows a collection to one element, grep the TESTS for
+    the EMPTY and MULTI forms.** Production may only ever pass one; a test is
+    where the degenerate case lives, and four `retire([], …)` calls were the
+    only gate on a sweep the code's own comment calls "previously permanently
+    unreachable".
+
+13. **Ask whether the recorder is still OPEN at the line you are adding to it.**
+    A diagnostic can be in lexical scope and still write nowhere: this repo's
+    connection-attempt trace is drained into the session ring and `complete()`d
+    partway through `connect()`, so a `trace?.record` added below that point
+    reaches neither the ring nor the published snapshot — and is a no-op on
+    every attempt that carried no trace. For any "records X through the same
+    recorder as Y", find Y's line, find the recorder's CLOSE, and check which
+    side of it your line is on.
 
 ## Things attacked and found sound
 

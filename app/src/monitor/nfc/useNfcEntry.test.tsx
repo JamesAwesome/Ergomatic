@@ -51,7 +51,7 @@ describe("useNfcEntry", () => {
     const { useNfcEntry } = await import("./useNfcEntry");
     const { result } = renderHook(() => useNfcEntry());
     stageRetire(
-      [{ sessionKey: "2026-09-06T00:00:00.000Z", revision: 0 }],
+      { sessionKey: "2026-09-06T00:00:00.000Z", revision: 0 },
       ATTEMPT,
     );
     const onInlineError = vi.fn();
@@ -101,7 +101,7 @@ describe("useNfcEntry", () => {
     const { useNfcEntry } = await import("./useNfcEntry");
     const { result, unmount } = renderHook(() => useNfcEntry());
     stageRetire(
-      [{ sessionKey: "2026-09-06T00:00:00.000Z", revision: 0 }],
+      { sessionKey: "2026-09-06T00:00:00.000Z", revision: 0 },
       ATTEMPT,
     );
     const onInlineError = vi.fn();

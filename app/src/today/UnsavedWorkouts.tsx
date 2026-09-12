@@ -96,16 +96,7 @@ function UnsavedRow({
     }
     discard.disarm();
     if (recording.kind === "timer") clearSelectedTimer(recording.run, draft);
-    else
-      retireHandoff(
-        [
-          {
-            sessionKey: recording.entry.sessionKey,
-            revision: recording.entry.revision,
-          },
-        ],
-        "today-discard",
-      );
+    else retireHandoff(recording.entry, "today-discard");
     onDismiss();
   }
   function handleReview() {

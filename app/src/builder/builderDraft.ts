@@ -1,4 +1,5 @@
 import type { BuilderForm } from "./builderState.js";
+import { isPlainRecord } from "../isPlainRecord";
 
 /** localStorage key for the builder draft — one slot, same discipline as
  *  session/draft.ts's DRAFT_KEY. Exported so tests never hardcode it. */
@@ -42,10 +43,6 @@ export function formFingerprint(f: BuilderForm): string {
       r.rest,
     ]),
   ]);
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // Loose on purpose, like session/draft.ts's isSessionDraft: enough shape to

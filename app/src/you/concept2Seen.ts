@@ -8,7 +8,7 @@
  * You unmounts on every trip to `/you/concept2` and back and every visit is a
  * first-ever read. Per-mount evidence had a shorter lifetime than the fact it
  * was asked to carry (RF27). `localStorage` is the store this WebView already
- * writes from (`monitor/monitorRun.ts`'s `saveMonitorRun`) and it survives
+ * writes from (`monitor/handoffStore.ts`'s `commit`) and it survives
  * unmount, route change, backgrounding and relaunch (I-E). Availability floor:
  * `localStorage` is part of WebKit's WKWebView on every iOS this app targets
  * (`IPHONEOS_DEPLOYMENT_TARGET = 15.0`, `App.xcodeproj/project.pbxproj`);
@@ -39,7 +39,8 @@
  * Bounded: the only cell it feeds (row 2b) draws a door whose screen re-reads
  * the server, and I-C retries the clear on every successful read. Named
  * rather than hidden; `concept2Seen.test.ts` pins both directions. This is
- * the opposite of RF25/AUD-016's `saveMonitorRun`, where a swallowed write
+ * the opposite of RF25/AUD-016's old `saveMonitorRun` (deleted in Phase MD
+ * PR 1; the store's `commit` reports its verdict instead), where a swallowed write
  * let the caller proceed as if it had succeeded; here the caller's next
  * render simply re-reads storage.
  *

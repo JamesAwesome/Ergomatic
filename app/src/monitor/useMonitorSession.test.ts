@@ -41,7 +41,8 @@ import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
 import { releasingSchedule } from "../test/statusSubscriptions";
-import { loadMonitorRun, MONITOR_RUN_KEY, type MonitorRun } from "./monitorRun";
+import type { MonitorRun } from "./monitorRun";
+import { loadMonitorRun, MONITOR_RUN_KEY } from "./handoffStore";
 import { loadLastDevice, saveLastDevice } from "./lastDevice";
 import {
   resetForTests as resetHandoffStore,
@@ -3799,10 +3800,10 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // What `ConnectAction.tsx`'s own `handleConnect` would have staged at
     // press time, well before this hook's own connect()/program() ever
     // ran — the store, not a prop, is how that authorization survives to
-    // reach the hook (see `handoffStore.ts`'s own `stagedRetireSet` doc
+    // reach the hook (see `handoffStore.ts`'s own `stagedRetire` doc
     // comment).
     stageRetireForTest(
-      [{ sessionKey: leftoverKey, revision: 0 }],
+      { sessionKey: leftoverKey, revision: 0 },
       STAGED_ATTEMPT,
     );
 
@@ -3822,7 +3823,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
 
     // ARMED HAS FIRED: retired, consumed, receipted.
     expect(currentUnretiredHandoffForTest()).toBeNull();
-    expect(takeStagedRetireForTest(STAGED_ATTEMPT)).toStrictEqual([]);
+    expect(takeStagedRetireForTest(STAGED_ATTEMPT)).toBeNull();
     const entries = JSON.parse(result.current.exportLog()) as {
       kind: string;
       detail: string;
@@ -3847,7 +3848,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     expect(created.accepted).toBe(true);
     const createdRevision = created.accepted ? created.revision : -1;
     stageRetireForTest(
-      [{ sessionKey: leftoverKey, revision: 0 }],
+      { sessionKey: leftoverKey, revision: 0 },
       STAGED_ATTEMPT,
     );
 
@@ -3892,7 +3893,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     const leftoverKey = new Date(t0.getTime() - 3_600_000).toISOString();
     commitHandoffForTest(leftoverKey, null, fakeLeftoverRun(leftoverKey));
     stageRetireForTest(
-      [{ sessionKey: leftoverKey, revision: 0 }],
+      { sessionKey: leftoverKey, revision: 0 },
       STAGED_ATTEMPT,
     );
 
@@ -3920,7 +3921,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // LATER, unrelated Connect attempt's own "armed" must not inherit it
     // (rev-3 antagonist: "a set staged for attempt 1 must not authorize
     // attempt 2's retire").
-    expect(takeStagedRetireForTest(STAGED_ATTEMPT)).toStrictEqual([]);
+    expect(takeStagedRetireForTest(STAGED_ATTEMPT)).toBeNull();
     // F-4 (Task 5 re-review, 2026-08-30): the discard itself is receipted
     // ("the module receipts rarer things") — distinct from a `retire`
     // receipt, since nothing was actually removed from either tier here.
@@ -3949,7 +3950,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     const leftoverKey = new Date(t0.getTime() - 3_600_000).toISOString();
     commitHandoffForTest(leftoverKey, null, fakeLeftoverRun(leftoverKey));
     stageRetireForTest(
-      [{ sessionKey: leftoverKey, revision: 0 }],
+      { sessionKey: leftoverKey, revision: 0 },
       STAGED_ATTEMPT,
     );
 
@@ -3998,7 +3999,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // would wrongly treat as fair game.
     const unrelatedKey = new Date(t0.getTime() - 7_200_000).toISOString();
     commitHandoffForTest(unrelatedKey, null, fakeLeftoverRun(unrelatedKey));
-    expect(takeStagedRetireForTest(STAGED_ATTEMPT)).toStrictEqual([]); // nothing staged
+    expect(takeStagedRetireForTest(STAGED_ATTEMPT)).toBeNull(); // nothing staged
 
     const { result, fake } = harness({
       program: ONE_INTERVAL,
@@ -4222,7 +4223,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // §5's termini). `retire` tombstones unconditionally, and tombstones
     // are process-scoped, so the key is now permanently un-creatable for
     // the life of this process.
-    retireHandoffForTest([{ sessionKey: key!, revision: 0 }], "today-discard");
+    retireHandoffForTest({ sessionKey: key!, revision: 0 }, "today-discard");
     expect(currentUnretiredHandoffForTest()).toBeNull();
 
     // Session 2 — a fresh hook on the SAME clock, so the SAME key — is the
@@ -4395,14 +4396,15 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     expect(result.current.holdError).toBeNull();
 
     // THE RACE: retire the key directly through the store WHILE the burst
-    // hold is still open — the shape a Save/Discard produces once Task 4
-    // routes those doors through `retire()` instead of the legacy
-    // `clearMonitorRun()` (ROADMAP's own AUD-016 open condition on Task 4).
+    // hold is still open — the shape a Save/Discard produces now that
+    // Task 4 routes those doors through `retire()` instead of the legacy,
+    // since-deleted `clearMonitorRun()` (ROADMAP's own AUD-016 open
+    // condition, closed by Task 4).
     const current = currentUnretiredHandoffForTest();
     expect(current).not.toBeNull();
     retireHandoffForTest(
-      [{ sessionKey: current!.sessionKey, revision: current!.revision }],
-      "test-simulated-save-while-burst-open",
+      { sessionKey: current!.sessionKey, revision: current!.revision },
+      "manual-discard",
     );
 
     // THE SUMMARY ARRIVES: the writer gate accepts (it still reads
@@ -4944,18 +4946,19 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
 
   it("(d) THE RESURRECTION RACE, RETARGETED (hand-off store design spec §1, plan Task 3): the run is RETIRED (tombstoned) during the linger — the burst's own commit is refused by the store, and nothing reappears in storage", async () => {
     // RETARGETED from `clearMonitorRun()` (the legacy raw key-removal
-    // `LogSession.tsx`/`Today.tsx` still call today, Tasks 4/5's own scope)
-    // to `handoffStore.retire()` — the mechanism THIS hook's own commits
-    // actually answer to (spec §1's tombstone). `clearMonitorRun()` alone no
-    // longer has this effect under the new design: `appendSummaryObservations`
+    // `LogSession.tsx`/`Today.tsx` called before Phase MD PR 1, Tasks 4/5's
+    // own scope) to `handoffStore.retire()` — the mechanism THIS hook's own
+    // commits actually answer to (spec §1's tombstone). `clearMonitorRun()`
+    // alone never had this effect under the new design: `appendSummaryObservations`
     // is pure and builds on the hook's own `runRef.current`, never a
     // storage re-read (`stillLive` is deleted), so a raw physical removal
-    // the store's own bookkeeping never hears about would NOT stop the
-    // hook's own late-burst commit from landing (a real, but TEMPORARY,
-    // gap this branch's own sequencing closes: Task 4 retargets
+    // the store's own bookkeeping never heard about would not have stopped
+    // the hook's own late-burst commit from landing (a real, but TEMPORARY,
+    // gap this branch's own sequencing closed: Task 4 retargeted
     // `LogSession.tsx`'s save-success/monitor-discard onto
     // `handoffStore.retire()`, at which point this exact door produces the
-    // tombstone this test now simulates directly).
+    // tombstone this test now simulates directly — the gap is closed, not
+    // hypothetical).
     const driverTimer = manualSchedule();
     const burstTimer = manualSchedule();
     const boundaryWithBurst: FakeBoundaryEvent = {
@@ -4998,8 +5001,8 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     const staged = currentUnretiredHandoffForTest();
     expect(staged).not.toBeNull();
     retireHandoffForTest(
-      [{ sessionKey: staged!.sessionKey, revision: staged!.revision }],
-      "test-simulated-discard",
+      { sessionKey: staged!.sessionKey, revision: staged!.revision },
+      "monitor-discard",
     );
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
 
@@ -9296,7 +9299,9 @@ describe("useMonitorSession: exportLog", () => {
 // Phase LT spec 2, Task 2. `docs/superpowers/specs/
 // 2026-08-19-series-capture-design.md` §2 (the flush policy), §3 (the
 // localStorage sacrifice — this file's own share of it lives in
-// `monitorRun.test.ts`, inside `saveMonitorRun`'s own catch), §4 (S1/S6).
+// `handoffStore.test.ts`'s durable-bookkeeping suite, driving
+// `performDurableWrite`'s sacrifice, the deleted `saveMonitorRun`'s own
+// catch before Phase MD PR 1), §4 (S1/S6).
 // ---------------------------------------------------------------------------
 
 /** A hand-driven stand-in for `setInterval`, matching `manualSchedule()`'s
@@ -15882,7 +15887,7 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
 
   it("F7: a set staged under attempt A is NOT consumed by a zero-argument connect()'s armed event — it is discarded, and A's records are never retired", async () => {
     const leftoverKey = "2020-01-01T00:00:00.000Z";
-    stageRetireForTest([{ sessionKey: leftoverKey, revision: 0 }], ATTEMPT);
+    stageRetireForTest({ sessionKey: leftoverKey, revision: 0 }, ATTEMPT);
     const { result, fake } = harness({
       program: ONE_INTERVAL,
       events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],

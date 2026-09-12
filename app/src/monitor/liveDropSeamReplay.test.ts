@@ -65,7 +65,7 @@ import { buildGeneralStatusBytes } from "../../domain/monitor/pm5/statusFrames.j
 import { GENERAL_STATUS_UUID } from "../../domain/monitor/pm5/uuids.js";
 import type { Transport } from "../../domain/monitor/types.js";
 import type { RunIdentity } from "./useMonitorSession";
-import { loadMonitorRun } from "./monitorRun";
+import { loadMonitorRun } from "./handoffStore";
 import {
   parseRecording,
   type ParsedRecording,

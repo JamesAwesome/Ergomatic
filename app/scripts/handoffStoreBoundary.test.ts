@@ -107,29 +107,23 @@ const STORE_FILE = "src/monitor/handoffStore.ts";
 // Non-test files under `src/` permitted to write/remove the durable key
 // directly, OUTSIDE the store.
 //
-// **NARROWED at the final fix round (2026-08-30; antagonist §10 audit,
-// F-4a).** This used to be a wholesale skip: `monitorRun.ts` was exempt as
-// a FILE, so a brand-new raw `localStorage.setItem(MONITOR_RUN_KEY, ...)`
-// added anywhere in it — including in some future function that is not one
-// of the two legacy writers — produced exactly zero signal from this gate.
-// The file is still skipped by the offender loop (it genuinely holds the
-// only sanctioned raw writes left), but the dedicated "monitorRun.ts holds
-// EXACTLY the three sanctioned raw key operations" test below pins HOW
-// MANY it holds, so a new one moves the number and goes red.
+// **EMPTY since Phase MD PR 1 (2026-09-12).** HISTORY, because the shape
+// this list used to have is the shape a future exemption would take
+// again: `monitorRun.ts` was exempt as a FILE (a wholesale skip), then
+// NARROWED at the 2026-08-30 fix round (antagonist §10 audit, F-4a) to a
+// count — the file stayed skipped by the offender loop, and a dedicated
+// test pinned how many raw operations it held. Phase MD PR 1 moved the
+// persistence half into the store, so the count is now ZERO and the
+// dedicated test below asserts exactly that: no `localStorage`, no key
+// identifier, no key literal. Nothing under `src/` outside the store may
+// touch the key at all.
 const SRC_ALLOWLIST = new Set<string>([
-  // Legacy `saveMonitorRun`/`clearMonitorRun` (Task 6 close-out,
-  // 2026-08-30): ZERO production callers on this branch, confirmed via
-  // `grep -rln "saveMonitorRun(\|clearMonitorRun(" src --include=*.ts
-  // --include=*.tsx | grep -v '\.test\.'` — every production door now
-  // commits/retires through `handoffStore.ts` (Tasks 3-5). Kept, not
-  // deleted: the dozens of test files above call `saveMonitorRun`/
-  // `clearMonitorRun` directly as their own established fixture-seeding
-  // convention, independent of the store's CAS/tombstone discipline —
-  // rewriting all of them onto the store is a materially larger, different
-  // task than this close-out's own scope (the close-out brief's own item 4
-  // sanctions exactly this "leave + disclose" shape for dead code that
-  // would otherwise drag in unrelated churn).
-  "src/monitor/monitorRun.ts",
+  // Empty since Phase MD PR 1: the legacy writers (`saveMonitorRun`,
+  // `clearMonitorRun`) are deleted and `monitorRun.ts` holds no storage
+  // call at all, so the one entry this list ever carried is gone. An entry
+  // added here re-opens the invariant this gate closes (RF21) — a
+  // production file that needs the durable key needs the store, not an
+  // exemption.
 ]);
 
 // e2e specs permitted to seed/clear the key directly (an e2e file cannot
@@ -177,17 +171,20 @@ const INDIRECT_CALL = /localStorage\.(setItem|removeItem)\(\s*key\b/;
 
 /**
  * Task 6 fix round, M-2 (reviewer finding, reproduced 4x across Tasks
- * 4-5's own record before this gate existed): `monitorRun.ts`'s exported
- * legacy `saveMonitorRun`/`clearMonitorRun` (allowlisted above precisely
- * BECAUSE they hold the only raw key writes left outside the store) are
- * themselves a realistic bypass — any NEW production door calling one of
- * them writes/removes the durable key exactly as directly as a raw
- * `localStorage.setItem` would, and the checks above give it no signal at
- * all, since neither function's own call site ever mentions `setItem`,
- * `removeItem`, `MONITOR_RUN_KEY`, or the literal string. `\b` on both
- * sides so this matches a bare call (`saveMonitorRun(x)`) without also
- * matching an unrelated identifier that merely CONTAINS one of these
- * names as a substring.
+ * 4-5's own record before this gate existed): `monitorRun.ts` used to
+ * export the legacy `saveMonitorRun`/`clearMonitorRun`, which held the
+ * only raw key writes left outside the store, and a NEW production door
+ * calling either one would have written/removed the durable key exactly
+ * as directly as a raw `localStorage.setItem` — with no signal from the
+ * checks above, since neither function's own call site ever mentions
+ * `setItem`, `removeItem`, `MONITOR_RUN_KEY`, or the literal string.
+ * **Phase MD PR 1 deleted both functions**, so this pattern now guards
+ * against a RE-ADDED writer rather than a surviving one: it is kept
+ * precisely because the names are the ones a future change would reach
+ * for, and its detector self-test below exercises it against synthetic
+ * source rather than the tree. `\b` on both sides so this matches a bare
+ * call (`saveMonitorRun(x)`) without also matching an unrelated
+ * identifier that merely CONTAINS one of these names as a substring.
  */
 const LEGACY_WRITER_CALL = /\b(saveMonitorRun|clearMonitorRun)\s*\(/;
 
@@ -519,46 +516,39 @@ describe("hand-off store module boundary (spec §1/§10 row 11)", () => {
     expect(offenders).toStrictEqual([]);
   });
 
-  // ANT-F4a: the allowlist's own escape hatch, closed with a COUNT.
-  // `monitorRun.ts` holds exactly three raw key operations today, and all
-  // three belong to the two legacy writers the allowlist comment names:
-  //   - `saveMonitorRun`   — two `setItem` calls (the full write, then the
-  //                          series-sacrifice retry; see its own comment)
-  //   - `clearMonitorRun`  — one `removeItem`
-  // Counted against the CURRENT tree, not copied from a brief. A fourth
-  // raw operation added to this file — a new writer, or a re-added
-  // self-heal on the read path (which is exactly what the final fix round
-  // REMOVED from `loadMonitorRun`) — moves this number and fails here.
-  // Deliberately a count rather than an enumeration of enclosing function
-  // names: this file is scanned as text (no TypeScript AST available in a
-  // vitest `unit` project without pulling a parser in for one assertion),
-  // and a count is the strongest sound claim text alone supports.
-  it("monitorRun.ts holds EXACTLY the three sanctioned raw key operations — a new one moves this number", () => {
+  // Phase MD PR 1: the persistence half moved into the store, so the
+  // pure-builder module must contain NO storage access at all — not the
+  // key, not the identifier, not the global. Stronger than the old count
+  // of three, and a count of zero is the one value a re-added writer
+  // cannot hide behind.
+  it("monitorRun.ts holds ZERO storage references — no `localStorage`, no MONITOR_RUN_KEY, no key literal (Phase MD PR 1)", () => {
     const source = stripComments(
       readFileSync(join(APP_ROOT, "src/monitor/monitorRun.ts"), "utf8"),
     );
-    const matches = source.match(
-      new RegExp(
-        `localStorage\\.(setItem|removeItem)\\(\\s*${KEY_IDENTIFIER}\\b`,
-        "g",
-      ),
+    expect(source).not.toMatch(/localStorage/);
+    expect(source).not.toMatch(new RegExp(`\\b${KEY_IDENTIFIER}\\b`));
+    expect(source).not.toContain(KEY_LITERAL);
+  });
+
+  // The store is skipped by the offender loop, so its OWN raw operations
+  // need a count the way monitorRun.ts's used to: every localStorage call
+  // in the store goes through the three safe* wrappers, and nothing else.
+  it("handoffStore.ts touches localStorage ONLY inside safeGetItem/safeSetItem/safeRemoveItem — three call sites, one per wrapper", () => {
+    const source = stripComments(
+      readFileSync(join(APP_ROOT, STORE_FILE), "utf8"),
     );
-    expect(matches).toHaveLength(3);
-    // ...and they are the operations the allowlist claims: two writes and
-    // one removal, not three writes or three removals. A raw removal
-    // added on a read path would otherwise be able to hide behind a
-    // deleted write and keep the total at three.
-    expect(matches!.filter((m) => m.includes("setItem"))).toHaveLength(2);
-    expect(matches!.filter((m) => m.includes("removeItem"))).toHaveLength(1);
-    // The offender loop skips this file, so the count above is its only
-    // gate — and the count matches the IDENTIFIER form only. A raw write
-    // here against the string literal would evade both; assert that form
-    // to zero explicitly.
-    expect(
-      source.match(
-        /localStorage\.(setItem|removeItem)\(\s*["'`]ergomatic\.monitorRun["'`]/g,
-      ),
-    ).toBeNull();
+    // Every mention, not only the three method forms — `.clear()`, a bracket
+    // access or an alias would evade a method-name count (lens 2).
+    expect(source.match(/\blocalStorage\b/g)).toHaveLength(3);
+    // …and each mention is the one inside its wrapper, so a raw call that
+    // replaced a wrapper's own keeps the count and still fails.
+    expect(source).toContain("safeStorageOp(() => localStorage.getItem(key))");
+    expect(source).toContain(
+      "safeStorageOp(() => localStorage.setItem(key, value))",
+    );
+    expect(source).toContain(
+      "safeStorageOp(() => localStorage.removeItem(key))",
+    );
   });
 
   // §1's SECOND clause, checked at last (ANT-F4b): "Nothing else writes

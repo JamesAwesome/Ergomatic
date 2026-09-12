@@ -1613,8 +1613,9 @@ test.describe("Phase LL Task 3: recovery — a failed program() disposes, and Tr
 // Series capture spec (2026-08-19), Task 4 — S3's REAL forced-quota leg
 // (§4 S3: "the e2e probe fills storage to force a REAL QuotaExceededError
 // once, asserting the run survives with `seriesDropped`"). The mocked-
-// throw unit leg (`monitorRun.test.ts`'s own `saveMonitorRun` suite)
-// proves the CATCH/RETRY logic; this proves the premise underneath it —
+// throw unit leg (`handoffStore.test.ts`'s durable-bookkeeping suite,
+// driving `performDurableWrite`'s sacrifice) proves the CATCH/RETRY logic;
+// this proves the premise underneath it —
 // that a real browser's `localStorage.setItem` genuinely throws when the
 // origin is full, and that the sacrifice ordering survives contact with
 // that real exception, not just a `vi.spyOn` stand-in for it.

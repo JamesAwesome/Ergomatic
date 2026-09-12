@@ -1,0 +1,5 @@
+{
+  "name": "mode-justrow",
+  "verdict": "saved",
+  "bytes": "{\"v\":2,\"workoutId\":null,\"title\":\"Filling Low\",\"program\":{\"intervals\":[]},\"logSeed\":{\"steps\":[],\"paces\":{}},\"actuals\":[],\"deviceName\":\"PM5 430123456\",\"startedAt\":\"2026-08-05T12:00:00.000Z\",\"completedAt\":null,\"terminated\":false,\"mode\":\"justrow\"}"
+}

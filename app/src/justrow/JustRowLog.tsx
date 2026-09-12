@@ -185,15 +185,7 @@ export function JustRowSummary({
             }
             discard.disarm();
             if (door.kind === "monitor")
-              retireHandoff(
-                [
-                  {
-                    sessionKey: door.entry.sessionKey,
-                    revision: door.entry.revision,
-                  },
-                ],
-                "monitor-discard",
-              );
+              retireHandoff(door.entry, "monitor-discard");
             else if (loadRun()?.startedAt === door.run.startedAt) clearRun();
             void navigate("/today");
           }}
@@ -226,15 +218,7 @@ export function JustRowSummary({
     // Each kind clears ITS OWN record and only that one (the lifetime
     // table's "successful save" clear site for the timer run).
     if (door?.kind === "monitor") {
-      retireHandoff(
-        [
-          {
-            sessionKey: door.entry.sessionKey,
-            revision: door.entry.revision,
-          },
-        ],
-        "save-success",
-      );
+      retireHandoff(door.entry, "save-success");
     } else if (door?.kind === "timer") {
       if (loadRun()?.startedAt === door.run.startedAt) clearRun();
     }

@@ -34,14 +34,9 @@ import { buildRun } from "./engine";
 import { buildLogSeed, buildLogSteps, formatLogDate } from "./logDraft";
 import { loadRun, RUN_KEY, saveRun, type SessionRun } from "./run";
 import { buildSummaryModel } from "./summaryModel";
-import {
-  connectGuardStage,
-  loadMonitorRun,
-  saveMonitorRun,
-  MONITOR_RUN_KEY,
-  type MachineSummaryDetail,
-  type MonitorRun,
-} from "../monitor/monitorRun";
+import type { MachineSummaryDetail, MonitorRun } from "../monitor/monitorRun";
+import { loadMonitorRun, MONITOR_RUN_KEY } from "../monitor/handoffStore";
+import { seedMonitorRun } from "../test/seedHandoff";
 import type { SeriesData } from "../monitor/seriesRecorder";
 import type { MonitorLogEntry } from "../monitor/eventLog";
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
@@ -1043,7 +1038,7 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
     mockWorkouts([workout]);
     mockBaselines();
     const { run } = buildMonitorFixture();
-    saveMonitorRun({ ...run, workoutId: workout.id });
+    await seedMonitorRun({ ...run, workoutId: workout.id });
     await renderManualLog(workout.id, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
@@ -1083,7 +1078,7 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
     mockWorkouts([workout]);
     mockBaselines();
     const { run } = buildMonitorFixture();
-    saveMonitorRun({ ...run, workoutId: workout.id });
+    await seedMonitorRun({ ...run, workoutId: workout.id });
     await renderManualLog(workout.id, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
@@ -1123,7 +1118,7 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
       // parse throws and its catch swallows the append, so the key stays
       // exactly as seeded whether or not a miss was attempted.)
       const { run } = buildMonitorFixture();
-      saveMonitorRun({ ...run, workoutId: workout.id });
+      await seedMonitorRun({ ...run, workoutId: workout.id });
       await renderManualLog(workout.id, "?from=monitor");
       await screen.findByRole("heading", { name: "Hoarfrost" });
 
@@ -2841,7 +2836,7 @@ describe("LogSession: a connected arrival with no record (Phase LM Task 4)", () 
     mockWorkouts([workout]);
     mockBaselines();
     const { run } = buildMonitorFixture();
-    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    await seedMonitorRun({ ...run, workoutId: "some-other-workout" });
 
     await renderManualLog(workout.id, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
@@ -2884,7 +2879,7 @@ describe("LogSession: a connected arrival with no record (Phase LM Task 4)", () 
 describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () => {
   it("engages when all four conditions hold", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     const { monitorModeRun } = await import("./LogSession");
     const search = new URLSearchParams("from=monitor");
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toStrictEqual(run);
@@ -2892,7 +2887,7 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
 
   it("condition 1 (flag) removed: no from=monitor param falls through, even with a real completed matching record", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     const { monitorModeRun } = await import("./LogSession");
     const search = new URLSearchParams(); // no "from" at all
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
@@ -2900,7 +2895,7 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
 
   it("condition 1 (flag) wrong value: from=elsewhere also falls through", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     const { monitorModeRun } = await import("./LogSession");
     const search = new URLSearchParams("from=elsewhere");
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
@@ -2915,7 +2910,7 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
 
   it("condition 2 (record finished) removed: a LIVE MonitorRun (completedAt: null) falls through — the flag is intent, not evidence of a finished session", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun({ ...run, completedAt: null });
+    await seedMonitorRun({ ...run, completedAt: null });
     const { monitorModeRun } = await import("./LogSession");
     const search = new URLSearchParams("from=monitor");
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
@@ -2923,7 +2918,7 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
 
   it("condition 3 (workoutId match) removed: a completed record for a DIFFERENT workout falls through — THE HIJACK PIN, live form", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    await seedMonitorRun({ ...run, workoutId: "some-other-workout" });
     const { monitorModeRun } = await import("./LogSession");
     const search = new URLSearchParams("from=monitor");
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
@@ -2932,7 +2927,7 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
   it("condition 4 (seed alignment) removed: a missing logSeed disqualifies the record (MonitorLogSeedError caught, not thrown)", async () => {
     const { run } = buildMonitorFixture();
     const { logSeed: _drop, ...v1Shaped } = run;
-    saveMonitorRun({ ...v1Shaped, v: 1 });
+    await seedMonitorRun({ ...v1Shaped, v: 1 });
     const { monitorModeRun } = await import("./LogSession");
     const search = new URLSearchParams("from=monitor");
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
@@ -2940,7 +2935,7 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
 
   it("condition 4 (seed alignment) removed: a logSeed whose length no longer matches program.intervals disqualifies the record", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun({
+    await seedMonitorRun({
       ...run,
       logSeed: {
         steps: run.logSeed!.steps.slice(1),
@@ -2954,7 +2949,7 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
 
   it("condition 4 (seed alignment) removed: a malformed actuals ITEM (not caught by isMonitorRun's own shallow validator) disqualifies the record instead of throwing", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun({
+    await seedMonitorRun({
       ...run,
       actuals: [null as unknown as IntervalActual],
     });
@@ -2966,7 +2961,7 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
 
   it("THE HIJACK PIN itself: no flag + a stale (but otherwise perfectly valid) completed record for the SAME workout still falls through", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     const { monitorModeRun } = await import("./LogSession");
     const search = new URLSearchParams(); // reload/bookmark: no from=monitor
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
@@ -3079,7 +3074,7 @@ describe("LogSession: monitorModeRun logs which condition missed onto the log-do
 
   it("condition 2 (record not completed): logs not-completed", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun({ ...run, completedAt: null });
+    await seedMonitorRun({ ...run, completedAt: null });
     const { monitorModeRun } = await import("./LogSession");
     const search = new URLSearchParams("from=monitor");
     monitorModeRun(search, MONITOR_WORKOUT_ID);
@@ -3091,7 +3086,7 @@ describe("LogSession: monitorModeRun logs which condition missed onto the log-do
 
   it("condition 3 (workoutId mismatch): logs workout-id-mismatch", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    await seedMonitorRun({ ...run, workoutId: "some-other-workout" });
     const { monitorModeRun } = await import("./LogSession");
     const search = new URLSearchParams("from=monitor");
     monitorModeRun(search, MONITOR_WORKOUT_ID);
@@ -3104,7 +3099,7 @@ describe("LogSession: monitorModeRun logs which condition missed onto the log-do
   it("condition 4 (buildMonitorLogSteps throws): logs log-steps-build-failed", async () => {
     const { run } = buildMonitorFixture();
     const { logSeed: _drop, ...v1Shaped } = run;
-    saveMonitorRun({ ...v1Shaped, v: 1 });
+    await seedMonitorRun({ ...v1Shaped, v: 1 });
     const { monitorModeRun } = await import("./LogSession");
     const search = new URLSearchParams("from=monitor");
     monitorModeRun(search, MONITOR_WORKOUT_ID);
@@ -3116,7 +3111,7 @@ describe("LogSession: monitorModeRun logs which condition missed onto the log-do
 
   it("a real, engaging arrival logs nothing at all", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     const { monitorModeRun } = await import("./LogSession");
     const search = new URLSearchParams("from=monitor");
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toStrictEqual(run);
@@ -3378,7 +3373,7 @@ describe("LogSession: the log-door miss survives the teardown that follows it", 
 // `handoffStore.retire()` now), so a spy on the old function would never
 // fire regardless of correctness. Same `vi.doMock` + `vi.importActual`
 // wrapping idiom `mockMonitorRunClearSpy` used, now on `retire` itself —
-// records the exact `(set, reason)` pair so a test can assert not just
+// records the exact `(entry, reason)` pair so a test can assert not just
 // THAT a retire happened but which key/revision/reason it carried.
 function mockHandoffRetireSpy() {
   const spy = vi.fn();
@@ -3389,11 +3384,11 @@ function mockHandoffRetireSpy() {
     return {
       ...actual,
       retire: (
-        set: readonly { sessionKey: string; revision: number }[],
-        reason: string,
+        entry: Parameters<typeof actual.retire>[0],
+        reason: Parameters<typeof actual.retire>[1],
       ) => {
-        spy(set, reason);
-        return actual.retire(set, reason);
+        spy(entry, reason);
+        return actual.retire(entry, reason);
       },
     };
   });
@@ -3422,7 +3417,7 @@ describe("LogSession: the manual door's monitor mode — buildSummaryModel's own
 
   it("a MonitorLogSeedError from buildSummaryModel falls through to /today rather than crashing", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     vi.doMock("./summaryModel", async () => {
@@ -3452,7 +3447,7 @@ describe("LogSession: the manual door's monitor mode — buildSummaryModel's own
 
   it("a non-MonitorLogSeedError from buildSummaryModel is rethrown, never silently swallowed", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     vi.doMock("./summaryModel", async () => {
@@ -3499,7 +3494,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       ],
     };
     const { run, workout } = buildMonitorFixture({ series });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -3517,7 +3512,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("renders no trace chart when the loaded run has no series (a pre-spec-2 record, or one sacrificed at save time)", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -3527,7 +3522,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("shows the title/EXPECTED, PACES OFF from the frozen seed, and every row MEASURED with a real pm5 pace — the widened render gate", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -3581,7 +3576,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
         // index 2 (Calm Sea's distance work) never reached.
       ],
     });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -3623,7 +3618,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
         },
       ],
     });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -3655,7 +3650,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   // longer absent.
   it("THE HIJACK PIN: no from=monitor flag + a stale completed MonitorRun for the SAME workout renders the manual form, now with Discard present (LT-0)", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     const workout = manualWorkoutFixture(MONITOR_WORKOUT_ID);
     mockWorkouts([workout]);
     mockBaselines();
@@ -3672,7 +3667,10 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("a shallowly-valid MonitorRun with a malformed actuals entry never crashes the log door — it falls through to the manual form", async () => {
     const { run } = buildMonitorFixture();
-    saveMonitorRun({ ...run, actuals: [null as unknown as IntervalActual] });
+    await seedMonitorRun({
+      ...run,
+      actuals: [null as unknown as IntervalActual],
+    });
     const workout = manualWorkoutFixture(MONITOR_WORKOUT_ID);
     mockWorkouts([workout]);
     mockBaselines();
@@ -3687,7 +3685,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   it("a legacy v1 interrupted MonitorRun falls through gate 4 to the manual door, intended (queue item 2)", async () => {
     const { run } = buildMonitorFixture();
     const { logSeed: _drop, ...v1Shaped } = run;
-    saveMonitorRun({
+    await seedMonitorRun({
       ...v1Shaped,
       v: 1,
       endedBy: "interrupted",
@@ -3742,7 +3740,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
         },
       ],
     });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const retireSpy = mockHandoffRetireSpy();
@@ -3782,7 +3780,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(loadMonitorRun()).toBeNull();
     expect(retireSpy).toHaveBeenCalledTimes(1);
     expect(retireSpy).toHaveBeenCalledWith(
-      [{ sessionKey: run.startedAt, revision: 0 }],
+      expect.objectContaining({ sessionKey: run.startedAt, revision: 0 }),
       "save-success",
     );
   });
@@ -3794,7 +3792,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   // posted the pre-formatted STRING instead of the number goes red here).
   it("posts avgSplitSeconds/timeSeconds/distanceMeters as the model's own NUMBERS (not its display strings) — the monitor door's own three heroes", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -3847,7 +3845,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   // endedBy`, never re-derived here.
   it("posts endedBy straight from the loaded MonitorRun when present", async () => {
     const { run, workout } = buildMonitorFixture({ endedBy: "link-lost" });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -3869,7 +3867,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("a MonitorRun with no endedBy at all (a v1/v2 record predating this task, or a run no writer has closed a new way) omits the key from the POST body", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -3912,7 +3910,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       restSeconds: 90,
       restMeters: 64,
     });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -3937,7 +3935,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("a MonitorRun with none of the four RC-1 fields (a record predating this PR, or closed some other way than a natural finish) omits all four keys from the POST body", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -3995,7 +3993,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       summaryDetail: REALISTIC_SUMMARY_DETAIL,
       verificationBytes: REALISTIC_VERIFICATION_BYTES,
     });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -4032,7 +4030,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("a MonitorRun with no summaryTotals (a record predating this PR, or closed without the burst) omits machineWorkSeconds/machineWorkMeters/machineSummary from the POST body", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -4059,7 +4057,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       summaryTotals: { workElapsedSeconds: 24.3, workDistanceMeters: 76 },
       verificationBytes: REALISTIC_VERIFICATION_BYTES,
     });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -4098,7 +4096,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     const { run, workout } = buildMonitorFixture({
       summaryTotals: { workElapsedSeconds: 199.9, workDistanceMeters: 500.5 },
     });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -4121,7 +4119,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("an empty deviceName is substituted with MONITOR, and the pm5 door survives (Door PR A, step 6)", async () => {
     const { run: emptyRun, workout } = buildMonitorFixture({ deviceName: "" });
-    saveMonitorRun(emptyRun);
+    await seedMonitorRun(emptyRun);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -4155,7 +4153,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     const { run: longRun, workout } = buildMonitorFixture({
       deviceName: "PM5 " + "9".repeat(61),
     });
-    saveMonitorRun(longRun);
+    await seedMonitorRun(longRun);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -4253,7 +4251,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   // straight from the loaded run when present.
   it("omits series from the POST body when the run has none", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -4281,7 +4279,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       ],
     };
     const { run, workout } = buildMonitorFixture({ series });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const retireSpy = mockHandoffRetireSpy();
@@ -4304,7 +4302,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(loadMonitorRun()).toBeNull();
     expect(retireSpy).toHaveBeenCalledTimes(1);
     expect(retireSpy).toHaveBeenCalledWith(
-      [{ sessionKey: run.startedAt, revision: 0 }],
+      expect.objectContaining({ sessionKey: run.startedAt, revision: 0 }),
       "save-success",
     );
   });
@@ -4318,7 +4316,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
     };
     const { run, workout } = buildMonitorFixture({ series });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     // LOW-3 (fix round, RULED): seed the diagnostics stash a real rowed
     // session would already carry (`useMonitorSession.ts`'s own teardown
     // write) — proves the sacrifice APPENDS to it, never replaces or
@@ -4385,7 +4383,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(loadMonitorRun()).toBeNull();
     expect(retireSpy).toHaveBeenCalledTimes(1);
     expect(retireSpy).toHaveBeenCalledWith(
-      [{ sessionKey: run.startedAt, revision: 0 }],
+      expect.objectContaining({ sessionKey: run.startedAt, revision: 0 }),
       "save-success",
     );
 
@@ -4438,7 +4436,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
     };
     const { run, workout } = buildMonitorFixture({ series });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     // Seed a stash already AT capacity (500 entries, seq 0..499) — one
     // more sacrifice append must drop the oldest (seq 0), not grow past
     // 500.
@@ -4501,7 +4499,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
     };
     const { run, workout } = buildMonitorFixture({ series });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const retireSpy = mockHandoffRetireSpy();
@@ -4545,7 +4543,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
     };
     const { run, workout } = buildMonitorFixture({ series });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const retireSpy = mockHandoffRetireSpy();
@@ -4600,14 +4598,14 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(loadMonitorRun()).toBeNull();
     expect(retireSpy).toHaveBeenCalledTimes(1);
     expect(retireSpy).toHaveBeenCalledWith(
-      [{ sessionKey: run.startedAt, revision: 0 }],
+      expect.objectContaining({ sessionKey: run.startedAt, revision: 0 }),
       "save-success",
     );
   });
 
   it("a non-ok response with no series present never triggers a second POST", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -4628,7 +4626,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("a failed save does NOT clear MonitorRun — the record survives so a retry can still prefill", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const retireSpy = mockHandoffRetireSpy();
@@ -4648,7 +4646,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("Discard clears MonitorRun and navigates back to the workout's detail screen, with no POST ever fired", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -4671,7 +4669,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("Discard is staged: the first press only arms (button text flips, no clear, no navigation) — the record survives untouched", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -4726,7 +4724,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("leaving via BackLink (unmount) leaves the MonitorRun standing — loadMonitorRun() is still non-null after unmount", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const { unmount } = await renderManualLog(
@@ -4749,7 +4747,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(runBefore).not.toBeNull();
 
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     mockApi(() =>
@@ -4775,7 +4773,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     const runBefore = localStorage.getItem(RUN_KEY);
 
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -4795,7 +4793,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
   it("does not gate on baselines at all — the monitor branch renders even when baselines are unset (a stale bookmark elsewhere never blocks it)", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -4841,7 +4839,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       completedAt: new Date(FIXED_NOW.getTime() + 6 * 60 * 1000).toISOString(),
       terminated: false,
     };
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     const workout: LibraryWorkout = {
       id: "id-monitor-both-bases",
       title: "Monitor Both Bases",
@@ -4888,7 +4886,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       completedAt: new Date(FIXED_NOW.getTime() + 3 * 60 * 1000).toISOString(),
       terminated: false,
     };
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     const workout: LibraryWorkout = {
       id: "id-monitor-2k-only",
       title: "Monitor 2K Only",
@@ -4909,7 +4907,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   it("with an active plan, Log against plan posts NO advancesPlan key (the store's own `?? !isFreeRow` default, true for a workout row) — Save without logging posts advancesPlan:false", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -4942,7 +4940,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   it("monitor door wire shape: with an active plan, Save without logging posts advancesPlan: false", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -4979,7 +4977,7 @@ describe("LogSession: the close stamp on the wire (Wave E PR2 Task 6)", () => {
     // carries the SAVE clock as its date, minutes to hours after the row
     // was rowed and by however long the rower sat on the summary screen.
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -5045,7 +5043,7 @@ describe("LogSession: the drop strip (Wave F PR 1 Task 4, Gate 0)", () => {
     const { run, workout } = buildMonitorFixture({
       endedBy: "program-dropped",
     });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -5082,7 +5080,7 @@ describe("LogSession: the drop strip (Wave F PR 1 Task 4, Gate 0)", () => {
         },
       ],
     });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -5103,7 +5101,7 @@ describe("LogSession: the drop strip (Wave F PR 1 Task 4, Gate 0)", () => {
       endedBy: "program-dropped",
       actuals: [],
     });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -5136,7 +5134,7 @@ describe("LogSession: the drop strip (Wave F PR 1 Task 4, Gate 0)", () => {
   // strip).
   it("renders no strip for an ordinary finished run", async () => {
     const { run, workout } = buildMonitorFixture({ endedBy: "finished" });
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -5177,7 +5175,7 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
   // rather than asserted on a screen that never renders one.
   it("force (a) corrupt logSeed.steps.length: the fallthrough door renders with Discard, and firing it clears the stranded MonitorRun", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun({
+    await seedMonitorRun({
       ...run,
       logSeed: {
         steps: run.logSeed!.steps.slice(1),
@@ -5194,7 +5192,14 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
     // exercising the monitor branch.
     expect(screen.getByText("BY FEEL")).toBeInTheDocument();
     expect(loadMonitorRun()).not.toBeNull();
-    expect(connectGuardStage(loadMonitorRun() !== null)).toBe("unlogged");
+    // Phase MD PR 1: `connectGuardStage` reads the STORE now, not the
+    // durable bytes, so it has to be called on the same module instance the
+    // screen used — this file's `beforeEach` resets modules, and a
+    // statically-imported copy would hydrate a second instance from the
+    // bytes and then never see the discard's retire (it read green before
+    // the discard and stayed "unlogged" after it).
+    const { connectGuardStage } = await import("../monitor/handoffStore");
+    expect(connectGuardStage()).toBe("unlogged");
 
     await userEvent.click(
       screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
@@ -5207,7 +5212,7 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
       await screen.findByText("WORKOUT DETAIL SCREEN"),
     ).toBeInTheDocument();
     expect(loadMonitorRun()).toBeNull();
-    expect(connectGuardStage(loadMonitorRun() !== null)).toBeNull();
+    expect(connectGuardStage()).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -5216,7 +5221,7 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
   // route's :id.
   it("force (b) mismatched workoutId: the fallthrough door renders with Discard, and firing it clears the stranded MonitorRun", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    await seedMonitorRun({ ...run, workoutId: "some-other-workout" });
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -5244,7 +5249,10 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
   // `MonitorLogSeedError`.
   it("force (catch-all) malformed actuals entry: Discard still clears the stranded MonitorRun", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun({ ...run, actuals: [null as unknown as IntervalActual] });
+    await seedMonitorRun({
+      ...run,
+      actuals: [null as unknown as IntervalActual],
+    });
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -5291,7 +5299,7 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
 
   it("arms on the first press without clearing anything or navigating — the fallthrough record survives untouched", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    await seedMonitorRun({ ...run, workoutId: "some-other-workout" });
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -5310,7 +5318,7 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
 
   it("disarms on blur — a second press after focus moves away arms again instead of discarding", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    await seedMonitorRun({ ...run, workoutId: "some-other-workout" });
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -5332,10 +5340,11 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
 
   // Mirrors "leaves an unrelated live run/draft byte-identical in storage
   // after the monitor-mode discard fires" above, one door over: this
-  // branch's own qualified exception (`clearMonitorRun()` directly, never
-  // `discard.fire()`) must never touch an unrelated phone-timer session
-  // sitting in `./draft`/`./run` while this door clears its own fallen-
-  // through record.
+  // branch's own qualified exception (the key-bound `retireHandoff()`
+  // directly, never `discard.fire()` — the legacy `clearMonitorRun()` did
+  // this before Phase MD PR 1) must never touch an unrelated phone-timer
+  // session sitting in `./draft`/`./run` while this door clears its own
+  // fallen-through record.
   it("leaves an unrelated live draft/run byte-identical after the plain-manual door's discard clears a fallen-through MonitorRun", async () => {
     buildSessionFixture();
     const draftBefore = localStorage.getItem(DRAFT_KEY);
@@ -5344,7 +5353,7 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
     expect(runBefore).not.toBeNull();
 
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    await seedMonitorRun({ ...run, workoutId: "some-other-workout" });
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -5400,7 +5409,7 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6/R-D)",
       completedAt: "2026-08-02T12:05:00.000Z",
       endedBy: "interrupted",
     };
-    saveMonitorRun(interrupted);
+    await seedMonitorRun(interrupted);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -5446,7 +5455,7 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6/R-D)",
   // formula either way.
   it("inverse pin: a normal-completion record (no endedBy) shows the same MEASURED time as the interrupted case, never wall-clock, dated from completedAt", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
@@ -6170,7 +6179,7 @@ describe("LogSession: the post-test prompt (Phase BL PR B)", () => {
 
   it("a FINISHED 2K Test monitor save shows the offer from the connected door too", async () => {
     const { run, workout } = buildK2TestMonitorFixture("finished");
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     const apiFn = promptAwareApi();
@@ -6194,7 +6203,7 @@ describe("LogSession: the post-test prompt (Phase BL PR B)", () => {
   // wrong number wearing a tested source. No offer, no record.
   it("an INTERRUPTED 2K Test monitor save navigates straight to Today — no offer, no record", async () => {
     const { run, workout } = buildK2TestMonitorFixture("interrupted");
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     const apiFn = promptAwareApi();
@@ -6270,7 +6279,7 @@ describe("LogSession: the post-test prompt's degrade arms (Phase BL PR B)", () =
 
   it("declining from the monitor door lands on Today via the replace navigation", async () => {
     const { run, workout } = buildK2TestMonitorFixture("finished");
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     promptAwareApi();
@@ -6345,7 +6354,7 @@ describe("LogSession: the claim race — R0 render, R1 committed during the old 
 
   it("Save posts R0's numbers even though a richer R1 landed during teardown; the claim used R0's own revision, never a re-read; the retire counts richer-at-save", async () => {
     const { run: r0, workout } = buildMonitorFixture();
-    saveMonitorRun(r0);
+    await seedMonitorRun(r0);
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
@@ -6361,12 +6370,12 @@ describe("LogSession: the claim race — R0 render, R1 committed during the old 
       ...r0,
       summaryTotals: { workElapsedSeconds: 9999, workDistanceMeters: 99999 },
     };
-    const { handoffStore, setReceiptChannel } =
+    const { commit, read, setReceiptChannel } =
       await import("../monitor/handoffStore");
     const receipts: unknown[] = [];
     setReceiptChannel((r) => receipts.push(r));
     const commitR1 = () => {
-      const result = handoffStore.commit(r0.startedAt, 0, r1);
+      const result = commit(r0.startedAt, 0, r1);
       // Fixture sanity: R1 must actually land (revision 0 -> 1) for this
       // test to mean anything — a silently-refused R1 would make every
       // assertion below trivially true for the wrong reason.
@@ -6379,8 +6388,8 @@ describe("LogSession: the claim race — R0 render, R1 committed during the old 
 
     // R1 genuinely landed — the store's own current entry is richer than
     // what the screen rendered from.
-    expect(handoffStore.read()?.revision).toBe(1);
-    expect(handoffStore.read()?.run.summaryTotals).toBeDefined();
+    expect(read()?.revision).toBe(1);
+    expect(read()?.run.summaryTotals).toBeDefined();
 
     await chooseHeldAndEffort();
     await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
@@ -6434,7 +6443,7 @@ describe("LogSession: the claim race — R0 render, R1 committed during the old 
 describe("LogSession: the door leg — Discard tombstones the key, so a late producer burst can no longer resurrect it (§10 row 5 door leg)", () => {
   it("a late burst commit for the discarded key is refused after Discard, through the real UI path", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
 
@@ -6454,17 +6463,17 @@ describe("LogSession: the door leg — Discard tombstones the key, so a late pro
     // discard that already fired for the identical key/revision — exactly
     // Task 3's I1 shape ("a burst landing in the linger AFTER a rower has
     // already Saved or Discarded").
-    const { handoffStore } = await import("../monitor/handoffStore");
+    const { commit, read } = await import("../monitor/handoffStore");
     const lateBurst = {
       ...run,
       summaryTotals: { workElapsedSeconds: 1, workDistanceMeters: 1 },
     };
-    const result = handoffStore.commit(run.startedAt, 0, lateBurst);
+    const result = commit(run.startedAt, 0, lateBurst);
 
     expect(result).toStrictEqual({ accepted: false, reason: "retired" });
     // No resurrection: neither tier shows the late burst's record.
     expect(loadMonitorRun()).toBeNull();
-    expect(handoffStore.read()).toBeNull();
+    expect(read()).toBeNull();
   });
 });
 
@@ -6476,12 +6485,17 @@ describe("LogSession: the door leg — Discard tombstones the key, so a late pro
 describe("LogSession: the abandon path — claim survives unmount, counted at the next retire as claimed-not-consumed (§10 row 10)", () => {
   it("mount claims R0; unmounting WITHOUT Save/Discard leaves it claimed; a later retire (any reason but save-success) reports claimState:'claimed'", async () => {
     const { run, workout } = buildMonitorFixture();
-    saveMonitorRun(run);
+    await seedMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
 
-    const { handoffStore, setReceiptChannel } =
-      await import("../monitor/handoffStore");
+    const {
+      read,
+      retire,
+      setReceiptChannel,
+      stagedRetireAttemptId,
+      takeStagedRetire,
+    } = await import("../monitor/handoffStore");
     const receipts: unknown[] = [];
     setReceiptChannel((r) => receipts.push(r));
 
@@ -6499,7 +6513,7 @@ describe("LogSession: the abandon path — claim survives unmount, counted at th
     // Abandon: the rower leaves (Back press / unmount) without Save or
     // Discard — no retire fires from this component at all.
     unmount();
-    expect(handoffStore.read()?.sessionKey).toBe(run.startedAt);
+    expect(read()?.sessionKey).toBe(run.startedAt);
 
     // "Next acceptance": some LATER destructive authorization retires this
     // same, still-claimed key. RE-POINTED (plan Task 5, carried from
@@ -6531,11 +6545,9 @@ describe("LogSession: the abandon path — claim survives unmount, counted at th
     );
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    const staged = handoffStore.takeStagedRetire(
-      handoffStore.stagedRetireAttemptId() ?? "",
-    );
-    expect(staged.length).toBe(1);
-    handoffStore.retire(staged, "connect-guard-armed");
+    const staged = takeStagedRetire(stagedRetireAttemptId() ?? "");
+    expect(staged).not.toBeNull();
+    retire(staged!, "connect-guard-armed");
 
     const retireReceipt = receipts.find(
       (r) => (r as { kind?: string }).kind === "retire",

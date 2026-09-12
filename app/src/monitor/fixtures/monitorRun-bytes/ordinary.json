@@ -1,0 +1,5 @@
+{
+  "name": "ordinary",
+  "verdict": "saved",
+  "bytes": "{\"v\":2,\"workoutId\":\"fl-bytes-fixture\",\"title\":\"Filling Low\",\"program\":{\"intervals\":[{\"type\":\"work\",\"kind\":\"distance\",\"value\":2000,\"targetSplit\":124,\"displaySpm\":22,\"restSeconds\":180},{\"type\":\"work\",\"kind\":\"distance\",\"value\":2000,\"targetSplit\":124,\"displaySpm\":22,\"restSeconds\":180},{\"type\":\"work\",\"kind\":\"distance\",\"value\":2000,\"targetSplit\":124,\"displaySpm\":22,\"restSeconds\":180},{\"type\":\"work\",\"kind\":\"distance\",\"value\":2000,\"targetSplit\":124,\"displaySpm\":22,\"restSeconds\":180}]},\"logSeed\":{\"steps\":[{\"label\":\"8:00 warm-up\",\"kind\":\"work\"}],\"paces\":{}},\"actuals\":[],\"deviceName\":\"PM5 430123456\",\"startedAt\":\"2026-08-05T12:00:00.000Z\",\"completedAt\":null,\"terminated\":false,\"series\":{\"samples\":[{\"t\":0,\"d\":0,\"p\":120,\"spm\":24},{\"t\":1,\"d\":4,\"p\":121.5,\"spm\":25,\"hr\":140},{\"t\":2,\"d\":8,\"p\":122,\"spm\":25,\"r\":true}]}}"
+}

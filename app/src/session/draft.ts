@@ -1,5 +1,6 @@
 import { isPaceWordRef } from "../../domain/pace.js";
 import type { PaceRef, Step, WorkoutType } from "../../domain/types.js";
+import { isPlainRecord } from "../isPlainRecord";
 
 /** localStorage key for the session draft — the one artifact 6B's timer
  *  consumes. Exported so callers (and tests) never hardcode it twice. */
@@ -82,9 +83,6 @@ export function buildNudgedDraft(
 // Loose on purpose (see loadDraft's own comment): not full domain
 // validation of every step, just "is this shaped enough to not crash the
 // screens that immediately read it" — a plain object, not an array.
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 // Checks `v` plus every field a screen reads unconditionally on load:
 // Countdown/Timer map over `steps` and index into `nudges`/`spmOverrides`,

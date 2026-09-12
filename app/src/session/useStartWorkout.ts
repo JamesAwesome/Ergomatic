@@ -116,10 +116,7 @@ export function useStartWorkout(
       clearRun();
       const stale = currentUnretiredHandoff();
       if (stale !== null) {
-        retireHandoff(
-          [{ sessionKey: stale.sessionKey, revision: stale.revision }],
-          "start-replace",
-        );
+        retireHandoff(stale, "start-replace");
       }
       navigate("/session/countdown");
     } else {
@@ -135,9 +132,11 @@ export function useStartWorkout(
   // "unlogged," the accurate description, not "in progress."
   //
   // ROADMAP M-1's "two exceptions untouched" rule: this reads `loadRun`
-  // DIRECTLY, never rerouted through `anyLiveSession()`, which deliberately
-  // collapses to "none" and would silently downgrade "unlogged" to "none"
-  // — reintroducing the F5 data-loss class in the other direction.
+  // DIRECTLY, never rerouted through a live-only collapsing helper (the
+  // deleted `anyLiveSession()` — `connectGuardStage`'s doc comment in
+  // `handoffStore.ts` keeps the anti-pattern's record), which deliberately
+  // collapsed to "none" and would have silently downgraded "unlogged" to
+  // "none" — reintroducing the F5 data-loss class in the other direction.
   //
   // Hand-off store design spec §5, plan Task 5: the MonitorRun half now
   // reads `currentUnretired()` instead of `loadMonitorRun()` — the P1-1

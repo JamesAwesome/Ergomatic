@@ -11,7 +11,7 @@ import type { SessionDraft } from "./draft";
 import { buildRun } from "./engine";
 import type { SessionRun } from "./run";
 import type { MonitorRun } from "../monitor/monitorRun.js";
-import { loadMonitorRun, MONITOR_RUN_KEY } from "../monitor/monitorRun";
+import { loadMonitorRun, MONITOR_RUN_KEY } from "../monitor/handoffStore";
 import {
   buildLogSeed,
   buildLogSteps,

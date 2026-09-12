@@ -10,10 +10,11 @@ import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { saveRun, loadRun, type SessionRun } from "../session/run";
-import { createMonitorRun, loadMonitorRun, saveMonitorRun } from "./monitorRun";
+import { createMonitorRun } from "./monitorRun";
 import {
   commit as commitHandoff,
   currentUnretired as currentUnretiredHandoff,
+  loadMonitorRun,
   resetForTests as resetHandoffStoreForTests,
   setReceiptChannel,
   stageRetire as stageRetireHandoffForTest,
@@ -112,10 +113,11 @@ function liveSessionRun(): SessionRun {
  * and its one production caller, `useMonitorSession.ts`'s hook, is what
  * commits the result through the store) two calls instead of one, so the
  * guard can still be proven against a REAL localStorage round trip rather
- * than a "was the callback called" assertion — `saveMonitorRun` is the
- * SAME general-purpose writer `Today.tsx`/`LogSession.tsx`/
- * `useStartWorkout.ts` still call directly today, not a re-introduction of
- * anything this task removed. Task 5's own proof that its real wiring
+ * than a "was the callback called" assertion — `commitHandoff` below
+ * drives the SAME store writer (`handoffStore.ts`'s `commit`) that
+ * `useMonitorSession.ts`'s hook uses in production; the deleted
+ * `saveMonitorRun` served this role before Phase MD PR 1, so this is not
+ * a re-introduction of anything this task removed. Task 5's own proof that its real wiring
  * defers this destruction lives in `WorkoutDetail.test.tsx` and
  * `e2e/session.spec.ts`, not here.
  */
@@ -131,19 +133,47 @@ function connectAsTaskFiveWill(): void {
   if ("code" in compiled) {
     throw new Error(`fixture failed to compile: ${compiled.code}`);
   }
-  saveMonitorRun(
-    createMonitorRun(
-      {
-        workoutId: "fl-connect",
-        title: w.title,
-        program: compiled,
-        deviceName: "PM5 430123456",
-        logSeed: TEST_SEED,
-      },
-      t0,
-    ),
+  const run = createMonitorRun(
+    {
+      workoutId: "fl-connect",
+      title: w.title,
+      program: compiled,
+      deviceName: "PM5 430123456",
+      logSeed: TEST_SEED,
+    },
+    t0,
   );
+  // Mirrors the hook's own create-commit (`useMonitorSession.ts`, the
+  // "ready" branch): a same-key entry left by an EARLIER proceed in the same
+  // test is adopted as an update, never overwritten. The real writer refuses
+  // a second create against a current key ("stale"); the raw seeder this
+  // replaced (Phase MD PR 1) silently overwrote, which is why the double
+  // proceed some tests perform went unnoticed until fixtures went through
+  // `commit`.
+  const stale = currentUnretiredHandoff();
+  const result = commitHandoff(
+    run.startedAt,
+    stale !== null && stale.sessionKey === run.startedAt
+      ? stale.revision
+      : null,
+    run,
+  );
+  // A throw here would surface as vitest's `Errors` line beside GREEN
+  // tests (measured on Task 2's full run: `Tests 5970 passed`, `Errors 2`),
+  // so a refusal is RECORDED and asserted empty after every test instead.
+  if (!result.accepted) proceedRefusals.push(result.reason);
 }
+
+let proceedRefusals: string[] = [];
+afterEach(() => {
+  const seen = proceedRefusals;
+  proceedRefusals = [];
+  // A throw in afterEach FAILS the test that just ran (unlike a throw
+  // inside the component's event callback).
+  if (seen.length > 0) {
+    throw new Error(`connectAsTaskFiveWill refused: ${seen.join(", ")}`);
+  }
+});
 
 function renderConnect() {
   render(
@@ -481,9 +511,7 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
       expect(view).toHaveFocus();
       await userEvent.click(view);
       expect(screen.getByRole("heading", { name: "Today" })).toBeVisible();
-      expect(
-        takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
-      ).toStrictEqual([]);
+      expect(takeStagedRetireHandoff(stagedRetireAttemptId() ?? "")).toBeNull();
       expect(currentUnretiredHandoff()).toStrictEqual(before);
       expect(loadRun()).toStrictEqual(timer);
     },
@@ -505,9 +533,7 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     expect(currentUnretiredHandoff()).toStrictEqual(before);
     expect(loadMonitorRun()).not.toBeNull();
     const staged = takeStagedRetireHandoff(stagedRetireAttemptId() ?? "");
-    expect(staged).toStrictEqual([
-      { sessionKey: before!.sessionKey, revision: before!.revision },
-    ]);
+    expect(staged).toStrictEqual(before);
   });
 
   // Task 5 re-review (F-3, 2026-08-30): a refused confirm must not leave
@@ -521,9 +547,7 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(
-      takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
-    ).toStrictEqual([]);
+    expect(takeStagedRetireHandoff(stagedRetireAttemptId() ?? "")).toBeNull();
   });
 
   it("neither Connect anyway nor a direct proceed ever retires anything from this component — no retire receipt fires either way", async () => {
@@ -538,16 +562,17 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
     );
 
     // `connectAsTaskFiveWill` (this test's `onProceed`) writes a fresh
-    // MonitorRun of its own via `saveMonitorRun`/`createMonitorRun`
-    // directly — never through the store — so no COMMIT receipt is
-    // expected here either; the point is specifically the absence of any
-    // RETIRE receipt, which only the hook's own "armed" handler may emit.
+    // MonitorRun of its own via `createMonitorRun`/`commitHandoff` (the
+    // store's `commit`) BEFORE the receipt channel above is wired, so no
+    // receipt fires for that write either way; the point is specifically
+    // the absence of any RETIRE receipt from this press, which only the
+    // hook's own "armed" handler may emit.
     expect(receipts.filter((r) => r.kind === "retire")).toStrictEqual([]);
     // The staged set from the press above is still sitting in the store,
     // exactly where `useMonitorSession.ts`'s own "armed" handler expects
     // to find and consume it — nothing here already took it.
     const staged = takeStagedRetireHandoff(stagedRetireAttemptId() ?? "");
-    expect(staged.length).toBe(1);
+    expect(staged).not.toBeNull();
     setReceiptChannel(null);
   });
 
@@ -567,36 +592,34 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
       screen.getByRole("button", { name: "Connect anyway" }),
     );
 
-    // The STAGED set still names revision 0 — the value `handleConnect`
+    // The STAGED entry still names revision 0 — the value `handleConnect`
     // captured at stage time — never the superseded revision 1 the race
     // above produced. This is what lets the hook's own retire report
     // `superseded: true` truthfully later, instead of trivially matching
-    // whatever is current (see `handoffStore.stagedRetireSet`'s own doc
+    // whatever is current (see `handoffStore.stagedRetire`'s own doc
     // comment on why a fresh re-read at press time would defeat this).
     expect(
       takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
-    ).toStrictEqual([{ sessionKey: before!.sessionKey, revision: 0 }]);
+    ).toStrictEqual(before);
   });
 
-  it("nothing to protect: Connect stages an EMPTY set, clearing any stale set from an earlier, abandoned press", async () => {
-    // A stale set from an earlier press (a different workout's Connect,
+  it("nothing to protect: Connect stages null, clearing any stale entry from an earlier, abandoned press", async () => {
+    // A stale entry from an earlier press (a different workout's Connect,
     // since cancelled/abandoned) must not survive to authorize THIS
     // press's own eventual "armed" event (rev-3 antagonist: "a set
     // staged for attempt 1 must not authorize attempt 2's retire").
     stageRetireHandoffForTest(
-      [{ sessionKey: "2020-01-01T00:00:00.000Z", revision: 7 }],
+      { sessionKey: "2020-01-01T00:00:00.000Z", revision: 7 },
       "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
     );
     renderConnect();
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    expect(
-      takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
-    ).toStrictEqual([]);
+    expect(takeStagedRetireHandoff(stagedRetireAttemptId() ?? "")).toBeNull();
   });
 
-  it("nothing staged (a SessionRun-only stage): the guard shows the confirm, but stages an empty set — no MonitorRun to protect", async () => {
+  it("nothing staged (a SessionRun-only stage): the guard shows the confirm, but stages null — no MonitorRun to protect", async () => {
     saveRun(unloggedSessionRun());
     expect(currentUnretiredHandoff()).toBeNull();
     renderConnect();
@@ -608,9 +631,7 @@ describe("ConnectAction: staging the authorization (hand-off store §5 row 1)", 
         /Review and save (?:it|them) from Today\.Connecting discards (?:it|them)\./,
       ),
     ).toBeInTheDocument();
-    expect(
-      takeStagedRetireHandoff(stagedRetireAttemptId() ?? ""),
-    ).toStrictEqual([]);
+    expect(takeStagedRetireHandoff(stagedRetireAttemptId() ?? "")).toBeNull();
   });
 });
 

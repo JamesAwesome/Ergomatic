@@ -14,7 +14,8 @@ import { compileProgram } from "../../domain/monitor/program.js";
 import { buildDraft, DRAFT_KEY } from "./draft";
 import { advance, buildFreeRowRun, buildRun } from "./engine";
 import { buildLogSeed } from "./logDraft";
-import { MONITOR_RUN_KEY, type MonitorRun } from "../monitor/monitorRun";
+import type { MonitorRun } from "../monitor/monitorRun";
+import { MONITOR_RUN_KEY } from "../monitor/handoffStore";
 import { RUN_KEY } from "./run";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { PlanState } from "../api/usePlan";
@@ -899,7 +900,7 @@ describe("selected recording recovery", () => {
     ).toHaveLength(0);
     const newer = monitor({ startedAt: "2026-09-04T14:00:00.000Z" });
     store.retire(
-      [{ sessionKey: run.startedAt, revision: 0 }],
+      { sessionKey: run.startedAt, revision: 0 },
       "connect-guard-armed",
     );
     store.commit(newer.startedAt, null, newer);

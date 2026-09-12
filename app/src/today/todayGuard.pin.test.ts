@@ -22,6 +22,11 @@ import source from "./Today.tsx?raw";
  *
  * If a LATER phase legitimately changes this guard, update this constant in
  * the same commit and say why in the report. Do not delete the pin.
+ *
+ * Phase MD PR 1 (2026-09-12): `anyLiveSession` was deleted, `loadMonitorRun`
+ * moved into the store, and the negative import pin on `anyLiveSession` was
+ * replaced by the call-count pin below — a pin on a symbol that cannot exist
+ * cannot fail (RF21). The guard block itself is byte-identical to 7B's.
  */
 const PINNED_GUARD = `  useEffect(() => {
     const draft = loadDraft();
@@ -48,47 +53,39 @@ describe("Today's cold-start guard is untouched by Phase 7B (spec §3)", () => {
     expect(source).toContain(PINNED_GUARD);
   });
 
-  it("still reads the monitor record DIRECTLY, never through anyLiveSession()", () => {
-    // The M-1 failure mode, asserted at the file level rather than only
-    // inside the block above: the collapsing helper may be NAMED in this
-    // screen (its guard comment explains at length why it isn't used) but
-    // must never be imported, which is the only way it could be called.
-    //
-    // F6 spec 2b, Task 4 (antagonist correction 2, binding): the import
-    // WIDENED to bring in `clearMonitorRun`/`completeInterruptedRun`/
-    // `MonitorRun` for Today's own new interrupted-connected-session row —
-    // `loadMonitorRun` itself is untouched and still comes from the same
-    // module via a named import, so the guard-block constant above (the
-    // thing this pin actually protects) needed no change. Widening this
-    // one line is exactly what this file's own header sanctions ("If a
-    // LATER phase legitimately changes this guard, update this constant
-    // ... and say why") for the import line specifically, since the import
-    // is asserted here as a SEPARATE claim from the guard block itself.
-    //
-    // Hand-off store design spec §1, plan Task 3: widened to bring in
-    // `saveMonitorRun` — `completeInterruptedRun` is now a PURE builder
-    // (`monitorRun.ts`'s own doc comment on it), so `UnloggedMonitorRow`'s
-    // `handleLogIt` persisted its returned record itself, as a STOPGAP until
-    // Task 4 rewrote this screen's own unlogged row onto the store. Still
-    // just an import-line widening; the guard block itself is untouched.
-    //
-    // Hand-off store design spec (rev 4), plan Task 4: NARROWED back down —
-    // `clearMonitorRun`/`saveMonitorRun`/`type MonitorRun` are gone from
-    // this import (the unlogged row's own discard/Log-it handlers now call
-    // the store, not these), and a SECOND import line brings in the store's
-    // own named functions. `loadMonitorRun` survives on its own, unchanged:
-    // it is still what THIS guard block (the pin above) reads directly, and
-    // it is a genuinely different call from anything the store's `read()`
-    // does (this guard needs a synchronous, un-hydrated, always-fresh raw
-    // read at effect time — see `monitorEntry`'s own doc comment in
-    // Today.tsx for why the MOUNT SNAPSHOT reads through the store instead).
+  it("imports loadMonitorRun from the STORE (Phase MD PR 1 moved it) beside the store's own hydrate/read — the raw read and the hydrated read are deliberately two different calls", () => {
+    // Phase MD PR 1: `loadMonitorRun` lives in `handoffStore.ts` now, so
+    // this screen's monitor imports collapse to one line. The guard block
+    // above is byte-identical to before the move — only the import moved.
+    // What the pin still asserts is unchanged: this guard reads the durable
+    // record DIRECTLY, through a synchronous, un-hydrated, always-fresh raw
+    // read at effect time — not through the store's `read()` (see
+    // `monitorEntry`'s own doc comment in Today.tsx for why the MOUNT
+    // SNAPSHOT reads through the store instead). The store-side half of
+    // that rule — `loadMonitorRun` never consults the memory tier — is
+    // `handoffStore.test.ts`'s "reads the DURABLE tier only" case.
     expect(source).toContain(
-      'import { loadMonitorRun } from "../monitor/monitorRun";',
+      'import {\n  hydrate as hydrateHandoff,\n  loadMonitorRun,\n  read as readHandoff,\n  type HandoffEntry,\n} from "../monitor/handoffStore";',
     );
-    expect(source).toContain(
-      'import {\n  hydrate as hydrateHandoff,\n  read as readHandoff,\n  type HandoffEntry,\n} from "../monitor/handoffStore";',
-    );
-    expect(source).not.toMatch(/import\s*\{[^}]*\banyLiveSession\b/);
+    expect(source).not.toMatch(/from "\.\.\/monitor\/monitorRun"/);
+  });
+
+  it("the guard's raw read is the ONLY loadMonitorRun call in this screen, and it is inside the pinned block — every other monitor read here goes through the store's hydrated tier", () => {
+    // Replaces the old negative pin on an `anyLiveSession` import, which
+    // could never fail once that helper was deleted (RF21). The rule it
+    // protected — Today's cold-start guard reads the DURABLE BYTES,
+    // synchronously and un-hydrated, and asks about a live record
+    // specifically — is bound here to the call itself: exactly one raw
+    // read in the file, and it is the pinned one. Re-routing the guard
+    // through `readHandoff()` fails this AND the byte pin above; adding a
+    // second raw read anywhere else in the screen fails this alone.
+    // Comments in Today.tsx mention the call in backticks (four
+    // occurrences of `loadMonitorRun(` at baseline, ONE of them code); a
+    // call is never preceded by a backtick or an identifier character, so
+    // those are excluded — measured, not assumed.
+    const calls = source.match(/(^|[^`\w])loadMonitorRun\(\)/gm) ?? [];
+    expect(calls).toHaveLength(1);
+    expect(PINNED_GUARD).toContain("loadMonitorRun()");
   });
 
   it("occurs exactly once — the guard was not duplicated instead of moved", () => {

@@ -1,7 +1,14 @@
 // The hand-off store (design spec `docs/superpowers/specs/
 // 2026-08-30-handoff-protocol-design.md`, rev 4, James-approved 2026-08-30):
 // ONE module owning BOTH persistence tiers for the connected record —
-// `§1 The store`. Plan Task 2's own scope: this module and its unit tests
+// `§1 The store`. **Since Phase MD PR 1 (spec `docs/superpowers/specs/
+// 2026-09-12-stored-run-module-design.md`) it also owns the key, the
+// record's validators, the raw durable read `loadMonitorRun` and the Connect
+// guard `connectGuardStage`** — the persistence half `monitorRun.ts` used to
+// carry, moved here so the module that WRITES the key is the one that says
+// what a valid record is; `monitorRun.ts` is the type and its pure builders
+// and holds no storage call (`scripts/handoffStoreBoundary.test.ts` pins it
+// at zero). Plan Task 2's own scope: this module and its unit tests
 // ONLY. Nothing outside this file writes `MONITOR_RUN_KEY` or holds a
 // module-level `MonitorRun` — every existing writer/remover in
 // `monitorRun.ts`/`useMonitorSession.ts`/`LogSession.tsx`/`Today.tsx`/
@@ -11,7 +18,7 @@
 //
 // **Names verbatim from the plan's Global Constraints:** `handoffStore`,
 // `commit(sessionKey, expectedRevision, next)` (`null` = expect-absent),
-// `retryDurable`, `read`/`currentUnretired`, `retire(set, reason)`,
+// `retryDurable`, `read`/`currentUnretired`, `retire(entry, reason)`,
 // tombstones, receipts (`store-second-key-refused`, `handoff-dropped
 // reason=richer-at-save`, retire receipts w/ claim state), `durableRevision`
 // + `durableComplete`. `lastAcceptedRevisionRef` is the HOOK's own ref
@@ -39,8 +46,8 @@
 //     but not HOW that authorization survives from the guard's own read
 //     (well before BLE/programming) to the wire "armed" event (well
 //     after) without being re-read (which would defeat the point — see
-//     `stagedRetireSet`'s own doc comment). This module exposes that as
-//     `stageRetire(set)`/`takeStagedRetire()`, the store's own call —
+//     `stagedRetire`'s own doc comment). This module exposes that as
+//     `stageRetire(entry)`/`takeStagedRetire()`, the store's own call —
 //     the guard and the hook are different files/components with no
 //     prop path between them, so the store is the only place this
 //     hand-off can live without inventing a second mechanism.
@@ -61,13 +68,9 @@
 // tests (which call a non-render method first).
 
 import type { ConnectionAttemptId } from "../../domain/monitor/types.js";
-import {
-  MONITOR_RUN_KEY,
-  isMonitorRun,
-  isPlainRecord,
-  stripMalformedSeries,
-  type MonitorRun,
-} from "./monitorRun.js";
+import type { MonitorRun } from "./monitorRun.js";
+import { loadRun } from "../session/run";
+import { isPlainRecord } from "../isPlainRecord";
 
 /** The store's one entry shape (§1): "{ sessionKey, revision, run }" —
  *  `sessionKey` = `startedAt`, `revision` a monotonic counter the store
@@ -79,6 +82,26 @@ export interface HandoffEntry {
   readonly revision: number;
   readonly run: MonitorRun;
 }
+
+/** The key-and-revision pair every retire/stage call names — a
+ *  `HandoffEntry` satisfies it structurally, so a door passes the entry it
+ *  already holds (Phase MD PR 1: 12 of 13 sites used to wrap it in a
+ *  one-element array). */
+export type HandoffRef = Pick<HandoffEntry, "sessionKey" | "revision">;
+
+/** Every reason a production door gives when it retires the record. CLOSED
+ *  on purpose (Phase MD PR 1): `deriveClaim` branches on `"save-success"`,
+ *  and a free string made that comparison a convention. Tests use these
+ *  same members — a test-only reason would un-close the union. */
+export type RetireReason =
+  | "save-success"
+  | "manual-discard"
+  | "monitor-discard"
+  | "today-discard"
+  | "start-replace"
+  | "row-instead"
+  | "connect-guard-armed"
+  | "createMonitorRun-defense";
 
 /** §1/§7: the three shapes a durable attempt can leave behind. `"saved"` —
  *  the whole record, series included, landed. `"saved-without-series"` —
@@ -268,6 +291,138 @@ function safeRemoveItem(
 }
 
 // ---------------------------------------------------------------------
+// The durable record's validators and its raw read (Phase MD PR 1: moved
+// here from `monitorRun.ts` so the module that WRITES the key is the one
+// that says what a valid record is; the builders over there have no
+// storage call left). Every doc comment below travelled with its function.
+// ---------------------------------------------------------------------
+
+export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
+
+/** True when `value.series` is either absent or shaped enough to trust — a
+ *  plain record carrying a `samples` array, never a per-sample domain
+ *  validation. Shared by `stripMalformedSeries` and `isMonitorRun` so the
+ *  pre-pass and the validator cannot drift apart. */
+function hasValidSeries(value: Record<string, unknown>): boolean {
+  const series = value.series;
+  return (
+    series === undefined ||
+    (isPlainRecord(series) && Array.isArray(series.samples))
+  );
+}
+
+/** A malformed `series` used to discard the WHOLE record through
+ *  `isMonitorRun`'s all-or-nothing conjunction — the inverse of §3's own
+ *  sacrifice principle ("only the trace is ever sacrificed, never the
+ *  run"), applied at LOAD time instead of SAVE time. `parseDurableRun`
+ *  runs this FIRST: a `series` that fails `hasValidSeries` is dropped from
+ *  the value before `isMonitorRun` ever sees it, so every other field still
+ *  loads. Returns the SAME reference when `series` is already valid or
+ *  absent. Strips the RETURNED candidate only — the stored bytes stay as
+ *  they are until the next landed `performDurableWrite` replaces them. */
+function stripMalformedSeries(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  if (hasValidSeries(value)) return value;
+  const { series: _series, ...withoutSeries } = value;
+  return withoutSeries;
+}
+
+function isMonitorRun(value: unknown): value is MonitorRun {
+  if (!isPlainRecord(value)) return false;
+  const program = value.program;
+  // `logSeed` (7C, v2): same shallow treatment as `program` above — a v1
+  // record simply omits it (undefined is fine, `loadMonitorRun`'s own
+  // "no throw, no migration" contract), and when present it only has to be
+  // shaped enough not to crash a reader that unconditionally destructures
+  // `steps`/`paces` — never a deep per-step validation.
+  const logSeed = value.logSeed;
+  return (
+    (value.v === 1 || value.v === 2) &&
+    (value.workoutId === null || typeof value.workoutId === "string") &&
+    typeof value.title === "string" &&
+    isPlainRecord(program) &&
+    Array.isArray(program.intervals) &&
+    Array.isArray(value.actuals) &&
+    typeof value.deviceName === "string" &&
+    typeof value.startedAt === "string" &&
+    (value.completedAt === null || typeof value.completedAt === "string") &&
+    typeof value.terminated === "boolean" &&
+    // Phase JR PR 1 (review of 29e00561): `mode` is a KNOWN field, so it is
+    // validated like every other one. Declaring `mode?: "justrow"` and then
+    // never checking it let `mode: "corrupt"` load as a valid record, which
+    // is a different thing from the unknown-key tolerance this validator
+    // deliberately keeps — that tolerance is about fields this build has
+    // never heard of, not about a field it declares and then trusts.
+    (value.mode === undefined || value.mode === "justrow") &&
+    // Phase LL Task 4, widened again by Wave F PR 1 (spec §1): a record
+    // written by ANY era's writer (a legacy `"interrupted"` row, or one of
+    // the five new `CloseReason` values) still loads. Shallow membership
+    // check only, same discipline as every other field this validator
+    // covers: "shaped enough not to crash a reader that unconditionally
+    // destructures `endedBy`," never a claim about which specific writer
+    // produced it.
+    (value.endedBy === undefined ||
+      value.endedBy === "finished" ||
+      value.endedBy === "rower" ||
+      value.endedBy === "link-lost" ||
+      value.endedBy === "program-failed" ||
+      value.endedBy === "program-dropped" ||
+      value.endedBy === "interrupted") &&
+    // Phase LT spec 2, Task 2: same shallow "shaped enough not to crash an
+    // unconditional destructure" treatment as `logSeed` above. No
+    // unknown-key check anywhere in this validator (the `endedBy?`
+    // precedent this comment's own header cites) — this positive
+    // conjunction tolerates the new fields on records this task's own
+    // code never wrote, same as any other additive field ever has.
+    hasValidSeries(value) &&
+    (value.seriesDropped === undefined || value.seriesDropped === true) &&
+    (logSeed === undefined ||
+      (isPlainRecord(logSeed) &&
+        Array.isArray(logSeed.steps) &&
+        isPlainRecord(logSeed.paces)))
+  );
+}
+
+/** JSON → stripped → validated, or null. The ONE parse both readers share:
+ *  `ensureHydrated` (which additionally records the malformed state and
+ *  receipts it) and `loadMonitorRun` (which does neither — a raw read). */
+function parseDurableRun(raw: string): MonitorRun | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const candidate = isPlainRecord(parsed)
+    ? stripMalformedSeries(parsed)
+    : parsed;
+  return isMonitorRun(candidate) ? candidate : null;
+}
+
+/** The raw durable read — `Today.tsx`'s cold-start guard needs a
+ *  synchronous, un-hydrated, always-fresh read of the BYTES (its pin,
+ *  `todayGuard.pin.test.ts`, says why), so this never consults `current`
+ *  and never triggers hydration. Garbage, an unknown shape, or a denied
+ *  getter all read as `null` (the denied getter is receipted); NOTHING is
+ *  cleared on any path (§8). The
+ *  full history of why the read destroys nothing lives in `Today.tsx`'s
+ *  guard comment and the hand-off design spec §8. */
+export function loadMonitorRun(): MonitorRun | null {
+  const raw = safeGetItem(MONITOR_RUN_KEY);
+  if (!raw.ok) {
+    // Denied, not absent — receipted the way hydration receipts the same
+    // failure, so a guard that then discards a draft leaves a record of
+    // WHY it saw nothing (RF25: the owner of "what does Today do when the
+    // origin denies storage" is the receipt channel, not this reader).
+    emit({ kind: "storage-getter-error", operation: "get" });
+    return null;
+  }
+  if (raw.value === null) return null;
+  return parseDurableRun(raw.value);
+}
+
+// ---------------------------------------------------------------------
 // Module-level state — the store IS this state, per §1 ("Nothing else
 // writes MONITOR_RUN_KEY or holds a module-level run") and the Task 2
 // brief ("hydration outside render semantics (module-level: hydrate-on-
@@ -304,12 +459,12 @@ const claims = new Map<string, { renderedRevision: number }>();
  *  interstitial state's own "Cancel: nothing lost" promise, caught by
  *  review.
  *
- *  One process-scoped array, not per-key -- there is at most one Connect
+ *  One process-scoped slot, not per-key -- there is at most one Connect
  *  guard in flight at a time (single-tab assumption, same as every other
  *  piece of state in this module). Overwritten on every `stageRetire`
  *  call (never accumulated): `ConnectAction.tsx`'s own `handleConnect`
- *  calls this UNCONDITIONALLY on every press, staging an empty array
- *  when nothing needs protecting -- so a stale set from an earlier,
+ *  calls this UNCONDITIONALLY on every press, staging `null`
+ *  when nothing needs protecting -- so a stale entry from an earlier,
  *  abandoned press (the confirm panel cancelled, or a different
  *  workout's own Connect) can never survive to wrongly authorize a LATER
  *  press's own "armed" event. `useMonitorSession.ts`'s own `cancel()`/
@@ -322,34 +477,42 @@ const claims = new Map<string, { renderedRevision: number }>();
  *  how a future reader mistakes it for a leak).**
  *  `ConnectedInterstitial.tsx`'s `handleTryAgain` reaches `connect()` —
  *  and from there "armed" — WITHOUT going through `ConnectAction.tsx`'s
- *  `handleConnect`, so it never re-stages. The set from the ORIGINAL
+ *  `handleConnect`, so it never re-stages. The entry from the ORIGINAL
  *  press deliberately survives and authorizes the retry's own armed
  *  retire. That is right, not a hole: Try Again is the SAME attempt on
  *  the SAME record the rower was already warned about one screen earlier
- *  (a failed pair, a dropped link), not a second authorization. The set
+ *  (a failed pair, a dropped link), not a second authorization. The entry
  *  is only discarded when the attempt genuinely DIES -- `cancel()`,
  *  `programDropped`, the confirm panel's own Cancel -- each of which
  *  emits `staged-retire-discarded`. */
-let stagedRetireSet: readonly { sessionKey: string; revision: number }[] = [];
-/** Phase NF (design spec 2026-09-03 §3): WHICH attempt staged the set.
+let stagedRetire: HandoffRef | null = null;
+/** Phase NF (design spec 2026-09-03 §3): WHICH attempt staged the entry.
  *  Discard is compare-by-attempt-ID so a late cleanup from attempt A (an
  *  aborted NFC read settling after the rower already pressed Connect)
  *  cannot discard B's authorization. `null` whenever nothing is staged. */
 let stagedRetireAttempt: ConnectionAttemptId | null = null;
 
 /** Records the Connect guard's own authorization at stage time. See
- *  `stagedRetireSet`'s own doc comment above for the full discipline.
+ *  `stagedRetire`'s own doc comment above for the full discipline.
  *  Task 5 re-review (F-4): a non-empty slot being overwritten is
  *  receipted (`stage-retire-replaced`) -- the ordinary case (staging over
  *  an empty slot) stays silent. */
 export function stageRetire(
-  set: readonly { sessionKey: string; revision: number }[],
+  entry: HandoffRef | null,
   attemptId: ConnectionAttemptId,
 ): void {
-  if (stagedRetireSet.length > 0) {
-    emit({ kind: "stage-retire-replaced", discarded: stagedRetireSet });
+  if (stagedRetire !== null) {
+    emit({
+      kind: "stage-retire-replaced",
+      discarded: [
+        {
+          sessionKey: stagedRetire.sessionKey,
+          revision: stagedRetire.revision,
+        },
+      ],
+    });
   }
-  stagedRetireSet = set;
+  stagedRetire = entry;
   stagedRetireAttempt = attemptId;
 }
 
@@ -360,25 +523,24 @@ export function stageRetire(
  *  design. For the "this attempt died with something still staged" path,
  *  use `discardStagedRetire` below instead -- never this one, discarding
  *  its result. */
-export function takeStagedRetire(attemptId: ConnectionAttemptId): readonly {
-  sessionKey: string;
-  revision: number;
-}[] {
-  // Phase NF (antagonist delta pass F7, then hardening lens 2): a set
+export function takeStagedRetire(
+  attemptId: ConnectionAttemptId,
+): HandoffRef | null {
+  // Phase NF (antagonist delta pass F7, then hardening lens 2): an entry
   // staged by attempt A may authorize ONLY attempt A's armed retire.
   // Phase NF creates a state that did not exist before — a rower back on
-  // workout detail with a set still staged after a quiet/inline NFC
+  // workout detail with an entry still staged after a quiet/inline NFC
   // outcome — and JustRow's zero-argument `connect()` mints its own ID and
   // never stages. A mismatched take is a PURE READ: it neither consumes
-  // nor destroys the set (lens 2: destroying it would let another
+  // nor destroys the entry (lens 2: destroying it would let another
   // attempt's armed event orphan A's authorization). Invariant, not
-  // mechanism: a staged set authorizes exactly one attempt ID's armed
+  // mechanism: a staged entry authorizes exactly one attempt ID's armed
   // retire and nothing else.
-  if (stagedRetireAttempt !== attemptId) return [];
-  const set = stagedRetireSet;
-  stagedRetireSet = [];
+  if (stagedRetireAttempt !== attemptId) return null;
+  const entry = stagedRetire;
+  stagedRetire = null;
   stagedRetireAttempt = null;
-  return set;
+  return entry;
 }
 
 /** Task 5 re-review (F-3/F-4, 2026-08-30): the DISCARD path -- a dead
@@ -393,16 +555,19 @@ export function takeStagedRetire(attemptId: ConnectionAttemptId): readonly {
  *  receipt. */
 export function discardStagedRetire(attemptId: ConnectionAttemptId): void {
   // Phase NF: compare-by-attempt-ID. A discard from an attempt that is not
-  // the one that staged the set is a no-op, silently — it is the ordinary
+  // the one that staged the entry is a no-op, silently — it is the ordinary
   // late-cleanup case, not a fault.
   if (stagedRetireAttempt !== attemptId) return;
-  const set = takeStagedRetire(attemptId);
-  if (set.length > 0) {
-    emit({ kind: "staged-retire-discarded", discarded: set });
+  const entry = takeStagedRetire(attemptId);
+  if (entry !== null) {
+    emit({
+      kind: "staged-retire-discarded",
+      discarded: [{ sessionKey: entry.sessionKey, revision: entry.revision }],
+    });
   }
 }
 
-/** Test/diagnostic accessor: which attempt staged the current set. */
+/** Test/diagnostic accessor: which attempt staged the current entry. */
 export function stagedRetireAttemptId(): ConnectionAttemptId | null {
   return stagedRetireAttempt;
 }
@@ -469,7 +634,7 @@ function malformedReceipt(raw: string): HandoffReceipt {
  *    also throws leaves the old garbage exactly where it was, same as
  *    today.
  *  - `retire()` now ALSO sweeps the slot whenever `durableMalformed` is
- *    set, independent of whether its own `set` argument names anything
+ *    set, independent of whether its own entry argument names anything
  *    that exists — this is the leg that was previously permanently
  *    unreachable: a malformed durable blob hydrates to `current === null`,
  *    so `retire`'s per-entry lookup (keyed on `current.sessionKey`) could
@@ -488,19 +653,8 @@ function ensureHydrated(): void {
   }
   if (raw.value === null) return;
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw.value);
-  } catch {
-    durableMalformed = true;
-    emit(malformedReceipt(raw.value));
-    return;
-  }
-
-  const candidate = isPlainRecord(parsed)
-    ? stripMalformedSeries(parsed)
-    : parsed;
-  if (!isMonitorRun(candidate)) {
+  const candidate = parseDurableRun(raw.value);
+  if (candidate === null) {
     durableMalformed = true;
     emit(malformedReceipt(raw.value));
     return;
@@ -533,11 +687,11 @@ function ensureHydrated(): void {
 }
 
 /**
- * §3's sacrifice ordering, ported verbatim from `monitorRun.ts`'s retired
- * `saveMonitorRun` (Task 3 removes that function's own copy once its
- * callers move onto this store): try the full write; on a throw, retry
- * ONCE without `series` (stamping `seriesDropped: true`) IF a series was
- * present at all; a series-less record that fails skips the retry outright
+ * §3's sacrifice ordering, ported verbatim from `monitorRun.ts`'s
+ * `saveMonitorRun`, which Phase MD PR 1 deleted — this is now the ONLY
+ * copy of the sacrifice ordering (spec §3 invariant 3): try the full write;
+ * on a throw, retry ONCE without `series` (stamping `seriesDropped: true`)
+ * IF a series was present at all; a series-less record that fails skips the retry outright
  * ("there is nothing smaller to try" — the original comment's own words).
  * Updates `durableStateByKey` on success only (§8).
  */
@@ -588,7 +742,7 @@ function performDurableWrite(
  */
 function deriveClaim(
   sessionKey: string,
-  reason: string,
+  reason: RetireReason,
 ): { claimState: ClaimState; claimedRenderedRevision?: number } {
   const existing = claims.get(sessionKey);
   if (existing === undefined) return { claimState: "unclaimed" };
@@ -820,15 +974,15 @@ export function currentUnretired(sessionKey?: string): HandoffEntry | null {
 
 /**
  * §1: "the only destructive operation; one receipt per retired entry (key,
- * revision, claim state §6); nothing found → nothing emitted." Each
- * `{sessionKey, revision}` in `set` is looked up by KEY alone — a revision
+ * revision, claim state §6); nothing found → nothing emitted." The
+ * `{sessionKey, revision}` passed is looked up by KEY alone — a revision
  * mismatch (the entry was superseded between authorization and this call)
  * never blocks the retire; it only changes what the receipt reports
  * (`superseded`/`retiredRevision` vs `authorizedRevision`). This is also
  * what makes save-success's own retire "EXEMPT from rejection by
  * construction" (§1) with no special-casing needed here beyond the
  * `reason` string driving `deriveClaimState`/the `handoff-dropped` receipt
- * below: a genuine key MISMATCH (the set names a key that isn't the
+ * below: a genuine key MISMATCH (the entry names a key that isn't the
  * store's current one at all — §1's "receipted-impossible" new-key case)
  * is simply absent from `current`'s perspective and falls into "nothing
  * found," the identical no-op path an ordinary stale lookup takes.
@@ -846,9 +1000,9 @@ export function currentUnretired(sessionKey?: string): HandoffEntry | null {
  * the ordinary retire receipt so the failure is at least named, even
  * though nothing downstream branches on it.
  *
- * **Also sweeps a malformed durable slot, independent of `set` finding
+ * **Also sweeps a malformed durable slot, independent of the entry finding
  * anything** (task-2 review, finding I2). Every call to this function —
- * even one whose own `set` matches nothing at all — is the ONE reachable
+ * even one whose own entry matches nothing at all — is the ONE reachable
  * moment nothing else in this module ever gets: `retire` is the only
  * function that ever calls `safeRemoveItem`, so a malformed blob (which
  * hydrates to `current === null` and can therefore never be "found" by
@@ -859,8 +1013,8 @@ export function currentUnretired(sessionKey?: string): HandoffEntry | null {
  * failure there emits the identical `storage-getter-error` receipt.
  */
 export function retire(
-  set: readonly { sessionKey: string; revision: number }[],
-  reason: string,
+  { sessionKey, revision: authorizedRevision }: HandoffRef,
+  reason: RetireReason,
 ): void {
   ensureHydrated();
 
@@ -872,55 +1026,53 @@ export function retire(
     durableMalformed = false;
   }
 
-  for (const { sessionKey, revision: authorizedRevision } of set) {
-    const entry =
-      current !== null && current.sessionKey === sessionKey ? current : null;
-    if (entry === null) continue; // nothing found -> nothing emitted (§1)
+  const entry =
+    current !== null && current.sessionKey === sessionKey ? current : null;
+  if (entry === null) return; // nothing found -> nothing emitted (§1)
 
-    const { claimState, claimedRenderedRevision } = deriveClaim(
-      sessionKey,
-      reason,
-    );
+  const { claimState, claimedRenderedRevision } = deriveClaim(
+    sessionKey,
+    reason,
+  );
 
-    current = null;
-    tombstones.add(sessionKey);
-    claims.delete(sessionKey);
-    durableStateByKey.delete(sessionKey);
-    cachedVerdicts.delete(sessionKey);
-    const removal = safeRemoveItem(MONITOR_RUN_KEY);
-    if (!removal.ok) {
-      emit({ kind: "storage-getter-error", operation: "remove" });
-    }
+  current = null;
+  tombstones.add(sessionKey);
+  claims.delete(sessionKey);
+  durableStateByKey.delete(sessionKey);
+  cachedVerdicts.delete(sessionKey);
+  const removal = safeRemoveItem(MONITOR_RUN_KEY);
+  if (!removal.ok) {
+    emit({ kind: "storage-getter-error", operation: "remove" });
+  }
 
-    const superseded = entry.revision !== authorizedRevision;
+  const superseded = entry.revision !== authorizedRevision;
+  emit({
+    kind: "retire",
+    sessionKey,
+    authorizedRevision,
+    retiredRevision: entry.revision,
+    superseded,
+    claimState,
+    ...(claimedRenderedRevision !== undefined
+      ? { claimedRenderedRevision }
+      : {}),
+    reason,
+  });
+
+  // task-2 review, minor: gated on STRICTLY GREATER, not merely
+  // `superseded` (`!==`) — "richer-at-save" asserts the current
+  // revision is richer; revisions are monotonic in every reachable
+  // sequence, so this is equivalent in practice, but the label this
+  // receipt carries should never be reachable via a LOWER revision if
+  // some future bug ever produced one.
+  if (reason === "save-success" && entry.revision > authorizedRevision) {
     emit({
-      kind: "retire",
+      kind: "handoff-dropped",
+      reason: "richer-at-save",
       sessionKey,
-      authorizedRevision,
-      retiredRevision: entry.revision,
-      superseded,
-      claimState,
-      ...(claimedRenderedRevision !== undefined
-        ? { claimedRenderedRevision }
-        : {}),
-      reason,
+      claimedRevision: authorizedRevision,
+      currentRevision: entry.revision,
     });
-
-    // task-2 review, minor: gated on STRICTLY GREATER, not merely
-    // `superseded` (`!==`) — "richer-at-save" asserts the current
-    // revision is richer; revisions are monotonic in every reachable
-    // sequence, so this is equivalent in practice, but the label this
-    // receipt carries should never be reachable via a LOWER revision if
-    // some future bug ever produced one.
-    if (reason === "save-success" && entry.revision > authorizedRevision) {
-      emit({
-        kind: "handoff-dropped",
-        reason: "richer-at-save",
-        sessionKey,
-        claimedRevision: authorizedRevision,
-        currentRevision: entry.revision,
-      });
-    }
   }
 }
 
@@ -978,7 +1130,7 @@ export function resetForTests(): void {
   cachedVerdicts.clear();
   hydrated = false;
   durableMalformed = false;
-  stagedRetireSet = [];
+  stagedRetire = null;
   stagedRetireAttempt = null;
   // Reuses `setReceiptChannel(null)` rather than duplicating its
   // `() => undefined` default inline: a second, hand-written copy of that
@@ -991,26 +1143,135 @@ export function resetForTests(): void {
   setReceiptChannel(null);
 }
 
-/** The store's own name, per the plan's Global Constraints ("Names
- *  verbatim from the spec: `handoffStore` ..."). A plain object of the
- *  module's exported functions — this module has exactly one instance per
- *  process by design (§1's module-level state), so this is a namespacing
- *  convenience for call sites, not a second construction path; every
- *  function above is equally reachable by its own named export (this
- *  file's tests use the named exports directly, matching the rest of this
- *  codebase's `import { fn } from "./module"` convention). */
-export const handoffStore = {
-  commit,
-  retryDurable,
-  read,
-  hydrate,
-  currentUnretired,
-  retire,
-  claim,
-  durableState,
-  cachedVerdict,
-  stageRetire,
-  takeStagedRetire,
-  discardStagedRetire,
-  stagedRetireAttemptId,
-};
+/** What a Connect press has to warn about before it is allowed through, or
+ *  `null` when nothing is at risk. Shares its shape with `WorkoutDetail`'s
+ *  own `replaceStage` union (`session/useStartWorkout.ts`'s
+ *  `StartReplaceStage`), and — as of the close-out's queue item 3 — the two
+ *  doors now fully AGREE on when `"in-progress"` applies: a `SessionRun`
+ *  (a phone timer genuinely running in the background) stages it while
+ *  live, on both doors; a `MonitorRun` never does, on either door, because
+ *  any `MonitorRun` either door can see is always dead (F6 spec 2b, exit
+ *  criterion 5 — see `connectGuardStage`'s own doc comment below). HISTORY:
+ *  Start's door used to branch its `MonitorRun` case on `completedAt` too,
+ *  staging `"in-progress"` for a live-looking record — the close-out's
+ *  queue item 3 shed that, on the identical reasoning this function's own
+ *  comment already gives for the Connect door. NOT the same way its
+ *  `SessionRun` case still does, though: at the Start door, the
+ *  `SessionRun` branch only ever distinguishes completed ("unlogged") from
+ *  everything else, never `"in-progress"` — that door's own
+ *  `"in-progress"` for a genuinely live phone-timer session is produced by
+ *  a DIFFERENT branch entirely, the started-but-unfinished `SessionDraft`
+ *  check (`session/useStartWorkout.ts`'s `handleStart`, `startedAt !==
+ *  null`). Only THIS function's own `SessionRun` check (below) branches on
+ *  live-vs-finished to produce `"in-progress"` directly. */
+export type ConnectGuardStage = "unlogged" | "in-progress" | null;
+
+/**
+ * The Connect guard (7B, spec §3 — "the F5 walk, closed"). Answers "would
+ * connecting a monitor right now destroy something the rower still needs?"
+ * by reading the `SessionRun` record DIRECTLY, which is the whole point of
+ * this function existing separately from the deleted `anyLiveSession()`
+ * (see the anti-pattern note below).
+ *
+ * ROADMAP M-1, verbatim, because routing this through the function above is
+ * the exact mistake it was written to prevent:
+ *
+ * > **Guard wiring is NOT uniform (final-review M-1 — read before touching
+ * > any guard that reads `RUN_KEY`/`MONITOR_RUN_KEY`).** ... Routing either
+ * > through `anyLiveSession()` silently downgrades "unlogged" to "none" and
+ * > reintroduces the F5 data-loss class (a real, previously-shipped bug: a
+ * > stale run record silently discarded instead of protected). When adding
+ * > a NEW guard, ask "does this care about unlogged specifically, or just
+ * > live-vs-not" before picking which of the two patterns to follow.
+ *
+ * For Connect the answer is **YES, it cares about unlogged specifically**:
+ * the action behind it is `createMonitorRun` above, whose `clearRun()` is
+ * unconditional, and a finished-but-unlogged `SessionRun` is precisely the
+ * record 6B's F5 fix exists to protect — `anyLiveSession()` (deleted in
+ * Phase MD PR 1), whose own pinned table returned `"none"` for it (rows 7
+ * and 9), so a Connect guard wired
+ * that way would walk straight past the one case it is FOR. This is the
+ * same direct-read pattern `Today.tsx`'s cold-start guard already uses, and
+ * for the same reason its own comment gives.
+ *
+ * A LIVE `SessionRun` (`completedAt === null`) is staged too, with the
+ * "in progress" sentence rather than the "unlogged" one: `clearRun()`
+ * destroys that record just as completely, and the spec's own constraint is
+ * that **no silent destruction path exists in either direction**. It is a
+ * lesser loss than the unlogged case (an abandoned session was never going
+ * to be logged), which is why the two get different copy — the identical
+ * severity ordering, and the identical pair of sentences, that
+ * `WorkoutDetail`'s `handleStart` already applies at the other door.
+ *
+ * **This guard covers the `MonitorRun` side too, not just the
+ * `SessionRun`.** Everything downstream of a Connect press now destroys
+ * that record through the store rather than raw storage —
+ * `WorkoutDetail.handleRowInstead` retires whatever it finds (key-bound),
+ * and the create-commit at `useMonitorSession`'s "ready" branch retires the
+ * staged key before opening a new one — but a retire is still a
+ * destruction, so a rower must be ASKED first. A
+ * finished-but-unlogged `MonitorRun` is 7C's entire prefill input — exactly
+ * the same class of record the `SessionRun` check above exists to protect,
+ * on the OTHER side of the coexistence line. `WorkoutDetail.handleStart`
+ * has read both records since Task 2 (ROADMAP M-1's own two-record
+ * widening); this function reading only one was Task 2's original scope
+ * (`ConnectAction` shipped unmounted, so the `MonitorRun` side was
+ * unreachable through it) and became a live F5-class hole the instant Task
+ * 5 mounted the button. Same descending-severity order `handleStart`
+ * already uses: the `SessionRun` check runs first (unchanged), then the
+ * `MonitorRun` check — so a rower with BOTH records stale gets staged
+ * exactly ONCE, not twice, and the `SessionRun`'s own sentence wins ties
+ * the same way `handleStart`'s ordering already resolves them. No new copy:
+ * both sentences already exist and are shared with the `SessionRun` case
+ * above.
+ *
+ * **F6 spec 2b, Task 2 — the `MonitorRun` check no longer branches on
+ * `completedAt`.** It used to mirror the `SessionRun` check above,
+ * staging `"in-progress"` for a `completedAt === null` record on the
+ * theory that the erg was mid-piece. That theory was never true at this
+ * door: a connected session's own screen is WorkoutDetail, and both a
+ * reload and a navigation away tear the `useMonitorSession` hook down
+ * without ever touching the record — so any `MonitorRun` still visible
+ * here, live-looking or not, is a run nothing is driving anymore. Exit
+ * criterion 5 names the defect this produced ("Connect never again asks
+ * 'Replace it?' about a dead run"): every `MonitorRun` this function can
+ * see now stages `"unlogged"`, matching the finished case it already used
+ * to reach. The `SessionRun` branch above is untouched — a phone timer
+ * genuinely does keep running in the background across reload/navigation,
+ * so `"in-progress"` stays true there.
+ *
+ * **The anti-pattern this guard exists to avoid — formerly
+ * `anyLiveSession()`, deleted in Phase MD PR 1 (James's ruling, spec §7).**
+ * That helper collapsed both records to a live/not-live answer and so
+ * returned `"none"` for a finished-but-unlogged record — the exact record
+ * F5 destroyed (ROADMAP M-1, quoted above). Its nine-cell truth table and
+ * twelve tests died with it. The rule it was the counter-example for
+ * stands: a guard that protects an unlogged record reads that record
+ * DIRECTLY and asks about unlogged specifically. `Today.tsx`'s cold-start
+ * guard (`todayGuard.pin.test.ts`) and this function are the two live
+ * examples.
+ *
+ * **Phase MD PR 1: this function reads the store itself.** It lives in the
+ * store now, so the boolean its callers used to compute for it — because
+ * the reverse import was circular — is gone. Sold honestly: both callers
+ * (`ConnectAction.tsx`'s `handleEntry`, `JustRow.tsx`'s `handleStart`)
+ * still call `currentUnretired()` themselves for `setUnsavedCount`, so the
+ * count the rower sees and the decision to stage come from two reads of
+ * the same in-memory entry rather than one. That is consistent with the
+ * existing double read of `loadRun()` here and in those callers, not a
+ * simplification.
+ */
+export function connectGuardStage(): ConnectGuardStage {
+  const run = loadRun();
+  if (run !== null) {
+    return run.completedAt === null ? "in-progress" : "unlogged";
+  }
+  if (currentUnretired() !== null) {
+    // A MonitorRun visible at a Connect door is dead: the connected
+    // session lives on WorkoutDetail's surface and reload/navigation
+    // tears it down. "In progress" would assert machine state we do
+    // not have (spec 2b, exit criterion 5).
+    return "unlogged";
+  }
+  return null;
+}

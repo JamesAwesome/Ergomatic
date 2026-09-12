@@ -21,7 +21,8 @@ import { buildLogSeed } from "../session/logDraft";
 import { buildDraft, type SessionDraft, DRAFT_KEY } from "../session/draft";
 import { advance, buildFreeRowRun, buildRun } from "../session/engine";
 import { RUN_KEY, type SessionRun } from "../session/run";
-import { MONITOR_RUN_KEY, type MonitorRun } from "../monitor/monitorRun";
+import type { MonitorRun } from "../monitor/monitorRun";
+import { MONITOR_RUN_KEY } from "../monitor/handoffStore";
 import { elapsedSinceStart } from "./Today";
 import { TODAY_PICK_KEY, todayDateString, type TodayPick } from "./todayPick";
 import { TODAY_OVERRIDES_KEY, type TodayOverrides } from "./todayOverrides";
@@ -2767,9 +2768,11 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
 // two describe blocks side by side and see exactly where they diverge: the
 // copy ("interrupted connected session." vs "unlogged session."), Log it's
 // target (a stamp-then-navigate button, not a bare `<Link>`), the discard
-// body (`clearMonitorRun()` only — the session/draft records are a
-// DIFFERENT rower's-in-progress-phone-timer concern this row must never
-// touch), and the null-`workoutId` latent (no Log it at all).
+// body (`retireHandoff()` only, key-bound to the `MonitorRun` entry — the
+// legacy `clearMonitorRun()` did this before Phase MD PR 1; the
+// session/draft records are a DIFFERENT rower's-in-progress-phone-timer
+// concern this row must never touch), and the null-`workoutId` latent (no
+// Log it at all).
 describe("Today (2b): the interrupted connected session row", () => {
   it("a refused interrupted close opens unavailable without claiming or changing the newer open revision", async () => {
     const run = makeMonitorRun({ completedAt: null });
@@ -3001,7 +3004,7 @@ describe("Today (2b): the interrupted connected session row", () => {
       ),
     ).toBeVisible();
 
-    const { loadMonitorRun } = await import("../monitor/monitorRun");
+    const { loadMonitorRun } = await import("../monitor/handoffStore");
     const stamped = loadMonitorRun();
     expect(stamped?.completedAt).not.toBeNull();
     expect(stamped?.endedBy).toBe("interrupted");
@@ -3010,10 +3013,11 @@ describe("Today (2b): the interrupted connected session row", () => {
   it("discard is staged: first tap arms in place, second tap clears ONLY the monitor record", async () => {
     // A completed-but-unlogged SessionRun AND a draft, both real fixtures —
     // the exact records `useStagedDiscard().fire()` would clear (wrongly,
-    // for this row) if `handleDiscardClick` ever called it instead of
-    // `clearMonitorRun()` directly. Both rows render at once (Task 3's
-    // UnloggedRow beside this one), which is why every query below is
-    // scoped with `within()` on the row under test.
+    // for this row) if `UnsavedWorkouts`'s `handleDiscard` ever called it
+    // instead of the key-bound `retireHandoff()` (the legacy
+    // `clearMonitorRun()` did this before Phase MD PR 1). Both rows render
+    // at once (Task 3's UnloggedRow beside this one), which is why every
+    // query below is scoped with `within()` on the row under test.
     const sessionRun = unloggedRunFor(
       new Date("2026-08-01T11:00:00.000Z"),
       new Date("2026-08-01T11:40:00.000Z"),
@@ -3167,7 +3171,7 @@ describe("Today (2b): the interrupted connected session row", () => {
 describe("Today (§10 row 9): a memory-only unlogged row, present before reload and honestly gone after", () => {
   it("renders while the durable write stays denied, then a reload sees nothing — receipted at the ORIGINAL commit, not invented at hydration", async () => {
     mockReady();
-    const { handoffStore, setReceiptChannel } =
+    const { commit, setReceiptChannel } =
       await import("../monitor/handoffStore");
     const receipts: unknown[] = [];
     setReceiptChannel((r) => receipts.push(r));
@@ -3181,7 +3185,7 @@ describe("Today (§10 row 9): a memory-only unlogged row, present before reload 
       .mockImplementation(() => {
         throw new Error("simulated quota failure");
       });
-    const result = handoffStore.commit(run.startedAt, null, run);
+    const result = commit(run.startedAt, null, run);
     setItemSpy.mockRestore();
 
     // Fixture sanity: memory accepted it, durable genuinely never landed.
@@ -3972,7 +3976,7 @@ describe("Today (JR): the free row's recovery row", () => {
     // than on its programmed twin above: Log it on an open free row
     // stamps `interrupted` — the documented "closed later with no
     // evidence" value — before it routes.
-    const { loadMonitorRun } = await import("../monitor/monitorRun");
+    const { loadMonitorRun } = await import("../monitor/handoffStore");
     const stamped = loadMonitorRun();
     expect(stamped?.completedAt).not.toBeNull();
     expect(stamped?.endedBy).toBe("interrupted");
