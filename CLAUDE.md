@@ -40,17 +40,27 @@ requirements).
   thing — both roots hold the same names — and deliberately not frontmatter
   (for a symlinked pair both paths are the same inode, so that compare is
   `cmp(x, x)`) nor whether a skill REFERENCED by another skill exists at all.
-  The vendored eight are canonical in `.agents/`
-  and reach Claude Code through SYMLINKS at `.claude/skills/<name>`; the four
-  owned skills are canonical in `.claude/` and reach Codex through the
-  ten-line adapters. Pointers in both directions, copies in neither. **If the
-  `skills` CLI vendors a ninth skill, add its symlink in the same commit** —
-  the gate goes red otherwise, which is the whole point of it.
-  **`skillOverrides` is keyed per skill NAME, not per turn** (measured
-  2026-09-12): pinning a skill `user-invocable-only` also refuses the nested
-  `Skill` calls that `grill-with-docs`, `wayfinder` and
-  `improve-codebase-architecture` make into `domain-modeling`, even when
-  James typed the parent himself. Check a skill's callers before pinning it.
+  The vendored FOUR (`codebase-design`, `grill-me`, `grilling`,
+  `improve-codebase-architecture`) are canonical in `.agents/` and reach
+  Claude Code through SYMLINKS at `.claude/skills/<name>`; the four owned
+  skills are canonical in `.claude/` and reach Codex through the ten-line
+  adapters. Pointers in both directions, copies in neither. **If the `skills`
+  CLI vendors another skill, add its symlink in the same commit** — the gate
+  goes red otherwise, which is the whole point of it.
+  **`tdd`, `domain-modeling`, `wayfinder` and `grill-with-docs` were vendored
+  and then REMOVED (James, 2026-09-12) — do not re-vendor them without
+  asking.** `wayfinder` dispatched to `research` and `prototype`, which were
+  never vendored; `tdd` contradicted the already-loaded
+  `superpowers:test-driven-development` on whether refactoring is in the loop;
+  `domain-modeling` created `CONTEXT.md` and `docs/adr/` unprompted, a fourth
+  decision-record system; `grill-with-docs` was one line calling the last of
+  those, so it became `grilling` with extra steps.
+  **A vendored skill is not free just because it is vendored** — read what it
+  invokes and what it writes before adding it. **And `skillOverrides` is keyed
+  per skill NAME, not per turn** (measured 2026-09-12), so pinning one
+  `user-invocable-only` also refuses the nested `Skill` calls other skills
+  make into it, even when James typed the parent himself: check a skill's
+  callers before pinning it.
 
 ## Commands (run in `app/`)
 
