@@ -11,6 +11,8 @@ import {
   commit as commitHandoff,
   resetForTests as resetHandoffStoreForTests,
 } from "../monitor/handoffStore";
+import { buildStoredSummary, type StoredLog } from "../log/storedSummary";
+import { machineTierFromRun } from "../session/summaryModel";
 
 /** The plan the door reads through `usePlan()` (substitution spec
  *  2026-09-02, §Mechanism 2). `NO_PLAN` is the server's own no-plan body;
@@ -752,5 +754,94 @@ describe("JustRowLog: precedence when both records exist", () => {
     expect(
       ringEntries().filter((e) => e.kind === "justrow-log-door-conflict"),
     ).toHaveLength(0);
+  });
+});
+
+// The seam between the two doors that render a free row's RATE tile.
+//
+// Both halves were well tested and neither test crossed to the other, which
+// is the condition recurring failure 24 says HIDES a broken seam rather than
+// the condition that proves one works. So this suite starts at the PRODUCER —
+// it renders the real Just Row log door, lets it post, and reads the tile
+// back out of the body that door actually sent — instead of hand-building a
+// stored row and asserting on it.
+//
+// What it caught: `summaryModel.ts`'s live tier can see `run.mode`, and
+// `storedSummary.ts`'s reopened tier cannot, because `StoredLog` carries no
+// `mode`. The reopened door inferred "finished" from `endedBy` alone, a free
+// row's `endedBy` is always `"rower"`, and it stores `steps: []` — so the
+// weighted-mean fallback had nothing to weigh and the tile went from the
+// monitor's own average to a dash on reopen.
+describe("the free row's RATE tile agrees at both doors", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetHandoffStoreForTests();
+  });
+  afterEach(() => {
+    vi.doUnmock("../api");
+    vi.resetModules();
+  });
+
+  /** The row the server hands back for the body this door posted. Only the
+   *  columns the server ADDS are supplied here (`id`, `loggedAt`, and the
+   *  reflection fields a save leaves null); every tier input comes from the
+   *  posted body, so nothing this assertion depends on was typed by hand. */
+  function rowFromPostedBody(body: Record<string, unknown>): StoredLog {
+    return {
+      id: "log-1",
+      loggedAt: "2026-09-01T09:10:20.000Z",
+      held: null,
+      effort: null,
+      notes: null,
+      thumbs: null,
+      planKey: null,
+      planIndex: null,
+      ...body,
+    } as unknown as StoredLog;
+  }
+
+  it("reads the monitor's own average at BOTH doors, not 22 live and a dash on reopen", async () => {
+    const fn = mockApi(() => new Response(JSON.stringify({ id: "log-1" })));
+    const run = closedFreeRow();
+    commitHandoff(run.startedAt, null, run);
+    await renderDoor();
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => savedBody(fn));
+    const stored = buildStoredSummary(rowFromPostedBody(savedBody(fn)));
+
+    // 22 is `closedFreeRow`'s own `avgStrokeRate` — an INDEPENDENT literal,
+    // not `machineTierFromRun`'s output, so this pins the number rather than
+    // pinning the two derivations to each other (recurring failure 21's
+    // "a test that imports the constant it exists to gate").
+    expect(machineTierFromRun(run).rate).toBe(22);
+    expect(stored.heroes.machine?.rate).toBe(22);
+  });
+
+  it("still refuses a rate on a TERMINATED programmed row, which is the case the free-row branch must not swallow", async () => {
+    // The guard on the fix: a programmed piece cut short really does have a
+    // doubled 0x0039 average (pm5-interface-notes §27.6) and really must
+    // fall back to the splits. A free row is exempt because it has no
+    // defined end to fall short of — not because `endedBy` is convenient.
+    // Same shape as above with a workout id and no splits: still a dash.
+    const programmed = rowFromPostedBody({
+      workoutId: "w-1",
+      workoutType: "AT",
+      workoutTitle: "Some piece",
+      source: "pm5",
+      deviceName: "PM5 432331249",
+      steps: [],
+      endedBy: "rower",
+      timeSeconds: 620,
+      distanceMeters: 2480,
+      workSeconds: 620,
+      workMeters: 2480,
+      machineWorkSeconds: 620,
+      machineWorkMeters: 2480,
+      machineSummary: { avgStrokeRate: 22 },
+    });
+
+    expect(buildStoredSummary(programmed).heroes.machine?.rate).toBeUndefined();
   });
 });
