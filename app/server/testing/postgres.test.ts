@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
-import { startPostgres, PORT_BIND_TIMEOUT_RE } from "./postgres.js";
+import { startPostgres } from "./postgres.js";
 
 // Minimal stand-ins — only the properties startPostgres itself touches.
 const fakeStarted = (tag: string) =>
@@ -69,13 +69,27 @@ describe("startPostgres", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("matches the exact vendored message shape regardless of the timeout value", () => {
-    expect(PORT_BIND_TIMEOUT_RE.test(timeoutError().message)).toBe(true);
-    expect(
-      PORT_BIND_TIMEOUT_RE.test(
-        "Timed out after 30000ms while waiting for container ports to be bound to the host",
-      ),
-    ).toBe(true);
-    expect(PORT_BIND_TIMEOUT_RE.test("connection refused")).toBe(false);
+  it("retries on the vendored message whatever timeout value it carries, and on nothing else", async () => {
+    // Independent literals on purpose (RF21): a test that imported the
+    // module's own regex would retune with it.
+    const later = new Error(
+      "Timed out after 30000ms while waiting for container ports to be bound to the host",
+    );
+    const start = vi
+      .fn<() => Promise<StartedPostgreSqlContainer>>()
+      .mockRejectedValueOnce(later)
+      .mockResolvedValueOnce(fakeStarted("second"));
+    await expect(
+      startPostgres({ start, delayMs: 0, warn: () => undefined }),
+    ).resolves.toBe(await start.mock.results[1]?.value);
+    expect(start).toHaveBeenCalledTimes(2);
+
+    const refused = vi
+      .fn<() => Promise<StartedPostgreSqlContainer>>()
+      .mockRejectedValue(new Error("connection refused"));
+    await expect(
+      startPostgres({ start: refused, delayMs: 0, warn: () => undefined }),
+    ).rejects.toThrow("connection refused");
+    expect(refused).toHaveBeenCalledTimes(1);
   });
 });

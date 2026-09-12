@@ -30,11 +30,11 @@ import {
   type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
 
-export const POSTGRES_IMAGE = "postgres:18.4";
+const POSTGRES_IMAGE = "postgres:18.4";
 
 // Matches testcontainers' own message regardless of the timeout value it was
 // built with, so a future bump that changes the ceiling still matches.
-export const PORT_BIND_TIMEOUT_RE =
+const PORT_BIND_TIMEOUT_RE =
   /Timed out after \d+ms while waiting for container ports to be bound/;
 
 export interface StartPostgresOptions {

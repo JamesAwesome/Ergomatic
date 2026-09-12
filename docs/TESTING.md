@@ -31,7 +31,7 @@ SQL).
 | Layer | Lives in | Runs in | Speed | What it may assert |
 |---|---|---|---|---|
 | Domain | `app/domain/**` | Vitest `unit` project | milliseconds | Exact values. This is the product's math contract (pace, pain, splits, plan expansion) — no framework, no I/O, so there's no excuse for anything less than precise. Pinned to 100% coverage. |
-| Stores | `app/server/stores/**` | Vitest `integration` project (Testcontainers Postgres) | seconds | The only place SQL behavior is truth: constraints, error codes, transactions, real UUID/type coercion. If a store test passes here, it passes against real Postgres — not an approximation of it. |
+| Stores | `app/server/stores/**` | Vitest `integration` project (Testcontainers Postgres, started through `app/server/testing/postgres.ts`, which retries testcontainers' hardcoded 10 s port-bind timeout once) | seconds | The only place SQL behavior is truth: constraints, error codes, transactions, real UUID/type coercion. If a store test passes here, it passes against real Postgres — not an approximation of it. |
 | Routes | `app/server/routes/**`, `app/server/auth/**` | Vitest `unit` project (in-memory fakes) | milliseconds | Request handling, validation, auth gating, status codes — fast, because it runs against fakes. The store **contract suites** (§5) are what keep those fakes honest so "fast" doesn't mean "fictional." |
 | Client | `app/src/**` | Vitest `client` project (jsdom) | milliseconds | Rendered output and behavior, queried **by role and accessible name** (React Testing Library) — never by snapshot, never by implementation detail. |
 | E2E | `app/e2e/**` | Playwright, Chromium, against the real `docker compose` stack | ~1–2s per test, minutes for the stack boot | A few golden flows through the fully wired app (real server, real DB, real static-file serving) — the layer that catches boundary bugs no layer below it can see by construction (see the incident above). |
@@ -142,9 +142,7 @@ panic at this number later.** `vitest.stryker.config.ts` scopes mutation to
 the `unit` Vitest project only (the `integration` project spins up a
 Testcontainers Postgres per test file; running it per-mutant would be
 prohibitively slow and would force Docker onto every mutation run).
-`app/server/testing/postgres.ts` is where every integration file starts that
-container, and it retries once on testcontainers' hardcoded 10s port-bind
-timeout before giving up. Unit
+Unit
 tests only exercise the in-memory fakes, never the real Drizzle-backed store
 files — so mutating the real store implementations against unit-only
 coverage produces almost entirely `[NoCoverage]` mutants: the mutated line
