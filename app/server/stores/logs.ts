@@ -39,19 +39,23 @@ export type Thumbs = "up" | "down";
 // pgEnum (`server/db/schema.ts`'s `endedByEnum`) is the value authority;
 // this type mirrors it the same way `HeldResult`/`Thumbs` above already
 // mirror theirs.
-// Wave F PR 1 (lifecycle design spec §1, "The migration, owned"): this is
-// a HAND-COPIED literal union, not derived from `CloseReason` — widening
-// the client union typechecks clean and fails only at runtime on a phone
-// unless this mirror (and `server/db/schema.ts`'s `endedByEnum`, and
-// `server/routes/data.ts`'s `ENDED_BY_VALUES`) moves in the same commit.
-// `"program-dropped"` added here for exactly that reason.
-export type EndedBy =
-  | "finished"
-  | "rower"
-  | "link-lost"
-  | "program-failed"
-  | "program-dropped"
-  | "interrupted";
+// DERIVED from the pgEnum since Phase MD PR 3, not hand-copied. It was a
+// literal union, and so was `server/routes/data.ts`'s `ENDED_BY_VALUES`, and
+// so was the prose inside that route's own error message — four copies of
+// one value set, each of which typechecked clean while disagreeing with the
+// column. Widening now happens once, in `server/db/schema.ts`. The same
+// expression already compiles a few hundred lines below, in
+// `PARTIAL_ENDED_BY`'s `satisfies` clause, which is where the idiom comes
+// from; drizzle types `enumValues` as the literal tuple inferred at the
+// `pgEnum` call site, not `string[]`.
+export type EndedBy = (typeof endedByEnum.enumValues)[number];
+
+/** The same six values as a runtime array, for the route's own bounds check
+ *  and for the message it prints when that check refuses. Exported from here
+ *  rather than re-typed in `routes/data.ts`: that file already imports
+ *  `EndedBy` from this module and does not import `db/schema.js` at all, so
+ *  this adds no import edge into the schema for the route layer. */
+export const ENDED_BY_VALUES = endedByEnum.enumValues;
 
 // Amendment (2026-08-02, Phase 6C Task 1.5): targetSplit is now OPTIONAL (an
 // effort step's frozen split is an estimate, never a prescription — the 5G

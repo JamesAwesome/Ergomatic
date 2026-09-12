@@ -18,6 +18,7 @@ import {
 } from "../stores/baselines.js";
 import {
   CursorNotFoundError,
+  ENDED_BY_VALUES,
   type ActualSource,
   type EndedBy,
   type HeldResult,
@@ -58,19 +59,6 @@ const THUMBS_VALUES: Thumbs[] = ["up", "down"];
 // values `server/db/schema.ts`'s `endedByEnum` accepts. `endedByError`
 // below is the "validateSeriesSample's cousin" the brief names: known
 // value or absent, reject anything else.
-// Wave F PR 1 (lifecycle design spec §1, "The migration, owned"): a third
-// independent mirror of the same value set (alongside the pgEnum and
-// `server/stores/logs.ts`'s `EndedBy`) — `"program-dropped"` moves here
-// in the same commit as those two, or an unwidened validator 400s every
-// program-dropped save outright.
-const ENDED_BY_VALUES: EndedBy[] = [
-  "finished",
-  "rower",
-  "link-lost",
-  "program-failed",
-  "program-dropped",
-  "interrupted",
-];
 const PLAN_KEYS: PlanKey[] = ["sprint", "head"];
 const ACCENT_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 // Conservative slug shape, validated here rather than against the bundled
@@ -172,7 +160,11 @@ function endedByError(value: unknown): string | null {
     value !== null &&
     !ENDED_BY_VALUES.includes(value as EndedBy)
   ) {
-    return "endedBy must be one of finished|rower|link-lost|program-failed|program-dropped|interrupted or null";
+    // The value list is DERIVED (Phase MD PR 3), not typed out: this prose
+    // was the fourth hand-copy of the enum and could go stale without any
+    // gate noticing. `data.test.ts` keeps the full string as an INDEPENDENT
+    // literal, which is what pins the wording.
+    return `endedBy must be one of ${ENDED_BY_VALUES.join("|")} or null`;
   }
   return null;
 }
