@@ -40,6 +40,7 @@ import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
+import * as appLifecycleModule from "../adapters/appLifecycle";
 import { releasingSchedule } from "../test/statusSubscriptions";
 import type { MonitorRun } from "./monitorRun";
 import { loadMonitorRun, MONITOR_RUN_KEY } from "./handoffStore";
@@ -16273,3 +16274,185 @@ describe("useMonitorSession: an unsupported erg machine", () => {
  * today. Filed under Phase MT in ROADMAP.md. A test that cannot fail is worse
  * than no test, so there is none here (RF21).
  */
+
+// THE LIFECYCLE SEAM (Phase MD PR 2). `MonitorSessionDeps.
+// registerAppLifecycleListener` defaults to the adapter export and is read
+// from `depsRef` at each of the two call sites' own call time. These tests
+// are the seam's contract; every OTHER lifecycle test in this file now
+// rides it instead of `vi.doMock`ing the adapter.
+//
+// A fifth test — `withDerivedAxes` refusing a HALF override of
+// `axes`/`linkLoss` — belongs here per the plan (it is where the helper is
+// already imported) but needs Task 2 Step 4's `src/test/sessionAxes.ts`,
+// which does not exist yet in this commit. Deferred to Task 2, per the
+// plan's own escape valve ("write it in Task 1 and let it be RED until
+// then, or move it into Task 2; say which in the report") and confirmed by
+// the plan's own expected count at Step 6 (322 = 318 + 4, not + 5).
+describe("the lifecycle registrar dependency", () => {
+  const ATTEMPT_ID = "3c1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+  const targetedRequest = {
+    kind: "advertised-name" as const,
+    attemptId: ATTEMPT_ID,
+    exactName: DEVICE_NAME,
+  };
+
+  it("omitted, the hook calls the ADAPTER's own export — the static import IS the default", async () => {
+    // No `vi.resetModules()` anywhere in this test ON PURPOSE: a reset gives
+    // the hook a DIFFERENT module registry, whose `appLifecycle` namespace is
+    // not the object spied on here, and the spy would then never be called
+    // however correct the default was.
+    const spy = vi
+      .spyOn(appLifecycleModule, "registerAppLifecycleListener")
+      .mockImplementation(() => () => undefined);
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("a rejected SESSION registration on a LIVE attempt is exactly one ring entry naming the cause, and the session carries on", async () => {
+    let rejectRegistration!: (err: unknown) => void;
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        registerAppLifecycleListener: () =>
+          new Promise<() => void>((_resolve, reject) => {
+            rejectRegistration = reject;
+          }),
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(result.current.phase).toBe("pairing");
+
+    await act(async () => {
+      rejectRegistration(new Error("addListener refused"));
+      await flush();
+    });
+
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    // A PREFIX match, not an equality: the detail carries the rejection's
+    // own `String(err)` after `session: `, and pinning that text would pin a
+    // platform's message rather than our own record.
+    const details = ring
+      .filter((e) => e.kind === "lifecycle-registration-failed")
+      .map((e) => e.detail);
+    expect(details).toHaveLength(1);
+    expect(details[0]).toMatch(/^session: /);
+    // Not a failure of the session: everything but the background/foreground
+    // instruments still works.
+    expect(result.current.phase).toBe("pairing");
+  });
+
+  it("a rejected SESSION registration for a CANCELLED attempt is silent — no ring entry", async () => {
+    let rejectRegistration!: (err: unknown) => void;
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        registerAppLifecycleListener: () =>
+          new Promise<() => void>((_resolve, reject) => {
+            rejectRegistration = reject;
+          }),
+        driverOptions: { schedule: releasingSchedule() },
+      }),
+    );
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(result.current.phase).toBe("pairing");
+
+    await act(async () => {
+      await result.current.cancel();
+    });
+
+    await act(async () => {
+      rejectRegistration(new Error("addListener refused"));
+      await flush();
+    });
+
+    const ring = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      ring.filter((e) => e.kind === "lifecycle-registration-failed"),
+    ).toStrictEqual([]);
+  });
+
+  it("each site calls the registrar current at ITS OWN call time — a rerender between the scan lease and the session registration is harmless", async () => {
+    const calls: string[] = [];
+    let releaseScan!: () => void;
+    const scanTarget = vi.fn(
+      () =>
+        new Promise<DiscoveredMonitor[]>((resolve) => {
+          releaseScan = () => resolve([{ id: "x", name: DEVICE_NAME }]);
+        }),
+    );
+    // Two STABLE consts, hoisted out of the render callback (the test rule
+    // invariant 1 names): a closure minted inside `renderHook`'s callback
+    // would be a new function on every commit, which says nothing about
+    // which one each site read.
+    const first = (): (() => void) => {
+      calls.push("first");
+      return () => undefined;
+    };
+    const second = (): (() => void) => {
+      calls.push("second");
+      return () => undefined;
+    };
+    const { result, rerender } = renderHook(
+      (dep: MonitorSessionDeps["registerAppLifecycleListener"]) =>
+        useMonitorSession({
+          createTransport: () => ({ ...stubRadio({}), scanTarget }),
+          registerAppLifecycleListener: dep,
+          driverOptions: { schedule: releasingSchedule() },
+        }),
+      {
+        initialProps:
+          first as MonitorSessionDeps["registerAppLifecycleListener"],
+      },
+    );
+
+    await act(async () => {
+      void result.current.connect(targetedRequest);
+      await flush();
+    });
+    // The scan lease is registered and the scan is still pending.
+    expect(calls).toStrictEqual(["first"]);
+
+    rerender(second as MonitorSessionDeps["registerAppLifecycleListener"]);
+    await act(async () => {
+      releaseScan();
+      await flush();
+    });
+
+    // Site two read `depsRef.current` at ITS time, so it got the NEW value.
+    // Nothing else diverged: the session still reached pairing.
+    expect(calls).toStrictEqual(["first", "second"]);
+    expect(result.current.phase).toBe("pairing");
+  });
+});

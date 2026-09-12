@@ -1128,7 +1128,17 @@ export interface MonitorSessionDeps {
    *  `transports/index.ts`'s `resolveDefaultTransport` (fake-injection, then
    *  Web Bluetooth) on web — ROADMAP CL item 2, see that adapter's own doc
    *  comment for the full reasoning. */
-  createTransport?: () => Transport | null | Promise<Transport | null>;
+  createTransport?: (
+    liveness: LivenessDeps,
+  ) => Transport | null | Promise<Transport | null>;
+  /** Registers a background/foreground listener. Defaults to
+   *  `adapters/appLifecycle`'s `registerAppLifecycleListener` (the static
+   *  import above IS the default). Injected so a test delivers a lifecycle
+   *  event by PASSING A FUNCTION rather than replacing the adapter module —
+   *  RF19's whole class of defect enters here, and `adapters/appLifecycle.ts`'s
+   *  own header records why the real module can never deliver one under
+   *  Vitest (`isNative()` is always `false` there). */
+  registerAppLifecycleListener?: typeof registerAppLifecycleListener;
   /** The driver's event log. Injectable so Task 7's diagnostics sheet can
    *  own the log it renders (`exportLog()` — the sheet reads on open; the
    *  log has no subscribe and doesn't get one, spec §5). */
@@ -5247,9 +5257,8 @@ export function useMonitorSession(
       // `createTransport` override) resolves on the same tick, so `await`
       // costs nothing observable there.
       const transport = await (
-        depsRef.current.createTransport ??
-        (() => defaultTransport(livenessDepsRef.current))
-      )();
+        depsRef.current.createTransport ?? defaultTransport
+      )(livenessDepsRef.current);
       if (superseded()) {
         // Cancelled while the transport was still resolving (the native and
         // DEV arms both `await` a dynamic import here). Nothing was built
@@ -5309,7 +5318,10 @@ export function useMonitorSession(
           let scanLifecycle: (() => void) | null = null;
           try {
             try {
-              scanLifecycle = await registerAppLifecycleListener((event) => {
+              scanLifecycle = await (
+                depsRef.current.registerAppLifecycleListener ??
+                registerAppLifecycleListener
+              )((event) => {
                 if (event === "background") controller.abort();
               });
             } catch (err: unknown) {
@@ -5614,7 +5626,10 @@ export function useMonitorSession(
         // doc comment for the race this closes.
         const lifecycleAttempt = { cancelled: false };
         lifecycleAttemptRef.current = lifecycleAttempt;
-        const lifecycleResult = registerAppLifecycleListener((event) => {
+        const lifecycleResult = (
+          depsRef.current.registerAppLifecycleListener ??
+          registerAppLifecycleListener
+        )((event) => {
           if (event === "background") {
             // Task 1 (lost-monitor design spec): opens a hidden window for
             // `handleFrame`'s own counter to fill in — read back and
@@ -5743,17 +5758,44 @@ export function useMonitorSession(
           if (latch && hasMarkSuspect(transport)) transport.markSuspect();
         });
         if (lifecycleResult instanceof Promise) {
-          void lifecycleResult.then((unsub) => {
-            if (lifecycleAttempt.cancelled) {
-              // `fail()`/`teardown()` already ran for this attempt before the
-              // native promise settled — the ref may already belong to a
-              // LATER attempt's own real listener. Unregister this one
-              // directly rather than writing it anywhere.
-              unsub();
-              return;
-            }
-            lifecycleUnsubRef.current = unsub;
-          });
+          void lifecycleResult
+            .then((unsub) => {
+              if (lifecycleAttempt.cancelled) {
+                // `fail()`/`teardown()` already ran for this attempt before the
+                // native promise settled — the ref may already belong to a
+                // LATER attempt's own real listener. Unregister this one
+                // directly rather than writing it anywhere.
+                unsub();
+                return;
+              }
+              lifecycleUnsubRef.current = unsub;
+            })
+            .catch((err: unknown) => {
+              // A rejected registration for a LIVE attempt is one ring entry
+              // and nothing else: the session is already connected and every
+              // other path through it still works — only the
+              // background/foreground instruments are missing, which is
+              // exactly what RF19 says must be visible rather than silent.
+              // Guarded by the same `cancelled` token the `.then` arm reads:
+              // an attempt torn down before the native promise settled is not
+              // this session's failure to report — and note that TWO of the
+              // four `cancelled = true` sites are in `handleEvent`, so a
+              // mid-session link DROP silences a late rejection on purpose:
+              // the session it would have instrumented is already over.
+              // Recorded on the session RING
+              // (`log`), not the NFC attempt trace — that trace is drained into
+              // this ring and `complete()`d above, and is `undefined` on
+              // non-NFC connect, so a `trace?.record` here would reach nothing.
+              // The CAUSE rides the detail (`String(err)`): a registration
+              // that rejects on a device is a platform-sourced failure with
+              // nothing else observing it (RF19), and an entry that says only
+              // WHERE it happened sends the next reader back to the phone.
+              if (lifecycleAttempt.cancelled) return;
+              log.record(
+                "lifecycle-registration-failed",
+                `session: ${String(err)}`,
+              );
+            });
         } else {
           lifecycleUnsubRef.current = lifecycleResult;
         }
