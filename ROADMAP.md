@@ -471,8 +471,10 @@ recorded in PR 2's body; release note in rower words (spec §6.6).
 
 ## The free row's rate tile disagrees with itself
 
-**Status: SCHEDULED 2026-09-12 — one small PR, not a phase item and not fast
-path (it changes what a rower reads). S.** · dies 2026-09-19 · a wrong number
+**Status: DONE — fixed and merged in #402 (2026-09-12); closed on Phase MD
+PR 1's branch on the way past.** Was: SCHEDULED 2026-09-12 — one small PR,
+not a phase item and not fast path (it changes what a rower reads). S. ·
+dies 2026-09-19 · a wrong number
 on a screen today with a one-clause fix and no migration; a week is generous
 and anything longer means a refactor phase outranked a defect, which is the
 exact trade the PM gate refused.
@@ -555,7 +557,11 @@ purpose (PM gate, 2026-09-12):** a numbered PR reads as owed work to every
 later sweep, and the existence of both of these is undecided. Each opens with
 an investigation whose honest answer may be "no PR".
 
-- [ ] **PR 1 — one writer for the stored run (TRIAD: stored shape).** Spec:
+- [x] **PR 1 — one writer for the stored run (TRIAD: stored shape). LANDED
+      as PR #<n> (2026-09-12): one file, 27 exports (from 35),
+      `clearMonitorRun` deleted rather than moved (zero production callers —
+      plan, "The export count"), `MONITOR_RUN_KEY` kept exported (11
+      test-file importers by name).** Spec:
       `docs/superpowers/specs/2026-09-12-stored-run-module-design.md` (revision
       2 — the anchor pass blocked revision 1 and James ruled the re-scope).
       `monitorRun.ts` (1719 lines / 339 code) and `handoffStore.ts` (1016 /
@@ -658,7 +664,7 @@ an investigation whose honest answer may be "no PR".
       originally promised ALREADY SHIPPED in #345 —
       `derivedHeartRate.replay.test.ts:113`, independent literals, 59 → 100 and
       60 → null. Half this row's test work is done.*
-- [ ] **Exploration A — the freeze/resume observer.** The hook holds 38
+- [x] **Exploration A — the freeze/resume observer.** The hook holds 38
       `useRef`s; twelve are one concern (background, frame silence, freeze,
       resume). Six symbols are exported ONLY so the test can reach them —
       `defaultLivenessSchedule`, `recordLivenessSilence`,
@@ -677,6 +683,25 @@ an investigation whose honest answer may be "no PR".
       relaunch and re-arm — is the artifact RF27 says a plan owes anyway, and
       RF19's blind-instrument defect lived in exactly these refs. Fund it on
       that basis, not on the PR that may follow.
+      **Exploration A — answered 2026-09-12: NO PR.** The refs were re-counted
+      (38 total, confirmed) and the concern re-drawn: it is **14**, not twelve,
+      and they are three concerns with three different lifetimes — 7
+      instrument-only refs that reach no published value, 5 predicate refs
+      behind `frozen`/`frameSilence`, and 2 app-lifecycle unsubscribe handles
+      that belong to PR 2. A `createFreezeObserver` serving all 14 call sites
+      prices at **5 deps + 10 methods + 2 outputs = 17 members**, not the
+      3-in/4-out the row assumed, because its busiest writer — the
+      foreground-edge handler — also reads the liveness snapshot, increments
+      `LogicalSession`'s own `resumes`/`latches`, calls `update()`, reads
+      `stateRef`, and calls `transport.markSuspect()`; those five couplings
+      become parameters. No call site disappears and no `vi.doMock`
+      disappears (all target `adapters/appLifecycle` and are PR 2's to
+      remove). Deletion test: **moves, not concentrates.** The artifact the
+      row was funded for — the RF27 lifetime table over the refs — is
+      delivered: `docs/superpowers/audits/2026-09-12-architecture-walk/exploration-a-freeze-observer.md`.
+      Three one-line riders ride PR 2. Re-open only if PR 2 lands and the
+      foreground handler, with lifecycle injected, still reads as a module
+      wanting an owner.
 - [ ] **Exploration B — one replay harness. Runs after PR 2, never before.**
       Eight session-level replay specs — the `src/monitor/*Replay*.test.ts`
       files that drive `renderHook`: `burstReplay`, `lifecycleReplay`,
@@ -2141,7 +2166,8 @@ fixed.
      `todayGuard.pin.test.ts` — whose negative import pin would otherwise pass
      forever once the symbol cannot exist (RF21), and whose two byte-exact
      import pins that PR breaks anyway by moving `loadMonitorRun`. The row
-     stays here as the evidence; the work lands in that PR.
+     stays here as the evidence; the work lands in that PR. **Landed in Phase
+     MD PR 1 (#<n>, 2026-09-12); proposed for STRIKE at that PR's hand-back.**
   2. **The store's standing probe is row 11's tier-precedence COMPOUND
      mutation**, not the single-line reorder — that one is a genuine non-bite.
      Remove the `if (hydrated) return` re-entrancy guard together with forcing
@@ -2782,7 +2808,10 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **`isPlainRecord` is declared four times, byte-identically.** Exported from
+- **DONE — folded into Phase MD PR 1 (James's rider, 2026-09-12): one export
+  in `src/isPlainRecord.ts`, four call sites re-pointed. Struck only when
+  James rules at the hand-back.** `isPlainRecord` is declared four times,
+  byte-identically. Exported from
   `monitor/monitorRun.ts:453` and re-declared private in
   `builder/builderDraft.ts:47`, `session/draft.ts:85` and `session/run.ts:75`;
   all four bodies are the same line —

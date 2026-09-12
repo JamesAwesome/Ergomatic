@@ -147,7 +147,7 @@ exists and nothing is concatenated.
 - `MONITOR_RUN_KEY`, `isMonitorRun`, `isPlainRecord` and `stripMalformedSeries`
   become **private to `handoffStore.ts`**. Their only cross-module value
   consumer is the store itself; the tests that import the key are updated.
-- `loadMonitorRun` and `clearMonitorRun` move and stay exported.
+- `loadMonitorRun` moves and stays exported. **`clearMonitorRun` is DELETED, not moved (plan, 2026-09-12; harden lens 1 confirmed):** zero production callers, a raw `removeItem` that would leave the store's `current` disagreeing with the durable tier, and the boundary gate already names it as a legacy writer. Its 12 test call sites became `localStorage.removeItem(MONITOR_RUN_KEY)`.
   **`Today.tsx:45`'s import changes file**, which is budgeted in §7 because a
   pin asserts on that exact line.
 - `retire(set, reason: string)` becomes `retire(entry, reason: RetireReason)`.

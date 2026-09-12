@@ -1,7 +1,14 @@
 // The hand-off store (design spec `docs/superpowers/specs/
 // 2026-08-30-handoff-protocol-design.md`, rev 4, James-approved 2026-08-30):
 // ONE module owning BOTH persistence tiers for the connected record —
-// `§1 The store`. Plan Task 2's own scope: this module and its unit tests
+// `§1 The store`. **Since Phase MD PR 1 (spec `docs/superpowers/specs/
+// 2026-09-12-stored-run-module-design.md`) it also owns the key, the
+// record's validators, the raw durable read `loadMonitorRun` and the Connect
+// guard `connectGuardStage`** — the persistence half `monitorRun.ts` used to
+// carry, moved here so the module that WRITES the key is the one that says
+// what a valid record is; `monitorRun.ts` is the type and its pure builders
+// and holds no storage call (`scripts/handoffStoreBoundary.test.ts` pins it
+// at zero). Plan Task 2's own scope: this module and its unit tests
 // ONLY. Nothing outside this file writes `MONITOR_RUN_KEY` or holds a
 // module-level `MonitorRun` — every existing writer/remover in
 // `monitorRun.ts`/`useMonitorSession.ts`/`LogSession.tsx`/`Today.tsx`/
