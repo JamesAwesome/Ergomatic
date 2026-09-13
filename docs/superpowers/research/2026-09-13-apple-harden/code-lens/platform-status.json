@@ -1,6 +1,0 @@
-{
-  "status": "incomplete",
-  "source": "collaboration agent completion",
-  "message": "Agent errored: This content was flagged for possible cybersecurity risk. If this seems wrong, try rephrasing your request. To get authorized for security work, join the Trusted Access for Cyber program: https://chatgpt.com/cyber",
-  "followup": "Evidence recovery only. Review and unfinished probes were not resumed. The owned synthetic PostgreSQL container was stopped by the controller."
-}

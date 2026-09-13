@@ -1,1 +1,0 @@
-ALTER TABLE "preferences" ADD COLUMN "baselines_skipped" boolean DEFAULT false NOT NULL;

@@ -161,3 +161,5 @@ cybersecurity-risk block. This evidence package does not investigate, resume,
 or represent that review as passed.
 
 Raw `.log` references in this evidence collection are preserved at their original paths inside the [raw-log archive](../../apple-raw-logs.md). Its member hashes were verified before bundling; the archive keeps the PR within GitHub’s file-count limit.
+
+Generated evidence, source snapshots, replay scripts and the full server/client codebooks are preserved at their original paths in the [supporting-artifact archive](../../apple-supporting-artifacts.md), with every original member hash verified. See its extraction instructions before following raw artifact paths in the reports.

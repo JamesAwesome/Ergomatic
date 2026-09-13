@@ -1,1 +1,0 @@
-ALTER TABLE "concept2_links" ADD COLUMN "auto_verify" boolean DEFAULT false NOT NULL;

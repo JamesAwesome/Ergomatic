@@ -1,1 +1,0 @@
-ALTER TABLE "session_logs" ADD COLUMN "verified" boolean;

@@ -1,8 +1,0 @@
-{
-  "case": "cancelled-link then ordinary Library tab",
-  "afterClick": "http://127.0.0.1:63715/library",
-  "navigations": [
-    "http://127.0.0.1:63715/library"
-  ],
-  "libraryTabActive": "page"
-}

@@ -3,8 +3,9 @@
 The 187 original `.log` files are preserved byte-for-byte in
 [apple-raw-logs.tar.gz](apple-raw-logs.tar.gz), with their original repository
 paths. Bundling them keeps the PR below GitHub’s 300-file diff limit; product
-source, plans, reports, designs, captures and structured evidence remain plain
-files. No log was normalized or edited.
+source, review reports, designs and captures remain plain files. The
+[supporting-artifact index](apple-supporting-artifacts.md) describes the
+additional packaging for generated output and the two large codebooks. No log was normalized or edited.
 
 Reports and existing SHA manifests still name the original paths. To inspect
 those files or replay a manifest check, unpack into a temporary directory and

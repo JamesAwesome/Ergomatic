@@ -1,9 +1,0 @@
-{
-  "base": "3cf849c7614caa25bff78c64517e8d2e47ada39a",
-  "head": "089a4bfbf40119ce688b681398a74eaa93c3449e",
-  "source_files": 22,
-  "source_bytes_equal": true,
-  "reverse_patch_check_exit": 0,
-  "roundtrip_apply_exit": 0,
-  "patch_sha256": "37af2d302f86209bb0a3c3511567c459e155b3a0ff9178d606fe172ae4bc2de2"
-}

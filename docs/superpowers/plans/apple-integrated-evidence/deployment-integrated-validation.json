@@ -1,8 +1,0 @@
-{
-  "default_disabled": true,
-  "api_only": true,
-  "quoted_pem_newlines_preserved": true,
-  "all_explicit_values_preserved": true,
-  "services_started": false,
-  "real_credentials_used": false
-}
