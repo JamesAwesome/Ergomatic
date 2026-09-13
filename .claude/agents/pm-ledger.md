@@ -55,6 +55,29 @@ same runner, started in 0s. Fix-now would be reading the runner's queue logs —
 a session's work for a green anomaly. Trigger recorded instead: a second
 occurrence, or any non-green deploy, files the row that day.
 
+## 2026-09-12 — Phase PS PR 1 final gate (#417, TRIAD: a number's meaning)
+
+**Verdict: FAIL at first presentation — five blocking, none about behaviour:**
+CI red on the domain 100% pin; 2 commits behind main with no head SHA in the
+body; a 310-word fold — the worst on record; the hero height left wrong in
+the spec with two numbers circulating; a new `ci-changes.sh` comment
+falsified by `docs/monitor/sessions/`. **Function PASSED.**
+
+- RF7 arithmetic reproduced on both captures, and the watts figure was the
+  tell: legend Σ 14,379 s = 3:59:39; MACHINE 9,271 s / 36,752 m = 174 W
+  naive, the surface reads 176 = the ruling-6 exclusion visible in the
+  number — "when a design ships an exclusion, check the headline is the
+  EXCLUDED value".
+- All six open-gate conditions landed, five in artefacts not the PR.
+- Off-canvas copy is not automatically a design-gate breach: five captions,
+  each findable in prose → hand-back, not Gate 0.
+- Overdue really was none, but `grep -on "dies 20[0-9-]*"` misses
+  line-wrapped rows (ROADMAP:686-687); earliest live date 2026-09-19.
+- Release: tag with PR 1, do not wait for PR 2 — exit criterion 6's oracle
+  needs the TestFlight build; ride PR #419's notes; v0.46.0.
+- Fold-word series: #248 274, #249 225, #258 134, #268 186, #272 153,
+  #408 295, #409 183, #412 243, #417 310 (new worst).
+
 ## 2026-09-12 — Phase PS open gate (career stats on the You tab)
 
 **Verdict:** PASS WITH CONDITIONS (6). Spec
