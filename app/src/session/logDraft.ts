@@ -1,4 +1,5 @@
 import { fmtDuration } from "../../domain/duration.js";
+import { MONTH_ABBREV } from "../../domain/format.js";
 import { liveSteps } from "../../domain/expand.js";
 import type { IntervalActual } from "../../domain/monitor/types.js";
 import {
@@ -1053,9 +1054,9 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
 // component (react-router-dom, hooks, JSX) and this module is a pure,
 // framework-free session builder with no reason to depend on a screen —
 // pulling in Today.tsx's whole import chain to reuse six lines would be
-// backwards (screens depend on session/, not the other way around). A future
-// DRY pass could hoist this into `domain/format.js` — flagged, not fixed, in
-// Task 1's own report. Corrected count (whole-branch review; this comment
+// backwards (screens depend on session/, not the other way around). The
+// month table itself IS hoisted now — `MONTH_ABBREV` in `domain/format.js`,
+// the one copy (Phase PS PR 2 review, item 4); this six-line composer stays. Corrected count (whole-branch review; this comment
 // used to say "two independent copies"): THREE independent copies exist —
 // this one, Today.tsx's, and `e2e/session.spec.ts`'s own browser-context
 // copy (Task 4, `todayDateLabel`) — though only the first two are the DRY
@@ -1072,20 +1073,6 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
 // date (there is no `SessionRun.completedAt` to read it from, unlike
 // `logTotals` below), so it composes it directly from this same function
 // rather than growing a third copy of `MONTH_ABBREV`.
-const MONTH_ABBREV = [
-  "JAN",
-  "FEB",
-  "MAR",
-  "APR",
-  "MAY",
-  "JUN",
-  "JUL",
-  "AUG",
-  "SEP",
-  "OCT",
-  "NOV",
-  "DEC",
-];
 
 export function formatLogDate(iso: string): string {
   const d = new Date(iso);

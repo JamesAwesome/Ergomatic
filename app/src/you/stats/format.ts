@@ -8,6 +8,7 @@ import type {
 // (domain/stats/calendar.ts), re-exported so this surface's imports stay
 // local.
 export { fmtMeters } from "../../../domain/format.js";
+import { MONTH_ABBREV } from "../../../domain/format.js";
 export { fmtDate, parseDate } from "../../../domain/stats/calendar.js";
 
 /** Elapsed seconds as the house positional clock (`3:59:39`, `13:43`). */
@@ -20,29 +21,14 @@ export function fmtPercent(share: number): string {
   return `${Math.round(share * 100)}%`;
 }
 
-const MON = [
-  "JAN",
-  "FEB",
-  "MAR",
-  "APR",
-  "MAY",
-  "JUN",
-  "JUL",
-  "AUG",
-  "SEP",
-  "OCT",
-  "NOV",
-  "DEC",
-];
-
 /** `8 NOV` — a chart's x label and half of a range line. */
 export function fmtDayMonth(d: CalendarDate): string {
-  return `${d.d} ${MON[d.m - 1]}`;
+  return `${d.d} ${MONTH_ABBREV[d.m - 1]}`;
 }
 
 /** `MAY` — the season and trend x-axis labels. */
 export function fmtMonth(d: CalendarDate): string {
-  return MON[d.m - 1]!;
+  return MONTH_ABBREV[d.m - 1]!;
 }
 
 /** The range line's shape (§14 ruling 21, `build.mjs` `rangeText`): the
@@ -54,7 +40,7 @@ export function fmtRange(from: CalendarDate, to: CalendarDate): string {
   if (from.y === to.y && from.m === to.m && from.d === to.d)
     return `${fmtDayMonth(from)} ${from.y}`;
   if (from.y === to.y && from.m === to.m)
-    return `${from.d} TO ${to.d} ${MON[to.m - 1]} ${to.y}`;
+    return `${from.d} TO ${to.d} ${MONTH_ABBREV[to.m - 1]} ${to.y}`;
   if (from.y === to.y)
     return `${fmtDayMonth(from)} TO ${fmtDayMonth(to)} ${to.y}`;
   return `${fmtDayMonth(from)} ${from.y} TO ${fmtDayMonth(to)} ${to.y}`;
