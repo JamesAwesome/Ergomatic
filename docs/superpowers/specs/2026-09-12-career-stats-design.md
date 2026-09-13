@@ -460,14 +460,23 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
 `A6c-NoMonitorRows.dc.html`, `A7-Contrast.dc.html`).
 
 - **You root** (`src/You.tsx`): under the identity card, the **hero** — Gate
-  0's H3 TIME BY TYPE (§14 ruling 9), **181 px tall in portrait**
-  (`hero-heights.json`: H1 201, H2 142, H3 181, measured in the browser),
-  full content width. Top to bottom (A2-H3): one row carrying `LIFETIME ·
+  0's H3 TIME BY TYPE (§14 ruling 9), **163 px tall in portrait as
+  shipped** — measured ONCE, hairline to hairline on
+  `docs/screenshots/you.png`: the two full-width `--rule-2` (`#ded8c9`)
+  pixel rows are 120 and 282 (a PNG IDAT scan counting rows where ≥ 90 %
+  of pixels between x = 24 and x = 366 are that colour; PR #417's fix
+  round), so 282 − 120 + 1 = 163. The canvas candidates measured H1 201 /
+  H2 142 / H3 181 (`hero-heights.json`); the shipped chip legend wraps
+  tighter than the canvas draft, which is the whole difference. Full
+  content width. Top to bottom (A2-H3): one row carrying `LIFETIME ·
   56,752 M` and `SEASON 2027 · 43,012 M` (house mono label style, ALL column,
   work metres, tabular numerals; the two spans sit space-between and wrap
   when the width forces it); one 24 px stacked bar in the §3.2 order with
-  2 px surface gaps; the legend `AN 6% · AT 27% · O2 43% · TR 10% · NO TYPE
-  15%`; the caption `WORK TIME BY TYPE · ALL ROWS`. **It replaces the
+  2 px surface gaps; the legend as swatch CHIPS — one per non-empty
+  bucket, `AN 6%` … `NO TYPE 15%`, A2-H3's own markup (`build.mjs`
+  `stackSvg(…, { compact: true })`), wrapping when the width forces it;
+  the artboard wins over any run-of-text reading of this line; the
+  caption `WORK TIME BY TYPE · ALL ROWS`. **It replaces the
   two-line headline the design first carried** (ruling 9). **The hero IS the
   door (§14 ruling 10):** tapping anywhere on it opens `/you/stats`. It is
   ONE focusable control — a `Link` whose accessible name is `Stats`, ≥ 44 px
@@ -597,7 +606,8 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
     the rowed FILL carries the state at 17.11:1). Two candidates for
     previous-week bars were measured and REJECTED: the handoff's `#c9c3b2`
     (`--rule-3`) at 1.73:1 and `--ink-5` at 2.75:1 (§14 ruling 12).
-  - **Hit targets (A7):** the hero ≥ 44 px (181 px), `← BACK` 44 px min
+  - **Hit targets (A7):** the hero ≥ 44 px (163 px shipped, 181 px on the
+    canvas), `← BACK` 44 px min
     height and width, each filter chip 44 × 58 px, each date input 44 px
     tall, tab items 44 px + safe-area padding, Sign out 44 px. Chart marks
     are not tap targets in PR 1; PR 2's hover/tooltip layer owns them, with
@@ -1051,9 +1061,11 @@ the record.
    updates that paragraph in the same commit — an agent the corpus does not
    name is invisible to every future dispatch. Applied in PR 0.
 9. **The You hero is H3 TIME BY TYPE:** one stacked bar in the order AN ·
-   AT · O2 · TR · NO TYPE with the whole-percent legend, under the LIFETIME
-   and THIS SEASON figures; 181 px in portrait (`hero-heights.json`). It
-   REPLACES the two-line headline the design first carried (§5).
+   AT · O2 · TR · NO TYPE with the whole-percent legend drawn as swatch
+   chips (A2-H3), under the LIFETIME and THIS SEASON figures; 163 px in
+   portrait as shipped (hairline to hairline in `you.png`, rows 120→282;
+   the canvas draft measured 181, `hero-heights.json`). It REPLACES the
+   two-line headline the design first carried (§5).
 10. **The hero IS the door.** Tapping anywhere on it opens `/you/stats`;
     there is NO separate STATS row in `.you-doors`, which stays BASELINES ·
     CONCEPT2 · SETTINGS · DIAGNOSTICS. The hero is one focusable control (a
