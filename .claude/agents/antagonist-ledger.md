@@ -6,6 +6,44 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## Phase PS PR 2 plan — /harden lens 2, 2026-09-13 (prescribed code read as code)
+
+Plan at `dd34e025`; the sources reinstated at their real paths — tsc
+app/server/e2e 0, eslint + prettier clean, unit 58/58, client 196/196 before
+the pass. Six findings, four MECHANISM, all folded the same day; the loop
+closes here.
+
+- **`niceMax(NaN | Infinity)` loops forever** — the 1/2/5 ladder's only
+  exit is `max / step <= maxLines`, which neither satisfies (exit 124 under
+  `timeout 5`); pins at 0 and 1,000 were green. Guarded to the floor
+  (`{ 1000, 1000 }`). Folding it found the second half: a vitest per-test
+  `timeout` CANNOT interrupt a synchronous loop (measured — the whole run
+  still hangs with `{ timeout: 2000 }` on the pin), so the mutation is run
+  under an external `timeout` and `EXIT=124` is the red.
+- **A CUSTOM `to` after today anchored METRES PER WEEK on a future week** —
+  this week mid-chart, five future zero baselines. The domain clamps the
+  anchor to today; `max={today}` on both date inputs as a hint, not the
+  gate.
+- **`PAD_R 52` clips a last-day-of-month trend label** (~53 px of mono from
+  x ≈ 276 in a 320 viewBox). The label flips left of the dot when it would
+  overrun (`LABEL_ROOM`), pinned with a Sep 30 test row; a 60 % rule would
+  have flipped the seed's own labels onto the line.
+- **`seedGate0Tests` turned a mistyped seed log into a silent throwaway**
+  — now throws `no seeded log`.
+- The house's FIRST `:active` rule had no gate: a Chromium `mouse.down`
+  assertion reads `--surface-sunken`'s rgb off the pressed hero (mutation:
+  delete the rule → `rgba(0, 0, 0, 0)`); WKWebView tap behaviour for
+  `:active` is UNTESTED until a device look (no `touchstart` listener in
+  `src/`). `NOTHING IN THESE EIGHT WEEKS` misnamed null-metres rows (a
+  stored-tier row is a session with `workMeters: null`) → `NO METRES IN
+  THESE EIGHT WEEKS`, predicate unchanged.
+- HELD: no self-comparing test (`compute.mjs` is seed-only, every pin a
+  literal); all four A→B seams start upstream of A; the R13-delete trend
+  assertion is live only because the hero click remounts — now stated as a
+  precondition (RF38). Noted for James's hand-back, not a defect: at 0 rows
+  the trend is hidden by ruling 16, so a rower whose only log is deleted
+  keeps the point (ruling 4) but never sees it.
+
 ## Phase PS PR 2 plan, /harden lens 1, 2026-09-12 (the charts — DELTA against the PS vetted ground)
 
 Plan: `docs/superpowers/plans/2026-09-12-career-stats-pr2-plan.md` at

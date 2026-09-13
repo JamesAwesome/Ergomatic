@@ -382,6 +382,12 @@ toolkit, not a history.
     ways and three of the four `streakOf` pins moved instead. A half-applied
     mutant is RF35's mirror: the gate you credit is the one the mutation
     never reached.
+45. **Run every pure numeric helper on `NaN` and `Infinity` under `timeout`,
+    not only on 0.** An unbounded `for (;;)` ladder whose exit test is
+    `x <= n` never exits on NaN, and the render thread hangs — `niceMax`
+    (Phase PS PR 2 plan, 2026-09-13) did exactly that; pins at 0 and 1000
+    were green. Exit 124 is the finding; "unreachable through the routes" is
+    the severity, not the verdict.
 
 ## Things attacked and found sound
 
