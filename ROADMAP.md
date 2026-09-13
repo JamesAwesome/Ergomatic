@@ -3293,9 +3293,10 @@ rather than found.
 
 **OPENED 2026-09-12.** Spec:
 [docs/superpowers/specs/2026-09-12-phase-td-design.md](docs/superpowers/specs/2026-09-12-phase-td-design.md).
-Scope ruled by James the same day: **three rows, one PR** — the ungated
-reconciliation, the double link read, and the free-row summary capture. The
-other two left the phase and are filed below with dates.
+Scope ruled by James 2026-09-12: three rows, one PR. **TD-5 then came back
+out on 2026-09-13, measured** — see its row. What landed is the ungated
+reconciliation and the double link read; the other three are filed below
+with dates.
 
 **THIS SECTION USED TO SAY TWO OF THESE SHARE ONE BLOCKER AND SHOULD BE DONE
 TOGETHER. THAT WAS FALSE, and a spike at production defaults measured it**
@@ -3338,7 +3339,18 @@ than back in the queue this was built to replace.
 **Sizes:** S each.
 
 
-- [ ] **"A failing reconciliation does not fail the send" is UNGATED.** The
+- [x] **GATED 2026-09-13 (`03878a0f`) — "a failing reconciliation does not
+      fail the send".** The gate is a `BEFORE UPDATE` trigger in
+      `concept2Send.integration.test.ts` keyed to one row id, which fails
+      `markC2Verified`'s UPDATE and nothing else. **The row's own advice was
+      what blocked four attempts:** "fail at the DB" cannot mean the column,
+      because `recordC2Result` writes the same column on the same table and
+      `logs.get` selects it on the handler's first statement — so the
+      REQUEST breaks rather than the reconciliation, which is the 500 from
+      the fixture those attempts kept producing. Biting mutation recorded:
+      removing the route's try/catch gives `expected 500 to be 200`, and
+      only this test fails. First DDL any server test here has issued.
+      Original filing follows. The
       catch in `routes/concept2.ts`'s reconciliation now warns rather than
       swallowing silently — that was the real defect (RF24's shape: a
       permanently broken mechanism emitting nothing, forever). What has no
@@ -3409,7 +3421,23 @@ than back in the queue this was built to replace.
       fake than either. Unblocks with the same work that would let this stack
       photograph a sent row at all.
 
-- [ ] **The log detail issues TWO `GET /api/concept2/link` on EVERY view,
+- [x] **FIXED 2026-09-13 (`eff974f0`) — the log detail issued TWO
+      `GET /api/concept2/link` per view.** `FromTheLog` now owns the one
+      `useConcept2Link()` and threads it to both blocks. **It was worse than
+      the count suggested, and better to fix than a refactor:** the hook
+      registers `pageshow`/`visibilitychange` PER INSTANCE, so two instances
+      read twice on every FOREGROUND too — and because they held independent
+      state, a rower who relinked to a different Concept2 account kept a
+      stale `VERIFIED ✓` until the next remount, defeating the account gate
+      `MachineConfirmedBlock` exists for. **Honest about the other
+      direction:** the read now fires at parent mount, so `loading`, `error`
+      and `not-found` issue one where they issued none — both blocks sit
+      inside a ready-row guard, which this row's own "rendered
+      unconditionally" claim had wrong. Gated by an exact-delta assertion
+      run RED against the pre-fix tree first (`Expected: 1 Received: 2`) and
+      a client twin; one mutation reddens both. Original filing follows.
+
+- [ ] **(original filing) The log detail issues TWO `GET /api/concept2/link` on EVERY view,
       including rows with no machine block at all.** Phase AV
       added the verified mark to `MachineConfirmedBlock`, which needs the live
       link for its account gate, and `Concept2SendBlock` on the same screen
@@ -3435,7 +3463,31 @@ than back in the queue this was built to replace.
       an ADDITION on three others — net better, but not the pure halving the
       row implied. Spec §1.6.
 
-- [ ] **No committed capture shows the free-row summary's machine tiles.**
+- [ ] **BACK OUT OF THE LANDING PR 2026-09-13 (James) — no committed
+      capture shows the free-row summary's machine tiles.** · dies
+      2026-10-13 · a row and not a fix now because three measured attempts
+      could not land the delivery inside the window, and the next honest
+      step is a browser-side ring dump rather than a fourth timing guess.
+      **What the attempts established, so nobody starts from scratch again:**
+      (1) the fake IS reachable at delivery time — `__pm5FakeControls__`
+      was asserted present in the failing run, so this is not the
+      unreachable-seam problem; (2) delivering straight after the second End
+      tap is too early (spec §1.3, ORDER A — the terminated frame has not
+      arrived); (3) waiting for `Wrapping up` before delivering does not fix
+      it either, and `Wrapping up` cannot be the readiness signal anyway
+      because `ConnectedSurface.tsx:466-472` says it renders on every ended
+      state. **The window itself is measured and is not in doubt** (spec
+      §1.3, probe `1ae217e1`): the totals file iff the 0x0039 lands after
+      the driver has seen the `terminated` frame and before the 2000 ms
+      hand-off linger closes. What is missing is a browser-side observable
+      for "the terminated frame has landed" — the ring has one
+      (`summary-half` reads `(run closed, state=terminated)`), the DOM does
+      not. **The tiles are NOT ungated meanwhile:**
+      `justRowReplay.test.ts:350-355` drives the 2026-08-31 walk's own bytes
+      through the real driver, hook and store and asserts all six. This row
+      buys reviewer visibility, not correctness. Original filing follows.
+
+- [ ] **(original filing) No committed capture shows the free-row summary's machine tiles.**
       They ship in #351 gated from upstream of the producer — the
       2026-08-31 walk's own bytes replayed through the real driver, hook and
       store, then the door mounted over what it wrote

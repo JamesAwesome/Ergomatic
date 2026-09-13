@@ -236,9 +236,27 @@ this repo shipped a PAUSED state the PM5 cannot have.
 
 ## 3. Scope
 
-Three rows. TD-2 (the unparsable 409) and TD-3 (the `VERIFIED ✓` capture)
-were removed from this phase by James on 2026-09-12 and leave as dated rows
-(§9).
+**TWO rows landed: TD-1 and TD-4.** TD-2 (the unparsable 409) and TD-3 (the
+`VERIFIED ✓` capture) were removed by James on 2026-09-12, and **TD-5 (the
+free-row capture) came back out on 2026-09-13, measured** — three attempts
+could not land the delivery inside the window and the next honest step is a
+browser-side ring dump, not a fourth timing guess. All three leave as dated
+rows.
+
+**§4.3 below is retained in full rather than deleted**, because its tile
+table and the measured window are exactly what the next attempt needs, and
+deleting a section whose work was done is how a phase pays for the same
+research twice. Read it as the brief for the row, not as landed work.
+
+**What the TD-5 attempts established** (all PRIMARY, from runs on
+2026-09-13): `window.__pm5FakeControls__` was asserted PRESENT at delivery
+time, so this is not an unreachable-seam problem; delivering straight after
+the second End tap is ORDER A (too early — the terminated frame has not
+arrived); and waiting for `Wrapping up` first does not fix it, which is
+consistent with `ConnectedSurface.tsx:466-472` saying that text renders on
+every ended state. **The missing piece is a browser-side observable for "the
+terminated frame has landed".** The ring has one — `summary-half` reads
+`(run closed, state=terminated)` — and the DOM does not.
 
 ## 4. The three changes
 
@@ -472,6 +490,8 @@ regardless.
 - **I3** — both log-detail Concept2 blocks share one link read and one
   `reload`.
 - **I4** — the free-row summary capture is taken with the driver still live.
+  **NOT DELIVERED. TD-5 left the phase 2026-09-13 (§3);** this invariant is
+  still the right one and is now the ROADMAP row's brief.
 
 ## 7. Testing — each gate with RF26's five-part contract
 
@@ -602,14 +622,13 @@ Gates that SKIP, with the reason said aloud:
 2. **I2's gate was run against `97fc7cc9`'s unmodified tree BEFORE the lift
    and read 2**, with the command and its output recorded (RF35 — a mutation
    of the fixed code tests the fix's shape, not the defect).
-3. `docs/screenshots/justrow-log.png` (or its named successor) shows the
-   free-row machine tier block, which it cannot today at all
-   (`JustRowLog.tsx:380-383`), and the PR body names the THREE dashed tiles
-   and the three populated ones — per §4.3's table, not the earlier false
-   count.
-4. **The capture was opened and looked at** (RF7), and the tile states read
-   off the image match §4.3's table. A predicted tile state is not a
-   verified one.
+3. ~~The free-row capture shows its machine tier block.~~ **WITHDRAWN
+   2026-09-13** — TD-5 left the phase (§3). Its evidence is in the ROADMAP
+   row and in §4.3, which stands as that row's brief.
+4. ~~The capture was opened and looked at (RF7).~~ **WITHDRAWN with
+   criterion 3.** Nothing in this PR commits a capture, and
+   `git checkout -- docs/screenshots/` discarded the frames the attempts
+   rewrote.
 5. **The Icebox twin of TD-1 is PUT TO JAMES in the PR's hand-back list, and
    removed only on his ruling.** `ROADMAP.md:3475-3483` carries "'A failing
    reconciliation does not fail the send' has no test — Phase AV,
