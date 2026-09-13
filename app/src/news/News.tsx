@@ -60,10 +60,19 @@ export function ArticleRow({
     </span>
   );
 
-  // Suppressed (not rendered) rather than shown as a "read" square whenever
-  // the read state itself is unknown — the same suppression pin as the
-  // count above, at row granularity.
-  const square = isRead !== undefined && (
+  // The square is ALWAYS rendered and only its `data-read` waits for a
+  // known state (spec 2026-09-12-news-layout-shift, invariant G1). It used
+  // to be suppressed entirely while `reads` was loading, and inserting it
+  // once the fetch settled narrowed every row's body by 20px (10px square +
+  // 10px gap), wrapped three LATEST titles and dropped everything below by
+  // 62px — the layout shift James saw on every tab switch. An attribute-less
+  // square paints exactly what a read one paints (`.news-square`'s base rule
+  // is page-coloured with a transparent border) and is `aria-hidden`, so it
+  // reserves the column without claiming a read state the screen can't back
+  // up — the 6H suppression rule still holds at every TEXT site (the count,
+  // the accessible word, the " · READ" suffix) and on the row's own
+  // `data-read`.
+  const square = (
     <span className="news-square" data-read={isRead} aria-hidden="true" />
   );
 
@@ -128,16 +137,23 @@ export default function News() {
   // already been replaced — see that effect's own comment for the actual
   // bug this guards.
   const rootRef = useRef<HTMLElement>(null);
-  // Every ROW on this screen carries read-state-dependent markup (the
-  // unread square, the accessible Read/Unread word, the " · READ" meta
-  // suffix — all suppressed, not just blank, while `reads.state ===
-  // "loading"`, per `readStateFor`'s own suppression rule above) — so the
-  // reads fetch settling is what "this screen's real final height is now
-  // known" actually means. "Settled" means ready OR error, not
-  // `rowsReady`-style "ready only" the way `Library.tsx` gates its own
-  // restore (Library shows a LOADING placeholder with no list at all
-  // while loading; News never does — every row renders immediately, just
-  // with its read-state markup missing until this settles).
+  // "Settled" means the read state is KNOWN — ready OR error — which since
+  // the 2026-09-12 layout-shift spec is usually true on the first render:
+  // `useArticleReads` renders `ready` synchronously from its module-level
+  // last-known set on every mount after the first in this document, and
+  // BACK from Reader (the path the restore below exists for) is always such
+  // a warm mount, because Reader warmed the cache. So the restore lands on
+  // the first frame whose read state is known, from memory or from the
+  // fetch, and the geometry of that frame is the geometry the rower left.
+  // Only a truly cold mount (first News/Reader visit of the document) still
+  // waits for the fetch, and the reserved square column (`ArticleRow`
+  // above) keeps that frame's height equal to the settled one for every
+  // current title anyway. Not `rowsReady`-style "ready only" the way
+  // `Library.tsx` gates its own restore (Library shows a LOADING
+  // placeholder with no list at all while loading; News never does). A
+  // reconcile that DISAGREES with the last-known set (a read made on another
+  // device since) can still move a row after the restore has landed — said
+  // aloud in the spec, not gated.
   const contentSettled = reads.state !== "loading";
 
   // Save scroll position for the lifetime of this screen, throttled to

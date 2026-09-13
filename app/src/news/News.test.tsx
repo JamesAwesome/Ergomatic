@@ -110,14 +110,23 @@ describe("News", () => {
     expect(screen.queryByText(/UNREAD/)).not.toBeInTheDocument();
   });
 
-  it("error state: rows still render, but no squares and no count — never claims a wrong number", () => {
+  it("error state: rows still render with the square's column reserved but no read claim on it, and no count — never claims a wrong number", () => {
     mockUseArticleReads.mockReturnValue({ state: "error" });
     const { container } = renderNews();
 
     expect(
       screen.getByText("The four workout types, and how hard each should feel"),
     ).toBeVisible();
-    expect(container.querySelectorAll(".news-square")).toHaveLength(0);
+    // Invariant G1 (spec 2026-09-12-news-layout-shift §2): the gutter is
+    // part of every row's geometry in EVERY reads state, so the settled
+    // frame lands on top of this one. Only the attribute — the claim —
+    // waits for a known state.
+    expect(container.querySelectorAll(".news-square")).toHaveLength(7);
+    expect(container.querySelectorAll(".news-square[data-read]")).toHaveLength(
+      0,
+    );
+    expect(container.querySelectorAll(".news-row[data-read]")).toHaveLength(0);
+    expect(screen.queryByText(/^ ?(Read|Unread)$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/UNREAD/)).not.toBeInTheDocument();
     // Word-bounded on purpose: the count label is the target ("3 READ"),
     // not any copy that happens to contain the letters — the v0.10.0
@@ -125,15 +134,21 @@ describe("News", () => {
     expect(screen.queryByText(/\bREAD\b/)).not.toBeInTheDocument();
   });
 
-  it("loading state: rows render with no squares and no count either", () => {
+  it("loading state: every row reserves its square with no read claim, and no count either", () => {
     mockUseArticleReads.mockReturnValue({ state: "loading" });
     const { container } = renderNews();
 
     expect(
       screen.getByText("The four workout types, and how hard each should feel"),
     ).toBeVisible();
-    expect(container.querySelectorAll(".news-square")).toHaveLength(0);
+    expect(container.querySelectorAll(".news-square")).toHaveLength(7);
+    expect(container.querySelectorAll(".news-square[data-read]")).toHaveLength(
+      0,
+    );
+    expect(container.querySelectorAll(".news-row[data-read]")).toHaveLength(0);
     expect(screen.queryByText(/UNREAD/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\bREAD\b/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^ ?(Read|Unread)$/)).not.toBeInTheDocument();
   });
 
   it("the workout-types pinned row shows the four type chips in O2/AT/TR/AN order", () => {
@@ -225,13 +240,17 @@ describe("ArticleRow (linked kind — no linked article exists in the real regis
     expect(markRead).toHaveBeenCalledWith("external-piece");
   });
 
-  it("suppresses the square and READ suffix for a linked row too when reads is not ready, and clicking it never touches markRead (no such function exists on that state)", () => {
+  it("reserves the square without a read claim and suppresses the READ suffix for a linked row too when reads is not ready, and clicking it never touches markRead (no such function exists on that state)", () => {
     const { container } = render(
       <MemoryRouter>
         <ArticleRow article={linkedArticle} reads={{ state: "error" }} />
       </MemoryRouter>,
     );
-    expect(container.querySelectorAll(".news-square")).toHaveLength(0);
+    expect(container.querySelectorAll(".news-square")).toHaveLength(1);
+    expect(container.querySelectorAll(".news-square[data-read]")).toHaveLength(
+      0,
+    );
+    expect(screen.queryByText(/\bREAD\b/)).not.toBeInTheDocument();
 
     const link = screen.getByRole("link", {
       name: /Your 2k predicts less about your 10k than you think/,
@@ -253,10 +272,13 @@ describe("ArticleRow (linked kind — no linked article exists in the real regis
   // News's own `newsScroll.ts`. Restoration gates on `reads` having
   // settled (ready OR error, i.e. "not still loading") rather than on
   // `rowsReady` the way Library does: News always renders its article
-  // rows immediately (no LOADING placeholder branch), but every row's
-  // read-state markup (the unread square, the " · READ" suffix) is
-  // suppressed while `reads` is loading — a restore while it is still
-  // unknown could land short of this screen's true final height.
+  // rows immediately (no LOADING placeholder branch). Since the 2026-09-12
+  // layout-shift spec the square's column is reserved in every state and
+  // `useArticleReads` renders `ready` from its last-known set on every warm
+  // mount — so on BACK from Reader (always warm) the gate is immediate and
+  // the restore lands on the first frame, whose geometry is the one the
+  // rower left. The tests below mock the hook per state, so "loading"
+  // here is the cold first visit of a document.
   describe("scroll restoration (CL item: News scroll memory)", () => {
     const SAVED_SCROLL_Y = 900;
 
