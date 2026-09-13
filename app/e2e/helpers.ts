@@ -231,10 +231,16 @@ export async function stableBoundingBox(
  *  port. An explicit instant (`…Z`), never a zone name: what the browser
  *  then reads as the row's date is decided by ITS zone alone
  *  (`toCalendarDate`). */
-async function backdateRow(
-  table: "session_logs" | "test_history",
-  id: string,
-  instant: string,
+/** One statement against the stack's published Postgres port, asserting it
+ *  touched exactly one row. Extracted when a SECOND direct writer arrived
+ *  (`markRowVerified` below) rather than duplicating the connection block —
+ *  the port, credentials and the exactly-one-row check are the same problem
+ *  both times, and a silently-zero-row update is the failure mode that would
+ *  make either caller's capture a lie. */
+async function writeOneRow(
+  label: string,
+  sql: string,
+  params: readonly unknown[],
 ): Promise<void> {
   const { default: pg } = await import("pg");
   const client = new pg.Client({
@@ -246,18 +252,56 @@ async function backdateRow(
   });
   await client.connect();
   try {
-    const res = await client.query(
-      `update ${table} set logged_at = $2::timestamptz where id = $1`,
-      [id, instant],
-    );
+    const res = await client.query(sql, [...params]);
     if (res.rowCount !== 1) {
-      throw new Error(
-        `backdateRow(${table}): expected 1 row for ${id}, got ${res.rowCount}`,
-      );
+      throw new Error(`${label}: expected 1 row, got ${String(res.rowCount)}`);
     }
   } finally {
     await client.end();
   }
+}
+
+function backdateRow(
+  table: "session_logs" | "test_history",
+  id: string,
+  instant: string,
+): Promise<void> {
+  return writeOneRow(
+    `backdateRow(${table}) for ${id}`,
+    `update ${table} set logged_at = $2::timestamptz where id = $1`,
+    [id, instant],
+  );
+}
+
+/** Marks one saved row as accepted AND verified by Concept2, the way the
+ *  send route would have.
+ *
+ *  WHY THIS EXISTS. `POST /api/concept2/results/:logId` is the only writer
+ *  of `verified` (and of `c2_result_id`), and the screenshots stack is
+ *  Concept2-DARK by construction — `compose.yml` passes
+ *  `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}` and `screenshots.sh` exports no
+ *  `C2_*` — so that route answers 403 before it writes anything. Without a
+ *  seam, `VERIFIED ✓` could never be photographed, and it never had been.
+ *  This is the same manoeuvre, for the same reason, as `backdateRow` above:
+ *  the route cannot set the column, so the capture writes it directly
+ *  through the stack's own published port.
+ *
+ *  WHAT IT DOES NOT PROVE, stated so no capture built on it over-claims: it
+ *  seeds PAST the producer, so it says nothing about the send path. That
+ *  path is gated where it belongs — `concept2Send.integration.test.ts`
+ *  drives the real route against real Postgres. What this seam buys is the
+ *  half that had no gate at all: that the stored column travels
+ *  DB → `logs.get` → `GET /api/logs/:id` → the component → pixels. */
+export function markRowVerified(
+  id: string,
+  c2ResultId: number,
+  c2UserId: number,
+): Promise<void> {
+  return writeOneRow(
+    `markRowVerified for ${id}`,
+    "update session_logs set verified = true, c2_result_id = $2, c2_user_id = $3 where id = $1",
+    [id, c2ResultId, c2UserId],
+  );
 }
 
 export function backdateLog(id: string, instant: string): Promise<void> {

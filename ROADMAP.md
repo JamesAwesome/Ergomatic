@@ -2350,7 +2350,13 @@ fixed.
   it to the bash array. Filed under Tooling rather than the connected surface,
   because nothing about it is connected-surface work. **S**
 
-- **A client test's `console.log` never reaches stdout, so any probe that
+- **DONE 2026-09-13 — landed in the debt round's docs PR.** The fix is where
+  the row said it should go: a fourth habit in `docs/TESTING.md` §11
+  ("Verification is measured, not asserted"), and a third footgun beside the
+  two scoped-run ones in `CLAUDE.md`'s Commands section. Proposed for
+  eviction at the next hand-back; left here until James rules, since nothing
+  is struck without him. Original filing follows.
+  **A client test's `console.log` never reaches stdout, so any probe that
   REPORTS what it saw that way is reporting something nobody read.** Measured
   2026-09-12 during the Phase TD spike: under
   `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>`,
@@ -2445,9 +2451,40 @@ axis-quantity question — take the surviving work-versus-rest mismatches
 together, in ONE design pass with ONE Gate 0, rather than approving a third of
 a screen at a time. **OPEN QUESTION: none — the ruling already says what shape
 the pass takes.** What is missing is that nobody scheduled it. **And it is
-ACCRETING while unopened:** two of its five members were ADDED on 2026-09-07
-by PM gates (`PM5 · PER INTERVAL` over Concept2's arithmetic; AVG HR derived
-from the trace), so the longer it stays shut the larger its Gate 0 gets.
+ACCRETING while unopened:** two members were ADDED on 2026-09-07 by PM gates
+(`PM5 · PER INTERVAL` over Concept2's arithmetic; AVG HR derived from the
+trace), so the longer it stays shut the larger its Gate 0 gets.
+
+**THREE CORRECTIONS TO THIS SECTION'S OWN BOOKKEEPING, measured at the
+census 2026-09-13.** Take none of the below on trust (RF10) — it has been
+wrong in three ways at once:
+1. **It is SIX members, not five** (seven with the Stats row above). "Five"
+   was false when written, by nine days: commit `4df2737c` (2026-09-09) added
+   the phrase and the rest-bands annotation in one diff, but `git log -S` puts
+   the rest-bands bullet here since `e4773c44` on 2026-08-31, the day the pass
+   opened. A third count, "four bullets", is in
+   `docs/superpowers/specs/2026-09-06-logbook-parity-design.md`.
+2. **The eyebrow is over the TABLE, not the tiles, and the real defect is
+   worse than this section says.** The six machine tiles
+   (`PostWorkoutSummary.tsx`'s `MachineTierBlock`) carry NO eyebrow, heading
+   or provenance label of any kind; the single `PM5 · PER INTERVAL` string
+   lives on `MachineSummaryTable.tsx`, a separate block further down, which
+   is 4/6 the machine's figures and 2/6 ours. So the derived tiles are
+   UNLABELLED rather than mislabelled.
+3. **`931` / `929` is an e2e SEED, not a record.** It is
+   `design.spec.ts` and `screenshots.spec.ts` fixture data. The measured band
+   a rower could actually see is watts ≤1 W and cal/hr **24-78 on six of
+   nine sessions** (`2026-09-06-logbook-parity-design.md`). A Gate 0 artboard
+   built on 931/929 would show a 2 cal/hr gap where the real one reaches 78.
+
+**AND THE AXIS THIS PASS WAS GOING TO OFFER IS PROBABLY WRONG.**
+"Derived versus measured" does not survive our own wire notes:
+`docs/monitor/pm5-interface-notes.md` §27.5 measures the PM5's own watts
+field against `2.80/pace³` and finds agreement under 1 W — **the monitor's
+watts is itself a derivation of pace, so nothing on that strip is
+measured.** The honest axis is WHOSE ARITHMETIC, which James already ruled
+(§3.1, the logbook's). Putting the wrong axis on the board asks him to rule
+on a distinction that does not exist.
 **NEXT (≤0.25): none owed — this one needed a date, not an answer, and now
 has one.** · dies 2026-10-12 (set 2026-09-12, proposed by the controller at
 the housekeeping sweep before Wave A opens; James rules at that PR's review) ·
@@ -2485,6 +2522,35 @@ All three of the original ones were sitting apart — one in Phase PROTO, two un
 the screen came to mix quantities without saying so. **Every item changes what a
 displayed number MEANS, so the gate renders the whole summary before and after,
 in both orientations.**
+
+- **THE STATS `MACHINE` COLUMN'S OWN NUMBERS DO NOT PRODUCE ITS OWN THIRD
+      NUMBER, and a committed capture shows it.** · dies 2026-10-13 · FAST
+      FOLLOW (James, 2026-09-13) — filed rather than fixed in the same breath
+      because the fix is a product decision about which population the row
+      describes, not a arithmetic correction.
+      `docs/screenshots/you-stats.png` renders `METRES 36,752`,
+      `TIME 2:34:31` and `AVG WATTS 176` in one column. 2:34:31 is 9,271 s,
+      and `logbookWatts` is `Math.round(2.8 / (seconds / meters) ** 3)`
+      (`app/domain/logbook.ts`) — which over those two cells gives **174**,
+      not 176. Verified by hand 2026-09-13 off the committed PNG, not
+      inferred.
+      **The mechanism** is `app/domain/stats/aggregate.ts`: the watts
+      accumulator skips `r.tier !== "stored"` rows, while `totals(machine)`
+      beside it counts them. So METRES and TIME describe a SUPERSET of the
+      rows AVG WATTS is computed from, and the column silently mixes two
+      populations.
+      **Why nothing caught it:** the caption that would have explained the
+      seam was struck by rulings 18 and 19 —
+      `app/src/you/stats/TotalsGroup.tsx` says so outright ("NO prose:
+      rulings 18 and 19 struck every caption, the seam line and the
+      `n OF m` footnote included"). RF7's shape exactly: a reviewer
+      recomputing the headline from the rows in the same frame would have
+      found it in ten seconds, and the capture shipped.
+      **It is the same defect class as this pass's other members** — a figure
+      whose provenance the screen does not state — but on a FIFTH surface the
+      pass does not currently cover, and it landed 2026-09-12 (Phase PS PR 1
+      and PR 2), two days AFTER this pass was dated. Whether it joins the
+      pass or is fixed ahead of it is James's call at the Gate 0. **S**
 
 - **The chart's axes** — should `traceModel.ts`'s `t` and `d` become a true
   work-only clock? The PR-2 collision is discharged by labelling
