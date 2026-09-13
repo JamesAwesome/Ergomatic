@@ -6,6 +6,7 @@ import { makeFakeSessions, makeFakeUsers } from "../testing/fakes.js";
 
 const baseUser = {
   id: "u1",
+  appleSub: null,
   googleSub: "test:e2e@test.local",
   email: "e2e@test.local",
   name: "E2E Test User",

@@ -16,6 +16,7 @@ import type { SessionStore } from "./sessions.js";
 import type { UserStore } from "./users.js";
 
 export interface AuthDeps {
+  frontDoor?: import("./frontDoor.js").FrontDoor | null;
   sessions: SessionStore;
   users: UserStore;
   oauth: OAuthProvider | null;
@@ -31,8 +32,27 @@ export function createAuthRouter({
   nativeVerifier,
   allowlist,
   siteUrl,
+  frontDoor,
 }: AuthDeps): Router {
   const router = Router();
+  async function login(
+    claims: import("./google.js").Claims,
+  ): Promise<import("./signin.js").SignInResult> {
+    if (!frontDoor)
+      return signInWithClaims({ sessions, users, allowlist }, claims);
+    const signed = await frontDoor.attempts.legacyGoogle(claims);
+    return {
+      outcome: "ok",
+      user: signed.user,
+      token: signed.token!,
+      expiresAt: new Date(signed.expiresAt),
+    };
+  }
+
+  if (frontDoor) {
+    router.get("/api/auth/signin", frontDoor.admission);
+    router.post("/api/auth/native", frontDoor.admission);
+  }
 
   router.get("/api/auth/signin", async (_req, res) => {
     if (!oauth) {
@@ -78,10 +98,7 @@ export function createAuthRouter({
     }
 
     try {
-      const result = await signInWithClaims(
-        { sessions, users, allowlist },
-        claims,
-      );
+      const result = await login(claims);
       if (result.outcome === "denied") {
         res.setHeader("Set-Cookie", clear);
         res.redirect(`/?denied=${encodeURIComponent(result.email)}`);
@@ -119,10 +136,7 @@ export function createAuthRouter({
       return;
     }
     try {
-      const result = await signInWithClaims(
-        { sessions, users, allowlist },
-        claims,
-      );
+      const result = await login(claims);
       if (result.outcome === "denied") {
         res.status(403).json({ error: "denied", email: result.email });
         return;

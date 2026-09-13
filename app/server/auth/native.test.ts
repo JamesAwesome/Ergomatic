@@ -7,6 +7,7 @@ import { makeFakeSessions, makeFakeUsers } from "../testing/fakes.js";
 const claims = { sub: "s1", email: "a@x.com", emailVerified: true, name: "A" };
 const dbUser = {
   id: "u1",
+  appleSub: null,
   googleSub: "s1",
   email: "a@x.com",
   name: "A",

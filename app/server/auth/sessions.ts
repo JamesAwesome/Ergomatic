@@ -22,6 +22,7 @@ export interface SessionUser {
 }
 
 export interface ResolvedSession {
+  sessionId: string;
   user: SessionUser;
   expiresAt: Date;
   refreshed: boolean;
@@ -60,6 +61,7 @@ export function createSessionStore(db: Db) {
         refreshed = true;
       }
       return {
+        sessionId: row.session.id,
         user: { id: row.user.id, email: row.user.email, name: row.user.name },
         expiresAt,
         refreshed,

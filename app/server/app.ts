@@ -1,4 +1,5 @@
 import express from "express";
+import type { FrontDoor } from "./auth/frontDoor.js";
 import { noStore, originCheck, requireUser } from "./auth/middleware.js";
 import { createAuthRouter } from "./auth/routes.js";
 import { createTestSigninRouter } from "./auth/testSignin.js";
@@ -13,6 +14,7 @@ import { createStatsRouter } from "./routes/stats.js";
 import type { Concept2Store } from "./stores/concept2.js";
 
 export interface AppDeps {
+  frontDoor?: FrontDoor | null;
   checkDb: () => Promise<boolean>;
   sessions: SessionStore;
   users: UserStore;
@@ -76,6 +78,13 @@ export function createApp(deps: AppDeps) {
   // `express.json()` below runs as a no-op pass-through for a body this
   // one already consumed — every other route is untouched, still gated at
   // the default 100 KB.
+  if (deps.frontDoor)
+    app.post(
+      "/api/auth/apple/callback",
+      noStore,
+      express.urlencoded({ extended: false, limit: "32kb", parameterLimit: 8 }),
+      deps.frontDoor.appleCallback,
+    );
   app.post("/api/logs", express.json({ limit: "1mb" }));
   app.use(express.json());
   app.use("/api", noStore);
@@ -96,6 +105,30 @@ export function createApp(deps: AppDeps) {
     }
   });
 
+  app.get("/api/auth/options", (_req, res) => {
+    res.json({
+      frontDoorEnabled: Boolean(deps.frontDoor),
+      apple: { native: Boolean(deps.frontDoor), web: Boolean(deps.frontDoor) },
+      google: {
+        native: Boolean(deps.nativeVerifier),
+        web: Boolean(deps.oauth),
+      },
+    });
+  });
+  if (deps.frontDoor) app.use(deps.frontDoor.router);
+  else
+    app.use(
+      [
+        "/api/auth/native/attempts",
+        "/api/auth/web/attempts",
+        "/api/auth/methods",
+        "/api/auth/apple/callback",
+        "/api/auth/google/callback",
+      ],
+      (_req, res) => {
+        res.status(503).json({ error: "unavailable" });
+      },
+    );
   app.use(createAuthRouter(deps));
 
   if (deps.testAuthSecret) {

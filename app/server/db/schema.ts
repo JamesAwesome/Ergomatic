@@ -12,6 +12,7 @@ import {
   text,
   timestamp,
   uuid,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -24,6 +25,7 @@ export const users = pgTable("users", {
   // snapshot). No production code writes a NULL yet; the policy PR that does
   // becomes the rollback floor (docs/RELEASING.md § Rollback constraints).
   googleSub: text("google_sub").unique(),
+  appleSub: text("apple_sub").unique("users_apple_sub_unique"),
   email: text("email").notNull(),
   name: text("name").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -701,3 +703,75 @@ export const concept2AuthAttempts = pgTable("concept2_auth_attempts", {
     .notNull()
     .defaultNow(),
 });
+
+export const appleGrants = pgTable(
+  "apple_grants",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    clientId: text("client_id").notNull(),
+    refreshToken: text("refresh_token").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "apple_grants_pkey", columns: [t.userId, t.clientId] }),
+  ],
+);
+
+export const authAttempts = pgTable(
+  "auth_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bindingHash: text("binding_hash").notNull(),
+    surface: text("surface").notNull(),
+    purpose: text("purpose").notNull(),
+    targetProvider: text("target_provider").notNull(),
+    existingProvider: text("existing_provider"),
+    stage: text("stage").notNull(),
+    version: integer("version").notNull(),
+    state: text("state").notNull().unique("auth_attempts_state_unique"),
+    nonce: text("nonce").notNull(),
+    originalSessionId: uuid("original_session_id").references(
+      () => sessions.id,
+      { onDelete: "cascade" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    reauthenticatedAt: timestamp("reauthenticated_at", { withTimezone: true }),
+    verifiedSubject: text("verified_subject"),
+    verifiedEmail: text("verified_email"),
+    verifiedName: text("verified_name"),
+    appleClientId: text("apple_client_id"),
+    appleRefreshToken: text("apple_refresh_token"),
+  },
+  (t) => [
+    check("auth_attempts_surface_check", sql`${t.surface} in ('native','web')`),
+    check(
+      "auth_attempts_purpose_check",
+      sql`${t.purpose} in ('signin','link')`,
+    ),
+    check(
+      "auth_attempts_provider_check",
+      sql`${t.targetProvider} in ('apple','google') and (${t.existingProvider} is null or ${t.existingProvider} in ('apple','google'))`,
+    ),
+    check(
+      "auth_attempts_stage_check",
+      sql`${t.stage} in ('authorize','exchanging','confirm','reauth_authorize','reauth_exchanging','target_authorize','target_exchanging','link_ready')`,
+    ),
+    check(
+      "auth_attempts_session_check",
+      sql`(${t.purpose}='signin' and ${t.originalSessionId} is null and ${t.existingProvider} is null) or (${t.purpose}='link' and ${t.originalSessionId} is not null and ${t.existingProvider} is not null and ${t.existingProvider}<>${t.targetProvider})`,
+    ),
+    check("auth_attempts_expiry_check", sql`${t.expiresAt}>${t.createdAt}`),
+    check("auth_attempts_version_check", sql`${t.version}>0`),
+    uniqueIndex("auth_attempts_link_session_unique")
+      .on(t.originalSessionId)
+      .where(sql`${t.originalSessionId} is not null`),
+    index("auth_attempts_expires_at_idx").on(t.expiresAt),
+  ],
+);

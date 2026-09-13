@@ -1,4 +1,5 @@
 import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { createFrontDoor, frontDoorConfig } from "./auth/frontDoor.js";
 import { createApp } from "./app.js";
 import { parseAllowlist } from "./auth/allowlist.js";
 import { createGoogleProvider, type OAuthProvider } from "./auth/google.js";
@@ -85,7 +86,7 @@ if (!nativeVerifier) {
 }
 
 const allowlist = parseAllowlist(process.env.ALLOWED_EMAILS);
-if (allowlist.size === 0) {
+if (allowlist.size === 0 && process.env.FRONT_DOOR_ENABLED !== "1") {
   console.warn(
     "WARNING: ALLOWED_EMAILS is empty — nobody can create an account",
   );
@@ -187,9 +188,15 @@ const concept2 = {
 };
 
 const port = Number(process.env.PORT ?? 8080);
-createApp({
+const sessionStore = createSessionStore(db);
+const frontConfig = await frontDoorConfig(process.env, siteUrl);
+const frontDoor = frontConfig
+  ? await createFrontDoor(pool, sessionStore, frontConfig)
+  : null;
+const httpServer = createApp({
+  frontDoor,
   checkDb: () => checkDb(pool),
-  sessions: createSessionStore(db),
+  sessions: sessionStore,
   users: createUserStore(db),
   oauth,
   nativeVerifier,
@@ -201,3 +208,11 @@ createApp({
 }).listen(port, () => {
   console.log(`ergomatic api listening on :${port}`);
 });
+
+for (const signal of ["SIGINT", "SIGTERM"] as const)
+  process.once(signal, () => {
+    frontDoor?.close();
+    httpServer.close(() => {
+      void pool.end();
+    });
+  });
