@@ -4,13 +4,13 @@
 
 **Goal:** Add the approved Apple-first sign-in and account-linking client on iOS and web while preserving legacy Google behavior, native sign-out, and account/history continuity.
 
-**Architecture:** `useAuthFlow` is the sole client operation adapter. It consumes the shared server union, invokes the thin native Apple/Google proof bridges or follows the server's exact web authorization URL, and exposes credential-free view states to Welcome, confirmation, and You. A generation number invalidates every pending async continuation when a rower starts another operation, cancels, resets, signs out, or leaves the flow. An operation-local authorization owner serializes provider launch, proof, and finalization; the rendered target action reflects that busy authority. Browser tests intercept only the new auth endpoints and begin at real UI producers; server plans separately prove signed callbacks and database behavior.
+**Architecture:** `useAuthFlow` is the sole client operation adapter. It consumes the shared server union, invokes the thin native Apple/Google proof bridges or follows the server's exact web authorization URL, and exposes credential-free view states to Welcome, confirmation, and You. A generation number invalidates every pending async continuation when a rower starts another operation, cancels, resets, signs out, or leaves the flow. An operation-local authorization owner serializes provider launch, proof, and finalization; the rendered target action reflects that busy authority. `AppContent` consumes each route destination transition once so a retained terminal notice cannot replay navigation after the rower chooses another tab. Browser tests intercept only the new auth endpoints and begin at real UI producers; server plans separately prove signed callbacks and database behavior.
 
 **Tech Stack:** React 19, TypeScript 6, React Router 7, Capacitor 8, Vitest, Testing Library, Playwright
 
 **Spec:** `docs/superpowers/specs/2026-09-12-apple-signin-design.md`
 
-**Candidate through:** `0f990a68e930f4c2dbd6ee46736405554abd18d2` in `/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/apple-client-plan-scratch`
+**Candidate through:** `089a4bfbf40119ce688b681398a74eaa93c3449e` in `/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/apple-client-plan-scratch`
 
 ## Global constraints
 
@@ -95,18 +95,21 @@ export type AuthFlowView =
 
 ## Lifetime authority
 
-| Event                            | Authority change                                                          | Late result behavior                                                                |
-| -------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Start sign-in/link               | Increment generation; replace active operation after accepted server step | Any older begin/proof/confirm/finalize result is ignored.                           |
-| Prepare another link             | Increment generation; clear operation                                     | Prior async result cannot open a provider or change view.                           |
-| Cancel                           | Increment generation before server cancel; discard binding locally        | A late server cancel cannot overwrite a newer view.                                 |
-| Reset or successful You sign-out | Increment generation; clear operation and view                            | A native operation that survives Browser Back cannot resurrect after `abandon()`.   |
-| Web provider navigation          | Browser document reloads                                                  | Old hook memory cannot survive; cookie-bound resume creates the new operation view. |
-| Native signed-in result          | Check generation before and after dynamic import and token storage        | Invalidated flow cannot store a token or call the signed-in callback.               |
+| Event                            | Authority change                                                          | Late result behavior                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Start sign-in/link               | Increment generation; replace active operation after accepted server step | Any older begin/proof/confirm/finalize result is ignored.                             |
+| Prepare another link             | Increment generation; clear operation                                     | Prior async result cannot open a provider or change view.                             |
+| Cancel                           | Increment generation before server cancel; discard binding locally        | A late server cancel cannot overwrite a newer view.                                   |
+| Reset or successful You sign-out | Increment generation; clear operation and view                            | A native operation that survives Browser Back cannot resurrect after `abandon()`.     |
+| Web provider navigation          | Browser document reloads                                                  | Old hook memory cannot survive; cookie-bound resume creates the new operation view.   |
+| Native signed-in result          | Check generation before and after dynamic import and token storage        | Invalidated flow cannot store a token or call the signed-in callback.                 |
+| Auth route destination           | `AppContent` records each destination transition before navigating        | The terminal view and notice remain, while later ordinary navigation is not replayed. |
 
 The operation-local authorization owner is claimed synchronously before any dynamic import, provider initialization, provider proof, proof POST, or finalization. Every continuation checks the same operation object, generation, and owner. The target provider action renders disabled while that owner exists; Cancel remains available. Cleanup captures the operation it owns before awaiting the server and cannot clear or render over a newer operation.
 
 Busy screens remove or disable competing auth actions. `/you/sign-in-methods` is a normal history entry, so Browser Back can expose You while a native request is pending; successful sign-out must call `abandon()` and the generation guard remains mandatory.
+
+`consumedAuthDestination` is router-owned document memory. It is minted with `AppContent`, updated before a new auth destination is followed, survives route changes inside that mounted shell, and is discarded on document reload or unmount. A transition through `null` rearms the same path for a later operation. Pathname changes alone never rearm it.
 
 ---
 
@@ -125,10 +128,11 @@ git diff --stat 3cf849c7 259882ba -- app
 git show --stat --oneline 81ce6040
 git show --stat --oneline 0ca9849567e7ba38cdd5ecc79aa6ce655b26f859
 git show --stat --oneline 0f990a68e930f4c2dbd6ee46736405554abd18d2
-git diff --name-only 3cf849c7 0f990a68e930f4c2dbd6ee46736405554abd18d2
+git show --stat --oneline 089a4bfbf40119ce688b681398a74eaa93c3449e
+git diff --name-only 3cf849c7 089a4bfbf40119ce688b681398a74eaa93c3449e
 ```
 
-Expected: the complete server candidate owns shared types and both TypeScript inclusion edits, the native commit owns the thin bridge, and the two client commits together own exactly 22 source files plus seven PNG captures. Stop if the client series includes `app/shared`, either tsconfig, or `app/src/native/appleAuth.ts`.
+Expected: the complete server candidate owns shared types and both TypeScript inclusion edits, the native commit owns the thin bridge, and the three client commits together own exactly 22 source files plus seven PNG captures. Stop if the client series includes `app/shared`, either tsconfig, or `app/src/native/appleAuth.ts`.
 
 - [ ] **Step 2: Adopt the client commit after the server and native commits**
 
@@ -137,11 +141,13 @@ git rev-parse --show-toplevel
 git cherry-pick 0ca9849567e7ba38cdd5ecc79aa6ce655b26f859
 git rev-parse --show-toplevel
 git cherry-pick 0f990a68e930f4c2dbd6ee46736405554abd18d2
+git rev-parse --show-toplevel
+git cherry-pick 089a4bfbf40119ce688b681398a74eaa93c3449e
 git diff --check HEAD^
 git status --short
 ```
 
-Expected: both cherry-picks succeed without ownership conflicts and the worktree is clean.
+Expected: all three cherry-picks succeed without ownership conflicts and the worktree is clean.
 
 - [ ] **Step 3: Inspect the boundary, not just compilation**
 
@@ -163,6 +169,7 @@ From `app/`:
 ```bash
 export NODE_OPTIONS=--no-experimental-webstorage
 pnpm exec vitest run --project client \
+  src/App.test.tsx \
   src/adapters/authFlow.test.tsx \
   src/api/useAuthMethods.test.ts \
   src/native/signin.test.ts \
@@ -171,7 +178,7 @@ pnpm exec vitest run --project client \
   src/SignIn.frontDoor.test.tsx
 ```
 
-Expected from the candidate: 6 files and 68 tests pass, including late native begin after You sign-out, binding-secret request bodies, providerless returns, cancel cleanup, nonce-bound proofs, first-account confirmation, both link directions, and legacy fallback.
+Expected from the candidate: 7 files and 74 tests pass, including the actual You sign-out control abandoning a late native begin, binding-secret request bodies, providerless returns, cancel cleanup, nonce-bound proofs, first-account confirmation, both link directions, and legacy fallback.
 
 - [ ] **Step 2: Run repository gates once on the assembled branch**
 
@@ -188,7 +195,7 @@ Expected: all exit 0. Do not substitute the focused HTML diagnostic for the repo
 
 Read the per-file rows and missed branches in `app/coverage/index.html` from the single assembled `pnpm test:coverage` run above; archive the current-source result with integration evidence. The repo-wide aggregate must meet 90×4 and domain 100%. Do not run a duplicate full client suite or a narrowed coverage diagnostic merely to refresh a historical percentage.
 
-The earlier narrowed diagnostic at `0ca98495` ran 64 tests and exited 1 on 88.32% branches. Its retained HTML is historical evidence for that source, not a measured result for `0f990a68` and not the final aggregate gate.
+The earlier narrowed diagnostic at `0ca98495` ran 64 tests and exited 1 on 88.32% branches. Its retained HTML is historical evidence for that source, not a measured result for `089a4bfb` and not the final aggregate gate.
 
 ### Task 3: Prove browser producer-to-consumer behavior and approved design
 
@@ -198,9 +205,10 @@ The earlier narrowed diagnostic at `0ca98495` ran 64 tests and exited 1 on 88.32
 NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "Apple welcome begins"
 NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "linking Apple"
 NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "a lost finalize response reports uncertainty"
+NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "a cancelled link return sends the rower to You once"
 ```
 
-Expected: the welcome test clicks the real Apple control, follows the intercepted server `authorizationUrl`, consumes `authAttempt`, and reaches account confirmation. The link test starts from Add Apple, proves Google then Apple, finalizes, and keeps a workout created from real `LIBRARY_WORKOUTS` via `fromWorkout`/`toSteps` on the same account. The response-loss test aborts the finalize response, shows uncertainty, refetches methods, and shows both providers connected without a success notice.
+Expected: the welcome test clicks the real Apple control, follows the intercepted server `authorizationUrl`, consumes `authAttempt`, and reaches account confirmation. The link test starts from Add Apple, proves Google then Apple, finalizes, and keeps a workout created from real `LIBRARY_WORKOUTS` via `fromWorkout`/`toSteps` on the same account. The linked, uncertain-error, and cancelled-link terminal paths each route to You once, then the actual Library tab remains on Library with `aria-current=page`. The response-loss path keeps its uncertainty notice and refreshed connected methods before navigation.
 
 - [ ] **Step 2: Run design and canonical screenshot paths**
 
@@ -219,33 +227,35 @@ Keep the Task 2 `NODE_OPTIONS` export active. In a new shell, run `export NODE_O
 
 Apply each replacement independently, run the named command, verify the stated failure, then restore the file before the next row:
 
-| Source replacement                                                   | Command                                                                                                                                                                                                                       | Required red                                                                  |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `forcePrompt: true` → `forcePrompt: false`                           | `pnpm exec vitest run --project client src/native/signin.test.ts`                                                                                                                                                             | Forced-prompt assertion fails.                                                |
-| Google login option `nonce` → `nonce: "wrong"`                       | same                                                                                                                                                                                                                          | Nonce assertion fails.                                                        |
-| Remove the missing Google ID-token throw                             | same                                                                                                                                                                                                                          | Missing-token rejection fails.                                                |
-| Remove `bindingSecret` from native proof body                        | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx`                                                                                                                                                        | Exact proof-body assertion fails.                                             |
-| `nonce: step.nonce` → `nonce: "wrong"` in Apple call                 | same                                                                                                                                                                                                                          | Apple bridge input assertion fails.                                           |
-| Stop deleting `authProvider`                                         | same                                                                                                                                                                                                                          | Two return-cleanup assertions fail.                                           |
-| Default absent `authProvider` to `"apple"`                           | same                                                                                                                                                                                                                          | Both providerless return assertions fail.                                     |
-| `legacyGoogle: true` → `legacyGoogle: false` in fallback             | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx src/SignIn.frontDoor.test.tsx`                                                                                                                          | Legacy fallback assertions fail.                                              |
-| Reverse Apple/Google methods order                                   | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx`                                                                                                                                                        | Apple-first assertion fails.                                                  |
-| First link action bypasses `startPreparedLink`                       | `pnpm exec vitest run --project client src/auth/LinkSignInMethod.test.tsx`                                                                                                                                                    | Existing-provider proof assertion fails.                                      |
-| Remove `now` from success copy                                       | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx`                                                                                                                                                        | Approved-copy assertion fails.                                                |
-| Remove the first generation guard in `acceptStep`                    | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "does not resurrect a native link begin after You sign-out abandons it"`                                                                             | Late begin invokes Google proof.                                              |
-| Let a second `claimAuthorization` replace the current owner          | `node /tmp/apple-mechanism-probes/client.cjs`; then `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "keeps one rendered native target action"`                                                       | Probe reports a second owner and no completion; rendered test fails.          |
-| Render the target provider action enabled while owned                | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "keeps one rendered native target action"`                                                                                                           | Disabled-control assertion fails.                                             |
-| Remove the ownership check after Google initialization               | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "does not launch Google after initialization loses its operation"`                                                                                   | Stale Google proof launches.                                                  |
-| Remove captured-operation and generation checks after cancel cleanup | `node /tmp/apple-mechanism-probes/client-stale-cancel.cjs`; then `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "keeps a newly prepared link when an older provider cancellation finishes cleanup"` | Probe loses the new operation and rendered test shows the stale cancellation. |
-| Stop refreshing methods for an uncertain result                      | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx -t "refetches authoritative methods before showing an uncertain finalize result"`                                                                       | Only one methods read occurs and stale Add Apple remains.                     |
-| Route `attempt_expired` to the old default failure copy              | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx -t "renders the bounded link terminal copy"`                                                                                                            | Expiry renders false `Nothing changed` certainty.                             |
+| Source replacement                                                   | Command                                                                                                                                                                                                                       | Required red                                                                                                   |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `forcePrompt: true` → `forcePrompt: false`                           | `pnpm exec vitest run --project client src/native/signin.test.ts`                                                                                                                                                             | Forced-prompt assertion fails.                                                                                 |
+| Google login option `nonce` → `nonce: "wrong"`                       | same                                                                                                                                                                                                                          | Nonce assertion fails.                                                                                         |
+| Remove the missing Google ID-token throw                             | same                                                                                                                                                                                                                          | Missing-token rejection fails.                                                                                 |
+| Remove `bindingSecret` from native proof body                        | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx`                                                                                                                                                        | Exact proof-body assertion fails.                                                                              |
+| `nonce: step.nonce` → `nonce: "wrong"` in Apple call                 | same                                                                                                                                                                                                                          | Apple bridge input assertion fails.                                                                            |
+| Stop deleting `authProvider`                                         | same                                                                                                                                                                                                                          | Two return-cleanup assertions fail.                                                                            |
+| Default absent `authProvider` to `"apple"`                           | same                                                                                                                                                                                                                          | Both providerless return assertions fail.                                                                      |
+| `legacyGoogle: true` → `legacyGoogle: false` in fallback             | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx src/SignIn.frontDoor.test.tsx`                                                                                                                          | Legacy fallback assertions fail.                                                                               |
+| Reverse Apple/Google methods order                                   | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx`                                                                                                                                                        | Apple-first assertion fails.                                                                                   |
+| First link action bypasses `startPreparedLink`                       | `pnpm exec vitest run --project client src/auth/LinkSignInMethod.test.tsx`                                                                                                                                                    | Existing-provider proof assertion fails.                                                                       |
+| Remove `now` from success copy                                       | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx`                                                                                                                                                        | Approved-copy assertion fails.                                                                                 |
+| Remove the first generation guard in `acceptStep`                    | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "does not resurrect a native link begin after the flow is abandoned"`                                                                                | Late begin invokes Google proof.                                                                               |
+| Remove `authFlow?.abandon()` from the actual You sign-out control    | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "held native link begin through the real You sign-out control"`                                                                                      | Late begin launches Google proof after sign-out.                                                               |
+| Stop recording `consumedAuthDestination` before navigation           | Rebuild and run `/tmp/apple-code-lens/navigation.cjs`; then `NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "a cancelled link return sends the rower to You once"`                                          | Standalone browser records `/library` then `/you`; named Chromium fails because Library never becomes current. |
+| Let a second `claimAuthorization` replace the current owner          | `node /tmp/apple-mechanism-probes/client.cjs`; then `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "keeps one rendered native target action"`                                                       | Probe reports a second owner and no completion; rendered test fails.                                           |
+| Render the target provider action enabled while owned                | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "keeps one rendered native target action"`                                                                                                           | Disabled-control assertion fails.                                                                              |
+| Remove the ownership check after Google initialization               | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "does not launch Google after initialization loses its operation"`                                                                                   | Stale Google proof launches.                                                                                   |
+| Remove captured-operation and generation checks after cancel cleanup | `node /tmp/apple-mechanism-probes/client-stale-cancel.cjs`; then `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "keeps a newly prepared link when an older provider cancellation finishes cleanup"` | Probe loses the new operation and rendered test shows the stale cancellation.                                  |
+| Stop refreshing methods for an uncertain result                      | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx -t "refetches authoritative methods before showing an uncertain finalize result"`                                                                       | Only one methods read occurs and stale Add Apple remains.                                                      |
+| Route `attempt_expired` to the old default failure copy              | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx -t "renders the bounded link terminal copy"`                                                                                                            | Expiry renders false `Nothing changed` certainty.                                                              |
 
 After every restore:
 
 ```bash
 git diff --check
 pnpm exec vitest run --project client \
-  src/adapters/authFlow.test.tsx src/native/signin.test.ts \
+  src/App.test.tsx src/adapters/authFlow.test.tsx src/native/signin.test.ts \
   src/auth/LinkSignInMethod.test.tsx src/you/SignInMethods.test.tsx \
   src/SignIn.frontDoor.test.tsx
 ```
@@ -311,18 +321,18 @@ The following exact source patch is generated by:
 ```bash
 git diff --full-index \
   3cf849c7614caa25bff78c64517e8d2e47ada39a \
-  0f990a68e930f4c2dbd6ee46736405554abd18d2 -- app
+  089a4bfbf40119ce688b681398a74eaa93c3449e -- app
 ```
 
-Context-only blank diff markers are stored as empty lines so the Markdown passes whitespace checks. The embedded patch passed reverse and forward `git apply`, then every resulting source byte matched candidate HEAD `0f990a68e930f4c2dbd6ee46736405554abd18d2`. The seven reviewed PNG captures travel in the two client commits and are listed in the evidence report; binary bytes are intentionally omitted from this executable source archive.
+Context-only blank diff markers are stored as empty lines so the Markdown passes whitespace checks. The embedded patch passed reverse and forward `git apply`, then every resulting source byte matched candidate HEAD `089a4bfbf40119ce688b681398a74eaa93c3449e`. The seven reviewed PNG captures travel in the three client commits and are listed in the evidence report; binary bytes are intentionally omitted from this executable source archive.
 
 ```diff
 diff --git a/app/e2e/appleAuth.spec.ts b/app/e2e/appleAuth.spec.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..a8122d434dc1fe58fa010b6e024723d02e13e7a5
+index 0000000000000000000000000000000000000000..6c38c3ed330bfdd6c2e8b185f719fafa96b910c8
 --- /dev/null
 +++ b/app/e2e/appleAuth.spec.ts
-@@ -0,0 +1,267 @@
+@@ -0,0 +1,307 @@
 +import { expect, test, type Page } from "@playwright/test";
 +import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
 +import { fromWorkout, toSteps } from "../src/builder/builderState.js";
@@ -527,6 +537,12 @@ index 0000000000000000000000000000000000000000..a8122d434dc1fe58fa010b6e024723d0
 +    }, title);
 +    expect(account.email).toContain("apple-link-");
 +    expect(account.retained).toBe(true);
++
++    await page.getByRole("link", { name: "LIBRARY", exact: true }).click();
++    await expect(page).toHaveURL(/\/library$/);
++    await expect(
++      page.getByRole("link", { name: "LIBRARY", exact: true }),
++    ).toHaveAttribute("aria-current", "page");
 +  } finally {
 +    await page.evaluate(async (workoutTitle) => {
 +      const response = await fetch("/api/workouts");
@@ -589,6 +605,40 @@ index 0000000000000000000000000000000000000000..a8122d434dc1fe58fa010b6e024723d0
 +  await expect(page.getByRole("button", { name: "Add Apple" })).toHaveCount(0);
 +  await expect(page.getByText(/Nothing changed/)).toHaveCount(0);
 +  await expect(page.getByRole("status")).toHaveCount(0);
++
++  await page.getByRole("link", { name: "LIBRARY", exact: true }).click();
++  await expect(page).toHaveURL(/\/library$/);
++  await expect(
++    page.getByRole("link", { name: "LIBRARY", exact: true }),
++  ).toHaveAttribute("aria-current", "page");
++});
++
++test("a cancelled link return sends the rower to You once and releases ordinary navigation", async ({
++  page,
++}, testInfo) => {
++  await enableFrontDoor(page);
++  await page.route("**/api/auth/methods", (route) =>
++    route.fulfill({
++      status: 200,
++      json: { apple: false, google: true },
++    }),
++  );
++  await signInViaBackdoor(page, {
++    email: `apple-cancel-navigation-${testInfo.parallelIndex}@e2e.test`,
++    name: "Apple Link Tester",
++  });
++
++  await page.goto("/?authResult=cancelled&authPurpose=link&authProvider=apple");
++  await expect(page).toHaveURL(/\/you$/);
++  await expect(
++    page.getByRole("heading", { name: "SIGN-IN METHODS" }),
++  ).toBeVisible();
++
++  await page.getByRole("link", { name: "LIBRARY", exact: true }).click();
++  await expect(page).toHaveURL(/\/library$/);
++  await expect(
++    page.getByRole("link", { name: "LIBRARY", exact: true }),
++  ).toHaveAttribute("aria-current", "page");
 +});
 diff --git a/app/e2e/design.spec.ts b/app/e2e/design.spec.ts
 index f44fd40bdfa41aeb208db3eb4e2083b9bdbe3e2c..ea71580326ff04a332fa4398f91a7707d95c9452 100644
@@ -906,12 +956,13 @@ index 0000000000000000000000000000000000000000..362dd7855930e007b6f747a1b42c534f
 +</svg>
 \ No newline at end of file
 diff --git a/app/src/App.tsx b/app/src/App.tsx
-index f18240f93395daf2edd215abdb127a8203e451fc..217f1b09abc2bd737958b0dd1e18df151082f302 100644
+index f18240f93395daf2edd215abdb127a8203e451fc..bea098915e81a24758338c266fca445f3825b0c8 100644
 --- a/app/src/App.tsx
 +++ b/app/src/App.tsx
-@@ -1,11 +1,21 @@
- import { useEffect } from "react";
+@@ -1,11 +1,24 @@
+-import { useEffect } from "react";
 -import { BrowserRouter } from "react-router-dom";
++import { useEffect, useRef } from "react";
 +import { BrowserRouter, useLocation, useNavigate } from "react-router-dom";
  import SignIn from "./SignIn";
 +import { useAuthFlow } from "./adapters/authFlow";
@@ -924,8 +975,11 @@ index f18240f93395daf2edd215abdb127a8203e451fc..217f1b09abc2bd737958b0dd1e18df15
 +  const auth = useAuthFlow(refetch);
 +  const location = useLocation();
 +  const navigate = useNavigate();
++  const consumedAuthDestination = useRef(auth.destination);
 +
 +  useEffect(() => {
++    if (consumedAuthDestination.current === auth.destination) return;
++    consumedAuthDestination.current = auth.destination;
 +    if (auth.destination && auth.destination !== location.pathname) {
 +      void navigate(auth.destination);
 +    }
@@ -933,7 +987,7 @@ index f18240f93395daf2edd215abdb127a8203e451fc..217f1b09abc2bd737958b0dd1e18df15
 
    // Every screen that cares about scroll manages it itself (the reader and
    // releases screens jump to the top, the Library restores its own saved
-@@ -24,11 +34,15 @@ export default function App() {
+@@ -24,11 +37,15 @@ export default function App() {
    }, []);
 
    if (me.state === "loading") return null;
@@ -1389,10 +1443,10 @@ index 5d07363d8ce50cb913138da8b8c8c3e66d9596f6..42cc163145853d26820bf06d488919df
            baselines-subpage Gate 0, 2026-09-05): the foot of You is one
 diff --git a/app/src/adapters/authFlow.test.tsx b/app/src/adapters/authFlow.test.tsx
 new file mode 100644
-index 0000000000000000000000000000000000000000..7f450935606b61ff0c6d4f909f6a8dbeea2f302a
+index 0000000000000000000000000000000000000000..9c2d88b92e20c2086b73e06f89c7baa6ed927b1d
 --- /dev/null
 +++ b/app/src/adapters/authFlow.test.tsx
-@@ -0,0 +1,1103 @@
+@@ -0,0 +1,1168 @@
 +import {
 +  act,
 +  fireEvent,
@@ -1401,6 +1455,8 @@ index 0000000000000000000000000000000000000000..7f450935606b61ff0c6d4f909f6a8dbe
 +  screen,
 +  waitFor,
 +} from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { MemoryRouter } from "react-router-dom";
 +import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 +
 +const seam = vi.hoisted(() => ({
@@ -1409,6 +1465,7 @@ index 0000000000000000000000000000000000000000..7f450935606b61ff0c6d4f909f6a8dbe
 +  appleAuthorize: vi.fn(),
 +  googleInit: vi.fn(),
 +  googleProof: vi.fn(),
++  nativeSignOut: vi.fn(),
 +  storeToken: vi.fn(),
 +  navigateWeb: vi.fn(),
 +}));
@@ -1422,12 +1479,14 @@ index 0000000000000000000000000000000000000000..7f450935606b61ff0c6d4f909f6a8dbe
 +  initNativeAuth: seam.googleInit,
 +  nativeGoogleProof: seam.googleProof,
 +  nativeGoogleProofAfterInit: seam.googleProof,
++  nativeSignOut: seam.nativeSignOut,
 +}));
 +vi.mock("../native/session", () => ({ storeToken: seam.storeToken }));
 +vi.mock("./webNavigate", () => ({ navigateWeb: seam.navigateWeb }));
 +
 +import { useAuthFlow } from "./authFlow";
 +import LinkSignInMethod from "../auth/LinkSignInMethod";
++import You from "../You";
 +
 +function deferred<T>() {
 +  let resolve!: (value: T) => void;
@@ -1456,6 +1515,8 @@ index 0000000000000000000000000000000000000000..7f450935606b61ff0c6d4f909f6a8dbe
 +  seam.googleInit.mockReset();
 +  seam.googleInit.mockResolvedValue(undefined);
 +  seam.googleProof.mockReset();
++  seam.nativeSignOut.mockReset();
++  seam.nativeSignOut.mockResolvedValue(undefined);
 +  seam.storeToken.mockReset();
 +  seam.navigateWeb.mockReset();
 +  window.history.replaceState(null, "", "/");
@@ -1479,7 +1540,7 @@ index 0000000000000000000000000000000000000000..7f450935606b61ff0c6d4f909f6a8dbe
 +    });
 +  });
 +
-+  it("does not resurrect a native link begin after You sign-out abandons it", async () => {
++  it("does not resurrect a native link begin after the flow is abandoned", async () => {
 +    seam.native = true;
 +    let resolveBegin!: (response: Response) => void;
 +    seam.api.mockImplementation(async (path: string) => {
@@ -1500,8 +1561,6 @@ index 0000000000000000000000000000000000000000..7f450935606b61ff0c6d4f909f6a8dbe
 +      await Promise.resolve();
 +    });
 +
-+    // `/you/sign-in-methods` is a normal history entry. Back can reveal You
-+    // while this request is pending; successful sign-out calls abandon().
 +    act(() => result.current.abandon());
 +    await act(async () => {
 +      resolveBegin(
@@ -1523,6 +1582,66 @@ index 0000000000000000000000000000000000000000..7f450935606b61ff0c6d4f909f6a8dbe
 +
 +    expect(seam.googleProof).not.toHaveBeenCalled();
 +    expect(result.current.view).toStrictEqual({ kind: "idle" });
++  });
++
++  it("abandons a held native link begin through the real You sign-out control", async () => {
++    seam.native = true;
++    const begin = deferred<Response>();
++    seam.api.mockImplementation(async (path: string) => {
++      if (path === "/api/auth/options") return ok(options);
++      if (path === "/api/auth/methods") {
++        return ok({ apple: false, google: true });
++      }
++      if (path === "/api/auth/native/attempts") return begin.promise;
++      return new Response(null, { status: 404 });
++    });
++    const onSignedOut = vi.fn();
++    let auth!: ReturnType<typeof useAuthFlow>;
++    let pending!: Promise<void>;
++    function Harness() {
++      auth = useAuthFlow(() => {});
++      return (
++        <MemoryRouter>
++          <You
++            user={{ id: "rower", name: "Rower", email: "rower@example.test" }}
++            onSignedOut={onSignedOut}
++            authFlow={auth}
++          />
++        </MemoryRouter>
++      );
++    }
++    render(<Harness />);
++    await waitFor(() => expect(auth.options.state).toBe("ready"));
++    act(() => auth.prepareLink("apple"));
++    await act(async () => {
++      pending = auth.startPreparedLink();
++      await Promise.resolve();
++    });
++
++    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
++    expect(seam.nativeSignOut).toHaveBeenCalledOnce();
++    expect(onSignedOut).toHaveBeenCalledOnce();
++
++    await act(async () => {
++      begin.resolve(
++        ok({
++          outcome: "authorize",
++          attemptId: "late-you-link",
++          purpose: "link",
++          targetProvider: "apple",
++          expiresAt: "soon",
++          provider: "google",
++          stage: "reauth",
++          nonce: "late-nonce",
++          state: "late-state",
++          bindingSecret: "late-binding",
++        }),
++      );
++      await pending;
++    });
++
++    expect(seam.googleProof).not.toHaveBeenCalled();
++    expect(auth.view).toStrictEqual({ kind: "idle" });
 +  });
 +
 +  it("keeps one rendered native target action in flight through provider, proof, and finalization", async () => {
@@ -4348,3 +4467,7 @@ index 0000000000000000000000000000000000000000..db880e13ace15214b20413cf79c00c73
 +  );
 +}
 ```
+
+## Controller integration delta
+
+The complete candidate patch above remains pinned to `089a4bfb`; it is not silently rewritten as later source. After byte-exact adoption at `9f9276a9`, ordinary integrated visual inspection found two CSS discrepancies. Controller commit `d5421946` makes notice modifiers more specific than the base notice shorthand and gives auth-flow screens a 520px outer width, preserving 480px content after padding in landscape. Commit `c8ba5f12` waits for positive LIFETIME statistics readiness before You captures. These parent-owned changes and the final browser measurements are recorded in `apple-integrated-evidence/browser/report.md`; the interrupted independent review remains incomplete.

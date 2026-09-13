@@ -1,6 +1,6 @@
 # Apple plan hardening — mechanism findings and correction receipts
 
-The original lens 1 verdict remains BLOCKED in `mechanism-report.md`; it was not rerun or relabelled PASS. This is the controller’s disposition of the single owner fix round. The separate prescribed-code lens follows these corrections; there is no third hardening pass.
+The original lens 1 verdict remains BLOCKED in `mechanism-report.md`; it was not rerun or relabelled PASS. This is the controller’s disposition of the single owner fix round. The separate prescribed-code lens was interrupted by a platform cybersecurity-risk block; its verdict is INCOMPLETE. Its preserved partial evidence is in `code-lens/`; the unfinished probe was not resumed and there is no third hardening pass.
 
 | Finding | Correction | Source and deciding evidence |
 | --- | --- | --- |
@@ -12,3 +12,5 @@ The original lens 1 verdict remains BLOCKED in `mechanism-report.md`; it was not
 R1 remains a nonblocking conditional callback-ID collision concern. The native plan now limits its UUID claim to native-attempt ownership. The injected equal-ID probe does not establish attacker control, a natural collision or a device exploit. The whole-branch review and final James handback receive this limitation; no new lifecycle mechanism or roadmap row is silently invented.
 
 All evidence is candidate-specific. These scoped checks do not replace final integrated coverage, native compilation, named browser gates, exact-head CI, independent task/whole-branch review, DBA PR or PM final-PR gates. Real Apple configuration, phone authorization and native/web subject continuity remain untested runtime gates.
+
+The code lens’s confirmed ordinary navigation defect was corrected in client `089a4bfb` (integration `9f9276a9`). Auth returns now consume their destination once, so clicking Library after a linked, cancelled or uncertain result stays in Library. The reviewer’s original Chromium script passes; removing the consumption assignment recreates the failure. The same correction replaces the old sign-out overclaim with a rendered You-button gate and a mutation at its actual abandon call site. See `../../plans/apple-client-evidence/report.md`. These fixes do not complete the interrupted review.

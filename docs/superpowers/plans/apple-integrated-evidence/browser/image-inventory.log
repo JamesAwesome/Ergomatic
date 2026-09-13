@@ -1,0 +1,18 @@
+dimensions:
+apple-create-account.png 390x844
+apple-link-confirm-landscape.png 844x390
+apple-link-result-uncertain-landscape.png 844x390
+apple-link-result-uncertain.png 390x844
+apple-signin-methods.png 390x844
+apple-signin-welcome-landscape.png 844x390
+apple-signin-welcome.png 390x844
+changed_hashes:
+--- ../.superpowers/sdd/2026-09-13-apple-signin/integrated/browser/apple-png-before.sha256	2026-09-13 02:29:08
++++ ../.superpowers/sdd/2026-09-13-apple-signin/integrated/browser/apple-png-after.sha256	2026-09-13 02:33:28
+@@ -3,5 +3,5 @@
+ 184e1aa600ff02e0a85500aeb9a098a1c73d57735363159efca5e3870ca6cb83  ../docs/screenshots/apple-signin-welcome.png
+ 9a966e88a26ae1767ec1c98dcebaf14e321ab9470eba5abd37aea08a496646dc  ../docs/screenshots/apple-signin-methods.png
+ be923d513e6a3d1880a94bc0f8ebae8a8e58916f3160a7cbcba4479de36d7659  ../docs/screenshots/apple-link-result-uncertain-landscape.png
+-c6cad5475793e5dda7f81221aedf26690a576ad5045e72bb0b2152759598fee4  ../docs/screenshots/apple-link-result-uncertain.png
++e5d55d92836d150c2205c02cdce3febeedbfb857299ec9e5c73d39898bfcec86  ../docs/screenshots/apple-link-result-uncertain.png
+ f8b41d5ed0813bc8d973bebab58c9a7863b9505979ed225c96e484decc939330  ../docs/screenshots/apple-link-confirm-landscape.png

@@ -4,7 +4,7 @@
 
 - Candidate worktree: `/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/apple-client-plan-scratch`
 - Candidate base: `3cf849c7614caa25bff78c64517e8d2e47ada39a`
-- Tested client series: `0ca9849567e7ba38cdd5ecc79aa6ce655b26f859`, then `0f990a68e930f4c2dbd6ee46736405554abd18d2`
+- Tested client series: `0ca9849567e7ba38cdd5ecc79aa6ce655b26f859`, then `0f990a68e930f4c2dbd6ee46736405554abd18d2`, then `089a4bfbf40119ce688b681398a74eaa93c3449e`
 - Neighbor dependencies: server through `259882ba`; native through `81ce6040`
 - Keep the candidate worktree until the feature PR merges. The client commits exclude borrowed `app/shared/auth.ts`, both TypeScript configs, and `app/src/native/appleAuth.ts`.
 - Root and `app/` dependencies were installed. `core.hooksPath=.husky/_`; the real commit hook ran lint-staged and TypeScript successfully.
@@ -124,6 +124,28 @@ Server commit `259882ba` owns `finalize can commit identity and grant before its
 
 ## Residuals and integration order
 
-Adopt server through `259882ba`, native through `81ce6040`, then client commits `0ca9849567e7ba38cdd5ecc79aa6ce655b26f859` and `0f990a68e930f4c2dbd6ee46736405554abd18d2`. The client series needs the neighboring shared types, TypeScript inclusions, and thin native bridge and deliberately does not duplicate them.
+Adopt server through `259882ba`, native through `81ce6040`, then client commits `0ca9849567e7ba38cdd5ecc79aa6ce655b26f859`, `0f990a68e930f4c2dbd6ee46736405554abd18d2`, and `089a4bfbf40119ce688b681398a74eaa93c3449e`. The client series needs the neighboring shared types, TypeScript inclusions, and thin native bridge and deliberately does not duplicate them.
 
 Live Apple/Google credentials, iOS device launch, and native/web same-subject continuity remain release gates. Browser interception is confined to tests and capture fixtures; there is no production fake provider.
+
+## 2026-09-13 navigation correction — current source
+
+Commit `089a4bfbf40119ce688b681398a74eaa93c3449e` fixes the reproduced terminal-route loop. `AppContent` now owns `consumedAuthDestination` for its mounted document. The ref starts with the current destination, records each changed destination before navigation, survives in-document route changes, rearms when the controller transitions through `null`, and is discarded on unmount or reload. A retained linked/cancelled/error view and notice can therefore route to You once without replaying `/you` after the rower chooses Library.
+
+The recovered pre-fix Chromium evidence at `docs/superpowers/research/2026-09-13-apple-harden/code-lens/navigation.json` recorded `/library` followed by `/you`, a final `/you` URL, and no active Library tab. Running the same `/tmp/apple-code-lens/navigation.cjs` against the isolated 335-module fixed build produced `apple-client-evidence/navigation-fixed.json`: one `/library` navigation, a final `/library` URL, and `aria-current=page`.
+
+The earlier operation-lifetime paragraph overstated its first test: that test called `result.current.abandon()` directly. Current source adds `abandons a held native link begin through the real You sign-out control`. It renders the actual You button with a real `useAuthFlow`, holds native begin, completes native sign-out, and then proves the late begin cannot launch Google or change the idle view.
+
+Current gates and receipts:
+
+- `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/App.test.tsx src/adapters/authFlow.test.tsx src/api/useAuthMethods.test.ts src/native/signin.test.ts src/auth/LinkSignInMethod.test.tsx src/you/SignInMethods.test.tsx src/SignIn.frontDoor.test.tsx`: 7 files, 74 tests passed after restore.
+- `pnpm lint`, `pnpm typecheck`, and `pnpm format:check`: all passed before commit; typecheck reported E2E membership 25/25. The commit hook reran changed-file Prettier/ESLint and typecheck successfully.
+- `NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "linking Apple|lost finalize|cancelled link return"`: 3 Chromium tests passed. Linked, uncertain-error, and cancelled-link returns each released the actual Library tab. Both Docker production builds completed.
+- After the navigation mutant was restored, the named cancelled-link Chromium test passed 1/1 and the recovered standalone probe again ended on Library.
+
+Mutation receipts:
+
+- Removing `authFlow?.abandon()` from the actual You sign-out control made its held-begin test fail 1/1 because Google proof launched with `late-nonce`; restore passed.
+- Removing the assignment to `consumedAuthDestination` made the recovered standalone browser record `/library` then `/you`, and the named cancelled-link Chromium test failed 1/1 because Library never became current. Restore passed both proofs.
+
+Durable outputs are `navigation-red-browser.log`, `navigation-green-browser.log`, `navigation-restored-browser.log`, `navigation-final-focused.log`, `navigation-fixed.json`, and `navigation-mutations/`. The historical per-file HTML rows remain tied to `0ca98495`; parent owns the single current-source aggregate coverage run after adoption. No current-source diagnostic coverage percentage is claimed here.

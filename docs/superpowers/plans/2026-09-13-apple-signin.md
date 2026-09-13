@@ -26,7 +26,7 @@
 
 ## Authoring and integration
 
-All source modules are authored and paste-tested; independent hardening is next. The source contract is `2026-09-13-apple-auth-contract.md` beside this file. Each module carries its complete code and paste-test receipts; the assembled plan proceeds through the repository's harden gates before product integration.
+All source modules are authored and paste-tested. The source contract is `2026-09-13-apple-auth-contract.md` beside this file. The mechanism fix round is complete; the separate code lens was interrupted by a platform cybersecurity-risk block after confirming an ordinary navigation bug. Its review is INCOMPLETE, not PASS. Tested candidates are integrated for ordinary implementation and local verification with that navigation bug now corrected in client `089a4bfb` / integration `9f9276a9`. The unfinished review remains a handback gate; it is not being repeated through another tool or a third hardening pass. Exact evidence and limits are in `../research/2026-09-13-apple-harden/code-lens/`.
 
 Candidate adoption uses the repository-approved inline-author shape: retain and adopt the exact paste-tested code in task-sized commits, with the independent review half of subagent-driven development. Re-transcribing the same code is unnecessary. The PR records this shape.
 
@@ -37,8 +37,8 @@ Candidate adoption uses the repository-approved inline-author shape: retain and 
 **Interfaces:** Produces `app/shared/auth.ts` and the routes in the shared contract. Consumes verified Apple or Google proof plus the operation binding and, for links, the exact current session. Owns migration, providers, atomic stores, API mounting, boot configuration and cleanup lifecycle.
 
 - [x] Complete and paste-test the server module, including real PostgreSQL behavior.
-- [ ] Fold the mechanism/code hardening and DBA plan findings.
-- [ ] Adopt the candidate, verify its task gates, commit real work before mutation probes, then complete spec and quality review.
+- [x] Fold confirmed mechanism findings and DBA plan measurements; adopt server `259882ba` with real hooks and committed mutation evidence.
+- [ ] Complete the interrupted code-lens and independent spec/quality review gates.
 
 ### Task 2: Native Apple authorization bridge
 
@@ -47,8 +47,8 @@ Candidate adoption uses the repository-approved inline-author shape: retain and 
 **Interfaces:** Produces `AppleAuth.authorize({nonce:string,state:string})` returning `{idToken:string,authorizationCode:string,state:string,name?:string}`. Owns the thin native TypeScript interface, Swift plugin, controller registration, entitlement and Xcode membership. Does not own adapter orchestration.
 
 - [x] Complete and paste-test the native module with an unsigned simulator build.
-- [ ] Fold applicable hardening findings.
-- [ ] Adopt the candidate, verify its task gates and complete spec and quality review.
+- [x] Fold F3, adopt native `81ce6040`, and verify the integrated unsigned simulator build and built-configuration logging check.
+- [ ] Complete independent spec and quality review.
 
 ### Task 3: Welcome, confirmation and sign-in methods
 
@@ -57,8 +57,8 @@ Candidate adoption uses the repository-approved inline-author shape: retain and 
 **Interfaces:** Consumes Task 1's shared contract and Task 2's thin bridge. Owns provider orchestration, native Google interactive nonce proof, auth return handling and the approved Welcome/You/confirmation/linking surfaces.
 
 - [x] Complete and paste-test the client module against the shared contract.
-- [ ] Fold applicable hardening findings.
-- [ ] Adopt the candidate, verify client and browser behavior, then complete spec and quality review.
+- [x] Fold F2/F4 and the confirmed navigation correction; adopt client `089a4bfb`.
+- [ ] Complete independent spec and quality review.
 
 ### Task 4: Integrated release and review evidence
 
@@ -67,6 +67,8 @@ Candidate adoption uses the repository-approved inline-author shape: retain and 
 **Interfaces:** Consumes server configuration names and migration behavior. Produces deploy instructions that keep the feature dark, name Apple portal prerequisites and preserve Apple-only account access through an explicit rollback floor.
 
 - [x] Validate composed configuration and deployment instructions against the implemented server.
-- [ ] Run branch lint, typecheck, format, unit/client/integration, build and production-bundle gates; run named browser specs locally and inspect screenshots.
+- [x] Run branch lint, typecheck, format, unit/client/integration, build and production-bundle gates; run named browser specs locally and inspect corrected screenshots.
 - [ ] Complete whole-branch spec/quality, DBA PR and PM final-PR reviews; fold findings in one coordinated fix wave.
 - [ ] Open one coherent PR, verify CI for its exact head and present the review verdict plus proposed/overdue roadmap rows to James for the repository-required handback.
+
+Current ordinary verification and source provenance are recorded in `apple-integrated-evidence/report.md`. Full coverage passes 343 files / 8,784 tests, with one skip; aggregate statements/branches/functions/lines are 98.26/96.54/98.98/98.99 and domain remains 100%. Parent integration also fixes historical migration fixtures, retains cap-sync’s generated manifest order, restores the approved alert borders and 480px auth-flow content width, and waits for loaded statistics before You captures. A draft PR must state the incomplete review gates rather than claim merge readiness.

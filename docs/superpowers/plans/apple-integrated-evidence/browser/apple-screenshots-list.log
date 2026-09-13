@@ -1,0 +1,9 @@
+Listing tests:
+  [screenshots] › screenshots.spec.ts:7658:1 › apple-signin-welcome
+  [screenshots] › screenshots.spec.ts:7662:1 › apple-signin-welcome-landscape
+  [screenshots] › screenshots.spec.ts:7667:1 › apple-create-account
+  [screenshots] › screenshots.spec.ts:7743:1 › apple-signin-methods
+  [screenshots] › screenshots.spec.ts:7747:1 › apple-link-confirm-landscape
+  [screenshots] › screenshots.spec.ts:7789:1 › apple-link-result-uncertain
+  [screenshots] › screenshots.spec.ts:7793:1 › apple-link-result-uncertain-landscape
+Total: 7 tests in 1 file

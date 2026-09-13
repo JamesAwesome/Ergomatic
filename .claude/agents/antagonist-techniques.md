@@ -365,6 +365,8 @@ toolkit, not a history.
   and parser selection before the handler: a global foreign-origin rejection and
   JSON-only parsing stop Apple's form POST before any state check can run.
 
+- **A navigation request is not a permanent route invariant.** After an auth result, click the next ordinary tab through the real router. A terminal `/you` destination coupled to pathname changes sent Library straight back to You; a test stopping at the result screen missed it. This is the confirmed ordinary finding from the interrupted Apple code lens (2026-09-13); no completed review PASS is implied.
+
 ## Where the dated record lives
 
 The per-engagement record — one section per engagement, in date order,

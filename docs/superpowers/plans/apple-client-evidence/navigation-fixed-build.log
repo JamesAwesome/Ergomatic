@@ -1,0 +1,91 @@
+vite v8.2.2 building client environment for production...
+transforming...
+✓ 335 modules transformed.
+rendering chunks...
+computing gzip size...
+../../../../../../../../../../tmp/apple-code-lens/dist/index.html                                                     0.56 kB │ gzip:   0.33 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-vietnamese-600-normal-anCjMumA.woff2            5.19 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/newsreader-vietnamese-500-normal-CL6a8tp2.woff2         5.43 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-vietnamese-500-normal-C8zxqsMH.woff       5.61 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-vietnamese-400-normal-DDuiU_S-.woff       5.62 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-vietnamese-500-normal-k0drYPZA.woff2            5.65 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-vietnamese-400-normal-BF4g3tCF.woff2            5.67 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-vietnamese-600-normal-iLQfcSjf.woff       5.71 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-cyrillic-ext-500-normal-BIfNGwUT.woff     5.77 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-cyrillic-ext-600-normal-9HEixskS.woff     5.79 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-cyrillic-ext-400-normal-DMdlQ8Kv.woff     5.82 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-vietnamese-400-normal-BulugwFq.woff2      5.86 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-vietnamese-500-normal-DZ4AoWbu.woff2      6.04 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-cyrillic-ext-400-normal-xuaO2J-f.woff2    6.91 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-vietnamese-600-normal-D2EvbN8M.woff2      6.93 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-cyrillic-ext-500-normal-BqneJy0T.woff2    6.97 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/newsreader-vietnamese-500-normal-BEAbKU8A.woff          7.03 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-cyrillic-400-normal-CEL4l2ZJ.woff         7.20 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-cyrillic-500-normal-Ael50iVv.woff         7.20 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-cyrillic-600-normal-fLZuRloM.woff         7.26 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-vietnamese-600-normal-C8xBVdfP.woff             7.38 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-vietnamese-500-normal-7W3lD2kQ.woff             7.66 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-vietnamese-400-normal-FGOLYM1a.woff             7.68 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-cyrillic-ext-600-normal-V-xxqcpd.woff2    7.69 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-cyrillic-400-normal-BSMlKf0J.woff2        8.35 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-cyrillic-500-normal-Bq9vWWag.woff2        8.46 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-cyrillic-600-normal-CTOM6hUh.woff2        9.35 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-latin-ext-400-normal-D3D2R8hC.woff       11.76 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-latin-ext-500-normal-CZ70TYgx.woff       11.76 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-latin-ext-600-normal-DmB0ttJJ.woff       11.83 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-latin-ext-600-normal-Dm61iqcg.woff2            12.38 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-latin-ext-400-normal-B5tPZzqW.woff2            12.92 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-latin-400-normal-CvHOgSBP.woff           13.14 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-latin-500-normal-CB9ihrfo.woff           13.15 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-latin-ext-500-normal-RFhg4CpD.woff2            13.16 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-latin-600-normal-DWFSQ4vo.woff           13.20 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-latin-ext-400-normal-BmRBH3aV.woff2      13.34 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-latin-ext-500-normal-CAhNIIs5.woff2      13.43 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-latin-600-normal-3BBy0ZsW.woff2                13.82 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-latin-ext-600-normal-D38SheWl.woff2      14.32 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-latin-500-normal-CGugC8dq.woff2                14.60 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-latin-400-normal-C81ewxNO.woff2                14.70 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2          14.70 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-latin-500-normal-DSY6xOcd.woff2          14.88 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/newsreader-latin-ext-500-normal-BNHmvKvI.woff2         15.06 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/ibm-plex-mono-latin-600-normal-BgSNZQsw.woff2          15.62 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-latin-ext-600-normal-D7uErJuz.woff             17.72 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-latin-ext-400-normal-DrmqtLj6.woff             17.98 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-latin-600-normal-DwYieO8P.woff                 18.20 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-latin-ext-500-normal-D7mXw3Kz.woff             18.29 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-latin-400-normal-Bl602Mgc.woff                 18.97 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/archivo-latin-500-normal-pkzA7jw9.woff                 18.98 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/newsreader-latin-ext-500-normal-CZruMFou.woff          19.29 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/newsreader-latin-500-normal-B66TYsaK.woff2             23.62 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/newsreader-latin-500-normal-DFwuUcdu.woff              29.63 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/index-NeajD2YL.css                                    119.83 kB │ gzip:  17.95 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/webAuth-Ch6J0S-C.js                                     0.07 kB │ gzip:   0.08 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/appleAuth-C-55XkHU.js                                   0.08 kB │ gzip:   0.09 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/appSettings-BzSsEjTk.js                                 0.11 kB │ gzip:   0.11 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/keepAwake-a9qSJEBZ.js                                   0.45 kB │ gzip:   0.29 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/appLifecycle-CauteCGB.js                                0.52 kB │ gzip:   0.34 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/keyboard-Cx1VmE8N.js                                    0.57 kB │ gzip:   0.37 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/haptics-fiwEg8xQ.js                                     0.59 kB │ gzip:   0.39 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/native-BUWqcb5a.js                                      0.72 kB │ gzip:   0.33 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/web-LwJT7JL3.js                                         0.76 kB │ gzip:   0.38 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/web-szr0shcW.js                                         0.77 kB │ gzip:   0.35 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/web-B9dskbiE.js                                         0.84 kB │ gzip:   0.40 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/web-BaPbpaPh.js                                         0.92 kB │ gzip:   0.46 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/web-DbKzwR46.js                                         1.15 kB │ gzip:   0.46 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/session-DWANdAg8.js                                     1.39 kB │ gzip:   0.62 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/base-BZrsY4BR.js                                        2.53 kB │ gzip:   0.92 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/nfc-DdNqnhcN.js                                         3.11 kB │ gzip:   1.31 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/capacitorBle-B1q2nPyD.js                                6.67 kB │ gzip:   2.63 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/web-BPJ9-knX.js                                         7.67 kB │ gzip:   2.24 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/dist-Dhrj-3P3.js                                        7.75 kB │ gzip:   3.09 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/esm-DDr1MVpf.js                                         8.63 kB │ gzip:   2.42 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/web-CbKRL1B6.js                                        13.30 kB │ gzip:   3.94 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/signin-vEuei5IF.js                                     45.90 kB │ gzip:  11.70 kB
+../../../../../../../../../../tmp/apple-code-lens/dist/assets/index-DGJCczes.js                                     736.72 kB │ gzip: 222.46 kB
+
+✓ built in 156ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.

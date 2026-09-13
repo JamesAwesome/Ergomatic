@@ -1,0 +1,20 @@
+
+Running 4 tests using 3 workers
+
+(node:64630) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:64632) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:64633) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/4] [screenshots] › e2e/screenshots.spec.ts:7748:1 › apple-link-confirm-landscape
+[2/4] [screenshots] › e2e/screenshots.spec.ts:7791:1 › apple-link-result-uncertain
+[3/4] [screenshots] › e2e/screenshots.spec.ts:7744:1 › apple-signin-methods
+[4/4] [screenshots] › e2e/screenshots.spec.ts:7795:1 › apple-link-result-uncertain-landscape
+  4 passed (1.1s)

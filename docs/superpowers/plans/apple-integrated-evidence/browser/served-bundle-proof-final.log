@@ -1,0 +1,18 @@
+checkout_head=c8ba5f12b381d55ab8cc2ec504cbfdc56319b2ab
+css_product_source=d5421946ad5ab825dadefb390a7da2e07350e7f1
+app_src_diff_from_css_product_source_lines=0
+base_url=http://127.0.0.1:8358
+js_path=/assets/index-3IXZScxA.js
+css_path=/assets/index-BupF1Tm4.css
+served_js_sha256=0094b66d3b5aa081b85f8968b207706b98e0b6d57c3c447ce03bbcd89dd78d5d
+served_css_sha256=711017f3068f84a67e57ffb49aafce49fc55425bbdf6f3930928a231b608f83c
+served_distinctive_js_literals:
+Create your account
+authAttempt
+served_corrected_css_selectors:
+.notice.auth-notice-error{border-color:var(--accent)}
+.notice.auth-notice-success{border-color:var(--success)}
+running_stack:
+ergomatic-17458-web Up 3 minutes (healthy)
+ergomatic-17458-api Up 3 minutes (healthy)
+ergomatic-17458-postgres Up 3 minutes (healthy)

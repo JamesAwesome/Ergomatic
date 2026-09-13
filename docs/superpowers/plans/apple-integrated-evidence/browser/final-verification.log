@@ -1,0 +1,14 @@
+final_head=c8ba5f12b381d55ab8cc2ec504cbfdc56319b2ab
+089a4bfb not-direct-ancestor
+259882ba not-direct-ancestor
+81ce6040 not-direct-ancestor
+9f9276a9 ancestor
+d5421946 ancestor
+c8ba5f12 ancestor
+product_files_after_d542:
+tracked_capture_status:
+ M docs/screenshots/apple-link-confirm-landscape.png
+ M docs/screenshots/apple-link-result-uncertain-landscape.png
+ M docs/screenshots/apple-link-result-uncertain.png
+stack_containers_after_cleanup=0
+retained_volume=ergomatic-17458_pgdata

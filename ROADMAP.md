@@ -757,7 +757,9 @@ his Concept2 logbook page, both pairs of numbers and the gap's explanation
 
 **Status: OPEN 2026-09-12 — James chose Apple sign-in first and approved
 new rowers creating accounts.** The design and rendered Gate 0 were approved
-on 2026-09-12; implementation planning is underway. Approved spec:
+on 2026-09-12; implementation and local checks are complete behind a
+disabled-by-default front door. The interrupted code-review gate remains open;
+the PR stays draft. Approved spec:
 [Apple sign-in and open accounts](docs/superpowers/specs/2026-09-12-apple-signin-design.md).
 **TRIAD twice — auth AND stored shape. L.**
 · dies 2026-10-10 (set 2026-09-10 under the wave-heading rule above) · a month
