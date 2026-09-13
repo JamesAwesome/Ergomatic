@@ -129,6 +129,34 @@ describe("SignIn front door", () => {
     expect(auth.startSignIn).toHaveBeenCalledWith("google");
   });
 
+  it("shows the existing invitation denial for a saved or relay email", () => {
+    const auth = controller({
+      kind: "error",
+      purpose: "signin",
+      code: "access_denied",
+      email: "relay@privaterelay.appleid.com",
+      targetProvider: "apple",
+    });
+    render(<SignIn auth={auth} />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "relay@privaterelay.appleid.com isn't invited to this Ergomatic. Ask James to add you.",
+    );
+    expect(screen.queryByText(/didn’t work/)).not.toBeInTheDocument();
+  });
+
+  it("keeps a providerless access denial dedicated when the server has no email", () => {
+    const auth = controller({
+      kind: "error",
+      purpose: "signin",
+      code: "access_denied",
+    });
+    render(<SignIn auth={auth} />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This account isn't invited to this Ergomatic. Ask James to add you.",
+    );
+    expect(screen.queryByText(/didn’t work/)).not.toBeInTheDocument();
+  });
+
   it("uses R when the confirmed identity has no usable initials", () => {
     const auth = controller({
       kind: "confirm",

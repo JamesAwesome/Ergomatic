@@ -49,6 +49,7 @@ export type AuthFlowView =
       kind: "error";
       purpose: AuthPurpose;
       code: AuthErrorCode;
+      email?: string;
       targetProvider?: AuthProvider;
     };
 
@@ -60,7 +61,7 @@ export interface AuthFlowController {
   startSignIn(provider: AuthProvider): Promise<void>;
   confirmAccount(): Promise<void>;
   useUsualSignIn(): Promise<void>;
-  prepareLink(provider: AuthProvider): void;
+  prepareLink(provider: AuthProvider): Promise<void>;
   startPreparedLink(): Promise<void>;
   authorizeLinkTarget(): Promise<void>;
   cancel(): Promise<void>;
@@ -74,6 +75,7 @@ interface ActiveOperation {
   step: ActiveStep;
   bindingSecret?: string;
   authorizationOwner?: symbol;
+  cancellation?: Promise<boolean>;
 }
 
 interface FlowContext {
@@ -88,6 +90,7 @@ interface FlowContext {
 const ERROR_CODES = new Set<AuthErrorCode>([
   "invalid_request",
   "invalid_proof",
+  "access_denied",
   "attempt_expired",
   "account_changed",
   "account_conflict",
@@ -146,26 +149,42 @@ function destinationFor(
   return null;
 }
 
-async function responseError(response: Response): Promise<AuthErrorCode> {
+async function responseError(
+  response: Response,
+): Promise<{ code: AuthErrorCode; email?: string }> {
   try {
     const body = (await response.json()) as Partial<AuthError>;
-    return body.error && ERROR_CODES.has(body.error)
-      ? body.error
-      : "signin_failed";
+    const code =
+      body.error && ERROR_CODES.has(body.error) ? body.error : "signin_failed";
+    return {
+      code,
+      ...(code === "access_denied" &&
+      typeof body.email === "string" &&
+      body.email.trim() &&
+      body.email.length <= 320
+        ? { email: body.email.trim() }
+        : {}),
+    };
   } catch {
-    return "signin_failed";
+    return { code: "signin_failed" };
   }
 }
 
 class AuthRequestError extends Error {
-  constructor(readonly code: AuthErrorCode) {
+  constructor(
+    readonly code: AuthErrorCode,
+    readonly email?: string,
+  ) {
     super(code);
   }
 }
 
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await api(path, init);
-  if (!response.ok) throw new AuthRequestError(await responseError(response));
+  if (!response.ok) {
+    const error = await responseError(response);
+    throw new AuthRequestError(error.code, error.email);
+  }
   return (await response.json()) as T;
 }
 
@@ -177,20 +196,37 @@ function postJson<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+async function postNoContent(path: string, body: unknown): Promise<void> {
+  const response = await api(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const error = await responseError(response);
+    throw new AuthRequestError(error.code, error.email);
+  }
+}
+
 function setFailure(
   context: FlowContext,
   generation: number,
   purpose: AuthPurpose,
   error: unknown,
   targetProvider?: AuthProvider,
+  retainOperation = false,
 ): void {
   if (context.generation.current !== generation) return;
-  context.operation.current = null;
+  if (!retainOperation) context.operation.current = null;
   context.setTargetAuthorizationBusy(false);
+  const requestError = error instanceof AuthRequestError ? error : undefined;
   context.setView({
     kind: "error",
     purpose,
-    code: error instanceof AuthRequestError ? error.code : "signin_failed",
+    code: requestError?.code ?? "signin_failed",
+    ...(requestError?.code === "access_denied" && requestError.email
+      ? { email: requestError.email }
+      : {}),
     ...(targetProvider ? { targetProvider } : {}),
   });
 }
@@ -267,20 +303,32 @@ async function cancelActive(
   active = context.operation.current,
 ): Promise<boolean> {
   if (!active || context.operation.current !== active) return active === null;
+  if (active.cancellation) return active.cancellation;
   const surface = context.native ? "native" : "web";
   const body = context.native ? { bindingSecret: active.bindingSecret } : {};
-  try {
-    await postJson(
-      `/api/auth/${surface}/attempts/${encodeURIComponent(active.step.attemptId)}/cancel`,
-      body,
-    );
-  } catch {
-    // The local holder still discards this attempt below. The bound server
-    // attempt expires and cannot be completed after its secret is discarded.
+  const cancellation = (async () => {
+    try {
+      await postNoContent(
+        `/api/auth/${surface}/attempts/${encodeURIComponent(active.step.attemptId)}/cancel`,
+        body,
+      );
+    } catch {
+      return false;
+    }
+    if (context.operation.current !== active) return false;
+    context.operation.current = null;
+    return true;
+  })();
+  active.cancellation = cancellation;
+  const cleaned = await cancellation;
+  if (
+    !cleaned &&
+    context.operation.current === active &&
+    active.cancellation === cancellation
+  ) {
+    active.cancellation = undefined;
   }
-  if (context.operation.current !== active) return false;
-  context.operation.current = null;
-  return true;
+  return cleaned;
 }
 
 async function finalizeLink(
@@ -417,14 +465,36 @@ async function authorizeNative(
     if (!ownsOperation(context, active, generation, owner)) return;
     const cancelled = isProviderCancellation(error);
     const cleaned = await cancelActive(context, active);
-    if (!cleaned || context.generation.current !== generation) return;
+    if (context.generation.current !== generation) return;
     context.setTargetAuthorizationBusy(false);
     if (cancelled) {
+      if (!cleaned) {
+        active.authorizationOwner = undefined;
+        setFailure(
+          context,
+          generation,
+          step.purpose,
+          new AuthRequestError("signin_failed"),
+          step.targetProvider,
+          true,
+        );
+        return;
+      }
       context.setView({
         kind: "cancelled",
         purpose: step.purpose,
         targetProvider: step.targetProvider,
       });
+    } else if (!cleaned) {
+      active.authorizationOwner = undefined;
+      setFailure(
+        context,
+        generation,
+        step.purpose,
+        new AuthRequestError("signin_failed"),
+        step.targetProvider,
+        true,
+      );
     } else {
       setFailure(context, generation, step.purpose, error, step.targetProvider);
     }
@@ -435,6 +505,7 @@ function consumeReturnParams(): {
   attemptId?: string;
   result?: string;
   error?: AuthErrorCode;
+  email?: string;
   purpose: AuthPurpose;
   targetProvider?: AuthProvider;
 } | null {
@@ -442,6 +513,7 @@ function consumeReturnParams(): {
   const attemptId = url.searchParams.get("authAttempt") || undefined;
   const result = url.searchParams.get("authResult") || undefined;
   const rawError = url.searchParams.get("authError");
+  const rawEmail = url.searchParams.get("authEmail");
   const rawPurpose = url.searchParams.get("authPurpose");
   const rawProvider = url.searchParams.get("authProvider");
   if (!attemptId && !result && !rawError) return null;
@@ -449,6 +521,7 @@ function consumeReturnParams(): {
     "authAttempt",
     "authResult",
     "authError",
+    "authEmail",
     "authPurpose",
     "authProvider",
   ]) {
@@ -459,15 +532,19 @@ function consumeReturnParams(): {
     "",
     `${url.pathname}${url.search}${url.hash}`,
   );
+  const error =
+    rawError && ERROR_CODES.has(rawError as AuthErrorCode)
+      ? (rawError as AuthErrorCode)
+      : rawError
+        ? "signin_failed"
+        : undefined;
   return {
     attemptId,
     result,
-    error:
-      rawError && ERROR_CODES.has(rawError as AuthErrorCode)
-        ? (rawError as AuthErrorCode)
-        : rawError
-          ? "signin_failed"
-          : undefined,
+    error,
+    ...(error === "access_denied" && rawEmail?.trim() && rawEmail.length <= 320
+      ? { email: rawEmail.trim() }
+      : {}),
     purpose: rawPurpose === "link" ? "link" : "signin",
     targetProvider:
       rawProvider === "apple" || rawProvider === "google"
@@ -553,6 +630,7 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
           kind: "error",
           purpose: returned.purpose,
           code: returned.error,
+          ...(returned.email ? { email: returned.email } : {}),
           ...(returned.targetProvider
             ? { targetProvider: returned.targetProvider }
             : {}),
@@ -593,9 +671,24 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
 
   async function start(provider: AuthProvider, purpose: AuthPurpose) {
     const startGeneration = ++generation.current;
-    operation.current = null;
     setTargetAuthorizationBusy(false);
     setView({ kind: "busy", purpose });
+    const previous = operation.current;
+    if (previous) {
+      const cleaned = await cancelActive(context, previous);
+      if (generation.current !== startGeneration) return;
+      if (!cleaned) {
+        setFailure(
+          context,
+          startGeneration,
+          previous.step.purpose,
+          new AuthRequestError("signin_failed"),
+          previous.step.targetProvider,
+          true,
+        );
+        return;
+      }
+    }
     try {
       if (native) {
         const result = await postJson<NativeBegin>(
@@ -660,18 +753,60 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
       const provider =
         active.step.targetProvider === "apple" ? "google" : "apple";
       setView({ kind: "busy", purpose: "signin" });
-      await cancelActive(context);
+      const cleaned = await cancelActive(context, active);
       if (generation.current !== usualGeneration) return;
+      if (!cleaned) {
+        setFailure(
+          context,
+          usualGeneration,
+          "signin",
+          new AuthRequestError("signin_failed"),
+          active.step.targetProvider,
+          true,
+        );
+        return;
+      }
       setView({ kind: "usual", provider });
     },
-    prepareLink(provider) {
-      generation.current += 1;
-      operation.current = null;
+    async prepareLink(provider) {
+      if (
+        options.state !== "ready" ||
+        !options.frontDoorEnabled ||
+        !options.apple ||
+        !options.google
+      ) {
+        return;
+      }
+      const prepareGeneration = ++generation.current;
       setTargetAuthorizationBusy(false);
+      const previous = operation.current;
+      if (previous) {
+        const cleaned = await cancelActive(context, previous);
+        if (generation.current !== prepareGeneration) return;
+        if (!cleaned) {
+          setFailure(
+            context,
+            prepareGeneration,
+            previous.step.purpose,
+            new AuthRequestError("signin_failed"),
+            previous.step.targetProvider,
+            true,
+          );
+          return;
+        }
+      }
       setView({ kind: "link_confirm", targetProvider: provider });
     },
     async startPreparedLink() {
-      if (view.kind !== "link_confirm") return;
+      if (
+        view.kind !== "link_confirm" ||
+        options.state !== "ready" ||
+        !options.frontDoorEnabled ||
+        !options.apple ||
+        !options.google
+      ) {
+        return;
+      }
       await start(view.targetProvider, "link");
     },
     async authorizeLinkTarget() {
@@ -702,8 +837,20 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
       const targetProvider = operation.current?.step.targetProvider;
       const cancelGeneration = ++generation.current;
       const active = operation.current;
-      await cancelActive(context, active);
+      const cleaned = await cancelActive(context, active);
       if (generation.current !== cancelGeneration) return;
+      if (!cleaned) {
+        if (active) active.authorizationOwner = undefined;
+        setFailure(
+          context,
+          cancelGeneration,
+          purpose,
+          new AuthRequestError("signin_failed"),
+          targetProvider,
+          true,
+        );
+        return;
+      }
       setTargetAuthorizationBusy(false);
       setView({
         kind: "cancelled",

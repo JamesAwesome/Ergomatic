@@ -123,6 +123,80 @@ describe("front-door boot and options", () => {
     await vi.advanceTimersByTimeAsync(60000);
     expect(query).toHaveBeenCalledTimes(2);
   });
+  it("sweeps expired sessions independently on startup and every minute", async () => {
+    vi.useFakeTimers();
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const sweepExpired = vi.fn().mockResolvedValue(undefined);
+    const sessions = {
+      ...baseDeps().sessions,
+      sweepExpired,
+    };
+    const key = await generateKeyPair("ES256");
+
+    const front = await createFrontDoor(
+      { query } as unknown as pg.Pool,
+      sessions,
+      {
+        siteUrl: "https://erg.test",
+        apple: {
+          nativeClientId: "native.app",
+          webClientId: "web.app",
+          teamId: "TEAM",
+          keyId: "KEY",
+          key: key.privateKey,
+        },
+        google: { nativeClientId: "", webClientId: "", clientSecret: "" },
+      },
+      createAccessPolicy("public", ""),
+    );
+
+    expect(query).toHaveBeenCalledOnce();
+    expect(sweepExpired).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(sweepExpired).toHaveBeenCalledTimes(2);
+    front.close();
+  });
+
+  it("runs both cleanup jobs and reports their failures separately", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const query = vi.fn().mockRejectedValue(new Error("attempt cleanup"));
+    const sweepExpired = vi
+      .fn()
+      .mockRejectedValue(new Error("session cleanup"));
+    const sessions = {
+      ...baseDeps().sessions,
+      sweepExpired,
+    };
+    const key = await generateKeyPair("ES256");
+
+    const front = await createFrontDoor(
+      { query } as unknown as pg.Pool,
+      sessions,
+      {
+        siteUrl: "https://erg.test",
+        apple: {
+          nativeClientId: "native.app",
+          webClientId: "web.app",
+          teamId: "TEAM",
+          keyId: "KEY",
+          key: key.privateKey,
+        },
+        google: { nativeClientId: "", webClientId: "", clientSecret: "" },
+      },
+      createAccessPolicy("public", ""),
+    );
+
+    expect(query).toHaveBeenCalledOnce();
+    expect(sweepExpired).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      '{"event":"auth_attempt_cleanup_failed"}',
+    );
+    expect(warn).toHaveBeenCalledWith(
+      '{"event":"auth_session_cleanup_failed"}',
+    );
+    front.close();
+  });
   it.each([
     "/api/auth/native/attempts",
     "/api/auth/web/attempts",

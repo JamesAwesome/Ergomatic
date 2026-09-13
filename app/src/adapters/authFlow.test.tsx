@@ -28,7 +28,6 @@ vi.mock("../native/appleAuth", () => ({
 }));
 vi.mock("../native/signin", () => ({
   initNativeAuth: seam.googleInit,
-  nativeGoogleProof: seam.googleProof,
   nativeGoogleProofAfterInit: seam.googleProof,
   nativeSignOut: seam.nativeSignOut,
 }));
@@ -105,7 +104,7 @@ describe("useAuthFlow", () => {
     });
     const { result } = renderHook(() => useAuthFlow(() => {}));
     await waitFor(() => expect(result.current.options.state).toBe("ready"));
-    act(() => result.current.prepareLink("apple"));
+    await act(async () => result.current.prepareLink("apple"));
     let pending!: Promise<void>;
     await act(async () => {
       pending = result.current.startPreparedLink();
@@ -163,7 +162,7 @@ describe("useAuthFlow", () => {
     }
     render(<Harness />);
     await waitFor(() => expect(auth.options.state).toBe("ready"));
-    act(() => auth.prepareLink("apple"));
+    await act(async () => auth.prepareLink("apple"));
     await act(async () => {
       pending = auth.startPreparedLink();
       await Promise.resolve();
@@ -256,7 +255,9 @@ describe("useAuthFlow", () => {
       auth = useAuthFlow(() => {});
       return (
         <>
-          <button onClick={() => auth.prepareLink("apple")}>Add Apple</button>
+          <button onClick={() => void auth.prepareLink("apple")}>
+            Add Apple
+          </button>
           <LinkSignInMethod auth={auth} />
         </>
       );
@@ -320,7 +321,7 @@ describe("useAuthFlow", () => {
     expect(cancelCount).toBe(0);
   });
 
-  it("keeps a newly prepared link when an older provider cancellation finishes cleanup", async () => {
+  it("waits for older provider cancellation before preparing a new link", async () => {
     seam.native = true;
     seam.googleProof.mockResolvedValue({ idToken: "google-proof" });
     seam.appleAuthorize.mockRejectedValue({ code: "cancelled" });
@@ -365,8 +366,12 @@ describe("useAuthFlow", () => {
       auth = useAuthFlow(() => {});
       return (
         <>
-          <button onClick={() => auth.prepareLink("apple")}>Add Apple</button>
-          <button onClick={() => auth.prepareLink("google")}>Add Google</button>
+          <button onClick={() => void auth.prepareLink("apple")}>
+            Add Apple
+          </button>
+          <button onClick={() => void auth.prepareLink("google")}>
+            Add Google
+          </button>
           <LinkSignInMethod auth={auth} />
         </>
       );
@@ -388,16 +393,14 @@ describe("useAuthFlow", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Add Google" }));
-    expect(screen.getByRole("heading", { name: "Add Google" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Add Apple" })).toBeVisible();
     await act(async () => {
       cancelResponse.resolve(new Response(null, { status: 204 }));
       await Promise.resolve();
     });
-    expect(auth.view).toStrictEqual({
-      kind: "link_confirm",
-      targetProvider: "google",
-    });
-    expect(screen.getByRole("heading", { name: "Add Google" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Add Google" }),
+    ).toBeVisible();
   });
 
   it("does not launch Google after initialization loses its operation", async () => {
@@ -438,6 +441,9 @@ describe("useAuthFlow", () => {
           state: "google-state",
         });
       }
+      if (path === "/api/auth/native/attempts/held-init/cancel") {
+        return new Response(null, { status: 204 });
+      }
       throw new Error(`unexpected ${path}`);
     });
 
@@ -446,8 +452,12 @@ describe("useAuthFlow", () => {
       auth = useAuthFlow(() => {});
       return (
         <>
-          <button onClick={() => auth.prepareLink("google")}>Add Google</button>
-          <button onClick={() => auth.prepareLink("apple")}>Add Apple</button>
+          <button onClick={() => void auth.prepareLink("google")}>
+            Add Google
+          </button>
+          <button onClick={() => void auth.prepareLink("apple")}>
+            Add Apple
+          </button>
           <LinkSignInMethod auth={auth} />
         </>
       );
@@ -464,6 +474,12 @@ describe("useAuthFlow", () => {
     await waitFor(() => expect(seam.googleInit).toHaveBeenCalledOnce());
 
     fireEvent.click(screen.getByRole("button", { name: "Add Apple" }));
+    await waitFor(() =>
+      expect(auth.view).toStrictEqual({
+        kind: "link_confirm",
+        targetProvider: "apple",
+      }),
+    );
     await act(async () => {
       initialization.resolve();
       await Promise.resolve();
@@ -586,7 +602,7 @@ describe("useAuthFlow", () => {
 
     const { result } = renderHook(() => useAuthFlow(() => {}));
     await waitFor(() => expect(result.current.options.state).toBe("ready"));
-    act(() => result.current.prepareLink("apple"));
+    await act(async () => result.current.prepareLink("apple"));
     await act(async () => result.current.startPreparedLink());
 
     expect(seam.googleProof).toHaveBeenCalledWith("reauth-nonce");
@@ -764,9 +780,101 @@ describe("useAuthFlow", () => {
     });
     act(() => result.current.reset());
     expect(result.current.view).toStrictEqual({ kind: "idle" });
-    act(() => result.current.prepareLink("google"));
+    await act(async () => result.current.prepareLink("google"));
     act(() => result.current.abandon());
     expect(result.current.view).toStrictEqual({ kind: "idle" });
+  });
+
+  it("keeps confirmation active when usual-sign-in cleanup is uncertain, then advances after a successful retry", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=usual-retry");
+    let cancellations = 0;
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/usual-retry") {
+        return ok({
+          outcome: "confirm",
+          attemptId: "usual-retry",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          profile: { email: "relay@apple.test", name: "Rower" },
+        });
+      }
+      if (path === "/api/auth/web/attempts/usual-retry/cancel") {
+        cancellations += 1;
+        return cancellations === 1
+          ? ok({ error: "signin_failed" }, 503)
+          : new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.view.kind).toBe("confirm"));
+
+    await act(async () => result.current.useUsualSignIn());
+    expect(result.current.view).toStrictEqual({
+      kind: "error",
+      purpose: "signin",
+      code: "signin_failed",
+      targetProvider: "apple",
+    });
+
+    await act(async () => result.current.useUsualSignIn());
+    expect(result.current.view).toStrictEqual({
+      kind: "usual",
+      provider: "google",
+    });
+    expect(cancellations).toBe(2);
+  });
+
+  it("retains a rejected explicit cancellation for a later successful cleanup", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=cancel-retry");
+    let cancellations = 0;
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/cancel-retry") {
+        return ok({
+          outcome: "authorize",
+          attemptId: "cancel-retry",
+          purpose: "link",
+          targetProvider: "google",
+          expiresAt: "soon",
+          provider: "google",
+          stage: "target",
+          nonce: "nonce",
+          state: "state",
+          authorizationUrl: "https://accounts.example/target",
+        });
+      }
+      if (path === "/api/auth/web/attempts/cancel-retry/cancel") {
+        cancellations += 1;
+        if (cancellations === 1) {
+          throw new Error("server deleted the attempt but delivery was lost");
+        }
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() =>
+      expect(result.current.view.kind).toBe("link_authorize"),
+    );
+
+    await act(async () => result.current.cancel());
+    expect(result.current.view).toStrictEqual({
+      kind: "error",
+      purpose: "link",
+      code: "signin_failed",
+      targetProvider: "google",
+    });
+
+    await act(async () => result.current.cancel());
+    expect(result.current.view).toStrictEqual({
+      kind: "cancelled",
+      purpose: "link",
+      targetProvider: "google",
+    });
+    expect(cancellations).toBe(2);
   });
 
   it("turns native provider cancellation into a silent provider-aware terminal state", async () => {
@@ -801,6 +909,66 @@ describe("useAuthFlow", () => {
       purpose: "signin",
       targetProvider: "apple",
     });
+  });
+
+  it("reports uncertain provider-cancellation cleanup and keeps its binding retryable", async () => {
+    seam.native = true;
+    seam.appleAuthorize.mockRejectedValue({
+      code: "cancelled",
+      idToken: "must-not-survive",
+      authorizationCode: "must-not-survive-either",
+    });
+    let cancellations = 0;
+    let proofPosts = 0;
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/native/attempts") {
+        return ok({
+          outcome: "authorize",
+          attemptId: "provider-cancel-retry",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "apple",
+          stage: "signin",
+          nonce: "nonce",
+          state: "state",
+          bindingSecret: "binding",
+        });
+      }
+      if (path === "/api/auth/native/attempts/provider-cancel-retry/cancel") {
+        cancellations += 1;
+        if (cancellations === 1) {
+          throw new Error("server deleted the attempt but delivery was lost");
+        }
+        return new Response(null, { status: 204 });
+      }
+      if (path === "/api/auth/native/attempts/provider-cancel-retry/proof") {
+        proofPosts += 1;
+        throw new Error("cancelled proof must not be posted");
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+
+    await act(async () => result.current.startSignIn("apple"));
+    expect(result.current.view).toStrictEqual({
+      kind: "error",
+      purpose: "signin",
+      code: "signin_failed",
+      targetProvider: "apple",
+    });
+    expect(JSON.stringify(result.current)).not.toContain("must-not-survive");
+
+    await act(async () => result.current.cancel());
+    expect(result.current.view).toStrictEqual({
+      kind: "cancelled",
+      purpose: "signin",
+      targetProvider: "apple",
+    });
+    expect(seam.appleAuthorize).toHaveBeenCalledOnce();
+    expect(proofPosts).toBe(0);
   });
 
   it("recognizes the Google plugin's interactive cancellation code", async () => {
@@ -928,7 +1096,7 @@ describe("useAuthFlow", () => {
     });
     const { result } = renderHook(() => useAuthFlow(() => {}));
     await waitFor(() => expect(result.current.options.state).toBe("ready"));
-    act(() => result.current.prepareLink("apple"));
+    await act(async () => result.current.prepareLink("apple"));
     await act(async () => result.current.startPreparedLink());
     await act(async () => result.current.authorizeLinkTarget());
     expect(result.current.view).toStrictEqual({
@@ -959,6 +1127,146 @@ describe("useAuthFlow", () => {
       }).toStrictEqual(expected),
     );
     expect(window.location.search).toBe("");
+  });
+
+  it("preserves and scrubs a web access denial with its verified relay email", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?keep=1&authError=access_denied&authEmail=relay%40privaterelay.appleid.com&authPurpose=signin&authProvider=apple#return",
+    );
+    seam.api.mockResolvedValue(ok(options));
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.view.kind).toBe("error"));
+    expect(result.current.view).toStrictEqual({
+      kind: "error",
+      purpose: "signin",
+      code: "access_denied",
+      email: "relay@privaterelay.appleid.com",
+      targetProvider: "apple",
+    });
+    expect(window.location.search).toBe("?keep=1");
+    expect(window.location.hash).toBe("#return");
+  });
+
+  it("preserves a native JSON access denial with the server-provided account email", async () => {
+    seam.native = true;
+    seam.appleAuthorize.mockResolvedValue({
+      idToken: "id",
+      authorizationCode: "code",
+      state: "state",
+    });
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/native/attempts") {
+        return ok({
+          outcome: "authorize",
+          attemptId: "denied-native",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "apple",
+          stage: "signin",
+          nonce: "nonce",
+          state: "state",
+          bindingSecret: "binding",
+        });
+      }
+      if (path === "/api/auth/native/attempts/denied-native/proof") {
+        return ok({ error: "access_denied", email: "saved@example.test" }, 403);
+      }
+      if (path === "/api/auth/native/attempts/denied-native/cancel") {
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+    await act(async () => result.current.startSignIn("apple"));
+    expect(result.current.view).toStrictEqual({
+      kind: "error",
+      purpose: "signin",
+      code: "access_denied",
+      email: "saved@example.test",
+      targetProvider: "apple",
+    });
+  });
+
+  it("retains the operation when server-error cleanup has no acknowledgement", async () => {
+    seam.native = true;
+    seam.appleAuthorize.mockResolvedValue({
+      idToken: "id",
+      authorizationCode: "code",
+      state: "state",
+    });
+    let cancellations = 0;
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/native/attempts") {
+        return ok({
+          outcome: "authorize",
+          attemptId: "server-error-cancel-retry",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "apple",
+          stage: "signin",
+          nonce: "nonce",
+          state: "state",
+          bindingSecret: "binding",
+        });
+      }
+      if (
+        path === "/api/auth/native/attempts/server-error-cancel-retry/proof"
+      ) {
+        return ok({ error: "invalid_proof" }, 400);
+      }
+      if (
+        path === "/api/auth/native/attempts/server-error-cancel-retry/cancel"
+      ) {
+        cancellations += 1;
+        if (cancellations === 1) throw new Error("acknowledgement lost");
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+
+    await act(async () => result.current.startSignIn("apple"));
+    expect(result.current.view).toStrictEqual({
+      kind: "error",
+      purpose: "signin",
+      code: "signin_failed",
+      targetProvider: "apple",
+    });
+
+    await act(async () => result.current.cancel());
+    expect(result.current.view).toStrictEqual({
+      kind: "cancelled",
+      purpose: "signin",
+      targetProvider: "apple",
+    });
+    expect(cancellations).toBe(2);
+  });
+
+  it("refuses direct link entry unless both providers are available on this surface", async () => {
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") {
+        return ok({
+          ...options,
+          apple: { native: false, web: false },
+          google: { native: true, web: true },
+        });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+    await act(async () => result.current.prepareLink("apple"));
+    await act(async () => result.current.startPreparedLink());
+    expect(result.current.view).toStrictEqual({ kind: "idle" });
+    expect(seam.api).toHaveBeenCalledTimes(1);
   });
 
   it.each([

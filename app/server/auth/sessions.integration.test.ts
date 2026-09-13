@@ -68,6 +68,23 @@ describe("session lifecycle against real Postgres", () => {
     );
   });
 
+  it("sweepExpired deletes expired rows and retains live rows", async () => {
+    const expired = await store.createSession(userId);
+    const live = await store.createSession(userId);
+    await db
+      .update(sessions)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(sessions.tokenHash, hashToken(expired.token)));
+
+    await store.sweepExpired();
+
+    const rows = await db
+      .select({ tokenHash: sessions.tokenHash })
+      .from(sessions);
+    expect(rows).not.toContainEqual({ tokenHash: hashToken(expired.token) });
+    expect(rows).toContainEqual({ tokenHash: hashToken(live.token) });
+  });
+
   it("deleteSession signs out exactly that session", async () => {
     const { token } = await store.createSession(userId);
     await store.deleteSession(token);

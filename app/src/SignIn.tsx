@@ -15,7 +15,9 @@ function Welcome({ auth }: { auth: AuthFlowController }) {
       <p className="tagline">Rowing workout tracker &amp; planner.</p>
       {auth.view.kind === "error" && auth.view.purpose === "signin" && (
         <p className="notice auth-notice-error" role="alert">
-          That sign-in didn’t work. Give it another try.
+          {auth.view.code === "access_denied"
+            ? `${auth.view.email ?? "This account"} isn't invited to this Ergomatic. Ask James to add you.`
+            : "That sign-in didn’t work. Give it another try."}
         </p>
       )}
       <div className="auth-stack">
@@ -161,6 +163,43 @@ function UsualSignIn({
   );
 }
 
+function LegacySignIn({
+  denied,
+  failed,
+  nativeError,
+  onSignedIn,
+  onNativeError,
+}: {
+  denied: string | null;
+  failed: boolean;
+  nativeError: string | null;
+  onSignedIn?: () => void;
+  onNativeError: (message: string) => void;
+}) {
+  return (
+    <main className="signin">
+      <h1>Ergomatic</h1>
+      <p className="tagline">Rowing workout tracker &amp; planner.</p>
+      {denied && (
+        <p className="notice" role="alert">
+          {denied} isn&apos;t invited to this Ergomatic. Ask James to add you.
+        </p>
+      )}
+      {failed && (
+        <p className="notice" role="alert">
+          That sign-in didn&apos;t work. Give it another try.
+        </p>
+      )}
+      {nativeError && (
+        <p className="notice" role="alert">
+          {nativeError}
+        </p>
+      )}
+      <SignInButton onSignedIn={onSignedIn} onError={onNativeError} />
+    </main>
+  );
+}
+
 export default function SignIn({
   onSignedIn,
   auth,
@@ -190,52 +229,25 @@ export default function SignIn({
     }
     if (auth.options.state === "ready" && auth.options.legacyGoogle) {
       return (
-        <main className="signin">
-          <h1>Ergomatic</h1>
-          <p className="tagline">Rowing workout tracker &amp; planner.</p>
-          {denied && (
-            <p className="notice" role="alert">
-              {denied} isn&apos;t invited to this Ergomatic. Ask James to add
-              you.
-            </p>
-          )}
-          {failed && (
-            <p className="notice" role="alert">
-              That sign-in didn&apos;t work. Give it another try.
-            </p>
-          )}
-          {nativeError && (
-            <p className="notice" role="alert">
-              {nativeError}
-            </p>
-          )}
-          <SignInButton onSignedIn={onSignedIn} onError={setNativeError} />
-        </main>
+        <LegacySignIn
+          denied={denied}
+          failed={failed}
+          nativeError={nativeError}
+          onSignedIn={onSignedIn}
+          onNativeError={setNativeError}
+        />
       );
     }
     return <Welcome auth={auth} />;
   }
 
   return (
-    <main className="signin">
-      <h1>Ergomatic</h1>
-      <p className="tagline">Rowing workout tracker &amp; planner.</p>
-      {denied && (
-        <p className="notice" role="alert">
-          {denied} isn&apos;t invited to this Ergomatic. Ask James to add you.
-        </p>
-      )}
-      {failed && (
-        <p className="notice" role="alert">
-          That sign-in didn&apos;t work. Give it another try.
-        </p>
-      )}
-      {nativeError && (
-        <p className="notice" role="alert">
-          {nativeError}
-        </p>
-      )}
-      <SignInButton onSignedIn={onSignedIn} onError={setNativeError} />
-    </main>
+    <LegacySignIn
+      denied={denied}
+      failed={failed}
+      nativeError={nativeError}
+      onSignedIn={onSignedIn}
+      onNativeError={setNativeError}
+    />
   );
 }

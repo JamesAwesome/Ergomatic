@@ -35,15 +35,6 @@ export async function nativeSignIn(): Promise<boolean> {
   return true;
 }
 
-/** Fresh Google proof for credential linking. It never reads or stores the
- * Ergomatic session token; the auth-flow adapter owns the bound attempt. */
-export async function nativeGoogleProof(
-  nonce: string,
-): Promise<{ idToken: string }> {
-  await initNativeAuth();
-  return nativeGoogleProofAfterInit(nonce);
-}
-
 /** Runs the provider interaction after the auth-flow owner has initialized
  * the plugin and rechecked that its operation is still current. */
 export async function nativeGoogleProofAfterInit(

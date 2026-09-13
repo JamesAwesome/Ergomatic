@@ -36,40 +36,7 @@ vi.mock("./session", () => ({
   getStoredToken: vi.fn(),
 }));
 
-const { nativeGoogleProof, nativeSignOut } = await import("./signin");
-
-describe("nativeGoogleProof", () => {
-  beforeEach(() => {
-    initialize.mockReset();
-    initialize.mockResolvedValue(undefined);
-    login.mockReset();
-    login.mockResolvedValue({
-      provider: "google",
-      result: { responseType: "online", idToken: "signed-google-id-token" },
-    });
-  });
-
-  it("forces an interactive Google proof bound to the server nonce", async () => {
-    await expect(nativeGoogleProof("server-nonce")).resolves.toStrictEqual({
-      idToken: "signed-google-id-token",
-    });
-    expect(initialize).toHaveBeenCalledOnce();
-    expect(login).toHaveBeenCalledWith({
-      provider: "google",
-      options: { forcePrompt: true, nonce: "server-nonce" },
-    });
-  });
-
-  it("rejects an online Google response without an identity token", async () => {
-    login.mockResolvedValue({
-      provider: "google",
-      result: { responseType: "online", idToken: null },
-    });
-    await expect(nativeGoogleProof("server-nonce")).rejects.toThrow(
-      "Google proof returned no token",
-    );
-  });
-});
+const { nativeSignOut } = await import("./signin");
 
 describe("nativeSignOut: signing out ends the GOOGLE session, not just ours", () => {
   beforeEach(() => {

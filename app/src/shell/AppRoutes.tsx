@@ -270,7 +270,14 @@ export default function AppRoutes({
             {authFlow && (
               <Route
                 path="/you/sign-in-methods"
-                element={<LinkSignInMethod auth={authFlow} />}
+                element={
+                  authFlow.view.kind === "link_confirm" ||
+                  authFlow.view.kind === "link_authorize" ? (
+                    <LinkSignInMethod auth={authFlow} />
+                  ) : (
+                    <Navigate to="/you" replace />
+                  )
+                }
               />
             )}
             {/* The baselines door (Gate 0, 2026-09-05). Flat, a sibling of

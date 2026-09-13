@@ -68,7 +68,12 @@ function requestBinding(req: Request, surface: Surface) {
 }
 function failure(res: Response, error: unknown) {
   const code = error instanceof AuthFailure ? error.code : "signin_failed";
-  res.status(authStatus[code]).json({ error: code });
+  res.status(authStatus[code]).json({
+    error: code,
+    ...(code === "access_denied" && error instanceof AuthFailure && error.email
+      ? { email: error.email }
+      : {}),
+  });
 }
 export function createFrontDoorRoutes(deps: {
   attempts: Attempts;
@@ -81,6 +86,8 @@ export function createFrontDoorRoutes(deps: {
   const admission = rateLimit({
     windowMs: 60000,
     limit: 120,
+    // Anonymous auth has no trustworthy identity or IP key at this edge, so
+    // every producer intentionally shares one bounded admission bucket.
     keyGenerator: () => "anonymous-auth",
     standardHeaders: "draft-8",
     legacyHeaders: false,
@@ -360,9 +367,13 @@ export function createFrontDoorRoutes(deps: {
       if (owned && (await discard(owned)))
         res.append("Set-Cookie", cookie("", 0));
       const code = error instanceof AuthFailure ? error.code : "signin_failed";
+      const email =
+        code === "access_denied" && error instanceof AuthFailure
+          ? error.email
+          : undefined;
       res.redirect(
         303,
-        `/?authError=${code}&authPurpose=${purpose}${owned ? `&authProvider=${owned.targetProvider}` : ""}`,
+        `/?authError=${code}${email ? `&authEmail=${encodeURIComponent(email)}` : ""}&authPurpose=${purpose}${owned ? `&authProvider=${owned.targetProvider}` : ""}`,
       );
     }
   }

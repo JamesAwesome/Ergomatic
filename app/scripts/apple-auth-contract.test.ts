@@ -5,12 +5,20 @@ import { describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path: string) => readFileSync(resolve(here, "..", path), "utf8");
+const readOptional = (path: string) => {
+  try {
+    return read(path);
+  } catch {
+    return "";
+  }
+};
 
 const swift = read("ios/App/App/AppleAuthPlugin.swift");
 const wrapper = read("src/native/appleAuth.ts");
 const controller = read("ios/App/App/MyViewController.swift");
 const project = read("ios/App/App.xcodeproj/project.pbxproj");
 const entitlements = read("ios/App/App/App.entitlements");
+const consolePlugin = readOptional("ios/App/App/ErgomaticConsolePlugin.swift");
 
 function interfaceKeys(source: string, name: string): string[] {
   const body =
@@ -38,6 +46,23 @@ function rejectionCodes(source: string): string[] {
 }
 
 describe("AppleAuth native contract", () => {
+  it("keeps bridge result logging disabled and registers the app Console override first", () => {
+    const config = read("capacitor.config.ts");
+    expect(config).toContain('loggingBehavior: "none"');
+    expect(consolePlugin).toContain('let jsName = "Console"');
+    expect(consolePlugin).toContain(
+      'CAPPluginMethod(name: "log", returnType: CAPPluginReturnNone)',
+    );
+    const consoleRegistration = controller.indexOf(
+      "bridge?.registerPluginInstance(ErgomaticConsolePlugin())",
+    );
+    const webAuthRegistration = controller.indexOf(
+      "bridge?.registerPluginInstance(WebAuthPlugin())",
+    );
+    expect(consoleRegistration).toBeGreaterThan(-1);
+    expect(consoleRegistration).toBeLessThan(webAuthRegistration);
+  });
+
   it("registers the same plugin and promise method in Swift and TypeScript", () => {
     expect(swift).toContain('let jsName = "AppleAuth"');
     expect(swift).toContain(

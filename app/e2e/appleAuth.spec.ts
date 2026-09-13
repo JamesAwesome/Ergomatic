@@ -15,6 +15,124 @@ async function enableFrontDoor(page: Page): Promise<void> {
   );
 }
 
+test("a web access denial keeps the verified email and scrubs auth return parameters", async ({
+  page,
+}) => {
+  await enableFrontDoor(page);
+  await page.route("**/api/me", (route) =>
+    route.fulfill({ status: 401, json: { error: "unauthenticated" } }),
+  );
+
+  await page.goto(
+    "/?keep=1&authError=access_denied&authEmail=relay%40privaterelay.appleid.com&authPurpose=signin&authProvider=apple#return",
+  );
+
+  await expect(page.getByRole("alert")).toHaveText(
+    "relay@privaterelay.appleid.com isn't invited to this Ergomatic. Ask James to add you.",
+  );
+  await expect(page).toHaveURL(/\?keep=1#return$/);
+  await expect(
+    page.getByRole("button", { name: "Continue with Apple" }),
+  ).toBeVisible();
+});
+
+test("signed-in methods disable Add when either proof is unavailable and idle deep links return to You", async ({
+  page,
+}, testInfo) => {
+  await page.route("**/api/auth/options", (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        ...options,
+        apple: { native: true, web: false },
+      },
+    }),
+  );
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({ status: 200, json: { apple: false, google: true } }),
+  );
+  await signInViaBackdoor(page, {
+    email: `apple-unavailable-${testInfo.parallelIndex}@e2e.test`,
+    name: "Apple Link Tester",
+  });
+
+  await page.goto("/you");
+  await expect(page.getByText("CONNECTED")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add Apple" })).toBeDisabled();
+
+  await page.goto("/you/sign-in-methods");
+  await expect(page).toHaveURL(/\/you$/);
+  await expect(
+    page.getByRole("heading", { name: "SIGN-IN METHODS" }),
+  ).toBeVisible();
+});
+
+test("a lost cancel response retains cleanup authority and retries before a new sign-in", async ({
+  page,
+}) => {
+  let cancellations = 0;
+  let starts = 0;
+  await enableFrontDoor(page);
+  await page.route("**/api/me", (route) =>
+    route.fulfill({ status: 401, json: { error: "unauthenticated" } }),
+  );
+  await page.route("**/api/auth/web/attempts/cancel-delivery", (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        outcome: "confirm",
+        attemptId: "cancel-delivery",
+        purpose: "signin",
+        targetProvider: "apple",
+        expiresAt: "2026-09-13T00:05:00.000Z",
+        profile: { email: "relay@apple.test", name: "Rower" },
+      },
+    }),
+  );
+  await page.route(
+    "**/api/auth/web/attempts/cancel-delivery/cancel",
+    async (route) => {
+      cancellations += 1;
+      if (cancellations === 1) {
+        await route.abort("connectionfailed");
+      } else {
+        await route.fulfill({ status: 204 });
+      }
+    },
+  );
+  await page.route("**/api/auth/web/attempts", async (route) => {
+    starts += 1;
+    await route.fulfill({
+      status: 200,
+      json: {
+        outcome: "authorize",
+        attemptId: "replacement",
+        purpose: "signin",
+        targetProvider: "apple",
+        expiresAt: "2026-09-13T00:05:00.000Z",
+        provider: "apple",
+        stage: "signin",
+        nonce: "new-nonce",
+        state: "new-state",
+        authorizationUrl:
+          "/?authResult=cancelled&authPurpose=signin&authProvider=apple",
+      },
+    });
+  });
+
+  await page.goto("/?authAttempt=cancel-delivery");
+  await page.getByRole("button", { name: "← BACK" }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "That sign-in didn’t work. Give it another try.",
+  );
+  expect(cancellations).toBe(1);
+
+  await page.getByRole("button", { name: "Continue with Apple" }).click();
+  await expect.poll(() => cancellations).toBe(2);
+  await expect.poll(() => starts).toBe(1);
+  await expect(page).toHaveURL(/^(?!.*authResult)/);
+});
+
 test("Apple welcome begins at the real control and resumes into explicit account confirmation", async ({
   page,
 }) => {

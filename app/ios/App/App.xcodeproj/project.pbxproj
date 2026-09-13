@@ -14,11 +14,23 @@
 		E2A1B0022C5D4F0100AA1102 /* WebAuthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A1B0012C5D4F0100AA1101 /* WebAuthPlugin.swift */; };
 		E2A1B0042C5D4F0100AA1104 /* MyViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A1B0032C5D4F0100AA1103 /* MyViewController.swift */; };
 		E2A1B0062C5D4F0100AA1106 /* AppleAuthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A1B0052C5D4F0100AA1105 /* AppleAuthPlugin.swift */; };
+		E2A1B0202C5D4F0100AA1120 /* ErgomaticConsolePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A1B0192C5D4F0100AA1119 /* ErgomaticConsolePlugin.swift */; };
+		E2A1B0082C5D4F0100AA1108 /* ErgomaticConsolePluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A1B0072C5D4F0100AA1107 /* ErgomaticConsolePluginTests.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E2A1B0102C5D4F0100AA1110 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 504EC3031FED79650016851F;
+			remoteInfo = App;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
@@ -28,15 +40,25 @@
 		E2A1B0012C5D4F0100AA1101 /* WebAuthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthPlugin.swift; sourceTree = "<group>"; };
 		E2A1B0032C5D4F0100AA1103 /* MyViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyViewController.swift; sourceTree = "<group>"; };
 		E2A1B0052C5D4F0100AA1105 /* AppleAuthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleAuthPlugin.swift; sourceTree = "<group>"; };
+		E2A1B0192C5D4F0100AA1119 /* ErgomaticConsolePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErgomaticConsolePlugin.swift; sourceTree = "<group>"; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
+		E2A1B0072C5D4F0100AA1107 /* ErgomaticConsolePluginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErgomaticConsolePluginTests.swift; sourceTree = "<group>"; };
+		E2A1B0092C5D4F0100AA1109 /* AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		E2A1B0122C5D4F0100AA1112 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		504EC3011FED79650016851F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -53,6 +75,7 @@
 			children = (
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
+				E2A1B0112C5D4F0100AA1111 /* AppTests */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -61,6 +84,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				E2A1B0092C5D4F0100AA1109 /* AppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -73,6 +97,7 @@
 				E2A1B0032C5D4F0100AA1103 /* MyViewController.swift */,
 				E2A1B0012C5D4F0100AA1101 /* WebAuthPlugin.swift */,
 				E2A1B0052C5D4F0100AA1105 /* AppleAuthPlugin.swift */,
+				E2A1B0192C5D4F0100AA1119 /* ErgomaticConsolePlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -81,6 +106,14 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		E2A1B0112C5D4F0100AA1111 /* AppTests */ = {
+			isa = PBXGroup;
+			children = (
+				E2A1B0072C5D4F0100AA1107 /* ErgomaticConsolePluginTests.swift */,
+			);
+			path = AppTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -106,6 +139,23 @@
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E2A1B0132C5D4F0100AA1113 /* AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E2A1B0162C5D4F0100AA1116 /* Build configuration list for PBXNativeTarget "AppTests" */;
+			buildPhases = (
+				E2A1B0142C5D4F0100AA1114 /* Sources */,
+				E2A1B0122C5D4F0100AA1112 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E2A1B0172C5D4F0100AA1117 /* PBXTargetDependency */,
+			);
+			name = AppTests;
+			productName = AppTests;
+			productReference = E2A1B0092C5D4F0100AA1109 /* AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -120,6 +170,9 @@
 						CreatedOnToolsVersion = 9.2;
 						LastSwiftMigration = 1100;
 						ProvisioningStyle = Automatic;
+					};
+					E2A1B0132C5D4F0100AA1113 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 				};
 			};
@@ -140,6 +193,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				E2A1B0132C5D4F0100AA1113 /* AppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -169,10 +223,27 @@
 				E2A1B0042C5D4F0100AA1104 /* MyViewController.swift in Sources */,
 				E2A1B0022C5D4F0100AA1102 /* WebAuthPlugin.swift in Sources */,
 				E2A1B0062C5D4F0100AA1106 /* AppleAuthPlugin.swift in Sources */,
+				E2A1B0202C5D4F0100AA1120 /* ErgomaticConsolePlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E2A1B0142C5D4F0100AA1114 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E2A1B0082C5D4F0100AA1108 /* ErgomaticConsolePluginTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E2A1B0172C5D4F0100AA1117 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 504EC3031FED79650016851F /* App */;
+			targetProxy = E2A1B0102C5D4F0100AA1110 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -361,6 +432,38 @@
 			};
 			name = Release;
 		};
+		E2A1B0152C5D4F0100AA1115 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = haus.waffle.ergomatic.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/App";
+			};
+			name = Debug;
+		};
+		E2A1B0182C5D4F0100AA1118 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = haus.waffle.ergomatic.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/App";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -378,6 +481,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E2A1B0162C5D4F0100AA1116 /* Build configuration list for PBXNativeTarget "AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E2A1B0152C5D4F0100AA1115 /* Debug */,
+				E2A1B0182C5D4F0100AA1118 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

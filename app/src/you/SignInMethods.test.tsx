@@ -55,6 +55,68 @@ describe("SignInMethods", () => {
     expect(auth.prepareLink).toHaveBeenCalledWith("apple");
   });
 
+  it.each([
+    ["apple", false, true],
+    ["google", true, false],
+  ] as const)(
+    "keeps disconnected %s visible but disables Add unless both proofs are available",
+    async (provider, apple, google) => {
+      vi.mocked(api).mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            apple: provider === "apple" ? false : true,
+            google: provider === "google" ? false : true,
+          }),
+          { status: 200 },
+        ),
+      );
+      const auth = controller({ kind: "idle" });
+      auth.options = {
+        state: "ready",
+        frontDoorEnabled: true,
+        legacyGoogle: false,
+        apple,
+        google,
+      };
+      render(<SignInMethods auth={auth} />);
+      const add = await screen.findByRole("button", {
+        name: `Add ${provider === "apple" ? "Apple" : "Google"}`,
+      });
+      expect(add).toBeDisabled();
+      await userEvent.click(add);
+      expect(auth.prepareLink).not.toHaveBeenCalled();
+      expect(screen.getByText("CONNECTED")).toBeVisible();
+    },
+  );
+
+  it("disables link retry when either required proof is unavailable", async () => {
+    vi.mocked(api).mockResolvedValue(
+      new Response(JSON.stringify({ apple: false, google: true }), {
+        status: 200,
+      }),
+    );
+    const auth = controller({
+      kind: "error",
+      purpose: "link",
+      code: "account_changed",
+      targetProvider: "apple",
+    });
+    auth.options = {
+      state: "ready",
+      frontDoorEnabled: true,
+      legacyGoogle: false,
+      apple: false,
+      google: true,
+    };
+    render(<SignInMethods auth={auth} />);
+    const retry = await screen.findByRole("button", {
+      name: "Start linking again",
+    });
+    expect(retry).toBeDisabled();
+    await userEvent.click(retry);
+    expect(auth.prepareLink).not.toHaveBeenCalled();
+  });
+
   it("shows exact terminal link notices and refreshes methods after success", async () => {
     vi.mocked(api).mockImplementation(
       async () =>
@@ -154,6 +216,29 @@ describe("SignInMethods", () => {
     );
     render(<SignInMethods auth={controller(view)} />);
     expect(await screen.findByRole("alert")).toHaveTextContent(copy);
+  });
+
+  it("uses the invitation denial instead of uncertain-link wording", async () => {
+    vi.mocked(api).mockResolvedValue(
+      new Response(JSON.stringify({ apple: false, google: true }), {
+        status: 200,
+      }),
+    );
+    render(
+      <SignInMethods
+        auth={controller({
+          kind: "error",
+          purpose: "link",
+          code: "access_denied",
+          email: "saved@example.test",
+          targetProvider: "apple",
+        })}
+      />,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "saved@example.test isn't invited to this Ergomatic. Ask James to add you.",
+    );
+    expect(screen.queryByText(/couldn’t confirm/)).not.toBeInTheDocument();
   });
 
   it("keeps cancellation silent and hides the block while the feature is disabled", async () => {

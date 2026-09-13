@@ -18,7 +18,7 @@ import { startPostgres } from "../testing/postgres.js";
 import { createApp } from "../app.js";
 import { baseDeps } from "../testDeps.js";
 import { createSessionStore } from "./sessions.js";
-import { createAccessPolicy } from "./accessPolicy.js";
+import { createAccessPolicy, type AccessPolicy } from "./accessPolicy.js";
 import { createUserStore } from "./users.js";
 import { createAttempts } from "./attempts.js";
 import { createProviders } from "./providers.js";
@@ -28,9 +28,12 @@ describe("supported auth producers through Express and signed tokens", () => {
   let container: StartedPostgreSqlContainer;
   let pool: pg.Pool;
   let app: ReturnType<typeof createApp>;
-  let freshApp: () => Promise<ReturnType<typeof createApp>>;
+  let freshApp: (
+    policy?: AccessPolicy,
+  ) => Promise<ReturnType<typeof createApp>>;
   let rsa: Awaited<ReturnType<typeof generateKeyPair>>;
   let attempts: ReturnType<typeof createAttempts>;
+  let providers: ReturnType<typeof createProviders>;
   const codes = new Map<string, string>();
   function signal() {
     let resolve!: () => void;
@@ -46,7 +49,6 @@ describe("supported auth producers through Express and signed tokens", () => {
     pool = c.pool;
     await migrate(c.db, { migrationsFolder: "drizzle" });
     const accessPolicy = createAccessPolicy("public", "");
-    const sessions = createSessionStore(c.db, accessPolicy);
     const users = createUserStore(c.db);
     rsa = await generateKeyPair("RS256");
     const ec = await generateKeyPair("ES256");
@@ -55,7 +57,7 @@ describe("supported auth producers through Express and signed tokens", () => {
         { ...(await exportJWK(rsa.publicKey)), kid: "test", alg: "RS256" },
       ],
     });
-    const providers = createProviders(
+    providers = createProviders(
       {
         siteUrl: "https://erg.test",
         apple: {
@@ -92,8 +94,9 @@ describe("supported auth producers through Express and signed tokens", () => {
         },
       },
     );
-    freshApp = async () => {
-      attempts = createAttempts(pool, accessPolicy);
+    freshApp = async (policy = accessPolicy) => {
+      const sessions = createSessionStore(c.db, policy);
+      attempts = createAttempts(pool, policy);
       await attempts.sweep();
       const routes = createFrontDoorRoutes({
         attempts,
@@ -233,6 +236,68 @@ describe("supported auth producers through Express and signed tokens", () => {
       .get("/api/me")
       .auth(confirm.body.token, { type: "bearer" });
     expect(me.body.user.email).toBe("relay@privaterelay.appleid.com");
+  });
+  it("returns an existing account's saved email with native access denial", async () => {
+    await pool.query(
+      "INSERT INTO users (apple_sub,email,name) VALUES ($1,$2,$3)",
+      ["saved-apple", "saved@example.test", "Saved Rower"],
+    );
+    app = await freshApp(
+      createAccessPolicy("restricted", "someone-else@example.test"),
+    );
+    const begin = await request(app)
+      .post("/api/auth/native/attempts")
+      .send({ purpose: "signin", provider: "apple" });
+    const token = await jwt(begin.body.nonce, "native.app", "saved-apple");
+    codes.set("saved-denied", token);
+
+    const proof = await request(app)
+      .post(`/api/auth/native/attempts/${begin.body.attemptId}/proof`)
+      .send({
+        bindingSecret: begin.body.bindingSecret,
+        state: begin.body.state,
+        idToken: token,
+        authorizationCode: "saved-denied",
+      });
+
+    expect(proof.status).toBe(403);
+    expect(proof.body).toStrictEqual({
+      error: "access_denied",
+      email: "saved@example.test",
+    });
+    expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(0);
+    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
+  });
+  it("returns a verified Apple relay email with web access denial", async () => {
+    app = await freshApp(
+      createAccessPolicy("restricted", "someone-else@example.test"),
+    );
+    const begin = await request(app)
+      .post("/api/auth/web/attempts")
+      .send({ purpose: "signin", provider: "apple" });
+    const cookie = begin.headers["set-cookie"][0].split(";")[0];
+    const token = await jwt(begin.body.nonce, "web.app", "new-relay");
+    codes.set("relay-denied", token);
+
+    const callback = await request(app)
+      .post("/api/auth/apple/callback")
+      .set("Cookie", cookie)
+      .type("form")
+      .send({
+        state: begin.body.state,
+        code: "relay-denied",
+        id_token: token,
+      });
+
+    expect(callback.status).toBe(303);
+    const location = new URL(callback.headers.location, "https://erg.test");
+    expect(location.searchParams.get("authError")).toBe("access_denied");
+    expect(location.searchParams.get("authEmail")).toBe(
+      "relay@privaterelay.appleid.com",
+    );
+    expect((await pool.query("SELECT id FROM users")).rowCount).toBe(0);
+    expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(0);
+    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
   });
   it("Apple form_post reaches callback before origin check but requires binding and exact state", async () => {
     const begin = await request(app)

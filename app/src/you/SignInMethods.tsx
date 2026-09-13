@@ -18,6 +18,14 @@ function linkNotice(auth: AuthFlowController): React.ReactNode {
   }
   if (view.kind === "cancelled" && view.purpose === "link") return null;
   if (view.kind !== "error" || view.purpose !== "link") return null;
+  if (view.code === "access_denied") {
+    return (
+      <p className="notice auth-notice-error" role="alert">
+        {view.email ?? "This account"} isn&apos;t invited to this Ergomatic. Ask
+        James to add you.
+      </p>
+    );
+  }
   if (view.code === "account_changed") {
     return (
       <p className="notice auth-notice-error" role="alert">
@@ -79,6 +87,7 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
         !methods.methods[auth.view.targetProvider]))
       ? auth.view.targetProvider
       : undefined;
+  const linkAvailable = auth.options.apple && auth.options.google;
   return (
     <section className="auth-methods" aria-labelledby="auth-methods-heading">
       {notice}
@@ -96,7 +105,8 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
               className="auth-method-row"
               key={provider}
               aria-label={`Add ${name(provider)}`}
-              onClick={() => auth.prepareLink(provider)}
+              disabled={!linkAvailable}
+              onClick={() => void auth.prepareLink(provider)}
             >
               <span className="auth-method-name">{name(provider)}</span>
               <span className="auth-method-action">
@@ -109,7 +119,8 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
       {retryProvider && (
         <button
           className="button-l2 auth-link-retry"
-          onClick={() => auth.prepareLink(retryProvider)}
+          disabled={!linkAvailable}
+          onClick={() => void auth.prepareLink(retryProvider)}
         >
           Start linking again
         </button>

@@ -58,12 +58,22 @@ export async function createFrontDoor(
 ) {
   const attempts = createAttempts(pool, accessPolicy);
   const providers = createProviders(config);
-  async function sweep() {
+  async function sweepAttempts() {
     try {
       await attempts.sweep();
     } catch {
       console.warn(JSON.stringify({ event: "auth_attempt_cleanup_failed" }));
     }
+  }
+  async function sweepSessions() {
+    try {
+      await sessions.sweepExpired();
+    } catch {
+      console.warn(JSON.stringify({ event: "auth_session_cleanup_failed" }));
+    }
+  }
+  async function sweep() {
+    await Promise.all([sweepAttempts(), sweepSessions()]);
   }
   await sweep();
   const timer = setInterval(() => {

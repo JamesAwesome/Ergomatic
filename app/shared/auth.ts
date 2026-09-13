@@ -51,6 +51,7 @@ export type AuthErrorCode =
   | "signin_failed";
 export interface AuthError {
   error: AuthErrorCode;
+  email?: string;
 }
 export interface NativeProof {
   bindingSecret: string;
