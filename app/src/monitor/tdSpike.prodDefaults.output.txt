@@ -1,0 +1,326 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic-worktrees/td-spike/app
+
+PREMISE phase right after the call = ended
+PREMISE resolved after 0 ticks = false
+PREMISE resolved after 1 tick(s) = false
+PREMISE resolved after 2 tick(s) = false
+PREMISE resolved after 3 tick(s) = true
+PREMISE resolved after 4 tick(s) = true
+ORDER A resolved before summary = false
+
+===== ORDER A FULL RING (35 entries) =====
+[0] status-subscribe :: fallback
+[1] storage-persist :: denied (tolerated — design spec §4 S6, not mitigation)
+[2] free-row-open :: opened a free row; sending the PM5 its Just Row program (CSAFE-DEF p.80), no prepare
+[3] write :: f1 76 07 01 01 01 13 02 01 01 61 f2
+[4] ack :: f1 01 76 02 01 13 67 f2 slaveState=ready
+[5] free-row-program-sent :: 1 frame(s) acked
+[6] armed :: free row: the p.80 send settled
+[7] notify-first :: 0x0033 (20B)
+[8] notify-first :: 0x0032 (17B)
+[9] notify-first :: 0x0031 (19B)
+[10] structure :: workoutType=8 durationRaw=6000 durationType=0 raw=64 00 00 28 00 00 08 00 04 01 00 00 00 00 70 17 00 00 82
+[11] twd-sample :: machineTotal=0m at elapsed=1s distance=4m workoutState=4 durationRaw=6000 durationType=0
+[12] frame :: state=rowing elapsed=1 distance=4 rowingActive=true spm=22
+[13] raw-rowing-state :: previous=none value=1 state=rowing elapsed=1 distance=4
+[14] store-receipt:commit-accepted :: {"kind":"commit-accepted","sessionKey":"2026-08-07T09:00:00.000Z","revision":0,"verdict":"saved"}
+[15] partial-refused :: reason=no-reading idx=none
+[16] store-receipt:commit-accepted :: {"kind":"commit-accepted","sessionKey":"2026-08-07T09:00:00.000Z","revision":1,"verdict":"saved"}
+[17] handoff-hold :: burst-eligible close (endedBy=rower) with no summary yet — holding the ended hand-off up to 2000ms for the machine's own summary burst
+[18] final-totals :: accumulator=11m accumulatorElapsed=2s machineTotal=0m durationType=0 registers=0 of 0 programmed 
+[19] write :: f1 76 04 13 02 01 02 60 f2
+[20] ack :: f1 85 76 01 13 e1 f2 slaveState=in-use
+[21] terminate-sent :: 1 frame(s) acked
+[22] summary-half :: 0x0039 end-of-workout summary received (run open, state=rowing) raw=00 00 00 00 c0 99 00 88 36 00 18 ff ff ff ff 80 ff 08 e2 04
+[23] summary-log-stamp :: wire=2000-00-00 00:00 wall=2026-09-13T02:50:10.793Z (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)
+[24] summary-totals :: 0x0039 decoded: elapsed=393.6s distance=1396m workoutType=8 | accumulator=11m accumulatorElapsed=2s machineTotal=0m durationType=0 (this run has recorded 0 interval(s) totalling 0s/0m from 0x0037/0x0038, over a program with 0s of rest). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus 0s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)
+[25] summary-reconciled :: out-of-window — 0x0039 arrived with no open finish grace (the run is still open — no finish has happened); nothing filed
+[26] verification-received :: 0x003F received (run open, state=rowing) raw=27 d8 f3 6e e1 52 55 5b f8 14 01 00 94 00 00 00 00 00 00
+[27] frame :: state=terminated elapsed=1 distance=11 rowingActive=false spm=0
+[28] raw-rowing-state :: previous=1 value=0 state=terminated elapsed=1 distance=11
+[29] final-totals :: accumulator=11m accumulatorElapsed=1s machineTotal=0m durationType=0 registers=0 of 0 programmed 
+[30] terminal-raw :: state=terminated 0x0031=64 00 00 6e 00 00 08 00 0b 00 00 00 00 00 70 17 00 00 82
+[31] terminal :: terminated
+[32] avg-pace-verdict :: #1 suppressed — this run's own final interval (index -1) was never recorded; the machine's cumulative average may already include work ours has no record of (mid-work terminate is the ordinary way this happens — its boundary, if any, is discarded out-of-run and touches neither run.actuals nor recordedActuals)
+[33] frame :: state=idle elapsed=0 distance=0 rowingActive=false spm=23
+[34] frame :: state=armed elapsed=0 distance=0 rowingActive=false spm=23
+===== end ORDER A FULL RING =====
+
+
+===== ORDER A RELEVANT (6 entries) =====
+[0] handoff-hold :: burst-eligible close (endedBy=rower) with no summary yet — holding the ended hand-off up to 2000ms for the machine's own summary burst
+[1] terminate-sent :: 1 frame(s) acked
+[2] summary-half :: 0x0039 end-of-workout summary received (run open, state=rowing) raw=00 00 00 00 c0 99 00 88 36 00 18 ff ff ff ff 80 ff 08 e2 04
+[3] summary-log-stamp :: wire=2000-00-00 00:00 wall=2026-09-13T02:50:10.793Z (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)
+[4] summary-totals :: 0x0039 decoded: elapsed=393.6s distance=1396m workoutType=8 | accumulator=11m accumulatorElapsed=2s machineTotal=0m durationType=0 (this run has recorded 0 interval(s) totalling 0s/0m from 0x0037/0x0038, over a program with 0s of rest). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus 0s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)
+[5] summary-reconciled :: out-of-window — 0x0039 arrived with no open finish grace (the run is still open — no finish has happened); nothing filed
+===== end ORDER A RELEVANT =====
+
+ORDER A run present = true summaryTotals = undefined
+ORDER A1 endSession resolved before summary = false
+
+===== ORDER A1 RELEVANT (9 entries) =====
+[0] handoff-hold :: burst-eligible close (endedBy=rower) with no summary yet — holding the ended hand-off up to 2000ms for the machine's own summary burst
+[1] terminate-sent :: 1 frame(s) acked
+[2] summary-half :: 0x0039 end-of-workout summary received (run closed, state=terminated) raw=00 00 00 00 c0 99 00 88 36 00 18 ff ff ff ff 80 ff 08 e2 04
+[3] summary-log-stamp :: wire=2000-00-00 00:00 wall=2026-09-13T02:50:10.795Z (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)
+[4] summary-totals :: 0x0039 decoded: elapsed=393.6s distance=1396m workoutType=8 | accumulator=11m accumulatorElapsed=1s machineTotal=0m durationType=0 (this run has recorded 0 interval(s) totalling 0s/0m from 0x0037/0x0038, over a program with 0s of rest). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus 0s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)
+[5] summary-reconciled :: terminate-observations — 0x0039 arrived after a rower-ended close (393.6s/1396m, hash included), released when 0x003F arrived, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)
+[6] summary-1-missing :: 0x003A did not arrive inside the summary burst; calories, avg watts, avg cal/hr and rest distance are absent from this run's observations (the screen renders a dash, never 0)
+[7] summary-recorded :: run=2026-08-07T09:00:00.000Z totals={"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+[8] handoff-released :: burst-heard — the ended hand-off is free to navigate (0 actual(s) measured)
+===== end ORDER A1 RELEVANT =====
+
+ORDER A1 run present = true summaryTotals = {"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+ORDER A2 endSession resolved before summary = false
+
+===== ORDER A2 RELEVANT (9 entries) =====
+[0] handoff-hold :: burst-eligible close (endedBy=rower) with no summary yet — holding the ended hand-off up to 2000ms for the machine's own summary burst
+[1] terminate-sent :: 1 frame(s) acked
+[2] summary-half :: 0x0039 end-of-workout summary received (run closed, state=idle) raw=00 00 00 00 c0 99 00 88 36 00 18 ff ff ff ff 80 ff 08 e2 04
+[3] summary-log-stamp :: wire=2000-00-00 00:00 wall=2026-09-13T02:50:10.796Z (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)
+[4] summary-totals :: 0x0039 decoded: elapsed=393.6s distance=1396m workoutType=8 | accumulator=0m accumulatorElapsed=0s machineTotal=0m durationType=0 (this run has recorded 0 interval(s) totalling 0s/0m from 0x0037/0x0038, over a program with 0s of rest). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus 0s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)
+[5] summary-reconciled :: terminate-observations — 0x0039 arrived after a rower-ended close (393.6s/1396m, hash included), released when 0x003F arrived, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)
+[6] summary-1-missing :: 0x003A did not arrive inside the summary burst; calories, avg watts, avg cal/hr and rest distance are absent from this run's observations (the screen renders a dash, never 0)
+[7] summary-recorded :: run=2026-08-07T09:00:00.000Z totals={"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+[8] handoff-released :: burst-heard — the ended hand-off is free to navigate (0 actual(s) measured)
+===== end ORDER A2 RELEVANT =====
+
+ORDER A2 run present = true summaryTotals = {"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+ORDER B resolved before summary = true
+
+===== ORDER B FULL RING (39 entries) =====
+[0] status-subscribe :: fallback
+[1] storage-persist :: denied (tolerated — design spec §4 S6, not mitigation)
+[2] free-row-open :: opened a free row; sending the PM5 its Just Row program (CSAFE-DEF p.80), no prepare
+[3] write :: f1 76 07 01 01 01 13 02 01 01 61 f2
+[4] ack :: f1 01 76 02 01 13 67 f2 slaveState=ready
+[5] free-row-program-sent :: 1 frame(s) acked
+[6] armed :: free row: the p.80 send settled
+[7] notify-first :: 0x0033 (20B)
+[8] notify-first :: 0x0032 (17B)
+[9] notify-first :: 0x0031 (19B)
+[10] structure :: workoutType=8 durationRaw=6000 durationType=0 raw=64 00 00 28 00 00 08 00 04 01 00 00 00 00 70 17 00 00 82
+[11] twd-sample :: machineTotal=0m at elapsed=1s distance=4m workoutState=4 durationRaw=6000 durationType=0
+[12] frame :: state=rowing elapsed=1 distance=4 rowingActive=true spm=22
+[13] raw-rowing-state :: previous=none value=1 state=rowing elapsed=1 distance=4
+[14] store-receipt:commit-accepted :: {"kind":"commit-accepted","sessionKey":"2026-08-07T09:00:00.000Z","revision":0,"verdict":"saved"}
+[15] partial-refused :: reason=no-reading idx=none
+[16] store-receipt:commit-accepted :: {"kind":"commit-accepted","sessionKey":"2026-08-07T09:00:00.000Z","revision":1,"verdict":"saved"}
+[17] handoff-hold :: burst-eligible close (endedBy=rower) with no summary yet — holding the ended hand-off up to 2000ms for the machine's own summary burst
+[18] final-totals :: accumulator=11m accumulatorElapsed=2s machineTotal=0m durationType=0 registers=0 of 0 programmed 
+[19] write :: f1 76 04 13 02 01 02 60 f2
+[20] ack :: f1 85 76 01 13 e1 f2 slaveState=in-use
+[21] terminate-sent :: 1 frame(s) acked
+[22] frame :: state=terminated elapsed=1 distance=11 rowingActive=false spm=0
+[23] raw-rowing-state :: previous=1 value=0 state=terminated elapsed=1 distance=11
+[24] final-totals :: accumulator=11m accumulatorElapsed=1s machineTotal=0m durationType=0 registers=0 of 0 programmed 
+[25] terminal-raw :: state=terminated 0x0031=64 00 00 6e 00 00 08 00 0b 00 00 00 00 00 70 17 00 00 82
+[26] terminal :: terminated
+[27] avg-pace-verdict :: #1 suppressed — this run's own final interval (index -1) was never recorded; the machine's cumulative average may already include work ours has no record of (mid-work terminate is the ordinary way this happens — its boundary, if any, is discarded out-of-run and touches neither run.actuals nor recordedActuals)
+[28] frame :: state=idle elapsed=0 distance=0 rowingActive=false spm=23
+[29] frame :: state=armed elapsed=0 distance=0 rowingActive=false spm=23
+[30] summary-half :: 0x0039 end-of-workout summary received (run closed, state=armed) raw=00 00 00 00 c0 99 00 88 36 00 18 ff ff ff ff 80 ff 08 e2 04
+[31] summary-log-stamp :: wire=2000-00-00 00:00 wall=2026-09-13T02:50:10.797Z (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)
+[32] summary-totals :: 0x0039 decoded: elapsed=393.6s distance=1396m workoutType=8 | accumulator=0m accumulatorElapsed=0s machineTotal=0m durationType=0 (this run has recorded 0 interval(s) totalling 0s/0m from 0x0037/0x0038, over a program with 0s of rest). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus 0s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)
+[33] verification-received :: 0x003F received (run closed, state=armed) raw=27 d8 f3 6e e1 52 55 5b f8 14 01 00 94 00 00 00 00 00 00
+[34] summary-reconciled :: terminate-observations — 0x0039 arrived after a rower-ended close (393.6s/1396m, hash included), released when 0x003F arrived, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)
+[35] summary-1-missing :: 0x003A did not arrive inside the summary burst; calories, avg watts, avg cal/hr and rest distance are absent from this run's observations (the screen renders a dash, never 0)
+[36] store-receipt:commit-accepted :: {"kind":"commit-accepted","sessionKey":"2026-08-07T09:00:00.000Z","revision":2,"verdict":"saved"}
+[37] summary-recorded :: run=2026-08-07T09:00:00.000Z totals={"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+[38] handoff-released :: burst-heard — the ended hand-off is free to navigate (0 actual(s) measured)
+===== end ORDER B FULL RING =====
+
+
+===== ORDER B RELEVANT (9 entries) =====
+[0] handoff-hold :: burst-eligible close (endedBy=rower) with no summary yet — holding the ended hand-off up to 2000ms for the machine's own summary burst
+[1] terminate-sent :: 1 frame(s) acked
+[2] summary-half :: 0x0039 end-of-workout summary received (run closed, state=armed) raw=00 00 00 00 c0 99 00 88 36 00 18 ff ff ff ff 80 ff 08 e2 04
+[3] summary-log-stamp :: wire=2000-00-00 00:00 wall=2026-09-13T02:50:10.797Z (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)
+[4] summary-totals :: 0x0039 decoded: elapsed=393.6s distance=1396m workoutType=8 | accumulator=0m accumulatorElapsed=0s machineTotal=0m durationType=0 (this run has recorded 0 interval(s) totalling 0s/0m from 0x0037/0x0038, over a program with 0s of rest). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus 0s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)
+[5] summary-reconciled :: terminate-observations — 0x0039 arrived after a rower-ended close (393.6s/1396m, hash included), released when 0x003F arrived, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)
+[6] summary-1-missing :: 0x003A did not arrive inside the summary burst; calories, avg watts, avg cal/hr and rest distance are absent from this run's observations (the screen renders a dash, never 0)
+[7] summary-recorded :: run=2026-08-07T09:00:00.000Z totals={"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+[8] handoff-released :: burst-heard — the ended hand-off is free to navigate (0 actual(s) measured)
+===== end ORDER B RELEVANT =====
+
+ORDER B summaryTotals = {"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+
+===== ORDER C FULL RING (39 entries) =====
+[0] status-subscribe :: fallback
+[1] storage-persist :: denied (tolerated — design spec §4 S6, not mitigation)
+[2] free-row-open :: opened a free row; sending the PM5 its Just Row program (CSAFE-DEF p.80), no prepare
+[3] write :: f1 76 07 01 01 01 13 02 01 01 61 f2
+[4] ack :: f1 01 76 02 01 13 67 f2 slaveState=ready
+[5] free-row-program-sent :: 1 frame(s) acked
+[6] armed :: free row: the p.80 send settled
+[7] notify-first :: 0x0033 (20B)
+[8] notify-first :: 0x0032 (17B)
+[9] notify-first :: 0x0031 (19B)
+[10] structure :: workoutType=8 durationRaw=6000 durationType=0 raw=64 00 00 28 00 00 08 00 04 01 00 00 00 00 70 17 00 00 82
+[11] twd-sample :: machineTotal=0m at elapsed=1s distance=4m workoutState=4 durationRaw=6000 durationType=0
+[12] frame :: state=rowing elapsed=1 distance=4 rowingActive=true spm=22
+[13] raw-rowing-state :: previous=none value=1 state=rowing elapsed=1 distance=4
+[14] store-receipt:commit-accepted :: {"kind":"commit-accepted","sessionKey":"2026-08-07T09:00:00.000Z","revision":0,"verdict":"saved"}
+[15] partial-refused :: reason=no-reading idx=none
+[16] store-receipt:commit-accepted :: {"kind":"commit-accepted","sessionKey":"2026-08-07T09:00:00.000Z","revision":1,"verdict":"saved"}
+[17] handoff-hold :: burst-eligible close (endedBy=rower) with no summary yet — holding the ended hand-off up to 2000ms for the machine's own summary burst
+[18] final-totals :: accumulator=11m accumulatorElapsed=2s machineTotal=0m durationType=0 registers=0 of 0 programmed 
+[19] write :: f1 76 04 13 02 01 02 60 f2
+[20] ack :: f1 85 76 01 13 e1 f2 slaveState=in-use
+[21] terminate-sent :: 1 frame(s) acked
+[22] frame :: state=terminated elapsed=1 distance=11 rowingActive=false spm=0
+[23] raw-rowing-state :: previous=1 value=0 state=terminated elapsed=1 distance=11
+[24] final-totals :: accumulator=11m accumulatorElapsed=1s machineTotal=0m durationType=0 registers=0 of 0 programmed 
+[25] terminal-raw :: state=terminated 0x0031=64 00 00 6e 00 00 08 00 0b 00 00 00 00 00 70 17 00 00 82
+[26] terminal :: terminated
+[27] avg-pace-verdict :: #1 suppressed — this run's own final interval (index -1) was never recorded; the machine's cumulative average may already include work ours has no record of (mid-work terminate is the ordinary way this happens — its boundary, if any, is discarded out-of-run and touches neither run.actuals nor recordedActuals)
+[28] frame :: state=idle elapsed=0 distance=0 rowingActive=false spm=23
+[29] frame :: state=armed elapsed=0 distance=0 rowingActive=false spm=23
+[30] summary-half :: 0x0039 end-of-workout summary received (run closed, state=armed) raw=00 00 00 00 c0 99 00 88 36 00 18 ff ff ff ff 80 ff 08 e2 04
+[31] summary-log-stamp :: wire=2000-00-00 00:00 wall=2026-09-13T02:50:10.799Z (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)
+[32] summary-totals :: 0x0039 decoded: elapsed=393.6s distance=1396m workoutType=8 | accumulator=0m accumulatorElapsed=0s machineTotal=0m durationType=0 (this run has recorded 0 interval(s) totalling 0s/0m from 0x0037/0x0038, over a program with 0s of rest). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus 0s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)
+[33] verification-received :: 0x003F received (run closed, state=armed) raw=27 d8 f3 6e e1 52 55 5b f8 14 01 00 94 00 00 00 00 00 00
+[34] summary-reconciled :: terminate-observations — 0x0039 arrived after a rower-ended close (393.6s/1396m, hash included), released when 0x003F arrived, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)
+[35] summary-1-missing :: 0x003A did not arrive inside the summary burst; calories, avg watts, avg cal/hr and rest distance are absent from this run's observations (the screen renders a dash, never 0)
+[36] store-receipt:commit-accepted :: {"kind":"commit-accepted","sessionKey":"2026-08-07T09:00:00.000Z","revision":2,"verdict":"saved"}
+[37] summary-recorded :: run=2026-08-07T09:00:00.000Z totals={"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+[38] handoff-released :: burst-heard — the ended hand-off is free to navigate (0 actual(s) measured)
+===== end ORDER C FULL RING =====
+
+
+===== ORDER C RELEVANT (9 entries) =====
+[0] handoff-hold :: burst-eligible close (endedBy=rower) with no summary yet — holding the ended hand-off up to 2000ms for the machine's own summary burst
+[1] terminate-sent :: 1 frame(s) acked
+[2] summary-half :: 0x0039 end-of-workout summary received (run closed, state=armed) raw=00 00 00 00 c0 99 00 88 36 00 18 ff ff ff ff 80 ff 08 e2 04
+[3] summary-log-stamp :: wire=2000-00-00 00:00 wall=2026-09-13T02:50:10.799Z (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)
+[4] summary-totals :: 0x0039 decoded: elapsed=393.6s distance=1396m workoutType=8 | accumulator=0m accumulatorElapsed=0s machineTotal=0m durationType=0 (this run has recorded 0 interval(s) totalling 0s/0m from 0x0037/0x0038, over a program with 0s of rest). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus 0s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)
+[5] summary-reconciled :: terminate-observations — 0x0039 arrived after a rower-ended close (393.6s/1396m, hash included), released when 0x003F arrived, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)
+[6] summary-1-missing :: 0x003A did not arrive inside the summary burst; calories, avg watts, avg cal/hr and rest distance are absent from this run's observations (the screen renders a dash, never 0)
+[7] summary-recorded :: run=2026-08-07T09:00:00.000Z totals={"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+[8] handoff-released :: burst-heard — the ended hand-off is free to navigate (0 actual(s) measured)
+===== end ORDER C RELEVANT =====
+
+ORDER C summaryTotals = {"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+
+===== ORDER D FULL RING (40 entries) =====
+[0] status-subscribe :: fallback
+[1] storage-persist :: denied (tolerated — design spec §4 S6, not mitigation)
+[2] free-row-open :: opened a free row; sending the PM5 its Just Row program (CSAFE-DEF p.80), no prepare
+[3] write :: f1 76 07 01 01 01 13 02 01 01 61 f2
+[4] ack :: f1 01 76 02 01 13 67 f2 slaveState=ready
+[5] free-row-program-sent :: 1 frame(s) acked
+[6] armed :: free row: the p.80 send settled
+[7] notify-first :: 0x0033 (20B)
+[8] notify-first :: 0x0032 (17B)
+[9] notify-first :: 0x0031 (19B)
+[10] structure :: workoutType=8 durationRaw=6000 durationType=0 raw=64 00 00 28 00 00 08 00 04 01 00 00 00 00 70 17 00 00 82
+[11] twd-sample :: machineTotal=0m at elapsed=1s distance=4m workoutState=4 durationRaw=6000 durationType=0
+[12] frame :: state=rowing elapsed=1 distance=4 rowingActive=true spm=22
+[13] raw-rowing-state :: previous=none value=1 state=rowing elapsed=1 distance=4
+[14] store-receipt:commit-accepted :: {"kind":"commit-accepted","sessionKey":"2026-08-07T09:00:00.000Z","revision":0,"verdict":"saved"}
+[15] partial-refused :: reason=no-reading idx=none
+[16] store-receipt:commit-accepted :: {"kind":"commit-accepted","sessionKey":"2026-08-07T09:00:00.000Z","revision":1,"verdict":"saved"}
+[17] handoff-hold :: burst-eligible close (endedBy=rower) with no summary yet — holding the ended hand-off up to 2000ms for the machine's own summary burst
+[18] final-totals :: accumulator=11m accumulatorElapsed=2s machineTotal=0m durationType=0 registers=0 of 0 programmed 
+[19] write :: f1 76 04 13 02 01 02 60 f2
+[20] ack :: f1 85 76 01 13 e1 f2 slaveState=in-use
+[21] terminate-sent :: 1 frame(s) acked
+[22] frame :: state=terminated elapsed=1 distance=11 rowingActive=false spm=0
+[23] raw-rowing-state :: previous=1 value=0 state=terminated elapsed=1 distance=11
+[24] final-totals :: accumulator=11m accumulatorElapsed=1s machineTotal=0m durationType=0 registers=0 of 0 programmed 
+[25] terminal-raw :: state=terminated 0x0031=64 00 00 6e 00 00 08 00 0b 00 00 00 00 00 70 17 00 00 82
+[26] terminal :: terminated
+[27] avg-pace-verdict :: #1 suppressed — this run's own final interval (index -1) was never recorded; the machine's cumulative average may already include work ours has no record of (mid-work terminate is the ordinary way this happens — its boundary, if any, is discarded out-of-run and touches neither run.actuals nor recordedActuals)
+[28] frame :: state=idle elapsed=0 distance=0 rowingActive=false spm=23
+[29] frame :: state=armed elapsed=0 distance=0 rowingActive=false spm=23
+[30] latch-count :: latches=0 resumes=0
+[31] summary-half :: 0x0039 end-of-workout summary received (run closed, state=armed) raw=00 00 00 00 c0 99 00 88 36 00 18 ff ff ff ff 80 ff 08 e2 04
+[32] summary-log-stamp :: wire=2000-00-00 00:00 wall=2026-09-13T02:50:10.800Z (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)
+[33] summary-totals :: 0x0039 decoded: elapsed=393.6s distance=1396m workoutType=8 | accumulator=0m accumulatorElapsed=0s machineTotal=0m durationType=0 (this run has recorded 0 interval(s) totalling 0s/0m from 0x0037/0x0038, over a program with 0s of rest). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus 0s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)
+[34] verification-received :: 0x003F received (run closed, state=armed) raw=27 d8 f3 6e e1 52 55 5b f8 14 01 00 94 00 00 00 00 00 00
+[35] summary-reconciled :: terminate-observations — 0x0039 arrived after a rower-ended close (393.6s/1396m, hash included), released when 0x003F arrived, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)
+[36] summary-1-missing :: 0x003A did not arrive inside the summary burst; calories, avg watts, avg cal/hr and rest distance are absent from this run's observations (the screen renders a dash, never 0)
+[37] summary-recorded :: run=2026-08-07T09:00:00.000Z totals={"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+[38] handoff-released :: burst-heard — the ended hand-off is free to navigate (0 actual(s) measured)
+[39] disconnect-requested :: caller-initiated
+===== end ORDER D FULL RING =====
+
+
+===== ORDER D RELEVANT (9 entries) =====
+[0] handoff-hold :: burst-eligible close (endedBy=rower) with no summary yet — holding the ended hand-off up to 2000ms for the machine's own summary burst
+[1] terminate-sent :: 1 frame(s) acked
+[2] summary-half :: 0x0039 end-of-workout summary received (run closed, state=armed) raw=00 00 00 00 c0 99 00 88 36 00 18 ff ff ff ff 80 ff 08 e2 04
+[3] summary-log-stamp :: wire=2000-00-00 00:00 wall=2026-09-13T02:50:10.800Z (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)
+[4] summary-totals :: 0x0039 decoded: elapsed=393.6s distance=1396m workoutType=8 | accumulator=0m accumulatorElapsed=0s machineTotal=0m durationType=0 (this run has recorded 0 interval(s) totalling 0s/0m from 0x0037/0x0038, over a program with 0s of rest). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus 0s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)
+[5] summary-reconciled :: terminate-observations — 0x0039 arrived after a rower-ended close (393.6s/1396m, hash included), released when 0x003F arrived, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)
+[6] summary-1-missing :: 0x003A did not arrive inside the summary burst; calories, avg watts, avg cal/hr and rest distance are absent from this run's observations (the screen renders a dash, never 0)
+[7] summary-recorded :: run=2026-08-07T09:00:00.000Z totals={"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+[8] handoff-released :: burst-heard — the ended hand-off is free to navigate (0 actual(s) measured)
+===== end ORDER D RELEVANT =====
+
+ORDER D summaryTotals = {"workElapsedSeconds":393.6,"workDistanceMeters":1396}
+ORDER E linger window has expired; delivering now
+
+===== ORDER E FULL RING (39 entries) =====
+[0] status-subscribe :: fallback
+[1] storage-persist :: denied (tolerated — design spec §4 S6, not mitigation)
+[2] free-row-open :: opened a free row; sending the PM5 its Just Row program (CSAFE-DEF p.80), no prepare
+[3] write :: f1 76 07 01 01 01 13 02 01 01 61 f2
+[4] ack :: f1 01 76 02 01 13 67 f2 slaveState=ready
+[5] free-row-program-sent :: 1 frame(s) acked
+[6] armed :: free row: the p.80 send settled
+[7] notify-first :: 0x0033 (20B)
+[8] notify-first :: 0x0032 (17B)
+[9] notify-first :: 0x0031 (19B)
+[10] structure :: workoutType=8 durationRaw=6000 durationType=0 raw=64 00 00 28 00 00 08 00 04 01 00 00 00 00 70 17 00 00 82
+[11] twd-sample :: machineTotal=0m at elapsed=1s distance=4m workoutState=4 durationRaw=6000 durationType=0
+[12] frame :: state=rowing elapsed=1 distance=4 rowingActive=true spm=22
+[13] raw-rowing-state :: previous=none value=1 state=rowing elapsed=1 distance=4
+[14] store-receipt:commit-accepted :: {"kind":"commit-accepted","sessionKey":"2026-08-07T09:00:00.000Z","revision":0,"verdict":"saved"}
+[15] partial-refused :: reason=no-reading idx=none
+[16] store-receipt:commit-accepted :: {"kind":"commit-accepted","sessionKey":"2026-08-07T09:00:00.000Z","revision":1,"verdict":"saved"}
+[17] handoff-hold :: burst-eligible close (endedBy=rower) with no summary yet — holding the ended hand-off up to 2000ms for the machine's own summary burst
+[18] final-totals :: accumulator=11m accumulatorElapsed=2s machineTotal=0m durationType=0 registers=0 of 0 programmed 
+[19] write :: f1 76 04 13 02 01 02 60 f2
+[20] ack :: f1 85 76 01 13 e1 f2 slaveState=in-use
+[21] terminate-sent :: 1 frame(s) acked
+[22] frame :: state=terminated elapsed=1 distance=11 rowingActive=false spm=0
+[23] raw-rowing-state :: previous=1 value=0 state=terminated elapsed=1 distance=11
+[24] final-totals :: accumulator=11m accumulatorElapsed=1s machineTotal=0m durationType=0 registers=0 of 0 programmed 
+[25] terminal-raw :: state=terminated 0x0031=64 00 00 6e 00 00 08 00 0b 00 00 00 00 00 70 17 00 00 82
+[26] terminal :: terminated
+[27] avg-pace-verdict :: #1 suppressed — this run's own final interval (index -1) was never recorded; the machine's cumulative average may already include work ours has no record of (mid-work terminate is the ordinary way this happens — its boundary, if any, is discarded out-of-run and touches neither run.actuals nor recordedActuals)
+[28] frame :: state=idle elapsed=0 distance=0 rowingActive=false spm=23
+[29] frame :: state=armed elapsed=0 distance=0 rowingActive=false spm=23
+[30] latch-count :: latches=0 resumes=0
+[31] handoff-released :: burst-timeout — the ended hand-off is free to navigate (0 actual(s) measured)
+[32] disconnect-requested :: caller-initiated
+[33] summary-half :: 0x0039 end-of-workout summary received (run closed, state=armed) raw=00 00 00 00 c0 99 00 88 36 00 18 ff ff ff ff 80 ff 08 e2 04
+[34] summary-log-stamp :: wire=2000-00-00 00:00 wall=2026-09-13T02:50:13.103Z (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)
+[35] summary-totals :: 0x0039 decoded: elapsed=393.6s distance=1396m workoutType=8 | accumulator=0m accumulatorElapsed=0s machineTotal=0m durationType=0 (this run has recorded 0 interval(s) totalling 0s/0m from 0x0037/0x0038, over a program with 0s of rest). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus 0s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)
+[36] verification-received :: 0x003F received (run closed, state=armed) raw=27 d8 f3 6e e1 52 55 5b f8 14 01 00 94 00 00 00 00 00 00
+[37] summary-reconciled :: terminate-observations — 0x0039 arrived after a rower-ended close (393.6s/1396m, hash included), released when 0x003F arrived, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)
+[38] summary-1-missing :: 0x003A did not arrive inside the summary burst; calories, avg watts, avg cal/hr and rest distance are absent from this run's observations (the screen renders a dash, never 0)
+===== end ORDER E FULL RING =====
+
+
+===== ORDER E RELEVANT (8 entries) =====
+[0] handoff-hold :: burst-eligible close (endedBy=rower) with no summary yet — holding the ended hand-off up to 2000ms for the machine's own summary burst
+[1] terminate-sent :: 1 frame(s) acked
+[2] handoff-released :: burst-timeout — the ended hand-off is free to navigate (0 actual(s) measured)
+[3] summary-half :: 0x0039 end-of-workout summary received (run closed, state=armed) raw=00 00 00 00 c0 99 00 88 36 00 18 ff ff ff ff 80 ff 08 e2 04
+[4] summary-log-stamp :: wire=2000-00-00 00:00 wall=2026-09-13T02:50:13.103Z (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)
+[5] summary-totals :: 0x0039 decoded: elapsed=393.6s distance=1396m workoutType=8 | accumulator=0m accumulatorElapsed=0s machineTotal=0m durationType=0 (this run has recorded 0 interval(s) totalling 0s/0m from 0x0037/0x0038, over a program with 0s of rest). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus 0s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)
+[6] summary-reconciled :: terminate-observations — 0x0039 arrived after a rower-ended close (393.6s/1396m, hash included), released when 0x003F arrived, and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)
+[7] summary-1-missing :: 0x003A did not arrive inside the summary burst; calories, avg watts, avg cal/hr and rest distance are absent from this run's observations (the screen renders a dash, never 0)
+===== end ORDER E RELEVANT =====
+
+ORDER E run present = true summaryTotals = undefined
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  22:50:10
+   Duration  3.00s (transform 170ms, setup 77ms, import 206ms, tests 2.32s, environment 334ms)
+
