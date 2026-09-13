@@ -12905,4 +12905,35 @@ test.describe("/you/stats", () => {
     expect(undersized, JSON.stringify(undersized)).toEqual([]);
     expect(await page.locator("input[type=date]").count()).toBe(2);
   });
+
+  // TESTING.md §8's third rule: one computed-style assertion per registered
+  // screen, so a rule that stops resolving (a typo'd token, a moved rule
+  // losing the cascade — RF37) fails HERE, where jsdom cannot see colour.
+  // The hexes are tokens.css's, verbatim; the ratios are contrast.json's.
+  // Mutation: `.stats-card { background: var(--page) }` → the first
+  // expectation reads rgb(244, 241, 232).
+  test("the TOTALS card, the selected chip and the figure cells paint from the token palette", async ({
+    page,
+  }) => {
+    const cardBg = await page
+      .locator(".stats-card")
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(cardBg).toBe("rgb(255, 253, 247)"); // --surface
+    const cardBorder = await page
+      .locator(".stats-card")
+      .evaluate((el) => getComputedStyle(el).borderTopColor);
+    expect(cardBorder).toBe("rgb(222, 216, 201)"); // --rule-2
+    const chip = page.locator('.stats-chip[aria-checked="true"]');
+    expect(
+      await chip.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe(
+      "rgb(27, 26, 23)", // --ink; --on-color on it 17.11:1
+    );
+    const cell = await page
+      .getByRole("row", { name: /^METRES/ })
+      .getByRole("cell")
+      .first()
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(cell).toBe("rgb(27, 26, 23)"); // --ink, 17.11:1 on --surface
+  });
 });
