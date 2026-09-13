@@ -2492,6 +2492,35 @@ the screen came to mix quantities without saying so. **Every item changes what a
 displayed number MEANS, so the gate renders the whole summary before and after,
 in both orientations.**
 
+- **THE STATS `MACHINE` COLUMN'S OWN NUMBERS DO NOT PRODUCE ITS OWN THIRD
+      NUMBER, and a committed capture shows it.** · dies 2026-10-13 · FAST
+      FOLLOW (James, 2026-09-13) — filed rather than fixed in the same breath
+      because the fix is a product decision about which population the row
+      describes, not a arithmetic correction.
+      `docs/screenshots/you-stats.png` renders `METRES 36,752`,
+      `TIME 2:34:31` and `AVG WATTS 176` in one column. 2:34:31 is 9,271 s,
+      and `logbookWatts` is `Math.round(2.8 / (seconds / meters) ** 3)`
+      (`app/domain/logbook.ts`) — which over those two cells gives **174**,
+      not 176. Verified by hand 2026-09-13 off the committed PNG, not
+      inferred.
+      **The mechanism** is `app/domain/stats/aggregate.ts`: the watts
+      accumulator skips `r.tier !== "stored"` rows, while `totals(machine)`
+      beside it counts them. So METRES and TIME describe a SUPERSET of the
+      rows AVG WATTS is computed from, and the column silently mixes two
+      populations.
+      **Why nothing caught it:** the caption that would have explained the
+      seam was struck by rulings 18 and 19 —
+      `app/src/you/stats/TotalsGroup.tsx` says so outright ("NO prose:
+      rulings 18 and 19 struck every caption, the seam line and the
+      `n OF m` footnote included"). RF7's shape exactly: a reviewer
+      recomputing the headline from the rows in the same frame would have
+      found it in ten seconds, and the capture shipped.
+      **It is the same defect class as this pass's other members** — a figure
+      whose provenance the screen does not state — but on a FIFTH surface the
+      pass does not currently cover, and it landed 2026-09-12 (Phase PS PR 1
+      and PR 2), two days AFTER this pass was dated. Whether it joins the
+      pass or is fixed ahead of it is James's call at the Gate 0. **S**
+
 - **The chart's axes** — should `traceModel.ts`'s `t` and `d` become a true
   work-only clock? The PR-2 collision is discharged by labelling
   (`MACHINE CONFIRMED · WORK ONLY`), but **RC-5 made it sharper**: the chart's
