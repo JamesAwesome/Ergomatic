@@ -1,11 +1,21 @@
 import { useEffect } from "react";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, useLocation, useNavigate } from "react-router-dom";
 import SignIn from "./SignIn";
+import { useAuthFlow } from "./adapters/authFlow";
 import AppRoutes from "./shell/AppRoutes";
 import { useMe } from "./useMe";
 
-export default function App() {
+function AppContent() {
   const [me, signedOut, refetch] = useMe();
+  const auth = useAuthFlow(refetch);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (auth.destination && auth.destination !== location.pathname) {
+      void navigate(auth.destination);
+    }
+  }, [auth.destination, location.pathname, navigate]);
 
   // Every screen that cares about scroll manages it itself (the reader and
   // releases screens jump to the top, the Library restores its own saved
@@ -24,11 +34,15 @@ export default function App() {
   }, []);
 
   if (me.state === "loading") return null;
-  if (me.state === "out") return <SignIn onSignedIn={refetch} />;
+  if (me.state === "out") return <SignIn onSignedIn={refetch} auth={auth} />;
 
+  return <AppRoutes user={me.user} onSignedOut={signedOut} authFlow={auth} />;
+}
+
+export default function App() {
   return (
     <BrowserRouter>
-      <AppRoutes user={me.user} onSignedOut={signedOut} />
+      <AppContent />
     </BrowserRouter>
   );
 }

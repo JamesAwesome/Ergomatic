@@ -4,10 +4,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 // `nativeSignOut` is the ONLY function under test here: it is the one this
 // change gives real behaviour to, and the one whose ORDERING can be wrong.
 const logout = vi.fn<(o: { provider: string }) => Promise<void>>();
+const login = vi.fn();
+const initialize = vi.fn();
 vi.mock("@capgo/capacitor-social-login", () => ({
   SocialLogin: {
-    initialize: vi.fn(),
-    login: vi.fn(),
+    initialize,
+    login,
     logout: (o: { provider: string }) => logout(o),
   },
 }));
@@ -34,7 +36,40 @@ vi.mock("./session", () => ({
   getStoredToken: vi.fn(),
 }));
 
-const { nativeSignOut } = await import("./signin");
+const { nativeGoogleProof, nativeSignOut } = await import("./signin");
+
+describe("nativeGoogleProof", () => {
+  beforeEach(() => {
+    initialize.mockReset();
+    initialize.mockResolvedValue(undefined);
+    login.mockReset();
+    login.mockResolvedValue({
+      provider: "google",
+      result: { responseType: "online", idToken: "signed-google-id-token" },
+    });
+  });
+
+  it("forces an interactive Google proof bound to the server nonce", async () => {
+    await expect(nativeGoogleProof("server-nonce")).resolves.toStrictEqual({
+      idToken: "signed-google-id-token",
+    });
+    expect(initialize).toHaveBeenCalledOnce();
+    expect(login).toHaveBeenCalledWith({
+      provider: "google",
+      options: { forcePrompt: true, nonce: "server-nonce" },
+    });
+  });
+
+  it("rejects an online Google response without an identity token", async () => {
+    login.mockResolvedValue({
+      provider: "google",
+      result: { responseType: "online", idToken: null },
+    });
+    await expect(nativeGoogleProof("server-nonce")).rejects.toThrow(
+      "Google proof returned no token",
+    );
+  });
+});
 
 describe("nativeSignOut: signing out ends the GOOGLE session, not just ours", () => {
   beforeEach(() => {

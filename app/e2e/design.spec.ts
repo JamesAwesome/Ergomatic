@@ -624,6 +624,119 @@ test("Just Row observer: VITE-enabled route, accessibility, controls, and shell"
   await expect(page.getByRole("navigation", { name: "Main" })).toHaveCount(0);
 });
 
+test.describe("Apple front door and sign-in methods", () => {
+  const authOptions = {
+    frontDoorEnabled: true,
+    apple: { native: true, web: true },
+    google: { native: true, web: true },
+  };
+
+  test("welcome and confirmation keep approved provider order, geometry, palette and accessible names", async ({
+    page,
+  }) => {
+    await page.route("**/api/me", (route) =>
+      route.fulfill({ status: 401, json: { error: "unauthenticated" } }),
+    );
+    await page.route("**/api/auth/options", (route) =>
+      route.fulfill({ status: 200, json: authOptions }),
+    );
+    await page.route("**/api/auth/web/attempts", (route) =>
+      route.fulfill({
+        status: 200,
+        json: {
+          outcome: "authorize",
+          attemptId: "design-apple",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "2026-09-13T00:05:00.000Z",
+          provider: "apple",
+          stage: "signin",
+          nonce: "nonce",
+          state: "state",
+          authorizationUrl: "/?authAttempt=design-apple",
+        },
+      }),
+    );
+    await page.route("**/api/auth/web/attempts/design-apple", (route) =>
+      route.fulfill({
+        status: 200,
+        json: {
+          outcome: "confirm",
+          attemptId: "design-apple",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "2026-09-13T00:05:00.000Z",
+          profile: {
+            name: "Rower",
+            email: "9m3x7k2p1r@privaterelay.appleid.com",
+          },
+        },
+      }),
+    );
+    await page.goto("/");
+    const buttons = page.locator(".auth-provider-button");
+    await expect(buttons).toHaveText([
+      "Continue with Apple",
+      "Continue with Google",
+    ]);
+    for (const box of await buttons.evaluateAll((nodes) =>
+      nodes.map((node) => node.getBoundingClientRect().toJSON()),
+    )) {
+      expect(box.height).toBeGreaterThanOrEqual(52);
+      expect(box.width).toBeLessThanOrEqual(440);
+    }
+    expect(
+      await buttons
+        .first()
+        .evaluate((node) => getComputedStyle(node).backgroundColor),
+    ).toBe("rgb(0, 0, 0)");
+    await expect(new AxeBuilder({ page }).analyze()).resolves.toMatchObject({
+      violations: [],
+    });
+    await buttons.first().click();
+    await expect(
+      page.getByRole("heading", { name: "Create your account" }),
+    ).toBeVisible();
+    await expect(page.locator("html")).toHaveJSProperty(
+      "scrollWidth",
+      await page.locator("html").evaluate((node) => node.clientWidth),
+    );
+  });
+
+  test("You methods and the two-proof screen keep 44px controls and hide the tab bar during linking", async ({
+    page,
+  }) => {
+    await page.route("**/api/auth/options", (route) =>
+      route.fulfill({ status: 200, json: authOptions }),
+    );
+    await page.route("**/api/auth/methods", (route) =>
+      route.fulfill({ status: 200, json: { apple: false, google: true } }),
+    );
+    await signInViaBackdoor(page, {
+      email: "design-apple-methods@e2e.test",
+      name: "Maya Chen",
+    });
+    await page.goto("/you");
+    const addApple = page.getByRole("button", { name: "Add Apple" });
+    await expect(addApple).toBeVisible();
+    expect((await addApple.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await addApple.click();
+    await expect(
+      page.getByRole("heading", { name: "Add Apple" }),
+    ).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main" })).toHaveCount(0);
+    await expect(
+      page.getByText("Confirm your usual Google sign-in"),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Sign in with Apple", { exact: true }),
+    ).toBeVisible();
+    await expect(new AxeBuilder({ page }).analyze()).resolves.toMatchObject({
+      violations: [],
+    });
+  });
+});
+
 // --ink-4's own rgb (tokens.css #6f6a5f) — computed once here rather than
 // re-derived per call site.
 const INK_4_RGB = "rgb(111, 106, 95)";

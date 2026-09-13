@@ -30,6 +30,10 @@
   --rule-3: #c9c3b2;
   --accent: #b5341f;
   --accent-hover: #9c2c19;
+  --auth-apple: #000000;
+  --auth-apple-hover: #1b1b1b;
+  --auth-apple-label: #ffffff;
+  --success: #49624f;
   /* Fast-follow spec §4: Connect becomes the screen's single primary — its
      own action token, not a repaint of --accent. The value intentionally
      echoes --type-o2 immediately below, but stays a SEPARATE token:

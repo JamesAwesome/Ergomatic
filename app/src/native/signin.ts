@@ -35,6 +35,22 @@ export async function nativeSignIn(): Promise<boolean> {
   return true;
 }
 
+/** Fresh Google proof for credential linking. It never reads or stores the
+ * Ergomatic session token; the auth-flow adapter owns the bound attempt. */
+export async function nativeGoogleProof(
+  nonce: string,
+): Promise<{ idToken: string }> {
+  await initNativeAuth();
+  const res = await SocialLogin.login({
+    provider: "google",
+    options: { forcePrompt: true, nonce },
+  });
+  const idToken =
+    res.result.responseType === "online" ? res.result.idToken : null;
+  if (!idToken) throw new Error("Google proof returned no token");
+  return { idToken };
+}
+
 /* v8 ignore stop */
 
 /**

@@ -7631,3 +7631,120 @@ for (const viewport of [
     });
   });
 }
+
+const APPLE_AUTH_OPTIONS = {
+  frontDoorEnabled: true,
+  apple: { native: true, web: true },
+  google: { native: true, web: true },
+};
+
+async function captureAppleWelcome(
+  page: Page,
+  fileName: string,
+): Promise<void> {
+  await page.route("**/api/me", (route) =>
+    route.fulfill({ status: 401, json: { error: "unauthenticated" } }),
+  );
+  await page.route("**/api/auth/options", (route) =>
+    route.fulfill({ status: 200, json: APPLE_AUTH_OPTIONS }),
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: "Continue with Apple" }),
+  ).toBeVisible();
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, fileName) });
+}
+
+test("apple-signin-welcome", async ({ page }) => {
+  await captureAppleWelcome(page, "apple-signin-welcome.png");
+});
+
+test("apple-signin-welcome-landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await captureAppleWelcome(page, "apple-signin-welcome-landscape.png");
+});
+
+test("apple-create-account", async ({ page }) => {
+  await page.route("**/api/me", (route) =>
+    route.fulfill({ status: 401, json: { error: "unauthenticated" } }),
+  );
+  await page.route("**/api/auth/options", (route) =>
+    route.fulfill({ status: 200, json: APPLE_AUTH_OPTIONS }),
+  );
+  await page.route("**/api/auth/web/attempts", (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        outcome: "authorize",
+        attemptId: "capture-create",
+        purpose: "signin",
+        targetProvider: "apple",
+        expiresAt: "2026-09-13T00:05:00.000Z",
+        provider: "apple",
+        stage: "signin",
+        nonce: "capture-nonce",
+        state: "capture-state",
+        authorizationUrl: "/?authAttempt=capture-create",
+      },
+    }),
+  );
+  await page.route("**/api/auth/web/attempts/capture-create", (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        outcome: "confirm",
+        attemptId: "capture-create",
+        purpose: "signin",
+        targetProvider: "apple",
+        expiresAt: "2026-09-13T00:05:00.000Z",
+        profile: {
+          name: "Rower",
+          email: "9m3x7k2p1r@privaterelay.appleid.com",
+        },
+      },
+    }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: "Continue with Apple" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Create your account" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "apple-create-account.png"),
+  });
+});
+
+async function captureAppleMethods(
+  page: Page,
+  fileName: string,
+  openLink: boolean,
+): Promise<void> {
+  await page.route("**/api/auth/options", (route) =>
+    route.fulfill({ status: 200, json: APPLE_AUTH_OPTIONS }),
+  );
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({ status: 200, json: { apple: false, google: true } }),
+  );
+  await signInViaBackdoor(page, {
+    email: `screenshots-apple-${openLink ? "link" : "methods"}@e2e.test`,
+    name: "Maya Chen",
+  });
+  await page.goto("/you");
+  await expect(page.getByRole("button", { name: "Add Apple" })).toBeVisible();
+  if (openLink) {
+    await page.getByRole("button", { name: "Add Apple" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Add Apple" }),
+    ).toBeVisible();
+  }
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, fileName) });
+}
+
+test("apple-signin-methods", async ({ page }) => {
+  await captureAppleMethods(page, "apple-signin-methods.png", false);
+});
+
+test("apple-link-confirm-landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await captureAppleMethods(page, "apple-link-confirm-landscape.png", true);
+});

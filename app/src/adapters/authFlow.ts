@@ -1,0 +1,624 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import type {
+  AuthError,
+  AuthErrorCode,
+  AuthOptions,
+  AuthProvider,
+  AuthPurpose,
+  AuthStep,
+  NativeBegin,
+  SignedIn,
+} from "../../shared/auth";
+import { api } from "../api";
+import { isNative } from "../platform";
+import { navigateWeb } from "./webNavigate";
+
+export type AuthOptionsView =
+  | { state: "loading" }
+  | {
+      state: "ready";
+      frontDoorEnabled: boolean;
+      legacyGoogle: boolean;
+      apple: boolean;
+      google: boolean;
+    };
+
+export type AuthFlowView =
+  | { kind: "idle" }
+  | { kind: "busy"; purpose: AuthPurpose }
+  | {
+      kind: "confirm";
+      targetProvider: AuthProvider;
+      profile: { email: string; name: string };
+    }
+  | { kind: "usual"; provider: AuthProvider }
+  | { kind: "link_confirm"; targetProvider: AuthProvider }
+  | {
+      kind: "link_authorize";
+      targetProvider: AuthProvider;
+      provider: AuthProvider;
+      existingProofComplete: boolean;
+    }
+  | { kind: "linked"; targetProvider: AuthProvider }
+  | {
+      kind: "cancelled";
+      purpose: AuthPurpose;
+      targetProvider?: AuthProvider;
+    }
+  | {
+      kind: "error";
+      purpose: AuthPurpose;
+      code: AuthErrorCode;
+      targetProvider?: AuthProvider;
+    };
+
+export interface AuthFlowController {
+  options: AuthOptionsView;
+  view: AuthFlowView;
+  destination: "/" | "/you" | "/you/sign-in-methods" | null;
+  startSignIn(provider: AuthProvider): Promise<void>;
+  confirmAccount(): Promise<void>;
+  useUsualSignIn(): Promise<void>;
+  prepareLink(provider: AuthProvider): void;
+  startPreparedLink(): Promise<void>;
+  authorizeLinkTarget(): Promise<void>;
+  cancel(): Promise<void>;
+  reset(): void;
+  abandon(): void;
+}
+
+type ActiveStep = Exclude<AuthStep, SignedIn>;
+
+interface ActiveOperation {
+  step: ActiveStep;
+  bindingSecret?: string;
+}
+
+interface FlowContext {
+  native: boolean;
+  generation: React.MutableRefObject<number>;
+  operation: React.MutableRefObject<ActiveOperation | null>;
+  onSignedIn: React.MutableRefObject<() => void>;
+  setView: React.Dispatch<React.SetStateAction<AuthFlowView>>;
+}
+
+const ERROR_CODES = new Set<AuthErrorCode>([
+  "invalid_request",
+  "invalid_proof",
+  "attempt_expired",
+  "account_changed",
+  "account_conflict",
+  "email_required",
+  "unavailable",
+  "rate_limited",
+  "signin_failed",
+]);
+
+const LEGACY_OPTIONS: AuthOptionsView = {
+  state: "ready",
+  frontDoorEnabled: false,
+  legacyGoogle: true,
+  apple: false,
+  google: true,
+};
+
+function isAuthOptions(value: unknown): value is AuthOptions {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  for (const provider of ["apple", "google"] as const) {
+    const entry = record[provider];
+    if (typeof entry !== "object" || entry === null) return false;
+    const surface = entry as Record<string, unknown>;
+    if (
+      typeof surface.native !== "boolean" ||
+      typeof surface.web !== "boolean"
+    ) {
+      return false;
+    }
+  }
+  return typeof record.frontDoorEnabled === "boolean";
+}
+
+function destinationFor(
+  view: AuthFlowView,
+): "/" | "/you" | "/you/sign-in-methods" | null {
+  if (view.kind === "link_confirm" || view.kind === "link_authorize") {
+    return "/you/sign-in-methods";
+  }
+  if (
+    view.kind === "linked" ||
+    (view.kind === "cancelled" && view.purpose === "link") ||
+    (view.kind === "error" && view.purpose === "link")
+  ) {
+    return "/you";
+  }
+  if (
+    view.kind === "confirm" ||
+    view.kind === "usual" ||
+    (view.kind === "cancelled" && view.purpose === "signin") ||
+    (view.kind === "error" && view.purpose === "signin")
+  ) {
+    return "/";
+  }
+  return null;
+}
+
+async function responseError(response: Response): Promise<AuthErrorCode> {
+  try {
+    const body = (await response.json()) as Partial<AuthError>;
+    return body.error && ERROR_CODES.has(body.error)
+      ? body.error
+      : "signin_failed";
+  } catch {
+    return "signin_failed";
+  }
+}
+
+class AuthRequestError extends Error {
+  constructor(readonly code: AuthErrorCode) {
+    super(code);
+  }
+}
+
+async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await api(path, init);
+  if (!response.ok) throw new AuthRequestError(await responseError(response));
+  return (await response.json()) as T;
+}
+
+function postJson<T>(path: string, body: unknown): Promise<T> {
+  return jsonRequest<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+function setFailure(
+  context: FlowContext,
+  generation: number,
+  purpose: AuthPurpose,
+  error: unknown,
+  targetProvider?: AuthProvider,
+): void {
+  if (context.generation.current !== generation) return;
+  context.operation.current = null;
+  context.setView({
+    kind: "error",
+    purpose,
+    code: error instanceof AuthRequestError ? error.code : "signin_failed",
+    ...(targetProvider ? { targetProvider } : {}),
+  });
+}
+
+function isProviderCancellation(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+  const code = (error as { code?: unknown }).code;
+  return code === "cancelled" || code === "USER_CANCELLED";
+}
+
+async function finishSignedIn(
+  context: FlowContext,
+  result: SignedIn,
+  generation: number,
+): Promise<void> {
+  if (context.generation.current !== generation) return;
+  if (context.native) {
+    if (!result.token) throw new AuthRequestError("signin_failed");
+    const { storeToken } = await import("../native/session");
+    if (context.generation.current !== generation) return;
+    await storeToken(result.token);
+    if (context.generation.current !== generation) return;
+  }
+  context.operation.current = null;
+  context.setView({ kind: "idle" });
+  context.onSignedIn.current();
+}
+
+async function cancelActive(context: FlowContext): Promise<void> {
+  const active = context.operation.current;
+  context.operation.current = null;
+  if (!active) return;
+  const surface = context.native ? "native" : "web";
+  const body = context.native ? { bindingSecret: active.bindingSecret } : {};
+  try {
+    await postJson(
+      `/api/auth/${surface}/attempts/${encodeURIComponent(active.step.attemptId)}/cancel`,
+      body,
+    );
+  } catch {
+    // Local authority is already gone. The bound server attempt expires and
+    // cannot be completed from this client after its secret is discarded.
+  }
+}
+
+async function finalizeLink(
+  context: FlowContext,
+  generation: number,
+): Promise<void> {
+  const active = context.operation.current;
+  if (!active || active.step.outcome !== "link_ready") {
+    throw new AuthRequestError("invalid_request");
+  }
+  const surface = context.native ? "native" : "web";
+  const body = context.native ? { bindingSecret: active.bindingSecret } : {};
+  const result = await postJson<{ outcome: "linked" }>(
+    `/api/auth/${surface}/attempts/${encodeURIComponent(active.step.attemptId)}/finalize`,
+    body,
+  );
+  if (context.generation.current !== generation) return;
+  if (result.outcome !== "linked") throw new AuthRequestError("signin_failed");
+  const targetProvider = active.step.targetProvider;
+  context.operation.current = null;
+  context.setView({ kind: "linked", targetProvider });
+}
+
+async function acceptStep(
+  context: FlowContext,
+  step: AuthStep,
+  bindingSecret?: string,
+  autoAuthorize = false,
+  generation = context.generation.current,
+): Promise<void> {
+  if (context.generation.current !== generation) return;
+  if (step.outcome === "signed_in") {
+    await finishSignedIn(context, step, generation);
+    return;
+  }
+  context.operation.current = { step, bindingSecret };
+  if (step.outcome === "confirm") {
+    context.setView({
+      kind: "confirm",
+      targetProvider: step.targetProvider,
+      profile: step.profile,
+    });
+    return;
+  }
+  if (step.outcome === "link_ready") {
+    await finalizeLink(context, generation);
+    return;
+  }
+  if (step.purpose === "link" && step.stage === "target") {
+    context.setView({
+      kind: "link_authorize",
+      targetProvider: step.targetProvider,
+      provider: step.provider,
+      existingProofComplete: true,
+    });
+  }
+  if (context.native && autoAuthorize) {
+    await authorizeNative(context, step, bindingSecret, generation);
+  } else if (!context.native && autoAuthorize && step.authorizationUrl) {
+    navigateWeb(step.authorizationUrl);
+  }
+}
+
+async function authorizeNative(
+  context: FlowContext,
+  step: Extract<AuthStep, { outcome: "authorize" }>,
+  bindingSecret?: string,
+  generation = context.generation.current,
+): Promise<void> {
+  if (!bindingSecret) throw new AuthRequestError("invalid_request");
+  try {
+    let proof: {
+      state: string;
+      idToken: string;
+      authorizationCode?: string;
+      name?: string;
+    };
+    if (step.provider === "apple") {
+      const { AppleAuth } = await import("../native/appleAuth");
+      proof = await AppleAuth.authorize({
+        nonce: step.nonce,
+        state: step.state,
+      });
+    } else {
+      const { nativeGoogleProof } = await import("../native/signin");
+      proof = { ...(await nativeGoogleProof(step.nonce)), state: step.state };
+    }
+    if (context.generation.current !== generation) return;
+    const next = await postJson<AuthStep>(
+      `/api/auth/native/attempts/${encodeURIComponent(step.attemptId)}/proof`,
+      { bindingSecret, ...proof },
+    );
+    if (context.generation.current !== generation) return;
+    await acceptStep(context, next, bindingSecret, false, generation);
+  } catch (error) {
+    if (context.generation.current !== generation) return;
+    const cancelled = isProviderCancellation(error);
+    await cancelActive(context);
+    if (cancelled) {
+      context.setView({
+        kind: "cancelled",
+        purpose: step.purpose,
+        targetProvider: step.targetProvider,
+      });
+    } else {
+      setFailure(context, generation, step.purpose, error, step.targetProvider);
+    }
+  }
+}
+
+function consumeReturnParams(): {
+  attemptId?: string;
+  result?: string;
+  error?: AuthErrorCode;
+  purpose: AuthPurpose;
+  targetProvider?: AuthProvider;
+} | null {
+  const url = new URL(window.location.href);
+  const attemptId = url.searchParams.get("authAttempt") || undefined;
+  const result = url.searchParams.get("authResult") || undefined;
+  const rawError = url.searchParams.get("authError");
+  const rawPurpose = url.searchParams.get("authPurpose");
+  const rawProvider = url.searchParams.get("authProvider");
+  if (!attemptId && !result && !rawError) return null;
+  for (const key of [
+    "authAttempt",
+    "authResult",
+    "authError",
+    "authPurpose",
+    "authProvider",
+  ]) {
+    url.searchParams.delete(key);
+  }
+  window.history.replaceState(
+    null,
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+  return {
+    attemptId,
+    result,
+    error:
+      rawError && ERROR_CODES.has(rawError as AuthErrorCode)
+        ? (rawError as AuthErrorCode)
+        : rawError
+          ? "signin_failed"
+          : undefined,
+    purpose: rawPurpose === "link" ? "link" : "signin",
+    targetProvider:
+      rawProvider === "apple" || rawProvider === "google"
+        ? rawProvider
+        : undefined,
+  };
+}
+
+export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
+  const native = isNative();
+  const generation = useRef(0);
+  const operation = useRef<ActiveOperation | null>(null);
+  const onSignedInRef = useRef(onSignedIn);
+  const [options, setOptions] = useState<AuthOptionsView>({ state: "loading" });
+  const [view, setView] = useState<AuthFlowView>({ kind: "idle" });
+  const context = useMemo<FlowContext>(
+    () => ({
+      native,
+      generation,
+      operation,
+      onSignedIn: onSignedInRef,
+      setView,
+    }),
+    [native],
+  );
+
+  useEffect(() => {
+    onSignedInRef.current = onSignedIn;
+  }, [onSignedIn]);
+
+  useEffect(() => {
+    let live = true;
+    void api("/api/auth/options")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("missing options");
+        const body: unknown = await response.json();
+        if (!isAuthOptions(body)) throw new Error("invalid options");
+        if (!live) return;
+        const surface = native ? "native" : "web";
+        setOptions({
+          state: "ready",
+          frontDoorEnabled: body.frontDoorEnabled,
+          legacyGoogle: !body.frontDoorEnabled,
+          apple: body.apple[surface],
+          google: body.google[surface],
+        });
+      })
+      .catch(() => {
+        if (live) setOptions(LEGACY_OPTIONS);
+      });
+    return () => {
+      live = false;
+    };
+  }, [native]);
+
+  useEffect(() => {
+    if (native) return;
+    const returnGeneration = generation.current;
+    const returned = consumeReturnParams();
+    if (!returned) return;
+    void Promise.resolve().then(async () => {
+      if (generation.current !== returnGeneration) return;
+      if (returned.result === "signed_in") {
+        onSignedInRef.current();
+        return;
+      }
+      if (returned.result === "cancelled") {
+        if (generation.current !== returnGeneration) return;
+        setView({
+          kind: "cancelled",
+          purpose: returned.purpose,
+          ...(returned.targetProvider
+            ? { targetProvider: returned.targetProvider }
+            : {}),
+        });
+        return;
+      }
+      if (returned.error) {
+        if (generation.current !== returnGeneration) return;
+        setView({
+          kind: "error",
+          purpose: returned.purpose,
+          code: returned.error,
+          ...(returned.targetProvider
+            ? { targetProvider: returned.targetProvider }
+            : {}),
+        });
+        return;
+      }
+      if (!returned.attemptId) return;
+      setView({ kind: "busy", purpose: returned.purpose });
+      try {
+        const step = await jsonRequest<AuthStep>(
+          `/api/auth/web/attempts/${encodeURIComponent(returned.attemptId)}`,
+        );
+        if (generation.current !== returnGeneration) return;
+        try {
+          await acceptStep(context, step, undefined, false, returnGeneration);
+        } catch (error) {
+          setFailure(
+            context,
+            returnGeneration,
+            step.outcome === "signed_in" ? returned.purpose : step.purpose,
+            error,
+            step.outcome === "signed_in"
+              ? returned.targetProvider
+              : step.targetProvider,
+          );
+        }
+      } catch (error) {
+        setFailure(
+          context,
+          returnGeneration,
+          returned.purpose,
+          error,
+          returned.targetProvider,
+        );
+      }
+    });
+  }, [context, native]);
+
+  async function start(provider: AuthProvider, purpose: AuthPurpose) {
+    const startGeneration = ++generation.current;
+    operation.current = null;
+    setView({ kind: "busy", purpose });
+    try {
+      if (native) {
+        const result = await postJson<NativeBegin>(
+          "/api/auth/native/attempts",
+          {
+            purpose,
+            provider,
+          },
+        );
+        await acceptStep(
+          context,
+          result,
+          result.bindingSecret,
+          true,
+          startGeneration,
+        );
+      } else {
+        const result = await postJson<AuthStep>("/api/auth/web/attempts", {
+          purpose,
+          provider,
+        });
+        await acceptStep(context, result, undefined, true, startGeneration);
+      }
+    } catch (error) {
+      setFailure(context, startGeneration, purpose, error, provider);
+    }
+  }
+
+  return {
+    options,
+    view,
+    destination: destinationFor(view),
+    startSignIn: (provider) => start(provider, "signin"),
+    async confirmAccount() {
+      const active = operation.current;
+      if (!active || active.step.outcome !== "confirm") return;
+      const confirmGeneration = generation.current;
+      setView({ kind: "busy", purpose: "signin" });
+      try {
+        const surface = native ? "native" : "web";
+        const body = native ? { bindingSecret: active.bindingSecret } : {};
+        const signedIn = await postJson<SignedIn>(
+          `/api/auth/${surface}/attempts/${encodeURIComponent(active.step.attemptId)}/confirm`,
+          body,
+        );
+        await finishSignedIn(context, signedIn, confirmGeneration);
+      } catch (error) {
+        setFailure(
+          context,
+          confirmGeneration,
+          "signin",
+          error,
+          active.step.targetProvider,
+        );
+      }
+    },
+    async useUsualSignIn() {
+      const active = operation.current;
+      if (!active || active.step.outcome !== "confirm") return;
+      const usualGeneration = generation.current;
+      const provider =
+        active.step.targetProvider === "apple" ? "google" : "apple";
+      setView({ kind: "busy", purpose: "signin" });
+      await cancelActive(context);
+      if (generation.current !== usualGeneration) return;
+      setView({ kind: "usual", provider });
+    },
+    prepareLink(provider) {
+      generation.current += 1;
+      operation.current = null;
+      setView({ kind: "link_confirm", targetProvider: provider });
+    },
+    async startPreparedLink() {
+      if (view.kind !== "link_confirm") return;
+      await start(view.targetProvider, "link");
+    },
+    async authorizeLinkTarget() {
+      const active = operation.current;
+      if (!active || active.step.outcome !== "authorize") return;
+      if (native) {
+        await authorizeNative(
+          context,
+          active.step,
+          active.bindingSecret,
+          generation.current,
+        );
+      } else if (active.step.authorizationUrl) {
+        navigateWeb(active.step.authorizationUrl);
+      }
+    },
+    async cancel() {
+      const purpose =
+        operation.current?.step.purpose ??
+        (view.kind === "link_confirm" || view.kind === "link_authorize"
+          ? "link"
+          : "signin");
+      const targetProvider = operation.current?.step.targetProvider;
+      const cancelGeneration = ++generation.current;
+      await cancelActive(context);
+      if (generation.current !== cancelGeneration) return;
+      setView({
+        kind: "cancelled",
+        purpose,
+        ...(targetProvider ? { targetProvider } : {}),
+      });
+    },
+    reset() {
+      generation.current += 1;
+      operation.current = null;
+      setView({ kind: "idle" });
+    },
+    abandon() {
+      generation.current += 1;
+      operation.current = null;
+      setView({ kind: "idle" });
+    },
+  };
+}
