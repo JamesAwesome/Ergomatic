@@ -19,10 +19,24 @@ import {
   concept2AuthAttempts,
   concept2Links,
   sessionLogs,
-  users,
   workouts,
 } from "./schema.js";
 import type pg from "pg";
+
+async function seedHistoricalUser(
+  db: Db,
+  user: { googleSub: string; email: string; name: string },
+) {
+  // Migration fixtures span schemas older than the current users model, so
+  // pin the columns that have existed since 0000 instead of letting Drizzle
+  // emit newer columns against an older table.
+  const inserted = await db.execute<{ id: string }>(
+    sql`insert into "users" ("google_sub", "email", "name")
+        values (${user.googleSub}, ${user.email}, ${user.name})
+        returning "id"`,
+  );
+  return inserted.rows[0]!;
+}
 
 describe("migrations", () => {
   let container: StartedPostgreSqlContainer;
@@ -125,14 +139,11 @@ describe("migration 0008: the workouts wu-strip", () => {
   });
 
   it("strips a legacy wu step on migrate, byte-preserving the rest, and is idempotent", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "wu-strip-user",
-        email: "wu@strip.test",
-        name: "WU",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "wu-strip-user",
+      email: "wu@strip.test",
+      name: "WU",
+    });
 
     // Seeded RAW (the ORM insert, but with a shape validateWorkoutInput
     // rejects today): this shape can only exist as data written before wu
@@ -207,14 +218,11 @@ describe("migration 0008: the workouts wu-strip", () => {
   });
 
   it("leaves a wu-free workout completely untouched", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "no-wu-user",
-        email: "nowu@strip.test",
-        name: "NoWU",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "no-wu-user",
+      email: "nowu@strip.test",
+      name: "NoWU",
+    });
     const steps = [
       {
         k: "w",
@@ -258,14 +266,11 @@ describe("migration 0008: the workouts wu-strip", () => {
   // aborts, and since migrations run before the API serves a request, the
   // whole deploy never comes up. This is that missing test.
   it("strips a wu-ONLY workout to steps: [], not a migration failure", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "wu-only-user",
-        email: "wu-only@strip.test",
-        name: "WU Only",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "wu-only-user",
+      email: "wu-only@strip.test",
+      name: "WU Only",
+    });
 
     // A single-element array whose only step is `wu` — the exact legacy
     // shape spec §6/B4 says can exist (bulk import accepted a bare `wu 10`
@@ -387,14 +392,11 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
   });
 
   it("keeps an existing row's held/effort values, and reads thumbs back as null, after 0009 applies", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "pre-0009-user",
-        email: "pre-0009@migrate.test",
-        name: "Pre 0009",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "pre-0009-user",
+      email: "pre-0009@migrate.test",
+      name: "Pre 0009",
+    });
 
     // Seeded against the PRE-0009 schema (held/pain both NOT NULL — the
     // column is `pain` until 0024 renames it, so raw SQL names it; no
@@ -430,14 +432,11 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
   });
 
   it("accepts a NEW row with held/effort/thumbs all null once 0009 has applied", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "post-0009-user",
-        email: "post-0009@migrate.test",
-        name: "Post 0009",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "post-0009-user",
+      email: "post-0009@migrate.test",
+      name: "Post 0009",
+    });
 
     // migrate() above (previous test, same shared container) already
     // applied 0009 — this insert exercises the loosened constraint
@@ -536,14 +535,11 @@ describe("migration 0010: hero numbers and plan linkage", () => {
     );
     await migrate(db, { migrationsFolder: tempDir });
 
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "pre-0010-user",
-        email: "pre-0010@migrate.test",
-        name: "Pre 0010",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "pre-0010-user",
+      email: "pre-0010@migrate.test",
+      name: "Pre 0010",
+    });
 
     // Seeded against the PRE-0010 schema (none of the five new columns
     // exist yet) — raw SQL, not the typed `sessionLogs` insert helper, for
@@ -590,14 +586,11 @@ describe("migration 0010: hero numbers and plan linkage", () => {
   });
 
   it("accepts a NEW row with all five columns populated, the double-precision hero values surviving exactly, once 0010 has applied", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "post-0010-user",
-        email: "post-0010@migrate.test",
-        name: "Post 0010",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "post-0010-user",
+      email: "post-0010@migrate.test",
+      name: "Post 0010",
+    });
 
     // beforeAll above already applied 0010 (shared container) — this
     // insert exercises the new columns directly against the real table,
@@ -693,14 +686,11 @@ describe("migration 0011: the series column", () => {
     );
     await migrate(db, { migrationsFolder: tempDir });
 
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "pre-0011-user",
-        email: "pre-0011@migrate.test",
-        name: "Pre 0011",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "pre-0011-user",
+      email: "pre-0011@migrate.test",
+      name: "Pre 0011",
+    });
 
     // Seeded against the PRE-0011 schema (no series column at all) — raw
     // SQL, same reason 0010's own block above uses it: the typed
@@ -738,14 +728,11 @@ describe("migration 0011: the series column", () => {
   });
 
   it("accepts a NEW row with series populated, round-tripping exactly, once 0011 has applied", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "post-0011-user",
-        email: "post-0011@migrate.test",
-        name: "Post 0011",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "post-0011-user",
+      email: "post-0011@migrate.test",
+      name: "Post 0011",
+    });
 
     const series = {
       samples: [
@@ -841,14 +828,11 @@ describe("migration 0012: the ended_by column", () => {
     );
     await migrate(db, { migrationsFolder: tempDir });
 
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "pre-0012-user",
-        email: "pre-0012@migrate.test",
-        name: "Pre 0012",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "pre-0012-user",
+      email: "pre-0012@migrate.test",
+      name: "Pre 0012",
+    });
 
     // Seeded against the PRE-0012 schema (no ended_by column at all) —
     // raw SQL, same reason 0010/0011's own blocks above use it: the typed
@@ -886,14 +870,11 @@ describe("migration 0012: the ended_by column", () => {
   });
 
   it("accepts a NEW row with each ended_by value round-tripping exactly, once 0012 has applied — including the legacy 'interrupted' value the widened union carries forward unchanged", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "post-0012-user",
-        email: "post-0012@migrate.test",
-        name: "Post 0012",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "post-0012-user",
+      email: "post-0012@migrate.test",
+      name: "Post 0012",
+    });
 
     const values = [
       "finished",
@@ -928,14 +909,11 @@ describe("migration 0012: the ended_by column", () => {
   });
 
   it("rejects an unknown ended_by value — the enum, not application code, is the gate", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "post-0012-reject-user",
-        email: "post-0012-reject@migrate.test",
-        name: "Post 0012 Reject",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "post-0012-reject-user",
+      email: "post-0012-reject@migrate.test",
+      name: "Post 0012 Reject",
+    });
 
     await expect(
       db.execute(
@@ -1014,14 +992,11 @@ describe("migration 0013: baseline provenance columns", () => {
     );
     await migrate(db, { migrationsFolder: tempDir });
 
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "pre-0013-user",
-        email: "pre-0013@migrate.test",
-        name: "Pre 0013",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "pre-0013-user",
+      email: "pre-0013@migrate.test",
+      name: "Pre 0013",
+    });
     preMigrationUserId = u.id;
 
     // Seeded against the PRE-0013 schema (no source columns at all) — raw
@@ -1058,14 +1033,11 @@ describe("migration 0013: baseline provenance columns", () => {
   });
 
   it("defaults a fresh row's sources to 'manual' when the insert names neither — an old server binary writing post-migration stays truthful", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "post-0013-user",
-        email: "post-0013@migrate.test",
-        name: "Post 0013",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "post-0013-user",
+      email: "post-0013@migrate.test",
+      name: "Post 0013",
+    });
     // Raw SQL naming ONLY the pre-0013 columns: this is the exact
     // statement shape a not-yet-redeployed server (or any writer that
     // never learned the source columns) still issues after the DB has
@@ -1166,14 +1138,11 @@ describe("migration 0016: the machine summary columns", () => {
     );
     await migrate(db, { migrationsFolder: tempDir });
 
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "pre-0016-user",
-        email: "pre-0016@migrate.test",
-        name: "Pre 0016",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "pre-0016-user",
+      email: "pre-0016@migrate.test",
+      name: "Pre 0016",
+    });
 
     // Seeded against the PRE-0016 schema (no machine_* columns at all) —
     // raw SQL, same reason 0011/0013's own blocks above use it: the typed
@@ -1213,14 +1182,11 @@ describe("migration 0016: the machine summary columns", () => {
   });
 
   it("accepts a NEW row with all three machine columns populated, round-tripping exactly (fractional seconds included) once 0016 has applied", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "post-0016-user",
-        email: "post-0016@migrate.test",
-        name: "Post 0016",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "post-0016-user",
+      email: "post-0016@migrate.test",
+      name: "Post 0016",
+    });
 
     const machineSummary = {
       verificationBytes: [118, 120, 230, 126, 35, 227, 228, 1],
@@ -1337,14 +1303,11 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
     );
     await migrate(db, { migrationsFolder: tempDir });
 
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "pre-0018-user",
-        email: "pre-0018@migrate.test",
-        name: "Pre 0018",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "pre-0018-user",
+      email: "pre-0018@migrate.test",
+      name: "Pre 0018",
+    });
 
     // Seeded against the PRE-0018 schema (no c2_*/completed_at/tz columns
     // at all) — raw SQL, same reason 0011/0013/0016's own blocks above use
@@ -1422,14 +1385,11 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
   });
 
   it("accepts a NEW row with completedAt/tz populated, round-tripping exactly, once 0018 has applied", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "post-0018-user",
-        email: "post-0018@migrate.test",
-        name: "Post 0018",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "post-0018-user",
+      email: "post-0018@migrate.test",
+      name: "Post 0018",
+    });
 
     const completedAt = new Date("2026-08-30T12:00:00.000Z");
     const [row] = await db
@@ -1460,14 +1420,11 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
   });
 
   it("round-trips a concept2_links row, including a set needs_reauth_at", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "c2-link-user",
-        email: "c2-link@migrate.test",
-        name: "C2 Link",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "c2-link-user",
+      email: "c2-link@migrate.test",
+      name: "C2 Link",
+    });
 
     const expiresAt = new Date("2026-09-01T00:00:00.000Z");
     const needsReauthAt = new Date("2026-08-31T18:00:00.000Z");
@@ -1494,14 +1451,11 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
   });
 
   it("round-trips a concept2_auth_attempts row, needs_reauth_at absent by default", async () => {
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "c2-attempt-user",
-        email: "c2-attempt@migrate.test",
-        name: "C2 Attempt",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "c2-attempt-user",
+      email: "c2-attempt@migrate.test",
+      name: "C2 Attempt",
+    });
 
     await db.insert(concept2AuthAttempts).values({
       nonce: "nonce-1",
@@ -1544,7 +1498,7 @@ describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
   // identical shape (0020 vs #268's 0021), applied here: a SECOND capped
   // folder, so this block keeps testing 0021 alone regardless of how many
   // migrations ship after it.
-  let tempDirThrough21: string;
+  let tempDirThrough21: string | undefined;
   let seededUserId: string;
   // Captured in beforeAll, asserted in the first `it` — the staging is only
   // a proof about THIS migration if these hold. Literals, never derived
@@ -1607,14 +1561,11 @@ describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
     );
     await migrate(db, { migrationsFolder: tempDir });
 
-    const [u] = await db
-      .insert(users)
-      .values({
-        googleSub: "pre-0021-user",
-        email: "pre-0021@migrate.test",
-        name: "Pre 0021",
-      })
-      .returning();
+    const u = await seedHistoricalUser(db, {
+      googleSub: "pre-0021-user",
+      email: "pre-0021@migrate.test",
+      name: "Pre 0021",
+    });
     seededUserId = u.id;
 
     // TWO live attempts for ONE user, seeded against the pre-0021 schema —
@@ -1660,7 +1611,9 @@ describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
   afterAll(async () => {
     await pool.end().catch(() => {});
     await container.stop().catch(() => {});
-    await rm(tempDirThrough21, { recursive: true, force: true });
+    if (tempDirThrough21 !== undefined) {
+      await rm(tempDirThrough21, { recursive: true, force: true });
+    }
   });
 
   it("staged 0000..0020, then applied 0021 alone", () => {
@@ -1721,14 +1674,11 @@ describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
   });
 
   it("D1: two Ergomatic users cannot hold the same Concept2 account (UNIQUE c2_user_id)", async () => {
-    const [other] = await db
-      .insert(users)
-      .values({
-        googleSub: "post-0021-other",
-        email: "post-0021-other@migrate.test",
-        name: "Other",
-      })
-      .returning();
+    const other = await seedHistoricalUser(db, {
+      googleSub: "post-0021-other",
+      email: "post-0021-other@migrate.test",
+      name: "Other",
+    });
     // RAW SQL, the same treatment (and for the same reason) this block's
     // `surface` inserts above already carry: Drizzle's typed
     // `.insert(concept2Links)` builder emits EVERY declared column,
