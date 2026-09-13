@@ -193,6 +193,7 @@ main {
 
 .auth-flow-screen {
   display: flex;
+  max-width: 520px;
   min-height: 100dvh;
   flex-direction: column;
 }
@@ -378,11 +379,11 @@ button.auth-method-row {
   letter-spacing: 0.1em;
 }
 
-.auth-notice-success {
+.notice.auth-notice-success {
   border-color: var(--success);
 }
 
-.auth-notice-error {
+.notice.auth-notice-error {
   border-color: var(--accent);
 }
 
