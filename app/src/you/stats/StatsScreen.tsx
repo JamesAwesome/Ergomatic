@@ -13,11 +13,13 @@ import {
   type DateRange,
   type Preset,
 } from "../../../domain/stats/calendar.js";
+import { seasonSummary } from "../../../domain/stats/season.js";
 import type { DatedStatsRow } from "../../../domain/stats/statsRow.js";
 import { metresPerWeek } from "../../../domain/stats/weekly.js";
 import { useStatsRows } from "../../api/useStatsRows";
 import BackLink from "../../shell/BackLink";
 import { fmtDate, fmtRangeLine, parseDate } from "./format";
+import SeasonGroup from "./SeasonGroup";
 import StatsFilterBar, { type CustomProblem } from "./StatsFilterBar";
 import TimeByTypeGroup from "./TimeByTypeGroup";
 import TotalsGroup from "./TotalsGroup";
@@ -159,6 +161,9 @@ function Body({
           />
         </>
       )}
+      {/* SEASON never filters (§5 item 5, invariant 19): it renders
+          whatever the range holds, an empty CUSTOM included. */}
+      <SeasonGroup summary={seasonSummary(rows, today)} />
     </>
   );
 }

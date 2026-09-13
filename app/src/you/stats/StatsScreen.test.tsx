@@ -231,13 +231,13 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
   it("one row in range: TOTALS in full (1 OF 1 · 237 W for R13) and TIME BY TYPE reads TWO ROWS MAKE A CHART", async () => {
     await renderScreen(GATE0_ROWS.filter((r) => r.id === "R13"));
     expect(rowValue("AVG WATTS", 2)).toBe("237");
-    // R13 alone: METRES PER WEEK and TIME BY TYPE each say so — one per
-    // group, in §5's order.
+    // R13 alone: METRES PER WEEK, TIME BY TYPE and SEASON (one season row)
+    // each say so — three, one per group, in §5's order.
     expect(
       screen
         .getAllByText("TWO ROWS MAKE A CHART")
         .map((el) => el.closest("section")?.querySelector("h2")?.textContent),
-    ).toStrictEqual(["METRES PER WEEK", "TIME BY TYPE"]);
+    ).toStrictEqual(["METRES PER WEEK", "TIME BY TYPE", "SEASON 2027"]);
   });
 
   // Ruling 6's dash: MACHINE rows exist but every one is stored-tier, so
@@ -376,5 +376,49 @@ describe("/you/stats — PR 2: the range line, the groups in order, SEASON and T
       group.getByText("NO METRES IN THESE EIGHT WEEKS"),
     ).toBeInTheDocument();
     expect(group.queryByRole("img")).toBeNull();
+  });
+
+  it("SEASON 2027 draws 43,012 TODAY, AVG M/DAY 319 M, CURRENT STREAK 3 and LONGEST STREAK 3 — and does not move when the filter does", async () => {
+    await renderScreen(GATE0_ROWS);
+    const season = within(screen.getByRole("region", { name: "SEASON 2027" }));
+    expect(season.getByText("43,012 TODAY")).toBeInTheDocument();
+    const tile = (label: string) =>
+      season
+        .getByText(label)
+        .nextElementSibling?.querySelector(".stats-tile-value")?.textContent;
+    expect(tile("AVG M/DAY")).toBe("319");
+    expect(tile("CURRENT STREAK")).toBe("3");
+    expect(tile("LONGEST STREAK")).toBe("3");
+    expect(season.getAllByText("WEEKS · ERGOMATIC")).toHaveLength(2);
+    // The SVG's <text> is pruned under role="img": the figures are SAID.
+    expect(season.getByRole("img").getAttribute("aria-label")).toBe(
+      "Season 2027 cumulative metres, 43,012 today, 319 per day, current streak 3, longest 3",
+    );
+    fireEvent.click(chip("MONTH"));
+    expect(rowValue("METRES", 1)).toBe("5,000");
+    expect(season.getByText("43,012 TODAY")).toBeInTheDocument();
+  });
+
+  it("a CUSTOM range with no rows still renders SEASON under the NO ROWS BETWEEN line", async () => {
+    await renderScreen(GATE0_ROWS);
+    fireEvent.click(chip("CUSTOM"));
+    fireEvent.change(screen.getByLabelText("FROM"), {
+      target: { value: "2026-09-12" },
+    });
+    expect(screen.getByText(/^NO ROWS BETWEEN/)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "TOTALS" })).toBeNull();
+    expect(
+      screen.getByRole("region", { name: "SEASON 2027" }),
+    ).toBeInTheDocument();
+  });
+
+  it("the season card at 0 season rows reads NO ROWS THIS SEASON YET whatever the lifetime count (R1-R4 alone)", async () => {
+    await renderScreen(GATE0_ROWS.slice(0, 4));
+    expect(rowValue("METRES", 1)).toBe("13,740");
+    expect(
+      within(screen.getByRole("region", { name: "SEASON 2027" })).getByText(
+        "NO ROWS THIS SEASON YET",
+      ),
+    ).toBeInTheDocument();
   });
 });
