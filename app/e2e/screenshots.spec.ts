@@ -2699,6 +2699,48 @@ test("you-stats", async ({ page }) => {
   // PR 2: the TEST TREND is the last group and its 2k label the last thing
   // the seeded page renders (two fetches; the second lands after the first).
   await page.getByText("2K 1:54.0").waitFor();
+
+  // THE MACHINE COLUMN'S THREE NUMBERS DO NOT RECONCILE, ON PURPOSE, AND
+  // THIS PINS IT SO THE NEXT READER IS NOT CHASING A GHOST.
+  //
+  // `logbookWatts` is `round(2.8 / (seconds / meters) ** 3)`. Over the two
+  // cells above it — 36,752 m and 2:34:31, which is 9,271 s — that gives
+  // **174**, and the tile renders **176**. The difference is not a bug in
+  // the arithmetic: `aggregate.ts` excludes `tier: "stored"` rows from the
+  // watts accumulator (§14 ruling 6 — those rows fall back to
+  // `distanceMeters`/`timeSeconds`, which include rest, and would drag the
+  // figure) while `totals(machine)` beside it counts them. So METRES and
+  // TIME describe a SUPERSET of the rows AVG WATTS is computed from.
+  //
+  // The seam line that said so — `k ROWS PREDATE WORK-ONLY TOTALS · NOT IN
+  // AVG WATTS` — was struck by rulings 18 and 19, which is why the screen
+  // now offers no way to tell. `storedTierRows` is still computed and has
+  // no consumer anywhere.
+  //
+  // MEASURED ON PRODUCTION 2026-09-13, and it is why this is pinned rather
+  // than fixed: James's own data has TWO stored-tier rows and both carry a
+  // null distance and time, so they contribute nothing either way and the
+  // gap there is EXACTLY ZERO (111,118 m and 29,747 s on both populations,
+  // 146 W on both). The mismatch is visible here only because this seed
+  // deliberately builds a stored row WITH a distance — "the stored tier by
+  // having nothing else" (`gate0LogBodies.ts`) — which is the one row
+  // covering that tier and must not be weakened to make the frame tidy.
+  //
+  // Pinned with INDEPENDENT literals, not by importing the aggregate, so
+  // this goes red if the product changes rather than retuning with it. When
+  // the design pass rules on what the MACHINE column means, this assertion
+  // is the thing that should fail.
+  // By the row's ACCESSIBLE NAME, not a substring: `hasText: "METRES"` also
+  // matches `REST METRES`, and `TIME` also matches `AVG WATTS`'s neighbours
+  // — both are strict-mode violations rather than wrong answers, which is a
+  // fast failure but a confusing one.
+  await expect(
+    page.getByRole("row", { name: "METRES 56,752 36,752" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("row", { name: "TIME 3:59:39 2:34:31" }),
+  ).toBeVisible();
+  await expect(page.getByRole("row", { name: "AVG WATTS 176" })).toBeVisible();
   // /you/stats is a plain-flow route with the fixed `.tabbar` on screen
   // (not in HIDDEN_TABBAR_PREFIXES); a fullPage capture re-paints that bar
   // in every stitched segment (reason 1 above) — the first capture drew it

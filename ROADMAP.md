@@ -482,14 +482,32 @@ generation):
       job 103570288978) — its health-gated wait passed against the real
       production database with 0029 applied, which is the actual event the
       "curl the deployed `/api/prefs`" line above exists to catch a failure
-      of. **Not independently re-verified by this session's own authenticated
-      request**: `GET /api/prefs` requires a session this sandbox holds no
-      production credentials for, AND its network egress to
-      `ergomatic.waffle.haus` is itself blocked (`curl` fails with
-      `CONNECT tunnel failed, response 403` — an organization proxy policy,
-      not a server-side failure) — a by-hand authenticated curl is still
-      James's to run if he wants the stronger check; the clean deploy is
-      strong evidence on its own.
+      of. **RE-VERIFIED BY HAND 2026-09-13, and it passed.** James ran the
+      authenticated read in a browser at `https://ergomatic.waffle.haus`:
+      `await (await fetch('/api/prefs')).json()` — same-origin, so
+      the `erg_session` cookie rides automatically, and `originCheck`
+      (`app/server/auth/middleware.ts:41-62`) gates only MUTATING methods,
+      so a GET with no `Origin` passes. Production reported
+      `{"ok":true,"db":true,"version":"v0.46.0-4-g99f82298"}` at the time of
+      the check, and the body carried all six declared keys:
+      `timeCapMinutes: 60`, `countdownSeconds: 10`,
+      `paceToleranceSeconds: 1`, `accentColor: "#b5341f"`,
+      `startHereDismissed: true`, `baselinesSkipped: false`.
+      **`baselinesSkipped` being present is the thing this line existed to
+      catch:** `createPreferencesStore.get`
+      (`app/server/stores/preferences.ts:28-33`) does
+      `db.select().from(preferences)`, which drizzle expands to an EXPLICIT
+      column list, so a silently-skipped 0026 would 500 here whether or not
+      the user has a row. And `startHereDismissed: true` differs from
+      `PREFERENCES_DEFAULTS` (`false`, `preferences.ts:20`), which proves
+      this was a real row out of Postgres rather than the no-row default
+      object `get()` falls back to.
+      **What this read still cannot see, stated rather than dropped:**
+      whether 0029's DROPs landed. `workouts.difficulty`, its enum and
+      `preferences.difficulties` being GONE is invisible from the API;
+      confirming it needs `\d preferences` against the production database,
+      and no SSH entry for the deploy host exists in `~/.ssh/config`. Not
+      currently scheduled.
 **Exit:** the two phase-close greps in spec §6 (no `pain`/`difficult`; and
 `effort` means one thing) pasted into the close gate; e2e and screenshots
 green with refreshed captures; the by-hand stale-build check (a `v0.38.1`
@@ -2544,6 +2562,27 @@ in both orientations.**
       pass does not currently cover, and it landed 2026-09-12 (Phase PS PR 1
       and PR 2), two days AFTER this pass was dated. Whether it joins the
       pass or is fixed ahead of it is James's call at the Gate 0. **S**
+      **MEASURED ON PRODUCTION 2026-09-13, and it downgrades this row: the
+      gap there is EXACTLY ZERO.** James's data holds 26 `pm5` rows — 10
+      `steps`, 8 `machine`, 6 `work-pair` and **2 `stored`** — and both
+      stored rows carry a NULL distance and time, so they contribute nothing
+      to either population: 111,118 m and 29,747 s on both, **146 W on
+      both**. So no rower can see this today, and the 176-vs-174 above is an
+      E2E FIXTURE artefact, not a shipped defect.
+      **It is still latent and it will fire.** `stored` is not a legacy tier
+      — it is the fallback rung of a four-rung ladder
+      (`rowContribution.ts`), reached whenever work-only cannot be
+      established. The first such row that carries a DISTANCE — a link-lost
+      session that still recorded metres — makes the gap visible at once,
+      and nothing prevents one.
+      **The capture was NOT made to reconcile, deliberately.** The seed
+      builds its stored row "by having nothing else" with a distance, and it
+      is the only row covering that tier; tidying the frame would delete the
+      coverage and hide the behaviour. Instead `screenshots.spec.ts`'s
+      `you-stats` now PINS all three numbers with independent literals and a
+      comment naming the seam, so a reviewer recomputing from the frame is
+      told why rather than chasing a ghost — and so this assertion is what
+      goes red when the design pass rules.
 
 - **The chart's axes** — should `traceModel.ts`'s `t` and `d` become a true
   work-only clock? The PR-2 collision is discharged by labelling
