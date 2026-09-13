@@ -119,10 +119,13 @@ describe("supported auth producers through Express and signed tokens", () => {
               throw new Error("No legacy callback in this fixture");
             },
           },
-          nativeVerifier: async () => ({
+          // Token-driven so the unverified-email arm runs through the REAL
+          // producer (`login` -> `attempts.legacyGoogle`) rather than a stub
+          // standing in for it.
+          nativeVerifier: async (idToken: string) => ({
             sub: "legacy",
             email: "outside@allowlist.test",
-            emailVerified: true,
+            emailVerified: idToken !== "legacy-proof-unverified",
             name: "Legacy",
           }),
         }),
@@ -376,6 +379,22 @@ describe("supported auth producers through Express and signed tokens", () => {
       "/?authResult=cancelled&authPurpose=signin&authProvider=apple",
     );
     expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
+  });
+  it("legacy native Google denies an unverified email the same way with the front door on", async () => {
+    // `signin.ts` states the shared gate sequence "email_verified -> existing-sub
+    // -> policy -> ..." and answers 403 {outcome:"denied", email}. With the front
+    // door configured the same claims route through `attempts.legacyGoogle`
+    // instead, so the denial must survive that swap: an env var must not turn a
+    // client-class refusal into a 500 (RF34 — an invariant applied to one of the
+    // two paths it governs).
+    const response = await request(app)
+      .post("/api/auth/native")
+      .send({ idToken: "legacy-proof-unverified" });
+    expect(response.status).toBe(403);
+    expect(response.body).toStrictEqual({
+      error: "denied",
+      email: "outside@allowlist.test",
+    });
   });
   it("legacy native Google keeps direct-create token response with allowlist empty", async () => {
     const response = await request(app)
@@ -893,6 +912,53 @@ describe("supported auth producers through Express and signed tokens", () => {
       expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(0);
     },
   );
+  it("a rejected LINK callback reports its own purpose and target, not signin", async () => {
+    // The redirect's authPurpose is what routes the rower to a surface that can
+    // show the failure. A signed-in rower never renders a signin-purpose error
+    // (`SignInMethods` returns null unless purpose === "link"), so reporting a
+    // link failure as signin bounces them silently to Today and makes the whole
+    // recovery path — the notice, the methods refetch, "Start linking again" —
+    // unreachable.
+    const start = await request(app)
+      .post("/api/auth/web/attempts")
+      .set("Origin", "https://erg.test")
+      .send({ purpose: "signin", provider: "google" });
+    const s = start.body;
+    const startCookie = start.headers["set-cookie"][0].split(";")[0];
+    codes.set(
+      "google-link-purpose",
+      await googleJwt(s.nonce, "google-link-purpose", "google.web"),
+    );
+    await request(app)
+      .get("/api/auth/google/callback")
+      .query({ state: s.state, code: "google-link-purpose" })
+      .set("Cookie", startCookie);
+    const signed = await request(app)
+      .post(`/api/auth/web/attempts/${s.attemptId}/confirm`)
+      .set("Origin", "https://erg.test")
+      .set("Cookie", startCookie)
+      .send({});
+    const sessionCookie = (signed.headers["set-cookie"] as unknown as string[])
+      .find((c) => c.startsWith("erg_session="))!
+      .split(";")[0];
+    const begun = await request(app)
+      .post("/api/auth/web/attempts")
+      .set("Origin", "https://erg.test")
+      .set("Cookie", sessionCookie)
+      .send({ purpose: "link", provider: "apple" });
+    expect(begun.status).toBe(200);
+    const binding = begun.headers["set-cookie"][0].split(";")[0];
+
+    // A wrong state on a live LINK attempt: rejected at the state check, which
+    // sits above the line that reads the attempt's real purpose.
+    const rejected = await request(app)
+      .get("/api/auth/google/callback")
+      .set("Cookie", binding)
+      .query({ state: "not-the-state", code: "google-link-purpose" });
+    expect(rejected.headers.location).toContain("authError=invalid_proof");
+    expect(rejected.headers.location).toContain("authPurpose=link");
+    expect(rejected.headers.location).toContain("authProvider=apple");
+  });
   it("wrong callback provider cannot consume valid operation; old callback cannot cancel confirmation", async () => {
     const begin = await request(app)
       .post("/api/auth/web/attempts")

@@ -308,9 +308,23 @@ export function createFrontDoorRoutes(deps: {
     let owned: Attempt | undefined;
     let binding: { id: string; bindingSecret: string } | undefined;
     let purpose: AuthPurpose = "signin";
+    let targetProvider: AuthProvider | undefined;
     try {
       binding = webBinding(req);
       const a = await attempts.read(binding.id, binding.bindingSecret, "web");
+      // Read the attempt's own purpose and target the moment it loads, NOT
+      // after the state/stage checks below. They only feed the failure
+      // redirect's query string, and that string is what routes the rower to
+      // a surface able to render the failure: `SignInMethods` returns null
+      // unless the purpose is "link", and a signed-in rower never renders a
+      // signin-purpose error at all. Assigning these later made every
+      // rejection at those two checks report a link failure as `signin`, so
+      // the rower was bounced silently to Today with the whole recovery path
+      // — notice, methods refetch, "Start linking again" — unreachable.
+      // `owned` stays below the checks on purpose: it is the discard
+      // authority, and these two are not.
+      purpose = a.purpose;
+      targetProvider = a.targetProvider;
       const body = record(provider === "apple" ? req.body : req.query);
       const state = requiredText(body.state, 128);
       if (state !== a.state || attemptProvider(a) !== provider)
@@ -373,7 +387,7 @@ export function createFrontDoorRoutes(deps: {
           : undefined;
       res.redirect(
         303,
-        `/?authError=${code}${email ? `&authEmail=${encodeURIComponent(email)}` : ""}&authPurpose=${purpose}${owned ? `&authProvider=${owned.targetProvider}` : ""}`,
+        `/?authError=${code}${email ? `&authEmail=${encodeURIComponent(email)}` : ""}&authPurpose=${purpose}${targetProvider ? `&authProvider=${targetProvider}` : ""}`,
       );
     }
   }

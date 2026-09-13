@@ -483,8 +483,16 @@ export function createAttempts(pool: pg.Pool, accessPolicy: AccessPolicy) {
       return result.rows[0];
     },
     async legacyGoogle(identity: VerifiedIdentity): Promise<SignedIn> {
+      // `access_denied`, not `invalid_proof`: this is the SAME refusal
+      // `signInWithClaims` answers with `{outcome:"denied", email}` on the
+      // path this replaces when the front door is configured (`signin.ts`'s
+      // stated sequence, "email_verified -> existing-sub -> policy -> ..."),
+      // and `login`'s catch maps only `access_denied` back to that outcome.
+      // Throwing `invalid_proof` here rethrew instead, so configuring Apple
+      // turned a client-class refusal into a 500 on native and the wrong
+      // notice on web — one invariant, two paths, applied to one of them.
       if (!identity.emailVerified || !identity.email)
-        throw new AuthFailure("invalid_proof");
+        throw new AuthFailure("access_denied", identity.email || undefined);
       return transaction(async (tx) => {
         const user = (
           await tx.query<AuthUser>(
