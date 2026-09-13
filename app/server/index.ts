@@ -2,6 +2,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { createFrontDoor, frontDoorConfig } from "./auth/frontDoor.js";
 import { createApp } from "./app.js";
 import { createAccessPolicy } from "./auth/accessPolicy.js";
+import { parseAllowlist } from "./auth/allowlist.js";
 import { createGoogleProvider, type OAuthProvider } from "./auth/google.js";
 import { createNativeVerifier } from "./auth/nativeVerify.js";
 import { createSessionStore } from "./auth/sessions.js";
@@ -89,9 +90,12 @@ const accessPolicy = createAccessPolicy(
   process.env.ACCESS_MODE,
   process.env.ALLOWED_EMAILS,
 );
-if (accessPolicy.mode === "restricted" && !process.env.ALLOWED_EMAILS?.trim()) {
+if (
+  accessPolicy.mode === "restricted" &&
+  parseAllowlist(process.env.ALLOWED_EMAILS).size === 0
+) {
   console.warn(
-    "WARNING: ALLOWED_EMAILS is empty — nobody can create an account",
+    "WARNING: ALLOWED_EMAILS is empty — all account access is blocked",
   );
 }
 
