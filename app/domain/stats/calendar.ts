@@ -114,8 +114,16 @@ export function presetRange(
 export function customRange(
   from: CalendarDate,
   to: CalendarDate,
+  today: CalendarDate,
 ): DateRange | null {
-  return compareDates(from, to) > 0 ? null : { from, to };
+  // The ONE owner of the future-TO clamp (PR 2 review, item 1): no row is
+  // dated after today, so a typed `to` past today admits nothing and would
+  // only re-anchor the bars and mislabel the range line. Clamped here,
+  // every reader — totals, the range line, the empty line, the bars —
+  // sees the same range; `metresPerWeek` keeps its own clamp as defence.
+  // A FROM after the clamped TO is the order problem, not a future range.
+  const end = compareDates(to, today) > 0 ? today : to;
+  return compareDates(from, end) > 0 ? null : { from, to: end };
 }
 
 /** `YYYY-MM-DD` — what `<input type="date">` speaks and what the seed

@@ -84,6 +84,25 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
     expect(rowValue("METRES", 1)).toBe("5,000");
   });
 
+  // Review item 1: ONE owner of the future-TO clamp (`customRange`), so
+  // the totals, the range line and the bars all read the same range.
+  // Mutation: drop the clamp → the line reads `14 AUG TO 31 DEC 2026`.
+  it("a typed future TO (2026-12-31) clamps to today everywhere: the range line ends TO 12 SEP 2026, METRES stays 18,000, the bars end this week", async () => {
+    await renderScreen(GATE0_ROWS);
+    fireEvent.click(chip("CUSTOM"));
+    fireEvent.change(screen.getByLabelText("TO"), {
+      target: { value: "2026-12-31" },
+    });
+    expect(document.querySelector(".stats-range")?.textContent).toBe(
+      "14 AUG TO 12 SEP 2026",
+    );
+    expect(rowValue("METRES", 1)).toBe("18,000");
+    expect(
+      document.querySelector(".stats-bar-current")?.getAttribute("data-week"),
+    ).toBe("2026-09-07");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("a CUSTOM range with no rows reads NO ROWS BETWEEN <from> AND <to> with the filter bar still shown", async () => {
     await renderScreen(GATE0_ROWS);
     fireEvent.click(chip("CUSTOM"));

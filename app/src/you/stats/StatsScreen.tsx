@@ -55,7 +55,10 @@ export default function StatsScreen() {
     setCustom(next);
     const from = parseDate(next.from);
     const to = parseDate(next.to);
-    const r = from && to ? customRange(from, to) : null;
+    const r =
+      from && to && state.state === "ready"
+        ? customRange(from, to, state.today)
+        : null;
     if (r) setApplied(r);
   }
 
@@ -128,7 +131,7 @@ function Body({
       ? null
       : from === null || to === null
         ? "empty"
-        : customRange(from, to) === null
+        : customRange(from, to, today) === null
           ? "order"
           : null;
   // The seeded pair IS the 30 DAYS range, so an untouched CUSTOM reads it.

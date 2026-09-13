@@ -35,6 +35,8 @@ export function metresPerWeek(
 ): WeekBar[] {
   // A CUSTOM `to` after today would anchor the window on a future week and
   // draw future zero baselines: the anchor is never later than today.
+  // `customRange` already clamps such a `to` (the one owner); this is
+  // defence for a caller that builds a DateRange by hand, with its own pin.
   const anchor =
     range.to === null || compareDates(range.to, today) > 0 ? today : range.to;
   const lastWeek = mondayOf(anchor);

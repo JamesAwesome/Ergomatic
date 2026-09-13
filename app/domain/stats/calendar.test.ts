@@ -93,10 +93,20 @@ describe("calendar — pure { y, m, d } arithmetic (spec §3.3, invariant 14)", 
     });
   });
 
-  it("custom: from ≤ to is a range (equal is one day); from > to is null", () => {
+  it("custom: from ≤ to is a range (equal is one day); from > to is null; a TO after today is clamped to today, the ONE owner of that clamp", () => {
     const d = { y: 2026, m: 9, d: 12 };
-    expect(customRange(d, d)).toStrictEqual({ from: d, to: d });
-    expect(customRange({ y: 2026, m: 9, d: 13 }, d)).toBeNull();
+    expect(customRange(d, d, d)).toStrictEqual({ from: d, to: d });
+    expect(customRange({ y: 2026, m: 9, d: 13 }, d, d)).toBeNull();
+    // A typed 2026-12-31 admits no row (none is dated after today) and
+    // would re-anchor nothing: the range ends today.
+    expect(
+      customRange({ y: 2026, m: 8, d: 14 }, { y: 2026, m: 12, d: 31 }, d),
+    ).toStrictEqual({ from: { y: 2026, m: 8, d: 14 }, to: d });
+    // Both ends in the future: FROM follows the clamped TO — the order
+    // problem, not an empty future range.
+    expect(
+      customRange({ y: 2026, m: 12, d: 1 }, { y: 2026, m: 12, d: 31 }, d),
+    ).toBeNull();
   });
 });
 
