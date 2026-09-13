@@ -231,7 +231,13 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
   it("one row in range: TOTALS in full (1 OF 1 · 237 W for R13) and TIME BY TYPE reads TWO ROWS MAKE A CHART", async () => {
     await renderScreen(GATE0_ROWS.filter((r) => r.id === "R13"));
     expect(rowValue("AVG WATTS", 2)).toBe("237");
-    expect(screen.getByText("TWO ROWS MAKE A CHART")).toBeInTheDocument();
+    // R13 alone: METRES PER WEEK and TIME BY TYPE each say so — one per
+    // group, in §5's order.
+    expect(
+      screen
+        .getAllByText("TWO ROWS MAKE A CHART")
+        .map((el) => el.closest("section")?.querySelector("h2")?.textContent),
+    ).toStrictEqual(["METRES PER WEEK", "TIME BY TYPE"]);
   });
 
   // Ruling 6's dash: MACHINE rows exist but every one is stored-tier, so
@@ -330,5 +336,45 @@ describe("/you/stats — PR 2: the range line, the groups in order, SEASON and T
     });
     expect(rangeLine()).toBe("8 NOV 2025 TO 12 SEP 2026");
     expect(rowValue("METRES", 1)).toBe("56,752");
+  });
+
+  it("METRES PER WEEK on ALL: labels on the tallest (13,000) and the current (2,000) bars only, THIS WK on the axis, the current bar in ink", async () => {
+    await renderScreen(GATE0_ROWS);
+    const chart = within(screen.getByRole("img", { name: /^Metres per week/ }));
+    expect(
+      Array.from(
+        document.querySelectorAll(".stats-bar-label"),
+        (t) => t.textContent,
+      ),
+    ).toStrictEqual(["13,000", "2,000"]);
+    expect(chart.getByText("THIS WK")).toBeInTheDocument();
+    expect(document.querySelectorAll(".stats-bar-current")).toHaveLength(1);
+    expect(
+      document.querySelector(".stats-bar-current")?.getAttribute("data-week"),
+    ).toBe("2026-09-07");
+    expect(document.querySelectorAll(".stats-bar-out")).toHaveLength(0);
+    fireEvent.click(chip("30 DAYS"));
+    expect(document.querySelectorAll(".stats-bar-out")).toHaveLength(3);
+    expect(screen.getByText("OUT OF RANGE")).toBeInTheDocument();
+    // role="img" prunes the SVG's <text>: the label is what AT hears, and
+    // it must say "outside the range", never a raw 0, for those weeks.
+    const label = screen
+      .getByRole("img", { name: /^Metres per week/ })
+      .getAttribute("aria-label")!;
+    expect(label).toContain("20 JUL outside the range");
+    expect(label).toContain("this week 2,000");
+    expect(label).not.toMatch(/JUL 0\b/);
+  });
+
+  it("two rows older than the window on ALL: METRES PER WEEK reads NO METRES IN THESE EIGHT WEEKS and draws no chart", async () => {
+    await renderScreen(GATE0_ROWS.slice(0, 2)); // R1 Nov 2025, R2 Jan 2026
+    expect(rowValue("SESSIONS", 1)).toBe("2");
+    const group = within(
+      screen.getByRole("region", { name: "METRES PER WEEK" }),
+    );
+    expect(
+      group.getByText("NO METRES IN THESE EIGHT WEEKS"),
+    ).toBeInTheDocument();
+    expect(group.queryByRole("img")).toBeNull();
   });
 });

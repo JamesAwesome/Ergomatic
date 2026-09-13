@@ -14,12 +14,14 @@ import {
   type Preset,
 } from "../../../domain/stats/calendar.js";
 import type { DatedStatsRow } from "../../../domain/stats/statsRow.js";
+import { metresPerWeek } from "../../../domain/stats/weekly.js";
 import { useStatsRows } from "../../api/useStatsRows";
 import BackLink from "../../shell/BackLink";
 import { fmtDate, fmtRangeLine, parseDate } from "./format";
 import StatsFilterBar, { type CustomProblem } from "./StatsFilterBar";
 import TimeByTypeGroup from "./TimeByTypeGroup";
 import TotalsGroup from "./TotalsGroup";
+import WeekBarsGroup from "./WeekBarsGroup";
 import { NO_ROWS_YET } from "./YouStatsHero";
 
 /**
@@ -147,6 +149,10 @@ function Body({
       ) : (
         <>
           <TotalsGroup summary={summary} />
+          <WeekBarsGroup
+            bars={metresPerWeek(rows, range, today)}
+            rowsInRange={inRange.length}
+          />
           <TimeByTypeGroup
             buckets={timeByType(rows, range)}
             rowsInRange={inRange.length}

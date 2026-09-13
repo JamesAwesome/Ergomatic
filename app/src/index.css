@@ -12220,3 +12220,44 @@ section:not(.news-pinned) .news-row:last-of-type {
 .stats-range {
   margin-top: 8px;
 }
+.stats-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.stats-grid {
+  stroke: var(--rule-2);
+  stroke-width: 1;
+}
+.stats-tick {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  fill: var(--ink-3);
+}
+.stats-bar {
+  fill: var(--ink-4);
+}
+.stats-bar-current {
+  fill: var(--ink);
+}
+.stats-bar-zero {
+  stroke: var(--ink-4);
+  stroke-width: 2;
+}
+.stats-bar-zero.stats-bar-current {
+  stroke: var(--ink);
+}
+.stats-bar-out {
+  fill: none;
+  stroke: var(--rule-2);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+.stats-bar-label,
+.stats-point-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  fill: var(--ink);
+}
