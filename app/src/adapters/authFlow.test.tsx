@@ -611,7 +611,6 @@ describe("useAuthFlow", () => {
       kind: "link_authorize",
       targetProvider: "apple",
       provider: "apple",
-      existingProofComplete: true,
     });
   });
 
@@ -955,7 +954,6 @@ describe("useAuthFlow", () => {
                   kind,
                   targetProvider: "apple",
                   provider: "google",
-                  existingProofComplete: true,
                 }
               : kind === "busy"
                 ? { kind, purpose: "signin" }

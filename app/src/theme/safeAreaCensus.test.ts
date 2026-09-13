@@ -81,6 +81,30 @@ function topLevelBodiesFor(cls: string): string[] {
     .map((rule) => rule.body);
 }
 
+describe("the sign-in stack reserves its buttons' height before they arrive", () => {
+  it("`.signin .auth-stack` declares a min-height, so the first screen does not pop", () => {
+    // Both provider buttons are gated on an options fetch inside a grid that
+    // collapses to zero until they land. Without this the front door paints an
+    // empty box and then shifts. Deleting the rule makes this go red; the
+    // literal is independent of the production value by construction, since it
+    // is asserted as a presence plus a floor rather than an equality.
+    const rule = rules.find(
+      (r) =>
+        r.at.length === 0 &&
+        r.selectors.some((sel) => sel.trim() === ".signin .auth-stack"),
+    );
+    expect(rule, "no `.signin .auth-stack` rule in index.css").toBeDefined();
+    const match = /min-height:\s*(\d+)px/.exec(rule!.body);
+    expect(
+      match,
+      "`.signin .auth-stack` declares no min-height",
+    ).not.toBeNull();
+    // Two 52px controls and one 12px gap is the shape the approved render
+    // shows; anything shorter still pops.
+    expect(Number(match![1])).toBeGreaterThanOrEqual(116);
+  });
+});
+
 describe("safe-area census: every full-screen <main> pads its own insets", () => {
   const classes = layoutRootClasses();
 

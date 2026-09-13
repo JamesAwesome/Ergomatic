@@ -154,6 +154,19 @@ main {
   gap: 12px;
 }
 
+/* RESERVE THE SPACE THE BUTTONS WILL OCCUPY. Both provider buttons are gated
+   on `auth.options.state === "ready"`, i.e. on a network round-trip, inside a
+   grid that collapses to zero height until they arrive — so the first screen
+   a tester sees paints a heading, a tagline and nothing, then pops two 52px
+   buttons in and shifts the page. On `main` the sign-in button rendered
+   unconditionally with no network dependency, so this is new here. Two 52px
+   controls plus the 12px gap; reserving it is not a design choice, it is the
+   height the approved Gate 0 render already shows. #418's layout-shift
+   lesson, on the one screen every rower meets first. */
+.signin .auth-stack {
+  min-height: 116px;
+}
+
 .auth-provider-button {
   position: relative;
   display: flex;

@@ -143,7 +143,7 @@ describe("supported auth producers through Express and signed tokens", () => {
     exchangeOutsideLock = false;
     app = await freshApp();
   });
-  it.each(["new", "legacy-native", "legacy-web"])(
+  it.each(["new"])(
     "anonymous start request 121 is rejected after 120 shared admissions (%s)",
     async (first) => {
       // Independent spec literals: never derive these bounds from the limiter.
@@ -180,20 +180,28 @@ describe("supported auth producers through Express and signed tokens", () => {
       const web = await request(app)
         .post("/api/auth/web/attempts")
         .send({ purpose: "signin", provider: "apple" });
+      expect(web.status).toBe(429);
+      expect(web.body).toStrictEqual({ error: "rate_limited" });
+      // THE LEGACY DOORS STAY OPEN, and this is the assertion that keeps them
+      // that way (James, 2026-09-13). They used to be in this bucket, which
+      // meant configuring Apple put a globally keyed 120/min limiter in front
+      // of the Google door every current tester uses — `main` has none. A
+      // budget already exhausted by 121 anonymous front-door starts must not
+      // reach them.
       const legacyNative = await request(app)
         .post("/api/auth/native")
         .send({ idToken: "legacy-proof" });
+      expect(legacyNative.status).toBe(200);
       const legacyWeb = await request(app).get("/api/auth/signin");
-      for (const response of [web, legacyNative, legacyWeb]) {
-        expect(response.status).toBe(429);
-        expect(response.body).toStrictEqual({ error: "rate_limited" });
-      }
+      expect(legacyWeb.status).toBe(302);
       expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(
         resident,
       );
-      expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(
-        first === "legacy-native" ? 1 : 0,
-      );
+      // ONE session, and it is the proof that the fold worked: the legacy
+      // native call above was REJECTED before this change (it shared the
+      // exhausted bucket) and now completes, so it mints a session. A zero
+      // here would mean the legacy door is still being rate-limited.
+      expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(1);
       expect(exchangeOutsideLock).toBe(false);
     },
   );

@@ -59,10 +59,15 @@ export function createAuthRouter({
     };
   }
 
-  if (frontDoor) {
-    router.get("/api/auth/signin", frontDoor.admission);
-    router.post("/api/auth/native", frontDoor.admission);
-  }
+  // THE LEGACY DOORS ARE DELIBERATELY NOT RATE-LIMITED (James, 2026-09-13,
+  // reversing this spec's own bound on the PM gate's finding). They used to
+  // carry `frontDoor.admission` whenever Apple was configured, which meant
+  // merging this PR put a GLOBALLY keyed 120/min bucket in front of the Google
+  // door every tester uses today — main has no limiter on these paths at all,
+  // and `express-rate-limit` is new here. 121 unauthenticated requests from
+  // anywhere would have locked out every rower's sign-in for the rest of the
+  // window, on a path this PR has no business changing. The new front-door
+  // routes keep their bucket; this restores main's behaviour on the old ones.
 
   router.get("/api/auth/signin", async (_req, res) => {
     if (!oauth) {

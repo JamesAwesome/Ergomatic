@@ -52,7 +52,6 @@ describe("LinkSignInMethod", () => {
       kind: "link_authorize",
       targetProvider: "google",
       provider: "google",
-      existingProofComplete: true,
     });
     render(<LinkSignInMethod auth={auth} />);
     expect(screen.getByLabelText("Usual sign-in confirmed")).toBeVisible();

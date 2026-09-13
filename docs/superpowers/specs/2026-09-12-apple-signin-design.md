@@ -284,9 +284,14 @@ guessing a client IP through the proxy. Version 8.7.0 was returned by
 Its documented global-key and fail-closed settings provide this mechanism
 ([package configuration](https://express-rate-limit.mintlify.app/reference/configuration),
 PRIMARY). This is a shared admission limit, not a claim to stop targeted
-denial of service or to identify an attacker by IP. Existing Google legacy
-account-creation requests receive the same bound and a supported error
-response if it fires.
+denial of service or to identify an attacker by IP. **The bound applies to the
+NEW front-door routes only. Existing Google legacy requests are deliberately
+NOT limited (James, 2026-09-13), reversing this paragraph's original
+position:** those paths carry no limiter on `main`, every current tester signs
+in through them, and a global key means 121 anonymous requests from anywhere
+would lock out the whole cohort — a regression this slice has no reason to
+introduce. Extending admission to the legacy doors is a separate decision with
+its own evidence.
 
 The database additionally caps live anonymous attempts at 512. Minting
 serializes that count-and-insert decision using one fixed transaction-level

@@ -7,6 +7,7 @@ import type {
   AuthPurpose,
   AuthStep,
   NativeBegin,
+  NativeProof,
   SignedIn,
 } from "../../shared/auth";
 import { api } from "../api";
@@ -37,12 +38,6 @@ export type AuthFlowView =
       kind: "link_authorize";
       targetProvider: AuthProvider;
       provider: AuthProvider;
-      /** Always `true` where it is set, and read by no production code —
-       * `LinkSignInMethod` derives its ✓ from `view.kind` instead. Kept
-       * because the view union is the client's own contract and a field
-       * removal is a wider edit than this round; filed as a row rather than
-       * deleted in passing. */
-      existingProofComplete: boolean;
     }
   | { kind: "linked"; targetProvider: AuthProvider }
   | {
@@ -426,7 +421,6 @@ async function acceptStep(
       kind: "link_authorize",
       targetProvider: step.targetProvider,
       provider: step.provider,
-      existingProofComplete: true,
     });
   }
   if (context.native && autoAuthorize) {
@@ -454,12 +448,12 @@ async function authorizeNative(
   const bindingSecret = active.bindingSecret;
   try {
     if (!bindingSecret) throw new AuthRequestError("invalid_request");
-    let proof: {
-      state: string;
-      idToken: string;
-      authorizationCode?: string;
-      name?: string;
-    };
+    // The SHARED contract, not a re-declaration. `NativeProof` had exactly one
+    // reference in the repo — its own declaration — so the native proof shape
+    // was written twice independently (here, and parsed field-by-field on the
+    // server) and compiler-checked against neither. It could not drift loudly,
+    // only silently. Typing the body against it makes a rename a build error.
+    let proof: Omit<NativeProof, "bindingSecret">;
     if (step.provider === "apple") {
       const { AppleAuth } = await import("../native/appleAuth");
       if (!ownsOperation(context, active, generation, owner)) return;
@@ -479,9 +473,10 @@ async function authorizeNative(
       };
     }
     if (!ownsOperation(context, active, generation, owner)) return;
+    const body: NativeProof = { bindingSecret, ...proof };
     const next = await postJson<AuthStep>(
       `/api/auth/native/attempts/${encodeURIComponent(step.attemptId)}/proof`,
-      { bindingSecret, ...proof },
+      body,
     );
     if (!ownsOperation(context, active, generation, owner)) return;
     if (next.outcome === "link_ready") {
