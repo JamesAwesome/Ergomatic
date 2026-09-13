@@ -326,6 +326,24 @@ toolkit, not a history.
     mutation.
 35. **Lens 2 — `page.goto` after a delete proves reload, not remount.** A "no
     cache outlives the screen" invariant needs one same-document leg.
+36. **A "no write in flight" guard is a liveness check on a shared slot, not
+    an ordering proof.** `pendingWrites.size > 0` cannot tell a GET that
+    predates a write from one that postdates it — a write that SETTLES before
+    the slow GET resolves empties the slot and the stale response is applied.
+    Ask what VALUE makes the ordering decidable (an epoch we increment and
+    sample at issue time) before accepting any size/emptiness guard, and check
+    whether the design newly lets a write start while a GET is in flight.
+37. **A gate that waits for a condition is vacuous once a cache makes that
+    condition true at first render — check the path the gate EXISTS for.**
+    News's scroll restore waits on `contentSettled`; every mount it serves
+    (BACK from Reader) is warm, so the wait never waits. Name the mount the
+    gate is for, then ask whether the new fast path is that exact mount.
+38. **A per-account clear placed on the sign-out BUTTON misses the 401 path.**
+    `useMe`'s non-OK arm signs out without calling `signOut()`, and native
+    sign-in re-enters the same document — so unkeyed module state crosses
+    accounts. The repo already bounded one instance of this by KEYING the fact
+    to `user.id` (`You.tsx`'s `clearConcept2Seen`); an unkeyed cache inherits
+    the gap without the bound.
 
 ## Things attacked and found sound
 

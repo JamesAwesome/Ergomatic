@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-  PostgreSqlContainer,
-  type StartedPostgreSqlContainer,
-} from "@testcontainers/postgresql";
+import { type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { startPostgres } from "../testing/postgres.js";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { sql } from "drizzle-orm";
 import request from "supertest";
@@ -71,7 +69,7 @@ describe("POST/GET /api/logs: source is required (v0.35.0 sunset), refused when 
   let app: ReturnType<typeof createApp>;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
     await migrate(db, { migrationsFolder: "drizzle" });
     app = createApp(
@@ -347,7 +345,7 @@ describe("migration 0020 backfills every pre-existing row and leaves the column 
   };
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
     // Stage 0000..0019: the same SQL files, the journal cut before 0020.

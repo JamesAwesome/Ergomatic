@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { NEWEST_RELEASE_VERSION } from "./releasePin";
-import { RUN_ID, signInViaBackdoor } from "./helpers";
+import { RUN_ID, signInViaBackdoor, stableBoundingBox } from "./helpers";
 
 // Phase 6H Task 7: the News tab proven against the real stack — the one
 // thing no client test can give is the cross-reload proof that a read
@@ -582,4 +582,75 @@ test("article titles used by this file exist in the registry", async ({
       page.locator(".news-row-title").filter({ hasText: title }),
     ).toHaveCount(1);
   }
+});
+
+// Spec 2026-09-12-news-layout-shift §4 — the layout-shift gate. The frame
+// News paints BEFORE /api/article-reads settles must have the same geometry
+// as the frame it paints after: the unread square's column is reserved in
+// every reads state (invariant G1). Measured on a COLD document (a fresh
+// `page.goto`, so the hook's module-level last-known set is empty and the
+// loading frame genuinely exists — asserted below, not assumed, so a warm
+// cache cannot make this gate vacuous) for a rower who has one article READ
+// (so the settled frame contains a ` · READ` suffix and a 400-weight title
+// beside the reserved gutter — the one combination no Gate 0 receipt had).
+// Mutation that turns it red: restore `isRead !== undefined &&` in front of
+// the square in `ArticleRow` — three LATEST rows grow by 21px and WHAT'S NEW
+// drops 62px (390×844).
+test("News paints the same row geometry before and after the reads fetch settles (no layout shift)", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `news-no-shift-${RUN_ID}@e2e.test`,
+    name: "News No Shift",
+  });
+  // One read on the server first, in its own document. The reader paints
+  // its title before its own GET resolves and before its mark-read effect
+  // sends the PUT, so the title alone proves nothing about the server —
+  // wait for the PUT's response (review finding: a navigation while it is
+  // in flight aborts it and the count below reads 7, a flake, not a
+  // vacuous green). The route glob below does not match this URL.
+  const put = page.waitForResponse(
+    (r) =>
+      r.request().method() === "PUT" &&
+      r.url().endsWith("/api/article-reads/effort-scale"),
+  );
+  await page.goto("/news/effort-scale");
+  await expect(page.locator(".reader-title")).toHaveText(EFFORT_SCALE_TITLE);
+  expect((await put).ok()).toBe(true);
+
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/article-reads", async (route) => {
+    await held;
+    await route.continue();
+  });
+
+  // A NEW document: the module cache is cold and the loading frame is real.
+  await page.goto("/news");
+  await expect(page.locator(".news-row")).toHaveCount(7);
+  // The loading frame, observed: every square reserved, none claiming a
+  // read state, no count.
+  await expect(page.locator(".news-square")).toHaveCount(7);
+  await expect(page.locator(".news-square[data-read]")).toHaveCount(0);
+  await expect(page.locator(".news-unread-count")).toHaveCount(0);
+
+  const boxesOf = async () => {
+    const rows = await page.locator(".news-row").all();
+    const boxes = [];
+    for (const row of rows) boxes.push(await stableBoundingBox(row));
+    boxes.push(await stableBoundingBox(page.locator(".news-whatsnew")));
+    return boxes;
+  };
+  const before = await boxesOf();
+
+  release();
+  await expect(page.locator(".news-unread-count")).toHaveText("6 UNREAD");
+  await expect(
+    page.locator('a.news-row[href="/news/effort-scale"]'),
+  ).toHaveAttribute("data-read", "true");
+  const after = await boxesOf();
+
+  expect(after).toEqual(before);
 });

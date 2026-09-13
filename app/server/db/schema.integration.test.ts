@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-  PostgreSqlContainer,
-  type StartedPostgreSqlContainer,
-} from "@testcontainers/postgresql";
+import { type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { startPostgres } from "../testing/postgres.js";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { eq, sql } from "drizzle-orm";
 import {
@@ -32,7 +30,7 @@ describe("migrations", () => {
   let db: Db;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
     await migrate(db, { migrationsFolder: "drizzle" });
   });
@@ -89,7 +87,7 @@ describe("migration 0008: the workouts wu-strip", () => {
   ];
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
     // A migrations folder containing only 0000-0007, so migrate() below
@@ -350,7 +348,7 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
   ];
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
     // A migrations folder containing only 0000-0008, so migrate() below
@@ -505,7 +503,7 @@ describe("migration 0010: hero numbers and plan linkage", () => {
   ];
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
     // A migrations folder containing only 0000-0009, so migrate() below
@@ -663,7 +661,7 @@ describe("migration 0011: the series column", () => {
   ];
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
     // A migrations folder containing only 0000-0010, so migrate() below
@@ -811,7 +809,7 @@ describe("migration 0012: the ended_by column", () => {
   ];
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
     // A migrations folder containing only 0000-0011, so migrate() below
@@ -984,7 +982,7 @@ describe("migration 0013: baseline provenance columns", () => {
   ];
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
     // A migrations folder containing only 0000-0012 (amused_wild_child
@@ -1136,7 +1134,7 @@ describe("migration 0016: the machine summary columns", () => {
   ];
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
     // A migrations folder containing only 0000-0015, so migrate() below
@@ -1305,7 +1303,7 @@ describe("migration 0018: concept2_links, concept2_auth_attempts, session_logs c
   ];
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
     // A migrations folder containing only 0000-0017, so migrate() below
@@ -1579,7 +1577,7 @@ describe("migration 0021: attempts surface + UNIQUE(user_id), links UNIQUE(c2_us
   ];
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
     tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0021-"));
@@ -1770,7 +1768,7 @@ describe("migration 0024: pain → effort, and the article slug", () => {
   let tempDir: string;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
     const journal = JSON.parse(
       await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
@@ -1888,7 +1886,7 @@ describe("migration 0030: users.google_sub becomes nullable, the unique constrai
   let tempDir: string;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
 
     const journal = JSON.parse(

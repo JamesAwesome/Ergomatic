@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-  PostgreSqlContainer,
-  type StartedPostgreSqlContainer,
-} from "@testcontainers/postgresql";
+import { type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { startPostgres } from "../testing/postgres.js";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { eq } from "drizzle-orm";
 import type pg from "pg";
@@ -18,7 +16,7 @@ describe("session lifecycle against real Postgres", () => {
   let userId: string;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18.4").start();
+    container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
     await migrate(db, { migrationsFolder: "drizzle" });
     store = createSessionStore(db);

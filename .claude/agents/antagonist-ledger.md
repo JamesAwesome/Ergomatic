@@ -6,6 +6,56 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## 2026-09-12 — News layout-shift spec (`/harden` lens 1, full pass: invented mechanism + RF27)
+
+Spec: `docs/superpowers/specs/2026-09-12-news-layout-shift-design.md`. Eight
+mechanism findings, three bookkeeping; all folded as the spec's revision 2.
+
+- **C3 BROKEN.** `pendingWrites.size > 0` is liveness, not identity. Warm
+  cache → `Reader.tsx`'s mark-read effect now fires on the FIRST render
+  (impossible today, where it is gated on a `ready` only a resolved GET
+  produces) → PUT can settle before News's slow GET resolves → the pre-write
+  response is applied and the slug flips back. Fix: a module write-epoch
+  sampled at GET issue, drop-and-retry-once on mismatch.
+- **C3 left the instance's state unstated.** A cold instance whose GET is
+  discarded would sit in `loading` forever, pinning `contentSettled` false.
+  Ruled unreachable (a cold cache admits no writes) and stated.
+- **C4's NAME was false on native.** `useMe.ts`'s non-OK/throw arm signs out
+  without `adapters/auth.tsx:signOut`; `SignInButton`'s native arm re-signs-in
+  in the SAME document (web escapes only because it navigates to
+  `/api/auth/signin`). `You.tsx`'s `clearConcept2Seen` comment documents this
+  exact path and bounds it by KEYING to `user.id` — a bound `lastKnown` lacks.
+  Fix: clear at every transition to `out` inside `useMe.ts`, via one helper.
+- **RF27 table was incomplete.** `listeners` had no mint/clear sites; the spec
+  never said whether `publish` is gated by `cancelled`, which decides whether
+  an unmounted instance may write module state. Now: not gated; `cancelled`
+  gates only the instance-local error setState.
+- **The scroll-restore gate becomes immediate** on warm mounts — i.e. on
+  every BACK from Reader, the only path it exists for — while §1 presented it
+  as unchanged protection. Accepted in writing; the ungated reconcile-after-
+  restore case is said aloud.
+- **Receipts half-covered the claim.** `gate0.mjs` measured the reserved
+  gutter on a ZERO-reads account (no `· READ`, no 400-weight title);
+  `probe-shift.mjs` had a read row but injected no gutter; its second PUT used
+  `pain-scale`, retired by Phase DE (`articles.tsx` has `effort-scale`), so it
+  marked one row, not two. `probe-weight.mjs`'s h500/h400 HELD despite its
+  401s — it sets `style.fontWeight` in place, so read state is irrelevant to
+  it — but ran portrait-390 only. The e2e gate now measures the combination
+  on a cold document with a read row, and asserts it saw the loading frame.
+- **HELD:** the gutter arithmetic (`box-sizing: border-box` makes the square
+  exactly 10px outer); "identical to a read square"; no dark mode exists
+  (`prefers-color-scheme` count 0 in `index.css` and `theme/tokens.css`); a
+  tab tap cannot jump (`TabBar.tsx`'s `CLEAR_ON_TAB["/news"]`); the count
+  adds no height; News and Reader are never mounted together (one `<Routes>`).
+- **Wrong justification, right invariant:** §5's "paints `--page` on `--page`"
+  — `.news-pinned` is `background: var(--surface)`, so pinned squares are
+  `#f4f1e8` on `#fffdf7`, 1.110:1 computed. Already how the read square ships,
+  so the invariant survives.
+- **Could not establish:** whether a second shift exists on James's phone. The
+  wrap claim is width-bound at 302px/390px viewport and his device width is
+  unstated; a device screen recording would settle it. Filed in the spec's
+  out-of-scope as the next instrument if the tab still moves.
+
 ## 2026-09-12 — Phase MD exit pass (close-out, main `b2e26701`)
 
 Attacked the seven exit-criteria claims in `docs/closeouts/close-MD.md` and the

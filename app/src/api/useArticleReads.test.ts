@@ -284,9 +284,13 @@ describe("useArticleReads", () => {
     expect(second.result.current.readSlugs.has("baselines")).toBe(true);
   });
 
-  it("the barrier stays honest about a FAILED write: no local guess survives it", async () => {
-    // Distinguishes the barrier from an optimistic local union, which would
-    // claim the article is read even though the server never recorded it.
+  it("a failed write is corrected by the next reconciling read, never by a local guess", async () => {
+    // Since the 2026-09-12 layout-shift spec the app IS an optimistic local
+    // union until the server answers: the warm second mount renders the
+    // failed write as read (from the last-known set) — asserted below, on
+    // purpose — and the barrier's reconciling GET is what corrects it. What
+    // this gates is that the correction HAPPENS: a design that applied the
+    // optimistic set as if it were server truth would stay `true`.
     let rejectPut: (() => void) | undefined;
     const apiMock = vi.fn(async (_url: string, init?: RequestInit) => {
       if (init?.method === "PUT") {
@@ -308,9 +312,183 @@ describe("useArticleReads", () => {
     });
 
     const second = renderHook(() => useArticleReads());
-    act(() => rejectPut!());
-    await waitFor(() => expect(second.result.current.state).toBe("ready"));
     if (second.result.current.state !== "ready") throw new Error("ready");
-    expect(second.result.current.readSlugs.has("baselines")).toBe(false);
+    expect(second.result.current.readSlugs.has("baselines")).toBe(true);
+    act(() => rejectPut!());
+    // The barrier releases the reconciling GET only once the PUT settled;
+    // its `[]` is the truth and replaces the guess.
+    await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => {
+      if (second.result.current.state !== "ready") throw new Error("ready");
+      expect(second.result.current.readSlugs.has("baselines")).toBe(false);
+    });
+  });
+});
+
+// Spec 2026-09-12-news-layout-shift §3 — the module-level last-known set.
+// Every test here starts from a fresh module (`vi.resetModules` above), so
+// "cold" is the real cold: no GET has resolved in this module yet.
+describe("useArticleReads — last-known cache", () => {
+  function okGet(slugs: string[]) {
+    return new Response(JSON.stringify({ slugs }), { status: 200 });
+  }
+
+  it("C1: a mount after a successful read renders ready from the last known set at once, then refetches", async () => {
+    const apiMock = vi.fn(async () => okGet(["baselines"]));
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { useArticleReads } = await import("./useArticleReads");
+
+    const first = renderHook(() => useArticleReads());
+    expect(first.result.current.state).toBe("loading");
+    await waitFor(() => expect(first.result.current.state).toBe("ready"));
+    first.unmount();
+
+    const second = renderHook(() => useArticleReads());
+    // The FIRST read of the second instance's state — no waitFor.
+    if (second.result.current.state !== "ready") {
+      throw new Error(`expected ready, got ${second.result.current.state}`);
+    }
+    expect(second.result.current.readSlugs.has("baselines")).toBe(true);
+    await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("C2: a markRead on one mounted instance is visible on another before any request resolves", async () => {
+    const apiMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") return new Promise<Response>(() => {});
+      return okGet([]);
+    });
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { useArticleReads } = await import("./useArticleReads");
+
+    const a = renderHook(() => useArticleReads());
+    await waitFor(() => expect(a.result.current.state).toBe("ready"));
+    const b = renderHook(() => useArticleReads());
+    if (a.result.current.state !== "ready") throw new Error("ready");
+    const { markRead } = a.result.current;
+
+    act(() => {
+      markRead("effort-scale");
+    });
+
+    if (b.result.current.state !== "ready") throw new Error("ready");
+    expect(b.result.current.readSlugs.has("effort-scale")).toBe(true);
+  });
+
+  it("C3: a read issued before a write and resolving after that write SETTLED is dropped and re-issued — the write survives", async () => {
+    // The antagonist's interleaving (ledger 2026-09-12): with a warm cache
+    // the Reader marks read on its first render, so a PUT can go out after
+    // News's GET and land before that slow GET returns. An emptiness check
+    // on pending writes sees nothing pending and applies the stale set.
+    const gets: Array<(r: Response) => void> = [];
+    const apiMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") return new Response(null, { status: 204 });
+      return new Promise<Response>((resolve) => {
+        gets.push(resolve);
+      });
+    });
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { useArticleReads } = await import("./useArticleReads");
+
+    const first = renderHook(() => useArticleReads());
+    await waitFor(() => expect(gets).toHaveLength(1));
+    act(() => gets[0]!(okGet([])));
+    await waitFor(() => expect(first.result.current.state).toBe("ready"));
+    first.unmount();
+
+    const second = renderHook(() => useArticleReads());
+    await waitFor(() => expect(gets).toHaveLength(2)); // issued, held
+    if (second.result.current.state !== "ready") throw new Error("ready");
+    const { markRead } = second.result.current;
+    act(() => {
+      markRead("baselines");
+    });
+    // The PUT resolves immediately — let it settle before the GET returns.
+    await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(3));
+    await act(async () => {
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+
+    act(() => gets[1]!(okGet([]))); // the pre-write truth, arriving late
+    await waitFor(() => expect(gets).toHaveLength(3)); // re-issued once
+    if (second.result.current.state !== "ready") throw new Error("ready");
+    expect(second.result.current.readSlugs.has("baselines")).toBe(true);
+
+    // ONCE: a write that overtakes the retry too is dropped without a third
+    // GET — the next mount reconciles (bounded, like the barrier's two
+    // passes). A `while (stale)` loop would issue a fourth GET here.
+    act(() => {
+      markRead("effort-scale");
+    });
+    await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(5));
+    act(() => gets[2]!(okGet(["baselines"]))); // stale again: lacks effort-scale
+    await act(async () => {
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    expect(gets).toHaveLength(3);
+    if (second.result.current.state !== "ready") throw new Error("ready");
+    expect(second.result.current.readSlugs.has("baselines")).toBe(true);
+    expect(second.result.current.readSlugs.has("effort-scale")).toBe(true);
+  });
+
+  it("C4: clearArticleReadsCache makes the next mount cold", async () => {
+    const apiMock = vi.fn(async () => okGet(["baselines"]));
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { useArticleReads, clearArticleReadsCache } =
+      await import("./useArticleReads");
+
+    const first = renderHook(() => useArticleReads());
+    await waitFor(() => expect(first.result.current.state).toBe("ready"));
+    first.unmount();
+    clearArticleReadsCache();
+
+    const second = renderHook(() => useArticleReads());
+    expect(second.result.current.state).toBe("loading");
+  });
+
+  it("C4: a non-OK read on a warm mount clears the cache and reports error, and the next mount is cold", async () => {
+    let calls = 0;
+    const apiMock = vi.fn(async () => {
+      calls++;
+      return calls === 1
+        ? okGet(["baselines"])
+        : new Response(null, { status: 401 });
+    });
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { useArticleReads } = await import("./useArticleReads");
+
+    const first = renderHook(() => useArticleReads());
+    await waitFor(() => expect(first.result.current.state).toBe("ready"));
+    first.unmount();
+
+    const second = renderHook(() => useArticleReads());
+    expect(second.result.current.state).toBe("ready"); // warm, then...
+    await waitFor(() => expect(second.result.current.state).toBe("error"));
+    second.unmount();
+
+    const third = renderHook(() => useArticleReads());
+    expect(third.result.current.state).toBe("loading");
+  });
+
+  it("a network failure on a warm mount keeps showing the last known set", async () => {
+    let calls = 0;
+    const apiMock = vi.fn(async () => {
+      calls++;
+      if (calls === 1) return okGet(["baselines"]);
+      throw new Error("offline");
+    });
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { useArticleReads } = await import("./useArticleReads");
+
+    const first = renderHook(() => useArticleReads());
+    await waitFor(() => expect(first.result.current.state).toBe("ready"));
+    first.unmount();
+
+    const second = renderHook(() => useArticleReads());
+    await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    if (second.result.current.state !== "ready") throw new Error("ready");
+    expect(second.result.current.readSlugs.has("baselines")).toBe(true);
   });
 });
