@@ -106,7 +106,7 @@ if (accessPolicy.mode === "restricted") {
     //
     // The count, never the addresses. Apple-first accounts are private-relay
     // addresses and these logs are read over shoulders and pasted into chat
-    // (James's standing minimal-PII rule). A number is enough to send the
+    // (the standing minimal-PII rule). A number is enough to send the
     // operator to `select email from users;` on the host, which docs/deploy.md
     // now says.
     try {

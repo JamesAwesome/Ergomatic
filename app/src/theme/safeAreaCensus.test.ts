@@ -7,8 +7,8 @@ import { commentStrippedSource, cssRules } from "../test/cssView";
  * EVERY FULL-SCREEN `<main>` PADS ITS OWN TOP AND SIDES BY THE SAFE-AREA
  * INSET, and this is the only instrument in the repo that can say so.
  *
- * The defect it exists for has now happened twice. Phase SB (James's capture,
- * 2026-09-06) found `← BACK` rendering under the status-bar clock; the fix
+ * The defect it exists for has now happened twice. Phase SB (the 2026-09-06
+ * capture) found `← BACK` rendering under the status-bar clock; the fix
  * was `.screen`'s inset padding plus the `.status-backdrop` blur strip. Wave
  * A then added two NEW layout roots — `.signin` and `.auth-flow-screen` —
  * that are bare `<main>` elements rather than `.screen`, so they took the

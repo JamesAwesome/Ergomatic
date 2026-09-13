@@ -126,8 +126,8 @@ main {
   padding: 6px 20px 20px;
 }
 
-/* SAFE AREA, and it is not optional (Phase SB, James's capture of `← BACK`
-   under the clock, 2026-09-06 — see the status-backdrop note further down).
+/* SAFE AREA, and it is not optional (Phase SB, the 2026-09-06 capture of
+   `← BACK` under the clock — see the status-backdrop note further down).
    These two are bare <main> elements, so they take `main`'s flat
    `6px 20px 20px` and NOT `.screen`'s inset padding, which is what every
    other route in the app uses. With `viewport-fit=cover` that put the 44px
