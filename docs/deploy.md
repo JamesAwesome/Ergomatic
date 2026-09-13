@@ -149,8 +149,41 @@ container still reports healthy. The log gives a count, never the addresses —
 Apple-first accounts are private-relay addresses. To see which:
 
 ```sh
-docker compose exec db psql -U postgres -c 'select email from users;'
+docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select email from users;"'
 ```
+
+The service is `postgres`, not `db`, and the role and database both default to
+`ergomatic`, not `postgres` (`compose.yml`) — an earlier version of this block
+got both wrong. Expanding `$POSTGRES_USER`/`$POSTGRES_DB` INSIDE the container
+means the command works whatever the host `.env` sets them to, and needs no
+editing.
+
+**Before a deploy that changes access, check the whole condition at once.**
+This reads only the api container's own environment, prints counts rather than
+addresses, and applies the same trim-and-lowercase normalization the server
+uses, so it answers what the server will actually decide:
+
+```sh
+docker compose exec api node -e '
+const {Pool}=require("pg");
+const p=new Pool({connectionString:process.env.DATABASE_URL});
+const allow=new Set((process.env.ALLOWED_EMAILS||"").split(",").map(s=>s.trim().toLowerCase()).filter(Boolean));
+p.query("select email from users").then(r=>{
+const miss=r.rows.filter(x=>!allow.has(x.email.trim().toLowerCase())).length;
+console.log("ACCESS_MODE :",process.env.ACCESS_MODE||"(unset -> restricted)");
+console.log("accounts    :",r.rowCount);
+console.log("allowlist   :",allow.size);
+console.log("LOCKED OUT  :",miss,miss?"<-- FIX BEFORE DEPLOY":"(none)");
+return require("jose").importPKCS8(process.env.APPLE_PRIVATE_KEY||"","ES256").then(()=>console.log("PEM         : OK"),e=>console.log("PEM         : BAD -",e.message));
+}).then(()=>p.end());'
+```
+
+`LOCKED OUT: 0` and `PEM: OK` is the passing state. A bad PEM reads
+`Found a character that cannot be part of a valid base64 string` when the
+escaped `\n` was never decoded, and `"pkcs8" must be PKCS#8 formatted string`
+when the value is missing — and a partial `APPLE_*` set fails the boot outright
+rather than disabling Apple, so the whole API is down, not just sign-in. Both
+forms were measured against a real container on 2026-09-13.
 
 The current deployment at `ergomatic.waffle.haus` is staging. Use
 `ACCESS_MODE=restricted` and explicitly list tester account emails. Future
