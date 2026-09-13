@@ -4,7 +4,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import { signInViaBackdoor, stubBluetoothScanFailure } from "./helpers";
+import {
+  backdateLog,
+  signInViaBackdoor,
+  stubBluetoothScanFailure,
+} from "./helpers";
+import { GATE0_LOG_BODIES } from "../src/test/gate0LogBodies";
 import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
 import type { Step, WorkoutType } from "../domain/types.js";
 import { compileProgram } from "../domain/monitor/program.js";
@@ -2654,6 +2659,52 @@ test("import", async ({ page }) => {
   });
 });
 
+/** Phase PS PR 1: the Gate 0 seed through the API, each row backdated
+ *  to noon of its seed date in THIS RUNNER's zone. No `timezoneId` here,
+ *  so the browser shares the runner's zone and reads the same date back
+ *  whatever that zone is; `new Date("YYYY-MM-DDT12:00:00")` is Node's
+ *  local parse, and `toISOString()` hands `backdateLog` the instant. */
+async function seedGate0Stats(page: Page): Promise<void> {
+  for (const { id, date, body } of GATE0_LOG_BODIES) {
+    const created = await page.evaluate(async (b) => {
+      const res = await fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(b),
+      });
+      return { ok: res.ok, text: await res.text() };
+    }, body);
+    if (!created.ok) throw new Error(`${id}: ${created.text}`);
+    await backdateLog(
+      (JSON.parse(created.text) as { id: string }).id,
+      new Date(`${date}T12:00:00`).toISOString(),
+    );
+  }
+}
+
+// Phase PS PR 1 (Gate 0 A3): the subpage on the same seed, ALL selected.
+test("you-stats", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-stats@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await seedGate0Stats(page);
+  await page.clock.install({ time: new Date("2026-09-12T09:00:00") });
+  await page.goto("/you/stats");
+  // Ruling 19: no prose on the page; the AVG WATTS row is the last thing the
+  // seeded card renders.
+  await page.getByRole("row", { name: /^AVG WATTS/ }).waitFor();
+  // /you/stats is a plain-flow route with the fixed `.tabbar` on screen
+  // (not in HIDDEN_TABBAR_PREFIXES); a fullPage capture re-paints that bar
+  // in every stitched segment (reason 1 above) — the first capture drew it
+  // over the AN and AT legend rows. Same treatment as `builder`.
+  await neutralizeFixedTabBarForFullPageCapture(page);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-stats.png"),
+    fullPage: true,
+  });
+});
+
 test("you", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-you@e2e.test",
@@ -2665,7 +2716,13 @@ test("you", async ({ page }) => {
   // and the shortcut moved to `/you/baselines`, captured by "you-staged" and
   // the three "you-derive-offer" shots below.
   await setBaselines(page);
+  // Phase PS PR 1 (RF7): the hero derives its figures from rows, so the
+  // capture seeds the Gate 0 set — backdated to its seed dates, clock
+  // pinned to 2026-09-12 — and reads LIFETIME 56,752 · SEASON 2027 43,012.
+  await seedGate0Stats(page);
+  await page.clock.install({ time: new Date("2026-09-12T09:00:00") });
   await page.goto("/you");
+  await page.getByText("LIFETIME · 56,752 M").waitFor();
   // Same "LOADING…" race as /library: the row's state line is ABSENT until
   // its read lands, so waiting on the numbers themselves is what keeps this
   // from capturing a bare label and chevron.

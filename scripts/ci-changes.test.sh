@@ -93,6 +93,10 @@ setup
 check "$(commit_and_ask app/compose.yml)" "true" "compose files → run"
 teardown
 
+setup
+check "$(commit_and_ask docs/design/career-stats/seed.mjs)" "true" "the Gate 0 seed module under docs/ is a runtime import of a unit test (gate0Seed.test.ts) → run"
+teardown
+
 # --- fail-safe cases: uncertainty must never skip ---
 
 setup

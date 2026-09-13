@@ -546,6 +546,59 @@ export function describeStoreContracts(
     });
 
     describe("logs", () => {
+      // Phase PS PR 1 (spec §4.3): the stats projection. A new store method
+      // ships with its contract case (TESTING.md §5) — this is the one
+      // place the fake's hand-built projection and the real `select` are
+      // held to the same answer.
+      it("statsRows returns every row of THIS user only, steps whole, totalCalories as a number or null, and nothing of another user's", async () => {
+        const stores = await makeStores();
+        const mine = await stores.makeUser();
+        const theirs = await stores.makeUser();
+        const withCal = await stores.logs.create(
+          mine,
+          logInput({
+            steps: [{ label: "Work", actualMeters: 500, actualSeconds: 124 }],
+            machineSummary: { totalCalories: 37 },
+          }),
+        );
+        const badCal = await stores.logs.create(
+          mine,
+          logInput({ machineSummary: { totalCalories: "thirty-seven" } }),
+        );
+        await stores.logs.create(theirs, logInput());
+
+        const rows = await stores.logs.statsRows(mine);
+        expect(rows.map((r) => r.id).sort()).toStrictEqual(
+          [withCal.id, badCal.id].sort(),
+        );
+        const a = rows.find((r) => r.id === withCal.id)!;
+        expect(a.loggedAt).toBeInstanceOf(Date);
+        expect(a.totalCalories).toBe(37);
+        expect(a.steps).toStrictEqual([
+          { label: "Work", actualMeters: 500, actualSeconds: 124 },
+        ]);
+        expect(rows.find((r) => r.id === badCal.id)!.totalCalories).toBeNull();
+        expect(Object.keys(a).sort()).toStrictEqual(
+          [
+            "id",
+            "loggedAt",
+            "source",
+            "workoutType",
+            "endedBy",
+            "machineWorkSeconds",
+            "machineWorkMeters",
+            "workSeconds",
+            "workMeters",
+            "restSeconds",
+            "restMeters",
+            "distanceMeters",
+            "timeSeconds",
+            "steps",
+            "totalCalories",
+          ].sort(),
+        );
+      });
+
       // Wave E PR2 (observation 29). `sentC2ResultIds` is what stops the
       // weight-class declaration read from laundering OUR OWN derived guess
       // back as the rower's declaration on their next send. Both scopes are

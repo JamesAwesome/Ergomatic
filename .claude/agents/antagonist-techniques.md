@@ -299,19 +299,46 @@ toolkit, not a history.
     The 8/8 row and the ~half-unique conclusion reproduce under both, so the
     decision was safe and the figures are not quotable — which is the
     distinction to report.
-30. **A "no write in flight" guard is a liveness check on a shared slot, not
+30. **A refactor's capture-before contract is only as good as its TIER COVERAGE
+    — enumerate the fixtures by the branch each one LANDS ON, not by its name.**
+    Six "one per tier" fixtures covered machine ×2, work-pair ×2, stored ×2 and
+    the `steps` tier ZERO times — the one branch with a nullable field and a
+    hand-written key mapping (RF33). The tell: a fixture named for a tier it
+    only reaches under the mutation.
+31. **A zone pinned to the DEVELOPER'S OWN zone is green by environment twice
+    over** — the "did the pin take" assertion is vacuous locally, and any
+    Node-side `new Date("…T09:00:00")` or `resolvedOptions().timeZone` parses in
+    the RUNNER's zone while `test.use({timezoneId})` only moves the BROWSER.
+    Recompute the expected instant under UTC before believing a local pass.
+32. **Diff the prescribed CSS class list against the prescribed JSX.** Rules
+    with no element (`.stats-legend-row`, `.stats-legend-pct`) are invisible to
+    jsdom, to `textContent` assertions, and to the a11y sweep — only a capture
+    sees them. RF5 in the other direction.
+33. **Lens 2 — the zero-total surface.** When a chart's layout function
+    handles `total = 0` by returning `[]`, render the SURFACE with ≥ 2 rows
+    whose summed field is all-null and read what the rower sees: PS PR 1's bar
+    and legend both rendered EMPTY with a caption underneath, while every unit
+    test of the layout was green. The unit is right; the seam above it has no
+    sentence for "rows, but nothing to draw".
+34. **Lens 2 — a hand-rolled input map beside the ONE builder.** Grep every
+    test for the field-by-field `?? null` mapping the domain builder exists to
+    own; a test that maps by hand cannot see the builder's key-rename
+    mutation.
+35. **Lens 2 — `page.goto` after a delete proves reload, not remount.** A "no
+    cache outlives the screen" invariant needs one same-document leg.
+36. **A "no write in flight" guard is a liveness check on a shared slot, not
     an ordering proof.** `pendingWrites.size > 0` cannot tell a GET that
     predates a write from one that postdates it — a write that SETTLES before
     the slow GET resolves empties the slot and the stale response is applied.
     Ask what VALUE makes the ordering decidable (an epoch we increment and
     sample at issue time) before accepting any size/emptiness guard, and check
     whether the design newly lets a write start while a GET is in flight.
-31. **A gate that waits for a condition is vacuous once a cache makes that
+37. **A gate that waits for a condition is vacuous once a cache makes that
     condition true at first render — check the path the gate EXISTS for.**
     News's scroll restore waits on `contentSettled`; every mount it serves
     (BACK from Reader) is warm, so the wait never waits. Name the mount the
     gate is for, then ask whether the new fast path is that exact mount.
-32. **A per-account clear placed on the sign-out BUTTON misses the 401 path.**
+38. **A per-account clear placed on the sign-out BUTTON misses the 401 path.**
     `useMe`'s non-OK arm signs out without calling `signOut()`, and native
     sign-in re-enters the same document — so unkeyed module state crosses
     accounts. The repo already bounded one instance of this by KEYING the fact

@@ -117,6 +117,11 @@ import {
   sessionStrokeRate,
 } from "../session/logbookDerived";
 import { deriveAverageHeartRate } from "../../domain/monitor/derivedHeartRate.js";
+import {
+  rowContribution,
+  statsRowInput,
+  type StatsRowInput,
+} from "../../domain/stats/rowContribution.js";
 
 // Re-typed rather than imported from `server/stores/logs.ts` (this
 // repo's standing rule: client code never imports server/'s module
@@ -619,33 +624,9 @@ function buildMeta(row: StoredLog): SummaryMeta {
 // behavior today (the six current values, `"program-dropped"` now among
 // them, partition the same way either direction), different behavior the
 // day a seventh value exists.
-function isReconstructableClose(endedBy: StoredLog["endedBy"]): boolean {
-  return endedBy === "finished" || endedBy == null;
-}
-
-function stepActualSums(steps: StoredLogStep[]): {
-  meters?: number;
-  seconds?: number;
-} {
-  let hasMeters = false;
-  let meters = 0;
-  let hasSeconds = false;
-  let seconds = 0;
-  for (const step of steps) {
-    if (step.actualMeters !== undefined) {
-      hasMeters = true;
-      meters += step.actualMeters;
-    }
-    if (step.actualSeconds !== undefined) {
-      hasSeconds = true;
-      seconds += step.actualSeconds;
-    }
-  }
-  return {
-    meters: hasMeters ? meters : undefined,
-    seconds: hasSeconds ? seconds : undefined,
-  };
-}
+// Phase PS PR 1: `isReconstructableClose` now lives in
+// `domain/stats/rowContribution.ts` (the same allowlist, on `string | null`)
+// and is applied inside `rowContribution`, which `buildHeroes` below calls.
 
 // Tier B's AVG SPLIT: `500 × Σt/Σd` over pm5-sourced steps whose own
 // `actualSeconds` clears the sub-threshold floor — `MIN_MEASURABLE_
@@ -706,8 +687,10 @@ function tierBAvgSplitSeconds(steps: StoredLogStep[]): number | undefined {
 // `isReconstructableClose(row.endedBy)`: a row whose `endedBy` names an
 // incomplete-by-construction close DECLINES to FALLBACK instead (also an
 // empty `stepSums`) rather than risk this rung firing on a growing,
-// un-bounded population. See the tier-B2/FALLBACK comment block above
-// `stepActualSums` for the full risk/decision writeup.
+// un-bounded population. See the tier-B2/FALLBACK comment block earlier in
+// this module (the `isReconstructableClose` notes) for the full
+// risk/decision writeup; the sums themselves come from the domain's
+// `rowContribution` (Phase PS PR 1), the one reader of `steps`.
 function buildStoredRest(
   row: StoredLog,
   stepSums: { meters?: number; seconds?: number },
@@ -837,21 +820,36 @@ function storedMachineTier(
   };
 }
 
-function buildHeroes(row: StoredLog): SummaryHeroes {
-  const hasMachineTotals =
-    row.machineWorkSeconds !== null &&
-    row.machineWorkMeters !== null &&
-    row.machineWorkSeconds > 0 &&
-    row.machineWorkMeters > 0;
-  const stepSums = stepActualSums(row.steps);
+/** Phase PS PR 1 (spec §4.1): the row as the domain's tier rule reads it.
+ *  `endedBy ?? null` because `StoredLog.endedBy` is optional-and-nullable
+ *  and `StatsRowInput.endedBy` is required-with-null (TS2322 without the
+ *  mapping — measured by the antagonist with `tsc -p tsconfig.app.json`);
+ *  each step's two actuals map the same way. Exported for the contract
+ *  test (`heroesContract.test.ts`, spec §8.1). */
+export function toStatsRowInput(row: StoredLog): StatsRowInput {
+  return statsRowInput({
+    ...row,
+    endedBy: row.endedBy ?? null,
+    totalCalories: row.machineSummary?.totalCalories,
+  });
+}
 
-  if (hasMachineTotals) {
-    // machineWorkSeconds/machineWorkMeters is `number | null`, non-null
-    // and > 0 here by `hasMachineTotals`'s own gate — the `!`s document
-    // that fact, matching this repo's own convention for a fact a
-    // preceding check already established.
-    const distanceMeters = Math.round(row.machineWorkMeters!);
-    const timeSeconds = row.machineWorkSeconds!;
+function buildHeroes(row: StoredLog): SummaryHeroes {
+  // Phase PS PR 1 (spec §4.2): the TIER and the two hero numbers come from
+  // the domain's `rowContribution` — the one function the You tab sums —
+  // so this screen and LIFETIME cannot disagree (invariant 2;
+  // `heroesContract.test.ts` holds this equal to the output captured from
+  // main before the refactor). Everything else in each branch — avg
+  // split, the TOTAL line and its deliberately EMPTY `stepSums` on three
+  // of the four tiers, the machine tiles — is as it was; the tier
+  // comments earlier in this module still describe why. The B2 TOTAL line
+  // reads the domain contribution's own sums (the local `stepActualSums`
+  // is gone — one reader of `steps`, RF24).
+  const c = rowContribution(toStatsRowInput(row));
+
+  if (c.tier === "machine") {
+    const distanceMeters = c.workMeters;
+    const timeSeconds = c.workSeconds;
     const avgSplitSeconds = row.machineSummary?.avgPaceSecondsPer500m;
     const hasAvgSplit = avgSplitSeconds !== undefined && avgSplitSeconds > 0;
     return {
@@ -860,64 +858,20 @@ function buildHeroes(row: StoredLog): SummaryHeroes {
       timeSeconds,
       avgSplit: hasAvgSplit ? fmtSplit(avgSplitSeconds!) : undefined,
       avgSplitSeconds: hasAvgSplit ? avgSplitSeconds : undefined,
-      // Fix round 2 (final whole-branch review, CRITICAL finding C1): an
-      // EMPTY `stepSums`, not the real one — see TIER B1's own comment a
-      // few lines down for the shared reasoning, which applies here
-      // UNCHANGED. `appendSummaryObservations` admits `endedBy ===
-      // "rower"` (a Menu/End terminate) as well as `"finished"`, so a
-      // TERMINATED row can be tier A while its RC-1 rest pair is NULL
-      // (`computeWorkRestSums` runs ONLY for `"finished"`,
-      // `completeMonitorRun`'s own gate) — and the abandoned final
-      // interval's own actual can arrive with no matching program index
-      // a step was ever built for (its 0x0037 boundary never sends), so
-      // Σ steps under-counts the machine's own `machineWorkMeters` by
-      // exactly that interval's real, ROWED metres. Passing the real
-      // `stepSums` here let fallback-2 relabel that rowed work as rest —
-      // caught by a dedicated tier-A-with-null-rest-pair test below.
+      // EMPTY `stepSums` on purpose (fix round 2, C1): a TERMINATED tier-A
+      // row's Σ steps under-counts the machine's own total by the
+      // abandoned interval's ROWED metres, which fallback-2 would relabel
+      // as rest.
       totalLine: buildStoredTotalLine(row, timeSeconds, {}),
-      // Phase LP §3: the six machine tiles, same arithmetic as the live
-      // door's `machineTierFromRun` (`session/summaryModel.ts`), read off
-      // the stored row: totals from the RC-2/3 columns, everything else
-      // from `machine_summary` — absent keys (any row saved before this
-      // phase, or a burst that lost 0x003A) stay `undefined` and render as
-      // a dash. RATE: `endedBy` `"finished"` or absent (pre-close-reason
-      // rows) reads the stored 0x0039 average; any other close takes the
-      // splits' time-weighted mean (0x0039 doubles on a terminate).
       machine: storedMachineTier(row, timeSeconds, distanceMeters),
     };
   }
 
-  // TIER B1 — RC-1's own work pair, preferred over Σ steps whenever
-  // present (fix round 1: the sound signal the null-index finding asked
-  // for). `stepSums` is deliberately NOT passed to `buildStoredTotalLine`
-  // here — see that function's own note and `buildStoredRest`'s comment
-  // for why fallback-2 must never fire against a hero this branch already
-  // knows is complete.
-  const hasWorkPair =
-    row.workSeconds !== null &&
-    row.workMeters !== null &&
-    row.workSeconds > 0 &&
-    row.workMeters > 0;
-  if (hasWorkPair) {
-    const distanceMeters = Math.round(row.workMeters!);
-    const timeSeconds = row.workSeconds!;
-    // Steps first — they are the population this row actually measured, so
-    // where they carry PM5 actuals they outrank anything stored.
-    //
-    // THE FALLBACK (Phase JR PR 1, spec rev 4's F1). When they carry none,
-    // read the STORED column rather than returning `undefined`. A free row
-    // (Just Row) stores `steps: []` — it prescribes nothing, so there is
-    // nothing to fabricate — with a real work pair and a derived
-    // `avg_split_seconds`. Without this, `tierBAvgSplitSeconds` returns
-    // `undefined` (its `d` never leaves 0) and this screen shows NO avg
-    // split, while the history list falls through to that same stored
-    // column (`LogRow.tsx:154`) and shows one. Same row, two screens, one
-    // number present and one absent — the defect RC-5 exists to kill, one
-    // screen over, and `LogRow.tsx`'s "identical population by
-    // construction" premise is exactly what an empty `steps` falsifies.
-    //
-    // `?? undefined` because the column is `number | null` and every hero
-    // in this module speaks `undefined` for absent.
+  if (c.tier === "work-pair") {
+    // TIER B1 — RC-1's own work pair. Steps first for AVG SPLIT; a free
+    // row's `steps: []` falls back to the stored column (Phase JR F1).
+    const distanceMeters = c.workMeters;
+    const timeSeconds = c.workSeconds;
     const avgSplitSeconds =
       tierBAvgSplitSeconds(row.steps) ?? row.avgSplitSeconds ?? undefined;
     return {
@@ -931,42 +885,39 @@ function buildHeroes(row: StoredLog): SummaryHeroes {
     };
   }
 
-  // TIER B2 — no RC-1 work pair; Σ steps is the best (imperfect, see this
-  // module's own tier-B2 comment block above) available signal, trusted
-  // ONLY when `endedBy` proves the row is historical (fix round 2,
-  // `isReconstructableClose`) — otherwise DECLINES to FALLBACK below.
-  const hasStepActuals =
-    row.steps.some((s) => s.actualMeters !== undefined) &&
-    isReconstructableClose(row.endedBy);
-  if (hasStepActuals) {
-    const timeSeconds = stepSums.seconds;
+  if (c.tier === "steps") {
+    // TIER B2 — Σ steps, trusted only because `rowContribution` applied
+    // `isReconstructableClose`; the ONE branch that hands the real
+    // `stepSums` to the TOTAL line (fallback-2's rest derivation).
+    const timeSeconds = c.workSeconds ?? undefined;
     const avgSplitSeconds = tierBAvgSplitSeconds(row.steps);
     return {
-      distanceMeters: stepSums.meters,
+      distanceMeters: c.workMeters,
       time:
         timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
       timeSeconds,
       avgSplit:
         avgSplitSeconds !== undefined ? fmtSplit(avgSplitSeconds) : undefined,
       avgSplitSeconds,
-      totalLine: buildStoredTotalLine(row, timeSeconds, stepSums),
+      // The domain's own sums (rounded metres, verbatim seconds) — the one
+      // reader of `steps` (RF24); the local `stepActualSums` is gone.
+      totalLine: buildStoredTotalLine(row, timeSeconds, {
+        meters: c.workMeters,
+        seconds: c.workSeconds ?? undefined,
+      }),
     };
   }
 
-  // FALLBACK — stored heroes, unchanged. Fix round 2: EMPTY `stepSums`
-  // here too (never the real one) — a DECLINED tier-B2 row (steps exist
-  // but `endedBy` is unsafe) can still have `stepSums.meters` defined,
-  // and passing it would let fallback-2 fire on the exact gap this
-  // branch exists to protect against (see the TIER B2/FALLBACK comment
-  // block above `stepActualSums`).
-  const timeSeconds = row.timeSeconds ?? undefined;
+  // FALLBACK — stored heroes, unchanged; EMPTY `stepSums` (a DECLINED
+  // tier-B2 row still has real step sums, and fallback-2 must not see them).
+  const timeSeconds = c.workSeconds ?? undefined;
   return {
     avgSplit:
       row.avgSplitSeconds !== null ? fmtSplit(row.avgSplitSeconds) : undefined,
     avgSplitSeconds: row.avgSplitSeconds ?? undefined,
     time: timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
     timeSeconds,
-    distanceMeters: row.distanceMeters ?? undefined,
+    distanceMeters: c.workMeters ?? undefined,
     totalLine: buildStoredTotalLine(row, timeSeconds, {}),
   };
 }

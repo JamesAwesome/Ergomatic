@@ -553,11 +553,13 @@ the "After the strangers" list, whose PS line this section replaces (one
 home per body of work); the 6J sketch and `docs/history/phase-ps.md` are
 inputs, not the design.
 
-**Goal:** a rower sees their career — lifetime and season metres on You,
-and a STATS subpage with a date filter, totals in two columns (ALL ROWS and
-MACHINE), rest, calories and average watts, time by Erg Book type, average
-metres per day this season, weekly streaks, and the 2k/6k test trend.
-Every number equals the sum of what the log already shows per row, computed
+**Goal:** a rower sees their career — a hero on You (LIFETIME and SEASON
+metres over one work-time-by-type bar) that is itself the door to a stats
+subpage with a date filter, totals in two columns (ALL ROWS and MACHINE),
+rest, calories and average watts, metres per week, time by Erg Book type,
+the season's cumulative curve with average metres per day and weekly
+streaks, and the 2k/6k test trend. Every number equals the sum of what the
+log already shows per row, computed
 by ONE domain function (`app/domain/stats/`'s `rowContribution`) that the
 log's own `buildHeroes` is refactored to call, so You and the log cannot
 disagree. Nothing new is stored; nothing is imported from Concept2.
@@ -575,8 +577,8 @@ API; the MACHINE column keys on `source = 'pm5'` only, and Concept2
 contributes only the season's calendar (May 1 to Apr 30, named by end year)
 and vocabulary** — spec §7 invariant 12, gated by a key-set test on the
 projection type and a case-insensitive text scan over the stats code
-(§8.4). The RC-5 seam is accepted and named on the surface (`k ROWS PREDATE
-WORK-ONLY TOTALS · NOT IN AVG WATTS`), never corrected.
+(§8.4). The RC-5 seam is accepted and counted (`storedTierRows`; the surface
+line naming it was struck by ruling 19), never corrected.
 
 - [ ] **PR 0 — the spec, this section, and the DBA agent**
       (`.claude/agents/dba.md` + `dba-techniques.md` + `dba-ledger.md`;
@@ -597,52 +599,72 @@ WORK-ONLY TOTALS · NOT IN AVG WATTS`), never corrected.
       `GET /api/stats/rows` (additive, every row of the user, UNORDERED,
       slim per-row projection computed row-side so `steps` never crosses the
       wire; `totalCalories` as a narrow jsonb-path scalar), the adapter with
-      its own `TZ`-pinned test (a negative-offset zone asserted in effect, a
-      23:30-UTC instant landing on the previous local day, getters→`getUTC*`
-      as the mutation), the You headline as its OWN component
-      `src/you/stats/YouStatsHeadline.tsx` (LIFETIME / SEASON, ALL column,
-      work metres; `You.tsx` passes it nothing), the STATS door above
-      BASELINES, `/you/stats` with the filter bar (ALL · SEASON · YEAR ·
-      MONTH · 30 DAYS · CUSTOM), the whole TOTALS group — METRES / TIME /
-      SESSIONS in both columns, then REST METRES / CALORIES (Σ stored
-      `totalCalories`, `n OF m ROWS CARRY IT · MONITOR'S OWN COUNT`) / AVG
-      WATTS (`logbookWatts` of the RANGE's Σseconds ÷ Σmetres over machine,
+      its own `TZ`-pinned test (a negative-offset zone asserted in effect, an
+      early-UTC instant on the 13th — `02:30Z`, 22:30 EDT — that New York
+      still reads as the 12th, getters→`getUTC*` as the mutation; the first
+      draft's `23:30Z` instant is the 12th in UTC too and could not bite), the time-by-type computation and a stacked-bar
+      primitive under `src/charts/` (the hero needs both — Gate 0 ruling
+      11), the You HERO as its OWN component `src/you/stats/YouStatsHero.tsx`
+      (Gate 0's H3: LIFETIME / SEASON figures over one AN · AT · O2 · TR ·
+      NO TYPE bar with a whole-percent chip legend and no caption (ruling
+      18), 140 px portrait as shipped (`you.png` rows 120→259), ALL column,
+      work metres; `You.tsx` passes it nothing) which IS the door — one
+      focusable control named `Stats`, tapping anywhere opens `/you/stats`,
+      and `.you-doors` gains NO STATS row (ruling 10) — `/you/stats` with the
+      filter bar (ALL · SEASON · YEAR · MONTH · 30 DAYS · CUSTOM), the whole
+      TOTALS group — METRES / TIME / SESSIONS in both columns, then REST
+      METRES / CALORIES (Σ stored `totalCalories`) / AVG WATTS
+      (`logbookWatts` of the RANGE's Σseconds ÷ Σmetres over machine,
       work-pair and steps rows only — ruling 6 — never a mean of per-row
-      watts; captioned `AT THE RANGE'S AVERAGE PACE · WORK-ONLY ROWS`) under
-      MACHINE, with `n OF m CARRY THE MONITOR'S OWN TOTALS` under that
-      heading — and the empty states, including the MACHINE column's own
-      `NO MONITOR ROWS YET` when no `pm5` row is in range.** No pagination
-      BY DESIGN up to the measured trigger (any user > 5,000 rows; spec
-      invariant 15, the cursor row below owns it). **PR 1's DBA gate runs
-      the spec-pass protocol against the SHIPPED query (spec §9):** 1M rows
-      seeded with users at 1k / 10k / 100k from the 2026-09-07 `02-gen.sql`,
-      medians of 5 plus `EXPLAIN (ANALYZE, BUFFERS)`, the real payload
-      through the e2e backdoor with and without gzip, plan literals
-      bytes/row ≤ 240 and 10k-user p95 ≤ 150 ms, the seam fixture carrying
-      ≥ 1 stored-tier row; scripts committed under
-      `docs/superpowers/research/2026-09-12-stats-rows/`. Gates: Gate 0
-      (rendered You + subpage, both orientations, ratios as numbers, ≥ 12
-      seeded rows incl. two free rows and one pre-RC-5 row, plus a
-      zero-`pm5` frame for the MACHINE empty state) BEFORE the first
-      implementation commit; `/harden` on the plan; the DBA gate above; the
-      contract test `rowContribution ≡ buildHeroes` over every stored-log
-      fixture plus a NEW work-pair-and-steps fixture the gate-order mutation
-      can move, against output captured from `main` before the refactor;
-      one test seeding through `POST /api/logs` (the tier-A row FUSED on
-      purpose) and reading the new route (RF24); e2e with a hand-computed
-      headline literal (RF7); PM final gate.
-- [ ] **PR 2 — MOTIVATION (avg m/day this season, C2's Honor Board
-      definition; current + longest streak of Monday-start weeks, labelled
-      ERGOMATIC because Concept2 has no streak), TIME BY TYPE (AN/O2/AT/TR +
-      an honest NO TYPE bucket for free rows, one stacked bar on
-      `charts/scale` + `axis`), TEST TREND (2k and 6k split seconds over date
-      from the existing `GET /api/test-history` — the ONE figure that keeps
-      a point whose log row was deleted, because `test_history.session_log_id`
-      is `ON DELETE SET NULL` on purpose; its caption says so).** Gates:
-      antagonist DELTA pass on the streak/avg-per-day definitions only
-      (watts ships in PR 1 and was attacked by the anchor); DBA SKIP said
-      aloud unless a query changes; no per-PR PM gate (non-triad UI); Gate 0
-      rides PR 1's artifact, which renders all five groups.
+      watts) under MACHINE, with NO prose on the page (rulings 18 and 19
+      struck every caption, the seam line and the `n OF m` footnote
+      included; the counts stay computed in the aggregate) — the subpage's
+      TIME BY TYPE group (free once the hero exists,
+      ruling 11), and the empty states: 0 rows with the filter bar hidden,
+      1 row, and the MACHINE column's `NO MONITOR ROWS YET` with its REST /
+      CALORIES / AVG WATTS rows hidden when no `pm5` row is in range (ruling
+      16).** No pagination BY DESIGN up to the measured trigger (any user >
+      5,000 rows; spec invariant 15, the cursor row below owns it). **PR 1's
+      DBA gate runs the spec-pass protocol against the SHIPPED query (spec
+      §9):** 1M rows seeded with users at 1k / 10k / 100k from the
+      2026-09-07 `02-gen.sql`, medians of 5 plus `EXPLAIN (ANALYZE,
+      BUFFERS)`, the real payload through the e2e backdoor with and without
+      gzip, plan literals bytes/row ≤ 240 and 10k-user p95 ≤ 150 ms, the
+      seam fixture carrying ≥ 1 stored-tier row; scripts committed under
+      `docs/superpowers/research/2026-09-12-stats-rows/`. Gates: **Gate 0
+      APPROVED 2026-09-12** on the rendered canvas
+      (https://claude.ai/code/artifact/c8ad61d9-853b-4262-9051-032f90e90cf2;
+      sources `docs/design/career-stats/`, every ratio computed in
+      `contrast.json` — text ≥ 4.5:1 throughout and ≥ 6.69:1 bar the one NO
+      TYPE caption, every data mark ≥ 5.29:1; eight rulings recorded as spec
+      §14 9-16 and applied before the plan); `/harden` on the plan; the DBA
+      gate above; the contract test `rowContribution ≡ buildHeroes` over
+      every stored-log fixture plus a NEW work-pair-and-steps fixture the
+      gate-order mutation can move, against output captured from `main`
+      before the refactor; one test seeding through `POST /api/logs` (the
+      tier-A row FUSED on purpose) and reading the new route (RF24); e2e
+      seeding the Gate 0 seed itself (`seed.mjs`'s 13 log rows — its 6
+      test rows ride PR 2 with the trend — clock and zone pinned to
+      2026-09-12) and asserting `compute.mjs`'s
+      figures as literals — lifetime 56,752 m / 3:59:39 / 13, season 43,012
+      m, MACHINE 36,752 m, rest 718, cal 1,731, 176 W (RF7; the `8 OF 10`
+      and `1 ROW PREDATES` lines were struck by ruling 19); PM final gate.
+- [ ] **PR 2 — the remaining charts, all designed and approved at Gate 0
+      (ruling 11): METRES PER WEEK (eight Monday-start bars ending at the
+      range's last day, this week in `--ink`, the rest in `--ink-4` — Gate 0
+      ruling 12 over the handoff's `#c9c3b2`, 1.73:1, recorded in
+      `docs/design/DEVIATIONS.md`), the SEASON group (the cumulative curve
+      May 1 → today, `AVG M/DAY` on C2's Honor Board definition, current +
+      longest streak of Monday-start weeks labelled ERGOMATIC because
+      Concept2 has no streak — never filtered), TEST TREND (2k and 6k split
+      seconds over date from the existing `GET /api/test-history`, faster
+      is up — the ONE figure that keeps a point whose log row was deleted,
+      because `test_history.session_log_id` is `ON DELETE SET NULL` on
+      purpose; its caption says so), and the hover/tooltip layer.** Gates:
+      antagonist DELTA pass on the streak/avg-per-day/metres-per-week
+      definitions only (watts and time by type ship in PR 1); DBA SKIP said
+      aloud unless a query changes; no per-PR PM gate (non-triad UI); no
+      second design gate unless the rendered thing changes.
 
 **Rows this phase files (dated; the hand-back list at PR 2):**
 
@@ -687,25 +709,40 @@ surface and its parity-photograph row under Wave E. RC-16's doubled
 `avgStrokeRate` warning is irrelevant here (not displayed).
 
 **Ruled by James, 2026-09-12 (spec §14), applied in the spec:** MACHINE is
-BY DOOR — every `source = 'pm5'` row, link-lost ones included, with `n OF m
-CARRY THE MONITOR'S OWN TOTALS` under the column; rest is the stored RC-1
+BY DOOR — every `source = 'pm5'` row, link-lost ones included (the `n OF m`
+line that once said so was struck by ruling 19; rulings 18 and 19 together
+stripped every caption from the page); rest is the stored RC-1
 pair (`machineSummary.totalRestMeters` stays provenance, unread); the
 avg-m/day divisor counts today (May 1 → 1); the test trend SHOWS points
 whose log was deleted; CALORIES & WATTS are rows of TOTALS, not a group;
 AVG WATTS EXCLUDES stored-tier rows (metres, time and sessions still count
-them, and the seam line says so); the phase's ONLY external oracle is James
+them; the seam line that said so is gone since ruling 19) — and both the
+exclusion and the seam count
+cover ONLY `source = 'pm5'` rows in that tier (ruling 17, PR 1's fix round:
+a timer or manual row is what the rower typed, work by definition, never in
+k); the phase's ONLY external oracle is James
 comparing LIFETIME and THIS SEASON against his own Concept2 logbook page,
 once, by eye, on the TestFlight build (exit criterion below, RF11);
 `CLAUDE.md` names three standing agents, the `dba` described beside the
 other two, and a PR that adds or removes one updates that paragraph in the
-same commit.
+same commit. **And at Gate 0 (spec §14 9-16):** the You hero is H3 TIME BY
+TYPE and replaces the two-line headline; the hero IS the door and there is
+no STATS row; every subpage chart is designed now and ships in PR 2 except
+what the hero needs; previous-week bars are `--ink-4`, not the handoff's
+`#c9c3b2`; the stack order is AN · AT · O2 · TR · NO TYPE (the palette
+validator); landscape You scrolls; the seam line and the `n OF m` line
+(ruling 15) are superseded on the surface by ruling 19; zero monitor rows hide
+the MACHINE-only rows and zero rows hide the filter bar.
 
 **Exit:** at PR 1, a rower with ≥ 1 row sees real totals on You and
 `/you/stats` that equal the log's DETAIL heroes summed (the contract test
 and the e2e literal both green, mutations named), at 0 rows the honest empty
-state, and with no `pm5` row the MACHINE column's; at PR 2, the chart groups
-render at ≥ 2 points and read their empty string below — each half verified
-at the PR that ships it; the DBA verdict with the §9 protocol's numbers at
+state, and with no `pm5` row the MACHINE column's; the chart groups render
+at ≥ 2 points and read `TWO ROWS MAKE A CHART` below — TIME BY TYPE at PR
+1, the rest at PR 2, each verified at the PR that ships it; the e2e figures
+for the Gate 0 seed are `compute.mjs`'s, clock pinned; the hero is one
+control named `Stats` and `.you-doors` has no STATS row; the DBA verdict
+with the §9 protocol's numbers at
 1k / 10k / 100k attached to PR 1 and a pagination ruling against the
 5,000-row trigger; `grep -rin "verified\|c2ResultId\|c2UserId\|concept2"
 app/domain/stats app/src/you/stats app/src/api/useStatsRows.ts` empty,
@@ -2811,6 +2848,16 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- [ ] **`scripts/ci-changes.sh` skips the code jobs on `docs/monitor/sessions/` changes that tests read by name.** `app/src/test/captures.ts:21` resolves that directory and `captures.test.ts` reads two named capture files at runtime, so a rename, re-gzip or deletion there is "documentation" to the script and the `app` job never runs the test it broke — the same class PS PR 1 patched for `seed.mjs`. What would fix it now: add the prefix to `CODE_UNDER_DOCS_RE` with a case in `ci-changes.test.sh` — not done because the capture corpus is append-only today and widening the regex inside a TRIAD PR mixes two risk models. **S** · dies 2026-10-12 · pre-existing, one-line fix, but it belongs in the PR that next touches the captures.
+- **Move the PM5 NFC fixture loader (`loadPm5NfcFixture`, `FIXTURE_PM5_NAME`
+  and the capture they read) out of `src/monitor/nfc/fixtures` so
+  `domain/monitor/nfc.test.ts` needs no ESLint exemption.** Phase PS PR 1's
+  `domain/** → src/**` import ban (`app/eslint.config.js`) exempts exactly
+  that one file by name; it is the only `src/` import under `domain/`
+  (`grep -rn 'from "[./]*/src/' app/domain --include='*.ts'`, 2026-09-12).
+  What would fix it now: move the loader under `domain/monitor/nfc/`; not
+  done in PS because nothing in that PR touches NFC.
+  · dies 2026-10-12 · one test-file import, moving it is a test refactor outside PS
 - **PR1.75b leftovers, lifted from Phase PROTO 2026-09-10.** (1) a unit test for
   the empty `?state=` callback (`params.get` answers `""`, which the adapter
   treats as a MISMATCH and refuses — fails safe, untested); (2)

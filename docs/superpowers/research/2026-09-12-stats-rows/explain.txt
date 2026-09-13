@@ -1,0 +1,42 @@
+=== $	{pair%%:*} ===
+=== 1k ===
+                                                                    QUERY PLAN                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using session_logs_user_id_idx on session_logs  (cost=0.42..156.43 rows=700 width=746) (actual time=0.063..0.850 rows=1000.00 loops=1)
+   Index Cond: (user_id = '4f60dae9-297e-4786-a716-db09df8ff223'::uuid)
+   Index Searches: 1
+   Buffers: shared hit=60 read=118
+ Planning:
+   Buffers: shared hit=156
+ Planning Time: 0.199 ms
+ Execution Time: 0.905 ms
+(8 rows)
+
+=== $	{pair%%:*} ===
+=== 10k ===
+                                                                      QUERY PLAN                                                                      
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using session_logs_user_id_idx on session_logs  (cost=0.42..2099.82 rows=9733 width=746) (actual time=0.011..3.926 rows=10000.00 loops=1)
+   Index Cond: (user_id = 'adc55aa1-2a15-4554-87a9-0ecca2ac8a3a'::uuid)
+   Index Searches: 1
+   Buffers: shared hit=1819
+ Planning:
+   Buffers: shared hit=156
+ Planning Time: 0.167 ms
+ Execution Time: 4.192 ms
+(8 rows)
+
+=== $	{pair%%:*} ===
+=== 100k ===
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using session_logs_user_id_idx on session_logs  (cost=0.42..20897.75 rows=97493 width=746) (actual time=0.042..54.229 rows=100000.00 loops=1)
+   Index Cond: (user_id = '551ff664-ad66-47e3-b5fc-e89a045177e2'::uuid)
+   Index Searches: 1
+   Buffers: shared hit=174 read=17580
+ Planning:
+   Buffers: shared hit=156
+ Planning Time: 0.175 ms
+ Execution Time: 56.370 ms
+(8 rows)
+

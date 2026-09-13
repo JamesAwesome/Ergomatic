@@ -83,6 +83,22 @@ describe("You", () => {
     expect(screen.getByText("AR")).toBeInTheDocument();
   });
 
+  // Phase PS PR 1 (career-stats spec §7 invariant 16, §14 ruling 10): the
+  // hero IS the door and the ONLY door — one link named Stats on the whole
+  // screen, and `.you-doors` gains no STATS row. The hero's own test cannot
+  // see this file, so the `.you-doors` half lives here.
+  it("renders exactly one link named Stats and no STATS door", async () => {
+    renderYou(user);
+    expect(await screen.findAllByRole("link", { name: "Stats" })).toHaveLength(
+      1,
+    );
+    const doors = document.querySelector(".you-doors");
+    expect(doors).not.toBeNull();
+    const doorTexts = Array.from(doors!.children, (c) => c.textContent ?? "");
+    expect(doorTexts.length).toBeGreaterThan(0);
+    expect(doorTexts.some((t) => t.includes("STATS"))).toBe(false);
+  });
+
   it("signs out via POST and notifies", async () => {
     const onSignedOut = vi.fn();
     const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));

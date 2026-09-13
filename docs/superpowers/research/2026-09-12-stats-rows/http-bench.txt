@@ -1,0 +1,6 @@
+1k     identity      224781 B   median      9.5 ms (n=5)
+1k     gzip          224781 B   median      9.0 ms (n=5)
+10k    identity     2248115 B   median     89.0 ms (n=5)
+10k    gzip         2248115 B   median     91.0 ms (n=5)
+100k   identity    22481319 B   median    939.2 ms (n=5)
+100k   gzip        22481319 B   median    947.4 ms (n=5)

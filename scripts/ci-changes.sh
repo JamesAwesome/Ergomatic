@@ -24,6 +24,16 @@
 set -uo pipefail
 
 DOCS_ONLY_RE='^(docs/|\.claude/|\.codex/|\.agents/|[^/]*\.md$)'
+# Some files under docs/ are read by TESTS at runtime, so a change to them
+# must run the code jobs. Known today (the list is NOT exhaustive — grep the
+# test tree for reads under docs/ before trusting it): docs/design/career-
+# stats/seed.mjs, a runtime import of app/domain/stats/gate0Seed.test.ts
+# (Phase PS PR 1, handled below); and docs/monitor/sessions/, which
+# app/src/test/captures.ts resolves and captures.test.ts reads by file name
+# (NOT handled here — a ROADMAP register row, dies 2026-10-12, owns widening
+# this regex in the PR that next touches the captures). Checked before the
+# docs regex.
+CODE_UNDER_DOCS_RE='^docs/design/career-stats/seed\.mjs$'
 
 run_everything() {
   echo "ci-changes: $1 — running the code jobs" >&2
@@ -60,6 +70,9 @@ FILES="$(git diff --name-only --no-renames "$MERGE_BASE" "$HEAD" 2> /dev/null)" 
 
 while IFS= read -r file; do
   [ -n "$file" ] || continue
+  if printf '%s\n' "$file" | grep -qE "$CODE_UNDER_DOCS_RE"; then
+    run_everything "$file is code that a unit test imports"
+  fi
   if ! printf '%s\n' "$file" | grep -qE "$DOCS_ONLY_RE"; then
     run_everything "$file is not documentation"
   fi

@@ -1,0 +1,42 @@
+INSERT 0 4
+CREATE FUNCTION
+ dba_gen 
+---------
+ 
+(1 row)
+
+ dba_gen 
+---------
+ 
+(1 row)
+
+ dba_gen 
+---------
+ 
+(1 row)
+
+ dba_gen 
+---------
+ 
+(1 row)
+
+VACUUM
+  total  
+---------
+ 1000000
+(1 row)
+
+        email        | count  
+---------------------+--------
+ dba-1k@test.local   |   1000
+ dba-10k@test.local  |  10000
+ dba-100k@test.local | 100000
+ dba-fill@test.local | 889000
+(4 rows)
+
+ total_size 
+------------
+ 1411 MB
+(1 row)
+
+docker exec -i erg-dba-pg psql -U postgres -v ON_ERROR_STOP=1 < 01-seed.sql  0.01s user 0.01s system 0% cpu 50.502 total

@@ -12834,3 +12834,106 @@ test.describe("a half-set baseline pair", () => {
     ).toBeVisible();
   });
 });
+
+// ── Phase PS PR 1: the stats subpage registers here (TESTING.md §8) ────────
+test.describe("/you/stats", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-you-stats@e2e.test",
+      name: "Design Stats Tester",
+    });
+    // A populated screen (RF7): two seeded rows so the filter bar, TOTALS
+    // and the TIME BY TYPE legend all render; the chips are the tap
+    // targets, the CUSTOM inputs the zoom-guard's subjects.
+    for (const body of [
+      {
+        workoutTitle: "Sea Fret",
+        workoutType: "O2",
+        source: "manual",
+        steps: [{ label: "Work", actualMeters: 6000, actualSeconds: 1550 }],
+      },
+      {
+        workoutTitle: "Sea Fret",
+        workoutType: "AT",
+        source: "manual",
+        steps: [{ label: "Work", actualMeters: 2000, actualSeconds: 470 }],
+      },
+    ]) {
+      const res = await page.evaluate(async (b) => {
+        const r = await fetch("/api/logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workoutId: null,
+            held: null,
+            effort: null,
+            notes: null,
+            advancesPlan: false,
+            ...b,
+          }),
+        });
+        return r.status;
+      }, body);
+      expect(res).toBe(201);
+    }
+    await page.goto("/you/stats");
+    await page.getByRole("radio", { name: "CUSTOM" }).click();
+    await expect(page.getByLabel("FROM")).toBeVisible();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("every input on /you/stats computes font-size >= 16px (the two CUSTOM date fields)", async ({
+    page,
+  }) => {
+    const undersized = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("input"))
+        .map((el) => ({
+          id: el.getAttribute("aria-label") ?? el.type,
+          size: parseFloat(getComputedStyle(el).fontSize),
+        }))
+        .filter((e) => e.size < 16),
+    );
+    expect(undersized, JSON.stringify(undersized)).toEqual([]);
+    expect(await page.locator("input[type=date]").count()).toBe(2);
+  });
+
+  // TESTING.md §8's third rule: one computed-style assertion per registered
+  // screen, so a rule that stops resolving (a typo'd token, a moved rule
+  // losing the cascade — RF37) fails HERE, where jsdom cannot see colour.
+  // The hexes are tokens.css's, verbatim; the ratios are contrast.json's.
+  // Mutation: `.stats-card { background: var(--page) }` → the first
+  // expectation reads rgb(244, 241, 232).
+  test("the TOTALS card, the selected chip and the figure cells paint from the token palette", async ({
+    page,
+  }) => {
+    const cardBg = await page
+      .locator(".stats-card")
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(cardBg).toBe("rgb(255, 253, 247)"); // --surface
+    const cardBorder = await page
+      .locator(".stats-card")
+      .evaluate((el) => getComputedStyle(el).borderTopColor);
+    expect(cardBorder).toBe("rgb(222, 216, 201)"); // --rule-2
+    const chip = page.locator('.stats-chip[aria-checked="true"]');
+    expect(
+      await chip.evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe(
+      "rgb(27, 26, 23)", // --ink; --on-color on it 17.11:1
+    );
+    const cell = await page
+      .getByRole("row", { name: /^METRES/ })
+      .getByRole("cell")
+      .first()
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(cell).toBe("rgb(27, 26, 23)"); // --ink, 17.11:1 on --surface
+  });
+});

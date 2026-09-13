@@ -7,8 +7,9 @@ and a PM final gate; the phase opened with an antagonist anchor pass, a PM
 slate gate and a DBA spec pass, all three run at `93b91d66` (§15). James's
 approved design (2026-09-12) is the authority for every decision below; five
 points where a repo fact pulled against it were put to him and ruled the same
-day, and three more were ruled at the phase-open gates — §14 records each
-ruling (RF10).
+day, three more were ruled at the phase-open gates, and eight at Gate 0 on
+the rendered canvas (rulings 9-16; §5, §15) — §14 records each ruling
+(RF10).
 
 ## What and why
 
@@ -16,11 +17,13 @@ A rower who has used the app for a month has no way to see what they have
 done: no lifetime metres, no season, no "am I rowing more than last month".
 Concept2's logbook shows all of that on its front page, and a rower who sends
 their rows there (Wave E) sees a career total on one site and nothing on the
-other. This phase puts the career on the You tab — a two-line headline on You
-itself (LIFETIME and THIS SEASON metres) and a STATS door to a subpage with a
-date filter, totals in two columns (every row, and rows the monitor measured),
-rest, calories and average watts, time by Erg Book type, a season metres-per-
-day figure, weekly streaks, and the 2k/6k test trend. Every number is the sum
+other. This phase puts the career on the You tab — a hero on You itself
+(LIFETIME and THIS SEASON metres over one WORK TIME BY TYPE bar) that is
+itself the door to a subpage with a date filter, totals in two columns (every
+row, and rows the monitor measured), rest, calories and average watts, metres
+per week, time by Erg Book type, the season's cumulative curve with its
+average metres per day and weekly streaks, and the 2k/6k test trend. Every
+number is the sum
 of what the log already shows for each row, computed by one domain function
 that the log's own hero code is refactored to call, so the two surfaces cannot
 disagree. Nothing new is stored; nothing is imported from Concept2; the
@@ -150,9 +153,13 @@ load-bearing as the line quoted):**
   phase reads (findings line 12).
 - `app/src/charts/scale.ts` (`linearScale`, `domainFromReadings`,
   `decimate`) and `axis.ts` (`chooseTicks`, `formatTick`) are trace-agnostic
-  and are the only chart primitives; the design handoff's Trend block is a
-  SKETCH, not a chart spec (`docs/design/handoffs/2026-08-07-news-tab/
-  README.md:96`).
+  and are the only chart primitives (`ls app/src/charts/` → those two files
+  and their tests, 2026-09-12); there is no stacked-bar, bar or line
+  primitive, so PR 1 adds the stacked bar (§9). The design handoff's Trend
+  block is a SKETCH, not a chart spec
+  (`docs/design/handoffs/2026-08-07-news-tab/README.md:96`); its §9 item 1
+  names `#c9c3b2` for previous-week bars, which Gate 0 measured at 1.73:1
+  and replaced (§14 ruling 12).
 - Nothing under `docs/superpowers/research/` covers aggregation, seasons or
   streaks (listing read 2026-09-12). A result, not a gap to fill. The one DB
   measurement before this phase is
@@ -165,11 +172,11 @@ load-bearing as the line quoted):**
 | Concept | Concept2 has it | Ergomatic asserts | Who is wrong when it matters |
 | --- | --- | --- | --- |
 | Season (May 1 – Apr 30, named by end year) | Yes (PRIMARY) | Mirrors it exactly | Nobody: a calendar convention, not a number |
-| Lifetime metres | Yes | Σ over our rows only, work-only | Us, if a rower expects their C2 catch-up or pre-Ergomatic metres — the surface says ERGOMATIC ROWS ONLY |
+| Lifetime metres | Yes | Σ over our rows only, work-only | Us, if a rower expects their C2 catch-up or pre-Ergomatic metres — the `ERGOMATIC ROWS ONLY` subtitle was struck by ruling 18, so nothing on the surface says so |
 | Avg metres/day this season | Yes (Honor Board) | Same formula, divisor pinned in §3.3 | Us, by at most one day of divisor if the INFERENCE is wrong |
 | Weekly streak | **No.** Concept2 has no streak | Ergomatic-invented, labelled `ERGOMATIC` on the surface | Us; it asserts nothing on Concept2's behalf |
-| Type buckets (AN/O2/AT/TR) | No — C2 has no intensity axis | Erg Book's own axis; a free row is NO TYPE, not a fifth peer (`just-row-design.md:802-806`) | Nobody: purely ours |
-| MACHINE vs ALL | No — C2 has no such split | `source = 'pm5'` is the stored door (`schema.ts:230`); MACHINE = by door (§14 ruling 1) | Us: a `pm5` row that closed `link-lost` is MACHINE by door but its tier is `stored` (§3.1); the column's `n OF m CARRY THE MONITOR'S OWN TOTALS` line says so |
+| Type buckets (AN · AT · O2 · TR) | No — C2 has no intensity axis | Erg Book's own axis; a free row is NO TYPE, not a fifth peer (`just-row-design.md:802-806`) | Nobody: purely ours |
+| MACHINE vs ALL | No — C2 has no such split | `source = 'pm5'` is the stored door (`schema.ts:230`); MACHINE = by door (§14 ruling 1) | Us: a `pm5` row that closed `link-lost` is MACHINE by door but its tier is `stored` (§3.1); nothing on the surface says so since ruling 19 struck the `n OF m` line — the count is computed only |
 | Calories, watts | Yes, derived (Phase LP §1) | Σ stored `totalCalories`, the monitor's own count; watts from the range's own pace over rows whose tier can know work-only (§14 ruling 6) | Us if a rower compares to C2's per-row watts mean — the label says `AT THE RANGE'S AVERAGE PACE`, and the exclusion is named on the row |
 
 ## 3. Definitions
@@ -226,13 +233,15 @@ are absent (hard delete, `data.ts:1583`).
 - **Metres** = Σ `workMeters` over rows with a non-null value.
 - **Time** = Σ `workSeconds` over rows with a non-null value.
 - **Sessions** = |rows(R, C)|, including rows contributing `null` metres.
-- **Monitor's own totals line** (MACHINE only) = `n OF m CARRY THE MONITOR'S
-  OWN TOTALS`, n = rows in tier `machine`, m = |rows(R, MACHINE)|.
+- **Monitor's own totals count** (MACHINE only): n = rows in tier `machine`,
+  m = |rows(R, MACHINE)| — computed (`ownTotals`, `sessions`) and, since
+  ruling 19, NOT printed; the `n OF m …` line is gone from the surface.
 - **Rest metres** (MACHINE only) = Σ `restMeters` non-null — the stored RC-1
   pair, what the TOTAL line shows (§14 ruling 2).
-- **Calories** (MACHINE only) = Σ `calories` non-null, shown with
-  `n OF m ROWS CARRY IT` where m = |rows(R, MACHINE)|. The row's caption is
-  `MONITOR'S OWN COUNT`: nothing establishes that the PM5's `totalCalories`
+- **Calories** (MACHINE only) = Σ `calories` non-null; `caloriesRows` (n
+  of m = |rows(R, MACHINE)|) is computed but, since ruling 18, NOT printed —
+  the `n OF m ROWS CARRY IT · MONITOR'S OWN COUNT` caption was struck. The
+  definition stands: nothing establishes that the PM5's `totalCalories`
   is work-only (`oracleCorpusReplay.test.ts:916-920` proves only that it
   equals Σ split calories), so the WORK METRES caption does not govern it.
 - **Avg watts** (MACHINE only) = `logbookWatts(Σ workSeconds, Σ workMeters)`
@@ -242,10 +251,40 @@ are absent (hard delete, `data.ts:1583`).
   so one fused row moves the figure more than it moves metres. It is the
   watts of the range's average pace, never a mean of per-row watts.
   `undefined` (a dash) when either sum is 0. Metres, time and sessions still
-  count `stored`-tier rows; the row's caption names the exclusion (§5).
-- **Time by type** = Σ `workSeconds` grouped by `workoutType` ∈ {AN, O2, AT,
-  TR} plus NO TYPE for `null` — five buckets, one stacked bar, NO TYPE drawn
-  in `--ink-4` with no type colour so it cannot read as a fifth intensity.
+  count `stored`-tier rows; no caption names the exclusion any more
+  (rulings 18/19). **The exclusion and the `k` count (`storedTierRows`,
+  computed, never printed since ruling 19) cover ONLY `source ===
+  "pm5"` rows in the stored tier (§14 ruling 17):** a timer or manual row
+  in that tier is what the rower typed — work by definition — so it is
+  never in k, and being outside the MACHINE column (ruling 1) it never
+  enters the watts figure either way.
+- **Time by type** = Σ `workSeconds` grouped by `workoutType` ∈ {AN, AT, O2,
+  TR} plus NO TYPE for `null` — five buckets, one stacked bar in the STACK
+  ORDER `AN · AT · O2 · TR · NO TYPE` (§14 ruling 13: the dataviz palette
+  validator fails the earlier AN · O2 · AT · TR listing on the O2↔AN
+  adjacency, ΔE 11.3 < 15 and deutan 4.9; the drawn order passes at 16.8
+  normal / 13.5 protan, `docs/design/career-stats/build.mjs` header). NO
+  TYPE is drawn in `--ink-4` with no type colour so it cannot read as a fifth
+  intensity. A bucket's share = its seconds ÷ the range's Σ `workSeconds`;
+  the legend prints each share as a whole percent (Gate 0's ALL legend reads
+  `AN 6% · AT 27% · O2 43% · TR 10% · NO TYPE 15%`, whose integers sum to
+  101 by independent rounding — the invariant is on SECONDS, §7 invariant
+  17, not on the printed integers). A bucket with 0 s has no segment and no
+  legend row. Computed over the same `rows(R, ALL)` as METRES.
+- **Metres per week** (PR 2) = Σ `workMeters` over `rows(R, ALL)` grouped by
+  the Monday-start week of the row's date, drawn as eight bars ending at the
+  week containing the range's LAST day (today for every preset; TO for
+  CUSTOM). Gate 0 pins the ALL series for the seed: `0 · 0 · 10,000 · 0 · 0 ·
+  13,000 · 3,000 · 2,000` for the weeks of 2026-07-20 … 2026-09-07 with
+  today = 2026-09-12 (`compute.mjs`). The calendar's current week is drawn in
+  `--ink` and labelled `THIS WK`; every other week in `--ink-4` (§14 ruling
+  12). NOT DRAWN at Gate 0: a CUSTOM range whose TO precedes this week — by
+  the caption's own two clauses the eighth bar is then TO's week, labelled by
+  its date, and no bar is in ink; the plan states this case and its test.
+- **Season cumulative** (PR 2) = the running Σ `workMeters` (ALL) from May 1
+  of the current season to today, one point per row date, NOT filtered by
+  the range; its end label is `<total> TODAY`. AVG M/DAY and both streaks
+  (§3.3) sit under it in the same group.
 
 ### 3.3 Calendar
 
@@ -412,68 +451,172 @@ export interface StatsRowsResponse {
 
 ## 5. Surface
 
-- **You root** (`src/You.tsx`): under the identity card, a two-line headline
-  in the house mono label style: `LIFETIME · 412,380 M` / `SEASON 2027 ·
-  38,120 M` — ALL column, work metres. Tapping it opens `/you/stats`. **The
-  headline is its own component, `src/you/stats/YouStatsHeadline.tsx`,**
-  which fetches through `useStatsRows` and computes through the domain;
-  `You.tsx` renders it and passes it NOTHING — `You.tsx` already imports
-  `Concept2Row` (`You.tsx:7`) and sits outside the §8.4 scan, so the
-  Concept2-free surface has to be a file the scan covers.
-- **STATS door**: first row of `.you-doors` (`You.tsx:153`), ABOVE
-  `BaselinesRow` (`:154`); the four existing rows (`:154-168`) keep their
-  order and DIAGNOSTICS stays last, as the comment at `:142-152` requires
-  ("Stays the LAST child of You"). Route `/you/stats`, a flat sibling of
-  `/you/baselines` (`src/shell/AppRoutes.tsx:258-263`), not in
-  `HIDDEN_TABBAR_PREFIXES`.
-- **`/you/stats`**, top to bottom: (1) filter bar — six 44px chips ALL ·
-  SEASON · YEAR · MONTH · 30 DAYS · CUSTOM, roving-tabindex radiogroup
-  copied from `PaceRefInput` (RF8), ALL selected on first open; CUSTOM
-  reveals two `<input type="date">` at 16px, seeded FROM = today − 29,
+Every string, height and ratio below is the Gate 0 canvas as approved
+(James, 2026-09-12; artifact
+https://claude.ai/code/artifact/c8ad61d9-853b-4262-9051-032f90e90cf2;
+sources committed at `docs/design/career-stats/` — `seed.mjs` is the ONE
+source every artboard and `compute.mjs`'s printed arithmetic draw from,
+`build.mjs` emits the artboards, `contrast.json` and `hero-heights.json` are
+its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
+`A3-StatsPortrait.dc.html`, `A4-StatsLandscape.dc.html`,
+`A6a-Empty0Rows.dc.html`, `A6b-Empty1Row.dc.html`,
+`A6c-NoMonitorRows.dc.html`, `A7-Contrast.dc.html`).
+
+- **You root** (`src/You.tsx`): under the identity card, the **hero** — Gate
+  0's H3 TIME BY TYPE (§14 ruling 9), **140 px tall in portrait as
+  shipped** — measured ONCE, hairline to hairline on
+  `docs/screenshots/you.png`: the two full-width `--rule-2` (`#ded8c9`)
+  pixel rows are 120 and 259 (a PNG IDAT scan counting rows where ≥ 90 %
+  of pixels between x = 24 and x = 366 are that colour; PR #417's fix
+  round, re-measured after ruling 18 struck the caption), so
+  259 − 120 + 1 = 140. The canvas candidates measured H1 201 / H2 142 /
+  H3 181 (`hero-heights.json`); the shipped chip legend wraps tighter and
+  carries no caption, which is the whole difference. Full content width. Top to bottom (A2-H3): one row carrying `LIFETIME ·
+  56,752 M` and `SEASON 2027 · 43,012 M` (house mono label style, ALL column,
+  work metres, tabular numerals; the two spans sit space-between and wrap
+  when the width forces it); one 24 px stacked bar in the §3.2 order with
+  2 px surface gaps; the legend as swatch CHIPS — one per non-empty
+  bucket, `AN 6%` … `NO TYPE 15%`, A2-H3's own markup (`build.mjs`
+  `stackSvg(…, { compact: true })`), wrapping when the width forces it;
+  the artboard wins over any run-of-text reading of this line; NO caption
+  under the legend (ruling 18 struck `WORK TIME BY TYPE · ALL ROWS`). **It
+  replaces the
+  two-line headline the design first carried** (ruling 9). **The hero IS the
+  door (§14 ruling 10):** tapping anywhere on it opens `/you/stats`. It is
+  ONE focusable control — a `Link` whose accessible name is `Stats`, ≥ 44 px
+  tall, with the house visible focus ring — and contains no other
+  interactive element; the bar inside it is decoration for the accessible
+  name (the legend text carries the values), so the control has exactly one
+  name (§7 invariant 16). **The hero is its own component,
+  `src/you/stats/YouStatsHero.tsx`,** which fetches through `useStatsRows`
+  and computes through the domain; `You.tsx` renders it and passes it
+  NOTHING — `You.tsx` already imports `Concept2Row` (`You.tsx:7`) and sits
+  outside the §8.4 scan, so the Concept2-free surface has to be a file the
+  scan covers.
+- **The doors group is unchanged (ruling 10):** `.you-doors` (`You.tsx:153`)
+  stays `BaselinesRow` · `Concept2Row` · SETTINGS · DIAGNOSTICS (`:154-168`),
+  DIAGNOSTICS last as the comment at `:142-152` requires ("Stays the LAST
+  child of You"). **There is NO separate STATS row** — A2-H3 was drawn with
+  one before the ruling struck it, and the ruling governs. Route
+  `/you/stats`, a flat sibling of `/you/baselines`
+  (`src/shell/AppRoutes.tsx:258-263`), not in `HIDDEN_TABBAR_PREFIXES`.
+- **Landscape You scrolls (§14 ruling 14):** the hero pushes the doors below
+  the 390 px fold (`A2-H3-YouLandscape` marks `VIEWPORT BOTTOM · 390PX ·
+  PAGE SCROLLS`); accepted, no landscape-only layout.
+- **`/you/stats`**, top to bottom (A3 portrait, A4 landscape — the same
+  single column, the page scrolls in both):
+  (1) `← BACK` (`.back-link`, 44 px) and the title `Stats`; the **filter
+  bar** — six 44 px chips `ALL · SEASON · YEAR · MONTH · 30 DAYS · CUSTOM`
+  (58 px wide each at the 350 px content width), roving-tabindex radiogroup
+  copied from `PaceRefInput` (RF8), ALL selected on first open; NO caption
+  under it (ruling 18 struck `RANGE APPLIES TO …`). CUSTOM reveals
+  two `<input type="date">` at 16 px (44 px tall), seeded FROM = today − 29,
   TO = today, applied on change, and while FROM > TO the previous range
-  stays and the inputs read `FROM MUST NOT FOLLOW TO`; (2) TOTALS — two
-  columns headed `ALL ROWS` and `MACHINE`, rows METRES / TIME / SESSIONS in
-  both columns, then REST METRES / CALORIES / AVG WATTS under MACHINE only
-  (§14 ruling 5: calories and watts are rows of this group, never a group
-  of their own — the "lifetime + monthly" ruling is met by the ALL and
-  MONTH presets), with `n OF m CARRY THE MONITOR'S OWN TOTALS` under the
-  MACHINE heading. **Captions, each governing only what it can (RF34):**
-  the group's caption `ERGOMATIC ROWS ONLY · WORK METRES · REST SHOWN
-  SEPARATELY` governs METRES and TIME; the CALORIES row carries `n OF m
-  ROWS CARRY IT · MONITOR'S OWN COUNT` (not claimed work-only, §3.2); the
-  AVG WATTS row carries `AT THE RANGE'S AVERAGE PACE · WORK-ONLY ROWS`
-  (§14 ruling 6). (3) MOTIVATION — `AVG M/DAY THIS SEASON`, `CURRENT
-  STREAK`, `LONGEST STREAK`, each streak labelled `WEEKS · ERGOMATIC`;
-  (4) TIME BY TYPE — one stacked bar, five buckets, legend below; (5) TEST
-  TREND — 2k and 6k as two series of split seconds over date on
-  `linearScale`/`chooseTicks(kind: "pace")`, captioned `ALL TESTS · KEPT
-  WHEN A LOG IS DELETED` so the one exception is said where it shows.
-- **The seam line:** when any row in range is tier `stored`, the totals
-  caption gains `k ROWS PREDATE WORK-ONLY TOTALS · NOT IN AVG WATTS` — the
-  seam named on the surface, as ruled, and the watts exclusion (§14 ruling
-  6) said where the excluded rows are counted.
-- **Empty states**, honest text and never sample data: 0 rows → `NO ROWS
-  YET · YOUR FIRST SAVED ROW STARTS THE COUNT`; 1 row → totals render
-  (PR 1), and PR 2's chart groups read `TWO ROWS MAKE A CHART` below two
-  rows in range; **the MACHINE column with zero `pm5` rows in range** (every
-  tester who has never connected a monitor) → the column's figures are
-  replaced by `NO MONITOR ROWS YET` and its `n OF m` lines are hidden, so
-  nobody reads `0 OF 0 CARRY THE MONITOR'S OWN TOTALS`; no test history →
-  `NO 2K OR 6K TEST LOGGED` (one test point is drawn as a point — a record
-  of one is still a record); a CUSTOM range with no rows → `NO ROWS BETWEEN
-  <from> AND <to>`.
-- **Gate 0 (before any implementation task):** a rendered HTML artifact of
-  the You headline and the whole subpage at 390×844 portrait and 844×390
-  landscape, seeded with ≥ 12 real rows across four types plus two free
-  rows and one pre-RC-5 `stored` row, beside the current You screen — AND a
-  second frame of the subpage with zero `pm5` rows, showing the MACHINE
-  column's `NO MONITOR ROWS YET` state. Every colour pairing's ratio
-  computed and stated: the pairs this design uses are `--ink` on `--page`
-  (15.41:1) and `--ink-3` on `--page` (6.69:1) and on `--surface` (7.43:1),
-  all recorded in `docs/design/DEVIATIONS.md:75-79`; the NO TYPE bucket's
-  `--ink-4` on `--page` is 4.76:1 (`DEVIATIONS.md:59`). Any new pairing is
-  computed at the gate. Every tap target ≥ 44×44 px. RF7: the artifact's
-  headline is recomputed from its own rows by hand in the gate message.
+  stays and the inputs read `FROM MUST NOT FOLLOW TO` (A5b).
+  (2) **TOTALS** — **NO prose at all (ruling 19, which struck the two
+  lines ruling 18 had kept — the `k ROW(S) PREDATE WORK-ONLY TOTALS` seam
+  line and the `n OF m MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS`
+  footnote).** The page is the title, the filter bar, the TOTALS heading
+  and card, the TIME BY TYPE heading, bar and legend, and the empty-state
+  lines only. The card itself is the header row `ALL ROWS | MACHINE`, rows METRES /
+  TIME / SESSIONS in both columns, then REST METRES / CALORIES / AVG WATTS
+  under MACHINE only (§14 ruling 5: calories and watts are rows of this
+  group, never a group of their own — the "lifetime + monthly" ruling is
+  met by the ALL and MONTH presets). STRUCK by ruling 18: the `ERGOMATIC
+  ROWS ONLY · WORK METRES · REST SHOWN SEPARATELY` subtitle, the in-card
+  `n OF m CARRY …` header line, the CALORIES `n OF m ROWS CARRY IT ·
+  MONITOR'S OWN COUNT` line and the AVG WATTS `AT THE RANGE'S AVERAGE PACE
+  · WORK-ONLY ROWS` line — the exclusions those captions named (§3.2,
+  ruling 6) still hold in the numbers, unlabelled.
+  (3) **METRES PER WEEK** (PR 2) — eight bars ≤ 24 px wide on a `linearScale`
+  y-axis with `chooseTicks` gridlines, captioned `EIGHT WEEKS ENDING AT THE
+  RANGE'S LAST DAY · WEEKS BEGIN MONDAY · THIS WEEK IN INK`; the current week
+  in `--ink`, the others in `--ink-4`; bars carry their value label above
+  when non-zero (A3: `10,000`, `13,000`, `2,000`); x labels every other week
+  by date (`27 JUL · 10 AUG · 24 AUG · THIS WK`).
+  (4) **TIME BY TYPE** (PR 1 — the hero already needs the computation and
+  the bar, so the group ships at no extra cost, §9) — the same stacked bar
+  as the hero, with NO caption (ruling 18 struck `WORK TIME · NO TYPE IS
+  ERGOMATIC'S OWN BUCKET …`), and a legend of one row
+  per non-empty bucket: swatch, name, time, whole-percent share (A3: `AN
+  13:43 6% · AT 1:03:39 27% · O2 1:44:04 43% · TR 23:07 10% · NO TYPE
+  35:06 15%`).
+  (5) **SEASON <name>** (PR 2; A3 reads `SEASON 2027`), captioned `MAY 1 TO
+  TODAY · ALWAYS THIS SEASON · NOT FILTERED` — the cumulative curve (2 px
+  `--ink` line, ≥ 8 px end dot, y-axis in metres, x labels `MAY · AUG · NOV
+  · FEB · APR`) with its end label `43,012 TODAY`; under it three figures:
+  `AVG M/DAY` `319 M`, `CURRENT STREAK` `3` `WEEKS · ERGOMATIC`, `LONGEST
+  STREAK` `3` `WEEKS · ERGOMATIC` (the streak strip, A3, is 16 Monday-start
+  cells, rowed cells filled `--ink`, not-rowed cells outlined `--rule-2`).
+  (6) **TEST TREND** (PR 2) — 2k (`--ink`) and 6k (`--type-o2`) as two series
+  of split seconds over date on `linearScale`/`chooseTicks(kind: "pace")`
+  with the axis inverted so faster is higher (the caption ends `FASTER IS
+  UP`; ticks `1:54 · 1:58 · 2:02 · 2:06`), 2 px lines, ≥ 8 px dots with a
+  2 px surface ring, the last point of each series labelled (`6K 2:01.4`,
+  `2K 1:54.0`), a `2K · 6K` legend, captioned `ALL TESTS · KEPT WHEN A LOG
+  IS DELETED · NOT FILTERED` so the one exception is said where it shows.
+- **Empty states**, honest text and never sample data:
+  - **0 rows** (A6a; §14 ruling 16): the page is `← BACK`, `Stats` and `NO
+    ROWS YET · YOUR FIRST SAVED ROW STARTS THE COUNT` — **the filter bar is
+    hidden**, and so is every group.
+  - **1 row** (A6b): the filter bar and TOTALS render in full (`237` W for
+    R13 alone; A6b's `1 OF 1 CARRY …` line was struck by ruling 19); METRES PER WEEK, TIME
+    BY TYPE and SEASON each read `TWO ROWS MAKE A CHART` under their caption
+    (PR 1 renders TIME BY TYPE's; PR 2 the other two); TEST TREND draws its
+    one point — a record of one is still a record.
+  - **Zero `pm5` rows in range** (A6c; ruling 16 — every tester who has never
+    connected a monitor): the header row keeps both headings and the
+    METRES / TIME / SESSIONS rows keep an EMPTY MACHINE cell (the column does
+    not collapse); `NO MONITOR ROWS YET` sits on the column's own line under
+    them; **the REST METRES, CALORIES and AVG WATTS rows are HIDDEN** (the
+    `n OF m` lines this once also hid are gone everywhere since ruling 19).
+    The charts still render from the ALL rows (A6c: `20,000`
+    metres, `AVG M/DAY 133 M`, `CURRENT STREAK 0`, `LONGEST STREAK 1`).
+    One place the artboard and the ruling differ: A6c draws `AN 0:00 0%`
+    and `NO TYPE 0:00 0%` legend rows for its two empty buckets; invariant
+    17 (a 0-s bucket has no segment and no legend row) governs, and the plan
+    omits those rows.
+  - **No test history**: `NO 2K OR 6K TEST LOGGED` under the TEST TREND
+    caption (A6c).
+  - **A CUSTOM range with no rows**: `NO ROWS BETWEEN <from> AND <to>` — not
+    drawn at Gate 0; the plan renders it in the TOTALS group's place with the
+    filter bar still shown (the rower needs the bar to leave the range).
+- **Gate 0 — APPROVED 2026-09-12 (James), exit criterion 4 met.** What was
+  shown: the You hero in three candidate heights (H1 / H2 / H3, portrait and
+  landscape) beside the current You screen, the whole subpage at 390×844 and
+  844×390, the CUSTOM open and error frames, the three empty frames above,
+  and A7's contrast and hit-target tables — all seeded from `seed.mjs`'s 13
+  rows across four types plus two free rows and one pre-RC-5 `stored` row,
+  plus 6 test rows, and every headline recomputed from those rows by
+  `compute.mjs` (RF7). **The seed is the phase's reference fixture** (§8.5).
+  - **Contrast, every pairing computed (`contrast.json`, WCAG 2.1 relative
+    luminance; hexes verbatim from `app/src/theme/tokens.css`):** text —
+    `--ink` on `--page` 15.41:1, `--ink` on `--surface` 17.11:1, `--ink-3`
+    on `--page` 6.69:1, `--ink-3` on `--surface` 7.43:1, `--ink-2` on
+    `--surface` 10.81:1 (unselected chip), `--on-color` on `--ink` 17.11:1
+    (selected chip), `--ink-4` on `--page` 4.76:1 (the one caption naming
+    the NO TYPE bucket); **every text pairing clears 4.5:1 and every one but
+    the NO TYPE caption clears 6.69:1.** Data marks (WCAG 1.4.11, 3:1) —
+    `--ink` 17.11:1 (current-week bar, 2k line, rowed cells, season curve, TR
+    segment), `--ink-4` 5.29:1 (previous-week bars, NO TYPE segment),
+    `--type-an` 8.00:1, `--type-at` 5.53:1, `--type-o2` 6.65:1, `--accent`
+    5.94:1 (active tab mark); **every data mark ≥ 5.29:1.** Below 3:1, all
+    NON-TEXT and none a data mark: the two house hairlines that predate this
+    design (`--rule-3` on `--surface` 1.73:1 — filter strip and date-input
+    borders; `--rule` on `--page` 1.32:1 — card border) and the decorative
+    gridlines and not-rowed cell outline (`--rule-2` on `--surface` 1.40:1;
+    the rowed FILL carries the state at 17.11:1). Two candidates for
+    previous-week bars were measured and REJECTED: the handoff's `#c9c3b2`
+    (`--rule-3`) at 1.73:1 and `--ink-5` at 2.75:1 (§14 ruling 12).
+  - **Hit targets (A7):** the hero ≥ 44 px (140 px shipped, 181 px on the
+    canvas), `← BACK` 44 px min
+    height and width, each filter chip 44 × 58 px, each date input 44 px
+    tall, tab items 44 px + safe-area padding, Sign out 44 px. Chart marks
+    are not tap targets in PR 1; PR 2's hover/tooltip layer owns them, with
+    a hit target larger than the mark (dataviz).
+  - The dataviz palette validator's lightness-band and chroma-floor checks
+    fail for every house token because the palette is deliberately muted;
+    reported, not acted on (A7).
 
 ## 6. Where the risk is
 
@@ -521,9 +664,9 @@ which of them the gap was.
    whose tier is `machine`, `work-pair` or `steps`, never a mean of per-row
    watts and never fed a `stored`-tier row (§14 ruling 6).
 8. Calories is a sum of stored `totalCalories` only; a row without one adds
-   0 and the `n OF m` line says so.
+   0 (`caloriesRows` counts the carriers; not printed since rulings 18/19).
 9. NO TYPE is a bucket for `workoutType === null` only, drawn without a type
-   colour, and never a member of `WORKOUT_TYPES`.
+   colour, last in the stack, and never a member of `WORKOUT_TYPES`.
 10. Streaks are computed from row dates alone; an unfinished current week
     never breaks a streak.
 11. Nothing this phase adds is stored: no column, no migration, no
@@ -544,6 +687,22 @@ which of them the gap was.
 15. The stats surface renders a bounded state for any row count: the route
     is unpaginated by design up to the measured trigger (any user > 5,000
     rows, DBA 2026-09-12), and the §13 row owns the cursor beyond it.
+16. **The hero is the door and the only door (§14 ruling 10):** the You hero
+    is exactly ONE focusable control with exactly ONE accessible name
+    (`Stats`), ≥ 44 px, with visible focus; it contains no nested interactive
+    element (no inner link, button or tabbable node); activating it anywhere
+    — the figures, the bar, the legend — opens `/you/stats`; and `.you-doors`
+    carries no STATS row.
+17. **The stacked bar sums to the range:** its segments' seconds sum to Σ
+    `workSeconds` over `rows(R, ALL)` — the same figure the TIME row shows —
+    in the order `AN · AT · O2 · TR · NO TYPE`; a bucket with 0 s renders no
+    segment and no legend row; shares are printed as whole percents and the
+    invariant is on the seconds, never the printed integers.
+18. **The Gate 0 seed is the reference fixture:** the figures the e2e and
+    client tests assert for `docs/design/career-stats/seed.mjs`'s rows are
+    the ones `compute.mjs` prints (§8.5), with the clock pinned to
+    2026-09-12 — a change to any of those figures is a change to what a
+    number means and takes the TRIAD gate.
 
 ## 8. Testing — each gate with RF26's five-part contract
 
@@ -573,7 +732,7 @@ every row".
 row per tier, one `manual`, one `pm5` closed `link-lost`, **and at least one
 `stored`-tier row shaped like a pre-RC-5 save (fused `distanceMeters`, no
 work pair, no machine totals, `endedBy` outside the allowlist) so the
-`k ROWS PREDATE` count can go red** (DBA correctness note: its generator
+`storedTierRows` count can go red** (DBA correctness note: its generator
 produced zero such rows) — then reads `GET /api/stats/rows`. **The seeded
 tier-`machine` row is FUSED on purpose:** `distanceMeters` exceeds
 `machineWorkMeters` by a named rest amount, 120 m, because a realistic
@@ -600,13 +759,15 @@ the report names which literal went red.
 (§1) and a calendar pin
 that passes in UTC proves nothing about a device in New York. (1) Invariant
 5 at the seam. (2) The file sets `process.env.TZ = "America/New_York"` (a
-NEGATIVE offset, so a late-UTC instant crosses midnight backwards) at the
+NEGATIVE offset, so an early-UTC instant on the 13th is still the 12th
+there) at the
 top, BEFORE any `Date` is constructed, and ASSERTS the offset took —
 `new Date("2026-09-12T12:00:00Z").getTimezoneOffset()` is `240` — because a
 property of how the test got there is an assertion, not a comment (RF38).
-(3) Observable: the instant `2026-09-12T23:30:00Z` converts to
-`{ y: 2026, m: 9, d: 12 }` (the PREVIOUS local day; in UTC it would be the
-13th). (4) Mutation: swap the local getters for `getUTCFullYear`/
+(3) Observable: the instant `2026-09-13T02:30:00Z` converts to
+`{ y: 2026, m: 9, d: 12 }` (22:30 EDT, the PREVIOUS local day; in UTC it
+would be the 13th — a `23:30Z` instant on the 12th cannot serve, it is the
+12th in UTC too, measured at PR 1's Task 5 mutation). (4) Mutation: swap the local getters for `getUTCFullYear`/
 `getUTCMonth`/`getUTCDate` in the adapter → the assertion reads `d: 13`,
 and the report pastes that failure. (5) "The adapter converts in the
 process's zone, and the test process's zone is one where it matters."
@@ -614,36 +775,87 @@ process's zone, and the test process's zone is one where it matters."
 ### 8.4 Structural gate for invariant 12
 
 A unit test reads every file under `app/domain/stats/`, `src/you/stats/`
-(which now holds `YouStatsHeadline.tsx`, §5) and `src/api/useStatsRows.ts`
+(which now holds `YouStatsHero.tsx`, §5) and `src/api/useStatsRows.ts`
 as text and asserts, CASE-INSENSITIVELY, that none contains `verified`,
 `c2ResultId`, `c2UserId`, `concept2` or `/api/concept2` — the real module is
 `src/api/useConcept2Link.ts` (capital C), and a case-sensitive scan for
 `concept2` matches nothing in a file that imports it. It ALSO asserts the
-headline component's import list by reading `YouStatsHeadline.tsx`'s
+hero component's import list by reading `YouStatsHero.tsx`'s
 `import` lines and checking each specifier against the same list, so the
 one new file `You.tsx` renders is covered even though `You.tsx` itself
 (which imports `Concept2Row`, `:7`) is not. A type-level test asserts
-`keyof StatsRow` equals the §4.3 literal list. (4) Mutation: add `verified:
+`keyof StatsRow` equals the §4.3 literal list — **a COMPILE-time gate:**
+only `tsc` (`pnpm typecheck`, the pre-commit hook) bites on
+`expectTypeOf`, and vitest runs the file green whatever the type says; the
+runtime `it` beside it is kept as documentation of the ten keys, not as
+the gate. (4) Mutation: add `verified:
 boolean | null` to `StatsRow` → the key-set assertion fails naming the key;
 add `import { useConcept2Link } from "../../api/useConcept2Link"` to
-`YouStatsHeadline.tsx` → the text scan fails naming the file. (5) "No
+`YouStatsHero.tsx` → the text scan fails naming the file. (5) "No
 Concept2 identifier appears in the stats code" — structure, not runtime
 behaviour (RF26).
 
-### 8.5 Client and e2e (invariants 1, 8, 9, 13)
+### 8.5 Client and e2e (invariants 1, 8, 9, 13, 16, 17, 18)
 
-- Client: filter presets select the right rows; a CUSTOM `from > to` keeps
-  the previous range and shows the §5 string; empty states render the §5
-  strings and never a chart; the MACHINE column with zero `pm5` rows renders
-  `NO MONITOR ROWS YET` and no `n OF m` line.
-- e2e (`e2e/stats.spec.ts`): seed 6 rows through the API with known metres
-  (three `pm5`, one per other source), open You, assert the LIFETIME line
-  equals the HAND-COMPUTED sum written as a literal in the test (RF7); open
-  STATS, assert ALL and MACHINE metres against two literals; delete one
-  `pm5` row through the UI, reload, assert both lines moved by that row's
-  literal. Mutation: make the ALL column filter `source === "pm5"` → the
+- **The fixture is the Gate 0 seed** (§5; RF3): `docs/design/career-stats/
+  seed.mjs` — 13 log rows R1-R13 and 6 `test_history` rows T1-T6 — with
+  today = **2026-09-12**. It is plain dependency-free ESM, so tests import it
+  directly rather than transcribing it; if the plan transcribes (an API-shaped
+  seed for `POST /api/logs`), one test asserts the transcription's per-row
+  `workMeters`/`workSeconds`/`source`/`type`/`date` equal `seed.mjs`'s. The
+  figures to assert are `compute.mjs`'s printout, verbatim:
+  - ALL / lifetime: **56,752 m · 3:59:39 · 13 sessions**; SEASON 2027:
+    **43,012 m** (9 rows); 30 DAYS: 18,000 m; MONTH: 5,000 m.
+  - MACHINE (10 rows): **36,752 m · 2:34:31 · 10**; `ownTotals` 8 of 10
+    (computed, not printed — ruling 19); REST METRES **718**; CALORIES
+    **1,731** (8 of 10 carry one — computed, not printed); AVG WATTS **176**
+    (Σs 7679.1 / Σm 30,512 over the nine non-`stored` rows);
+    `storedTierRows` 1 (R1; computed, not printed — ruling 19).
+  - TIME BY TYPE (ALL): AN 822.6 s (5.7%) · AT 3819.4 s (26.6%) · O2 6244.0 s
+    (43.4%) · TR 1387.3 s (9.6%) · NO TYPE 2106.0 s (14.6%), Σ 14379.3 s; the
+    rendered legend reads `AN 6%`, `AT 27%`, `O2 43%`, `TR 10%`, `NO TYPE
+    15%` on the hero and `AN 13:43 6%` … `NO TYPE 35:06 15%` on the subpage.
+  - METRES PER WEEK (PR 2): `0 · 0 · 10,000 · 0 · 0 · 13,000 · 3,000 · 2,000`
+    for the weeks of 2026-07-20 … 2026-09-07. SEASON: `43,012 TODAY`, AVG
+    M/DAY 319 (43,012 / 135), CURRENT STREAK 3, LONGEST 3. TEST TREND: six
+    points, T1/T3/T5 with `sessionLogId` null.
+- **The clock is pinned.** Every figure above depends on today = 2026-09-12
+  (the season, 30 DAYS, MONTH, the week axis, the divisor 135, the streaks);
+  the e2e pins the browser clock to that date AND the browser's zone
+  (Playwright `timezoneId`), and seeds each row's `loggedAt` at local NOON of
+  its seed date so no zone can move a row across midnight. The unit tests
+  pass `today` as the `{ y, m, d }` triple (§3). A test that reads the real
+  clock is wrong by construction (invariant 14).
+- Client: filter presets select the right rows (the four preset totals
+  above); a CUSTOM `from > to` keeps the previous range and shows the §5
+  string; **0 rows renders the §5 string and NO filter bar** (ruling 16);
+  **zero `pm5` rows renders `NO MONITOR ROWS YET` and no REST METRES /
+  CALORIES / AVG WATTS row** (ruling 16; the `n OF m` absence case went
+  with the line itself, ruling 19; the three manual rows
+  R2 · R9 · R10 are the fixture: ALL 20,000 m · 1:25:08 · 3); the stacked
+  bar's segments sum to the range's seconds and a 0-s bucket has no segment
+  and no legend row (invariant 17 — the manual-rows fixture has AN = 0 and
+  NO TYPE = 0, so the mutation "render every bucket" goes red on it); the
+  order is pinned by the INDEPENDENT literal `["AN", "AT", "O2", "TR", "NO
+  TYPE"]`, never the production constant (RF21).
+- **Hero-as-door** (invariant 16), client: the hero's root is the one
+  element matching `a, button, [tabindex]` inside it (count = 1), its
+  accessible name is `Stats`, and a click on the legend text — the deepest
+  descendant — navigates to `/you/stats`; `.you-doors` has exactly four
+  children and none reads STATS. Mutation: wrap the legend in its own
+  `<Link>` → the count assertion fails naming two focusables.
+- e2e (`e2e/stats.spec.ts`): seed the 13 LOG rows through the API with the
+  clock and zone pinned (the 6 test rows seed in PR 2, with the trend); open You, assert the LIFETIME line
+  reads `56,752` and SEASON `43,012` (RF7 — hand-recomputed above and in
+  `compute.mjs`), Tab to the hero and assert it is focused with name
+  `Stats`, tap the LEGEND and assert `/you/stats`; assert ALL `56,752` and
+  MACHINE `36,752`, `718`, `1,731`, `176` (no prose lines to assert since
+  ruling 19); delete R13 (a `pm5` row, 2,000
+  m) through the UI, reload, assert LIFETIME `54,752`, MACHINE `34,752` and
+  `7 OF 9`. Mutation: make the ALL column filter `source === "pm5"` → the
   ALL literal fails while MACHINE passes (the case that proves the two
-  columns are computed independently).
+  columns are computed independently). This run is bounded below the fake's
+  first frame by construction — nothing here connects a monitor (RF41).
 - Screenshots: `you.png` (layout changed) and a new `you-stats.png`, opened
   and described, headline recomputed from the visible rows (RF7).
 
@@ -662,11 +874,17 @@ behaviour (RF26).
   `logbookWatts`/`logbookCalPerHour` move into `app/domain/logbook.ts` with
   `src/session/logbookDerived.ts` re-exporting, the `domain/** → src/**`
   ESLint rule and its mutation, route, adapter with its `TZ`-pinned test,
-  `YouStatsHeadline.tsx` as its own component, STATS subpage with filter bar
-  and the whole TOTALS group (both columns, rest, calories, avg watts and
-  both `n OF m` lines), the seam line, empty states including the MACHINE
-  column's.** Gates: Gate 0 first (§5); `/harden` on the plan (two lenses,
-  capped); the DBA gate below; full e2e read; PM final-PR gate.
+  the time-by-type computation in `aggregate.ts` and a stacked-bar primitive
+  under `src/charts/` (both needed by the hero — §14 ruling 11),
+  `YouStatsHero.tsx` as its own component and as the door (ruling 10; no
+  STATS row), the `/you/stats` subpage with filter bar, the whole TOTALS
+  group (both columns, rest, calories, avg watts; no prose since rulings
+  18/19), the TIME BY TYPE
+  group (it costs nothing once the hero exists, so it ships here), and the
+  empty states — 0 rows with the filter bar hidden, 1 row, and the MACHINE
+  column's with its three rows hidden (ruling 16).** Gates: Gate 0 —
+  APPROVED 2026-09-12 (§5); `/harden` on the plan (two lenses, capped); the
+  DBA gate below; full e2e read; PM final-PR gate.
   **PR 1's DBA gate is the protocol the spec pass prescribed, run against
   the SHIPPED store query, scripts committed under
   `docs/superpowers/research/2026-09-12-stats-rows/`:** (a) seed 1M rows
@@ -680,25 +898,30 @@ behaviour (RF26).
   to beat: **bytes/row ≤ 240 and the 10k-row user's p95 ≤ 150 ms**; (e) the
   §8.2 fixture carries ≥ 1 `stored`-tier row. The verdict names the scale
   that decided it.
-- **PR 2 — MOTIVATION, TIME BY TYPE, TEST TREND.** Gates:
-  antagonist DELTA pass scoped to §3.3 streak/avg-per-day definitions only
-  (new invariant classes against the anchor's vetted ground; AVG WATTS
-  ships in PR 1 and was attacked by the anchor); DBA SKIP stated aloud
-  unless a query changes (test-history's GET is unchanged); no PM per-PR
-  gate (non-triad UI); Gate 0 for its groups rides PR 1's artifact, which
-  renders all five groups.
+- **PR 2 — the remaining charts: METRES PER WEEK, the SEASON group
+  (cumulative curve, AVG M/DAY, CURRENT and LONGEST STREAK), TEST TREND,
+  and the hover/tooltip layer.** Every one was designed and approved at
+  Gate 0 (ruling 11; §5 items 3, 5, 6), so PR 2 carries no design gate of
+  its own unless the rendered thing changes. Gates: antagonist DELTA pass
+  scoped to §3.3 streak/avg-per-day and §3.2 metres-per-week definitions
+  only (new invariant classes against the anchor's vetted ground; AVG WATTS
+  and time by type ship in PR 1); DBA SKIP stated aloud unless a query
+  changes (test-history's GET is unchanged); no PM per-PR gate (non-triad
+  UI).
 - Fast path applies to nothing here (`app/domain/` and `app/server/` in
   PR 1; a wrong version produces a wrong number). PR 1 is one plan: the
   domain function and its contract test, the route and its seam test, and
-  one screen whose only chart-free group is TOTALS — one risk model (the
-  number's meaning) for one reviewer; the charts wait for PR 2.
+  one screen carrying TOTALS and the one chart the hero already needs — one
+  risk model (the number's meaning) for one reviewer; the line and bar
+  charts wait for PR 2.
 
 ## 10. Exit criteria
 
 1. §8.1–8.5 green with each mutation's failure text in the PR body,
    including the ESLint rule's (§4.1) and the `TZ` test's (§8.3).
-2. `grep -rin "verified\|c2ResultId\|c2UserId\|concept2" app/domain/stats
-   app/src/you/stats app/src/api/useStatsRows.ts` returns nothing (the §8.4
+2. `grep -rin --exclude='*.test.ts' "verified\|c2ResultId\|c2UserId\|concept2"
+   app/domain/stats app/src/you/stats app/src/api/useStatsRows.ts` returns
+   nothing — the exclusion drops the §8.4 test's own needle list (the §8.4
    gate's grep — case-insensitive, or it cannot see `useConcept2Link` —
    pasted).
 3. The DBA verdict is attached to PR 1 with the §9 protocol's numbers at
@@ -708,14 +931,22 @@ behaviour (RF26).
    the 2026-09-12 measurement; reopening either is James's call on its own
    TRIAD row, never PR 1's.
 4. Gate 0 approved before PR 1's first implementation commit, with ratios
-   and the zero-`pm5` MACHINE frame.
+   and the zero-`pm5` MACHINE frame — **MET 2026-09-12** (§5; artifact
+   `c8ad61d9-853b-4262-9051-032f90e90cf2`, sources in
+   `docs/design/career-stats/`), with rulings 9-16 applied here before the
+   plan was written.
 5. **Totals at ≥ 1 row, verified at PR 1:** a rower with one saved row sees
    real totals on You and `/you/stats` equal to that row's detail hero; at
    0 rows, the §5 empty state; with no `pm5` row, the MACHINE column's.
-   **Charts at ≥ 2 points, verified at PR 2:** the chart groups render at
-   two rows in range and read their §5 string below. Each half is checked
-   at the PR that ships it — a criterion cannot be verified on a build where
-   its code does not exist (RF24).
+   **Charts at ≥ 2 points:** TIME BY TYPE at PR 1, METRES PER WEEK, SEASON
+   and TEST TREND at PR 2 — each renders at two rows in range and reads
+   `TWO ROWS MAKE A CHART` below. Each half is checked at the PR that ships
+   it — a criterion cannot be verified on a build where its code does not
+   exist (RF24).
+7. **The reference fixture agrees with the canvas:** the e2e and client
+   figures for the Gate 0 seed (§8.5) are the ones `compute.mjs` prints and
+   the artboards show, with the clock pinned to 2026-09-12; the hero is one
+   control named `Stats` and `.you-doors` has no STATS row (invariant 16).
 6. **The eyeball oracle (§14 ruling 7):** on the TestFlight build carrying
    PR 1, James compares LIFETIME and THIS SEASON on You against his own
    Concept2 logbook page, once, by eye. The phase's close record carries
@@ -728,7 +959,8 @@ behaviour (RF26).
 PBs and Lifetime Bests; the Million Metre Club; Concept2 import or catch-up
 metres; storing machine type (the existing register row owns it; every row
 is a RowErg row until then); `completedAt` as the row date; per-row watts;
-charts beyond one stacked bar and one two-series line. **Generated columns,
+charts beyond the six Gate 0 drew (the hero bar, metres per week, time by
+type, the season curve and streak strip, the test trend). **Generated columns,
 an index, or any migration:** the DBA measures and James rules — a
 stored-shape change is its own TRIAD row outside PS, and the 2026-09-12
 measurement found neither Wave E row reachable from this route's shape
@@ -792,14 +1024,18 @@ touched by this spec.
 ## 14. Rulings (James, 2026-09-12)
 
 Five points where a repo fact pulled against the approved design, ruled on
-the day the design was approved (1-5), and three ruled at the phase-open
-gates the same day (6-8). The rulings are applied above; this section is the
-record.
+the day the design was approved (1-5), three ruled at the phase-open gates
+the same day (6-8), and eight ruled at Gate 0 on the rendered canvas (9-16;
+artifact `c8ad61d9-853b-4262-9051-032f90e90cf2`, sources
+`docs/design/career-stats/`). The rulings are applied above; this section is
+the record.
 
 1. **MACHINE = by door.** Every `source = 'pm5'` row is MACHINE, including a
    `pm5` row closed `link-lost` that has no machine totals and no work pair
    (`storedSummary.ts:496-520`) and so sits in tier `stored`. The column
-   carries `n OF m CARRY THE MONITOR'S OWN TOTALS` (§3.2, §5).
+   carries `n OF m CARRY THE MONITOR'S OWN TOTALS` (§3.2, §5) — that
+   surface line was moved under the card by ruling 18 and struck by ruling
+   19; the by-door definition stands, the count is computed only.
 2. **Rest metres = the stored RC-1 pair** (`restMeters`/`restSeconds`),
    what the TOTAL line shows. `machineSummary.totalRestMeters`
    (`storedSummary.ts:270`) stays provenance, unread here (§3.1).
@@ -813,8 +1049,9 @@ record.
 6. **AVG WATTS EXCLUDES `stored`-tier rows** (rows carrying only the fused
    figure). Watts = `logbookWatts` over Σs/Σm of rows whose tier is
    `machine`, `work-pair` or `steps`. Metres, time and sessions still count
-   `stored`-tier rows. The `k ROWS PREDATE WORK-ONLY TOTALS` line says those
-   rows are excluded from watts (§3.2, §5, invariant 7).
+   `stored`-tier rows. (The `k ROWS PREDATE WORK-ONLY TOTALS` line that
+   once named the excluded rows was struck by ruling 19; the exclusion
+   holds in the number, unlabelled — §3.2, invariant 7.)
 7. **The oracle.** Exit criterion 6: James compares LIFETIME and THIS SEASON
    on You against his own Concept2 logbook page once, by eye, on the
    TestFlight build; both numbers and the gap's explanation (rest metres,
@@ -829,6 +1066,77 @@ record.
    a PR that adds or removes a standing agent under `.claude/agents/`
    updates that paragraph in the same commit — an agent the corpus does not
    name is invisible to every future dispatch. Applied in PR 0.
+9. **The You hero is H3 TIME BY TYPE:** one stacked bar in the order AN ·
+   AT · O2 · TR · NO TYPE with the whole-percent legend drawn as swatch
+   chips (A2-H3), under the LIFETIME and THIS SEASON figures; 140 px in
+   portrait as shipped (hairline to hairline in `you.png`, rows 120→259;
+   the canvas draft measured 181, `hero-heights.json`). It REPLACES the
+   two-line headline the design first carried (§5).
+10. **The hero IS the door.** Tapping anywhere on it opens `/you/stats`;
+    there is NO separate STATS row in `.you-doors`, which stays BASELINES ·
+    CONCEPT2 · SETTINGS · DIAGNOSTICS. The hero is one focusable control (a
+    link or button with the accessible name `Stats`), ≥ 44 px, with visible
+    focus (§5, invariant 16).
+11. **Every subpage chart is designed now** — metres per week, time by type,
+    the season cumulative curve with AVG M/DAY and the streaks, the 2k/6k
+    test trend — and ships in PR 2, EXCEPT the time-by-type computation and
+    the stacked-bar primitive, which PR 1 needs for the hero; the subpage's
+    TIME BY TYPE group therefore ships in PR 1 at no extra cost (§9).
+12. **Previous-week bars use `--ink-4` (5.29:1 on `--surface`),** not the
+    2026-08-07 handoff's `#c9c3b2` (§9 item 1 of
+    `docs/design/handoffs/2026-08-07-news-tab/README.md`; 1.73:1, below WCAG
+    1.4.11's 3:1 for a data mark); `--ink-5` (2.75:1) was measured and
+    rejected too. Recorded as a deviation from the handoff in
+    `docs/design/DEVIATIONS.md` (the UI/UX table's last row).
+13. **Stack order AN · AT · O2 · TR · NO TYPE.** The spec's earlier AN · O2 ·
+    AT · TR listing fails the dataviz palette validator on the O2↔AN
+    adjacency (ΔE 11.3 < 15, deutan 4.9); the drawn order passes (16.8
+    normal / 13.5 protan) — `build.mjs` header (§3.2, invariant 17).
+14. **Landscape You scrolls:** the hero pushes the doors below the 390 px
+    fold; accepted, no landscape-only layout (§5).
+15. **Copy:** `1 ROW PREDATES WORK-ONLY TOTALS` is the singular of the seam
+    line, and the `n OF m CARRY THE MONITOR'S OWN TOTALS` line renders FULL
+    WIDTH under the TOTALS header row, not under the MACHINE column (§5).
+    (Superseded ON THE SURFACE: ruling 18 moved the `n OF m` line under
+    the card and dropped the seam suffix; ruling 19 struck both lines. The
+    definitions — singular/plural, n and m — stand in §3.2 as computed
+    values.)
+16. **Zero monitor rows hide the MACHINE-only rows:** with no `pm5` row in
+    range the REST METRES / CALORIES / AVG WATTS rows are hidden and the
+    MACHINE column keeps its own empty line reading `NO MONITOR ROWS YET`;
+    at zero rows of any kind the filter bar is hidden too (§5, §8.5).
+17. **The seam count and the watts exclusion are monitor-only (PR 1 fix
+    round, 2026-09-12).** The `k` count (`storedTierRows`) covers only
+    `source === "pm5"` rows in the stored tier, and ruling 6's exclusion
+    reads the same set. A timer row (`LogSession.tsx` saves only
+    `timeSeconds`/`distanceMeters`, so it lands in the stored tier by
+    shape) and a manual row are what the rower typed: work by definition,
+    counted in every ALL figure and never in k. Implemented in
+    `aggregate.ts`'s `storedTierRows`; gated by a `source: "timer"` fixture
+    (§3.2).
+18. **Strip the captions (2026-09-12, on sight of `you-stats.png`: "the
+    sheer amount of prose under that stats bar is insane").** The Stats
+    page keeps EXACTLY two lines of prose — the seam line under the TOTALS
+    heading (k > 0 only, no `· NOT IN AVG WATTS` suffix) and one footnote
+    under the TOTALS card, `n OF m MACHINE ROWS CARRY THE MONITOR'S OWN
+    TOTALS` (m > 0 only). Struck: the range caption under the filter bar,
+    the TOTALS subtitle, the in-card `n OF m` header line, the CALORIES and
+    AVG WATTS row captions, the TIME BY TYPE caption, and the hero's `WORK
+    TIME BY TYPE · ALL ROWS`. The A3/A2-H3 artboards now OVER-DRAW those
+    captions (`docs/design/career-stats/README.md`); the captures are the
+    current state. (The two lines this ruling kept were struck in turn by
+    ruling 19.)
+19. **Strip the last two lines (2026-09-12, on sight of the `e0b8626e`
+    capture: "The prose about the monitor's own rows is super confusing. I
+    also don't need the warning at the top about 1 row predating").** The
+    `k ROW(S) PREDATE WORK-ONLY TOTALS` seam line and the `n OF m MACHINE
+    ROWS CARRY THE MONITOR'S OWN TOTALS` footnote are gone; the Stats page
+    renders NO caption prose — title, filter bar, TOTALS heading + card,
+    TIME BY TYPE heading + bar + legend, and the empty-state lines only.
+    `storedTierRows`, `ownTotals` and `caloriesRows` stay in the domain
+    aggregate (tested; they still govern the watts exclusion) and nothing
+    renders them. Rulings 1 and 15's SURFACE lines are superseded; their
+    definitions stand.
 
 ## 15. Gate record (PR 0, at `93b91d66`)
 
@@ -842,3 +1150,10 @@ record.
 - DBA spec pass: PASS WITH ROWS, 1 row (§13's cursor row); neither Wave E
   row opens from this route. Ledger: `dba-ledger.md`, "2026-09-12 — Phase
   PS spec pass".
+- **Gate 0: APPROVED 2026-09-12 (James), on the rendered canvas** —
+  https://claude.ai/code/artifact/c8ad61d9-853b-4262-9051-032f90e90cf2,
+  sources `docs/design/career-stats/` (`seed.mjs` → `compute.mjs` →
+  `build.mjs`; `contrast.json`, `hero-heights.json`, artboards A1-A7). Eight
+  rulings (§14 9-16) applied in this revision before the PR 1 plan; the
+  canvas's A2-H3 still shows the STATS row ruling 10 struck, and the
+  spec, not the artboard, governs that one point.

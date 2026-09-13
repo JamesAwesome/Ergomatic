@@ -36,6 +36,7 @@ import BaselinesScreen from "../you/BaselinesScreen";
 import Diagnostics from "../you/Diagnostics";
 import Concept2Screen from "../you/Concept2Screen";
 import SettingsScreen from "../you/SettingsScreen";
+import StatsScreen from "../you/stats/StatsScreen";
 import MonitorLogs from "../you/MonitorLogs";
 import type { Me } from "../useMe";
 import TabBar from "./TabBar";
@@ -285,6 +286,11 @@ export default function AppRoutes({
                 and needs no account. NOT in HIDDEN_TABBAR_PREFIXES: the tab
                 bar stays, as on every other /you/* door. */}
             <Route path="/you/settings" element={<SettingsScreen />} />
+            {/* Phase PS PR 1 (career-stats spec §5): the stats subpage behind
+                You's hero. Flat, a sibling of /you/baselines, inside the
+                signed-in fragment because it reads account rows. NOT in
+                HIDDEN_TABBAR_PREFIXES. */}
+            <Route path="/you/stats" element={<StatsScreen />} />
             <Route
               path="/you/diagnostics/monitor-logs"
               element={<MonitorLogs />}

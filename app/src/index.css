@@ -11923,3 +11923,268 @@ section:not(.news-pinned) .news-row:last-of-type {
 .connected-surface-body-unread {
   opacity: 0.65;
 }
+
+/* ── Phase PS PR 1: the career hero on You and /you/stats (spec §5) ──
+   Contrast, computed (contrast.json, WCAG 2.1): --ink on --surface 17.11,
+   --ink-3 on --surface 7.43, --ink-3 on --page 6.69, --ink-4 on --page 4.76
+   (the one NO TYPE caption), --ink-2 on --surface 10.81 (unselected chip),
+   --on-color on --ink 17.11 (selected chip). Data marks ≥ 5.29 (--ink-4). */
+/* A2-H3 (build.mjs `heroBlock`): an OPEN block between two --rule-2
+   hairlines on --page — not a card. One tap target, ~181 px in portrait
+   (hero-heights.json). */
+.you-stats-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 2px;
+  min-height: var(--tap);
+  box-sizing: border-box;
+  border-top: 1px solid var(--rule-2);
+  border-bottom: 1px solid var(--rule-2);
+  color: var(--ink);
+  text-decoration: none;
+}
+.you-stats-hero:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.you-stats-figures {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+}
+.you-stats-figures > span {
+  white-space: nowrap;
+}
+.you-stats-hero .stats-caption {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.stacked-bar {
+  display: block;
+  width: 100%;
+  height: 24px;
+}
+.stacked-bar-seg-an {
+  fill: var(--type-an);
+}
+.stacked-bar-seg-at {
+  fill: var(--type-at);
+}
+.stacked-bar-seg-o2 {
+  fill: var(--type-o2);
+}
+.stacked-bar-seg-tr {
+  fill: var(--type-tr);
+}
+.stacked-bar-seg-none {
+  fill: var(--ink-4);
+}
+.stats-legend-line,
+.stats-caption,
+.stats-note {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+/* The hero's compact legend (A2-H3): swatch chips, wrapping. */
+.stats-legend-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.stats-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.stats-legend-chip .stats-swatch {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+.stats-legend-chip .stats-legend-key {
+  color: var(--ink);
+}
+.stats-group {
+  margin-top: 24px;
+}
+.stats-group-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+.stats-chips {
+  display: flex;
+  margin-top: 12px;
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.stats-chip {
+  flex: 1;
+  min-width: 44px;
+  min-height: var(--tap);
+  padding: 0 2px;
+  background: var(--surface);
+  border: none;
+  border-right: 1px solid var(--rule-3);
+  border-radius: 0;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.stats-chip:last-child {
+  border-right: none;
+}
+.stats-chip[aria-checked="true"] {
+  background: var(--ink);
+  color: var(--on-color);
+}
+.stats-custom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+.stats-date {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+.stats-date input {
+  min-height: var(--tap);
+  font-size: 16px;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  padding: 0 8px;
+}
+/* A3's TOTALS card (build.mjs `totalsCard`): a --surface panel with the
+   `112px minmax(0,1fr) minmax(0,1fr)` grid, 12 px column gaps, 36 px lines,
+   10 px 0.14em labels, 15 px 500 tabular figures. Kept as a real <table>
+   (the role queries and axe read the native semantics) with a FIXED layout
+   that pins the label column at 112 px and splits the rest evenly. */
+.stats-card {
+  margin-top: 12px;
+  padding: 10px 14px 4px;
+  background: var(--surface);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+}
+.stats-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.stats-table th {
+  text-align: left;
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+.stats-table th[scope="row"],
+.stats-table thead th:first-child {
+  width: 112px;
+}
+.stats-table thead th {
+  text-align: right;
+  white-space: nowrap;
+  padding: 0 0 6px 12px;
+  border-top: none;
+}
+.stats-table td {
+  text-align: right;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  padding-left: 12px;
+}
+.stats-table tbody th,
+.stats-table tbody td {
+  height: 36px;
+  padding-top: 0;
+  padding-bottom: 0;
+  vertical-align: middle;
+  border-top: 1px solid var(--rule-2);
+}
+.stats-table td.stats-note {
+  text-align: right;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  white-space: normal;
+  padding: 4px 0 8px;
+  border-top: none;
+  line-height: 1.5;
+}
+.stats-legend {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.stats-legend-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.stats-legend-pct {
+  color: var(--ink-3);
+}
+.stats-swatch {
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+}
+.stats-swatch-an {
+  background: var(--type-an);
+}
+.stats-swatch-at {
+  background: var(--type-at);
+}
+.stats-swatch-o2 {
+  background: var(--type-o2);
+}
+.stats-swatch-tr {
+  background: var(--type-tr);
+}
+.stats-swatch-none {
+  background: var(--ink-4);
+}

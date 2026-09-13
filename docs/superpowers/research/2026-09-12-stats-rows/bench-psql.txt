@@ -1,0 +1,9 @@
+Q_STATS-1k         median     8.38 ms  (n=5, run 1 discarded)  sorted: 7.38 7.71 8.38 8.47 8.91
+Q_NOCAL-1k         median     7.27 ms  (n=5, run 1 discarded)  sorted: 6.87 7.22 7.27 7.50 8.11
+Q_SCALAR-1k        median     0.84 ms  (n=5, run 1 discarded)  sorted: 0.80 0.81 0.84 0.98 1.98
+Q_STATS-10k        median    75.23 ms  (n=5, run 1 discarded)  sorted: 72.84 72.95 75.23 76.53 77.27
+Q_NOCAL-10k        median    77.56 ms  (n=5, run 1 discarded)  sorted: 73.20 73.68 77.56 80.07 90.88
+Q_SCALAR-10k       median     8.82 ms  (n=5, run 1 discarded)  sorted: 8.57 8.69 8.82 8.96 9.46
+Q_STATS-100k       median   943.40 ms  (n=5, run 1 discarded)  sorted: 692.93 798.96 943.40 986.66 1169.73
+Q_NOCAL-100k       median   849.32 ms  (n=5, run 1 discarded)  sorted: 784.76 841.44 849.32 985.81 1005.54
+Q_SCALAR-100k      median   117.07 ms  (n=5, run 1 discarded)  sorted: 110.31 114.95 117.07 119.77 128.18

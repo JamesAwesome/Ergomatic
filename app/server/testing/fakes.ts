@@ -671,6 +671,32 @@ function makeFakeLogsStore(
       );
       return { deleted: true, unCounted };
     },
+    // Phase PS PR 1: mirrors the real store's `STATS_ROW_COLUMNS` — the
+    // same scalars, `steps` whole, `totalCalories` a number or null (the
+    // `jsonb_typeof = 'number'` gate), no Concept2 field. Held equal to
+    // the real store by the `statsRows` contract case (TESTING.md §5).
+    async statsRows(userId: string) {
+      return (byUser.get(userId) ?? []).map((r) => {
+        const cal = r.machineSummary?.totalCalories;
+        return {
+          id: r.id,
+          loggedAt: r.loggedAt,
+          source: r.source,
+          workoutType: r.workoutType,
+          endedBy: r.endedBy ?? null,
+          machineWorkSeconds: r.machineWorkSeconds ?? null,
+          machineWorkMeters: r.machineWorkMeters ?? null,
+          workSeconds: r.workSeconds ?? null,
+          workMeters: r.workMeters ?? null,
+          restSeconds: r.restSeconds ?? null,
+          restMeters: r.restMeters ?? null,
+          distanceMeters: r.distanceMeters ?? null,
+          timeSeconds: r.timeSeconds ?? null,
+          steps: r.steps as unknown,
+          totalCalories: typeof cal === "number" ? cal : null,
+        };
+      });
+    },
     async count(userId: string) {
       return (byUser.get(userId) ?? []).length;
     },

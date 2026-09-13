@@ -125,6 +125,10 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   Filing a row for a single green anomaly is the filing-as-deferral pattern
   wearing a process hat.
 
+- **A repo-wide 100% pin fails on the DIRECTORY the PR created, and a "100% lines" claim reads as green.** #417 (2026-09-12): `domain/stats` shipped 99.02 stmts / 98.75 branch / **100 lines**, CI red on `app/domain/**`'s 100% pin, and the body said "every `domain/stats/*` at 100% lines" — accurate and useless. **At any gate, read the CI job's own conclusion at the head SHA before reading the body's gate list, and require a coverage claim to name all four metrics.**
+- **The deviation-in-the-presentation pattern reaches a MEASURED number, and then two numbers circulate.** #417 disclosed a short hero in the body (≈169 px) while §5 still read 181 and the re-review had measured 163; nothing gated the height, and the spec's prose described a legend the approved artboard did not draw. **When a PR re-aligns to an artboard, the artboard wins and the SPEC is what needs the edit — with one number and the command that produced it.**
+- **`ci-changes.sh`'s docs allowlist is a live hole wherever a test reads a file under `docs/` by name.** #417 patched it for `docs/design/career-stats/seed.mjs` and shipped the comment "One file under `docs/` is CODE"; `src/test/captures.ts:21` + `captures.test.ts` read named captures from `docs/monitor/sessions/`. **Before accepting an allowlist patch, grep the test tree for runtime reads of the skipped prefixes** — the patch's own comment is where the next false absolute lands.
+
 ## Recommendations that turned out wrong
 
 - **2026-08-13 — the CR2 item 0 hypothesis and its oracle.** Both written into
