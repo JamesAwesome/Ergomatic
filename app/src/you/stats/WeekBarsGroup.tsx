@@ -25,8 +25,8 @@ export const THIS_WEEK = "THIS WK";
 /** Two or more rows in range and no METRES in the window's eight weeks
  *  (ALL with only old rows, or only null-metres rows there): the chart
  *  would be eight zero baselines. "Metres", not "nothing" — a stored-tier
- *  row with `workMeters: null` is still a session. Copy pending James at
- *  PR review (Gate 0 drew no such frame). */
+ *  row with `workMeters: null` is still a session. Copy pending James's
+ *  ruling in #424's hand-back (Gate 0 drew no such frame). */
 export const NOTHING_IN_WINDOW = "NO METRES IN THESE EIGHT WEEKS";
 
 /** METRES PER WEEK (spec §5 item 3; §14 ruling 12): eight Monday-start

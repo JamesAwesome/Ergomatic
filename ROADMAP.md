@@ -554,8 +554,10 @@ phase-open gates (antagonist anchor, PM slate, DBA spec pass) ran at
 LANDED #417 the same day; v0.46.0 (build 977) RELEASED 2026-09-12 carrying
 PR 1, so exit criterion 6 — James's eyeball check against his Concept2
 logbook — is now RUNNABLE on that build (its `dies` stamp is on the Exit
-paragraph below). PR 2 is next; James's two 2026-09-12 notes ride it
-behind a Gate 0 addendum (spec §5.1).** **TRIAD on PR 1** (a
+paragraph below). PR 2 (the charts, plus James's two 2026-09-12 notes as
+rulings 20-23 behind a Gate 0 addendum, spec §5.1) is #424: the phase is
+CODE-COMPLETE when it merges and stays OPEN on criterion 6 alone, the only
+check that is not our own arithmetic (RF11).** **TRIAD on PR 1** (a
 number's meaning: every figure is a SUM over stored rows whose metres
 already mean two things — fused before RC-5, work-only after, no marker).
 **M.** · dies 2026-10-12 · a month from
@@ -791,7 +793,9 @@ the MACHINE-only rows and zero rows hide the filter bar.
 and the e2e literal both green, mutations named), at 0 rows the honest empty
 state, and with no `pm5` row the MACHINE column's; the chart groups render
 at ≥ 2 points and read `TWO ROWS MAKE A CHART` below — TIME BY TYPE at PR
-1, the rest at PR 2, each verified at the PR that ships it; the e2e figures
+1, METRES PER WEEK and SEASON at PR 2, each verified at the PR that ships
+it, with TEST TREND the stated exception (one test is a result, so it
+draws one dot; its empty state is `NO 2K OR 6K TEST LOGGED`); the e2e figures
 for the Gate 0 seed are `compute.mjs`'s, clock pinned; the hero is one
 control named `Stats` and `.you-doors` has no STATS row; the DBA verdict
 with the §9 protocol's numbers at

@@ -11,8 +11,8 @@ const LABEL: Record<Preset, string> = {
 };
 
 export const FROM_AFTER_TO = "FROM MUST NOT FOLLOW TO";
-/** A cleared FROM or TO. Copy pending James at PR review (Gate 0 drew only
- *  the FROM > TO error). */
+/** A cleared FROM or TO. Copy pending James's ruling in #424's hand-back
+ *  (Gate 0 drew only the FROM > TO error). */
 export const ENTER_BOTH_DATES = "ENTER BOTH DATES";
 export type CustomProblem = null | "empty" | "order";
 

@@ -1112,11 +1112,15 @@ behaviour (RF26).
 5. **Totals at ≥ 1 row, verified at PR 1:** a rower with one saved row sees
    real totals on You and `/you/stats` equal to that row's detail hero; at
    0 rows, the §5 empty state; with no `pm5` row, the MACHINE column's.
-   **Charts at ≥ 2 points:** TIME BY TYPE at PR 1, METRES PER WEEK, SEASON
-   and TEST TREND at PR 2 — each renders at two rows in range and reads
-   `TWO ROWS MAKE A CHART` below. Each half is checked at the PR that ships
-   it — a criterion cannot be verified on a build where its code does not
-   exist (RF24).
+   **Charts at ≥ 2 points:** TIME BY TYPE at PR 1, METRES PER WEEK and
+   SEASON at PR 2 — each renders at two rows in range and reads `TWO ROWS
+   MAKE A CHART` below. **TEST TREND is the exception and ships one
+   deliberately (PR 2):** a single test result IS a result, so the chart
+   draws it as one dot on a ±5 s domain rather than refusing; `rows` is
+   also the wrong noun for a test. Its own empty state is `NO 2K OR 6K TEST
+   LOGGED` at zero. Each half is checked at the PR that ships it — a
+   criterion cannot be verified on a build where its code does not exist
+   (RF24).
 7. **The reference fixture agrees with the canvas:** the e2e and client
    figures for the Gate 0 seed (§8.5) are the ones `compute.mjs` prints and
    the artboards show, with the clock pinned to 2026-09-12; the hero is one

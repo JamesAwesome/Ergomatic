@@ -9,8 +9,9 @@ import TypeLegend from "./TypeLegend";
 export const NO_ROWS_YET =
   "NO ROWS YET · YOUR FIRST SAVED ROW STARTS THE COUNT";
 /** Rows exist but none carries work SECONDS (every one on the steps tier
- *  with metres only), so the bar has nothing to draw. Copy pending James
- *  at PR review (a Gate 0 addition — the seed never reaches this state). */
+ *  with metres only), so the bar has nothing to draw. Copy pending James's
+ *  ruling in #424's hand-back (a Gate 0 addition — the seed never reaches
+ *  this state). */
 export const NO_WORK_TIME_TO_DRAW = "NO WORK TIME TO DRAW YET";
 const FIGURES_ID = "you-stats-figures";
 
