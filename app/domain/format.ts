@@ -34,4 +34,4 @@ export const MONTH_ABBREV = [
   "OCT",
   "NOV",
   "DEC",
-];
+] as const;

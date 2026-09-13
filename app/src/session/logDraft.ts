@@ -1048,31 +1048,24 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
   return out;
 }
 
-// Mirrors Today.tsx's own (private, unexported) `formatLogDate` byte for
-// byte — the house day format `docs/design/README.md`:185 established
-// ("JUL 25"). Still NOT imported BY Today.tsx: that file is a screen
-// component (react-router-dom, hooks, JSX) and this module is a pure,
-// framework-free session builder with no reason to depend on a screen —
-// pulling in Today.tsx's whole import chain to reuse six lines would be
-// backwards (screens depend on session/, not the other way around). The
-// month table itself IS hoisted now — `MONTH_ABBREV` in `domain/format.js`,
-// the one copy (Phase PS PR 2 review, item 4); this six-line composer stays. Corrected count (whole-branch review; this comment
-// used to say "two independent copies"): THREE independent copies exist —
-// this one, Today.tsx's, and `e2e/session.spec.ts`'s own browser-context
-// copy (Task 4, `todayDateLabel`) — though only the first two are the DRY
-// pass's actual candidates. The e2e copy is a different, unavoidable kind of
-// duplication (an e2e spec can't `import` a client module into the page it
-// evaluates code inside of), not a third instance of the same oversight a
-// hoist would fix.
+// The house day format `docs/design/README.md`:185 established ("JUL 25"),
+// composed here because this module is the pure, framework-free session
+// builder its screens already depend on (`LogSession.tsx` imports
+// `buildLogSteps`/`logTotals`/`buildManualLogSteps`), so the dependency
+// runs screens → session/, never the other way.
 //
-// EXPORTED (Task 3, the manual door): `LogSession.tsx` already sits
-// downstream of this module (imports `buildLogSteps`/`logTotals`/
-// `buildManualLogSteps`), so this is the SANCTIONED direction the paragraph
-// above describes — not the screen-depends-on-session violation that keeps
-// Today.tsx's own copy separate. The manual door's header needs today's
-// date (there is no `SessionRun.completedAt` to read it from, unlike
-// `logTotals` below), so it composes it directly from this same function
-// rather than growing a third copy of `MONTH_ABBREV`.
+// The month table is NOT duplicated: `MONTH_ABBREV` lives once in
+// `domain/format.js` and `LogRow.tsx` and `src/you/stats/format.ts` import
+// that same one (Phase PS PR 2 review, item 4 — this comment previously
+// claimed a byte-identical copy inside `Today.tsx`, which has no date
+// formatting at all). The only other copy is `e2e/session.spec.ts`'s
+// `todayDateLabel`, a browser-context literal an e2e spec cannot import
+// into the page it evaluates code inside — a different, unavoidable kind
+// of duplication.
+//
+// EXPORTED for the manual door: its header needs today's date and has no
+// `SessionRun.completedAt` to read it from (unlike `logTotals` below), so
+// it composes from this function rather than growing another table.
 
 export function formatLogDate(iso: string): string {
   const d = new Date(iso);

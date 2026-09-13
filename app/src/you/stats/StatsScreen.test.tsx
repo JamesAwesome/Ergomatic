@@ -93,7 +93,10 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
   // Review item 1: ONE owner of the future-TO clamp (`customRange`), so
   // the totals, the range line and the bars all read the same range.
   // Mutation: drop the clamp → the line reads `14 AUG TO 31 DEC 2026`.
-  it("a typed future TO (2026-12-31) clamps to today everywhere: the range line ends TO 12 SEP 2026, METRES stays 18,000, the bars end this week", async () => {
+  // RF21: only the range line can go RED here — `metresPerWeek` keeps its
+  // own anchor clamp and no seed row postdates today, so the METRES and
+  // bar assertions guard those two invariants rather than this one.
+  it("a typed future TO (2026-12-31) clamps to today: the range line ends TO 12 SEP 2026, with METRES and the bars unmoved", async () => {
     await renderScreen(GATE0_ROWS);
     fireEvent.click(chip("CUSTOM"));
     fireEvent.change(screen.getByLabelText("TO"), {

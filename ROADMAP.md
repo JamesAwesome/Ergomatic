@@ -679,8 +679,9 @@ line naming it was struck by ruling 19), never corrected.
       seconds over date from the existing `GET /api/test-history`, faster
       is up — the ONE figure that keeps a point whose log row was deleted,
       because `test_history.session_log_id` is `ON DELETE SET NULL` on
-      purpose; no caption — rulings 18/19 — the fact is said in the
-      trend's accessible name); the hover/tooltip layer once listed here
+      purpose; no caption — rulings 18/19 — and no surface says so, which is
+      James's open question in #424's hand-back); the hover/tooltip layer
+      once listed here
       is PR 3 or never (spec §11, James 2026-09-12) — plus
       James's two notes of 2026-09-12, asked after build 977 was on his
       phone and RULED the same day on the addendum boards (spec §5.1, §14
