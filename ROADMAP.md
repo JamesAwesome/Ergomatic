@@ -3267,19 +3267,28 @@ that created it — that rule worked. What it lacked was a home: "Small,
 queued" had grown past 240 rows, which is where things go to be forgotten
 rather than found.
 
-**TWO OF THESE SHARE ONE BLOCKER AND SHOULD BE DONE TOGETHER.** The fake
-monitor sends no end-of-workout summary burst, so neither the free-row machine
-tiles nor `VERIFIED ✓` can be photographed. Whoever unblocks that gets both
-captures from one piece of work; doing either alone is most of the cost for
-half the value.
+**OPENED 2026-09-12.** Spec:
+[docs/superpowers/specs/2026-09-12-phase-td-design.md](docs/superpowers/specs/2026-09-12-phase-td-design.md).
+Scope ruled by James the same day: **three rows, one PR** — the ungated
+reconciliation, the double link read, and the free-row summary capture. The
+other two left the phase and are filed below with dates.
 
-**None of these is a defect a rower can hit today.** Four are gaps in
-EVIDENCE — a capture that cannot be taken, a test that could not be made to
-bite — and one is a hardening case (the unparsable 409) that has never been
-observed. That is why they are grouped rather than queued, and why the entry
-condition for working on them is a quiet week, not an incident.
+**THIS SECTION USED TO SAY TWO OF THESE SHARE ONE BLOCKER AND SHOULD BE DONE
+TOGETHER. THAT WAS FALSE, and a spike measured it** (spec §1.3-1.4). The
+claim was that the fake sends no end-of-workout summary burst, so neither the
+free-row machine tiles nor `VERIFIED ✓` could be photographed. The fake sends
+one fine: the free row's terminated frame is one status tick later than the
+programmed arm's, and delivering the summary before that tick is refused
+`out-of-window` while delivering it after files the totals. One tick was the
+whole blocker and no production change is needed. `VERIFIED ✓` is blocked on
+something unrelated — the screenshots stack is Concept2-DARK by construction,
+so the only writer of `verified` 403s — and unblocking one does nothing for
+the other.
 
-**Sizes:** S each; M for the capture pair together.
+**None of these is a defect a rower can hit today**, which is why the entry
+condition is a quiet week rather than an incident.
+
+**Sizes:** S each.
 
 
 - [ ] **"A failing reconciliation does not fail the send" is UNGATED.** The
@@ -3306,7 +3315,17 @@ condition for working on them is a quiet week, not an incident.
       of the phase's debt rather than waiting for a PR that happens to touch
       this file. **S**
 
-- [ ] **An unparsable Concept2 409 leaves a row permanently stuck as unsent.**
+- [ ] **SPLIT OUT OF THIS PHASE 2026-09-12 (James) — an unparsable Concept2
+      409 leaves a row permanently stuck as unsent.** · dies 2026-10-12 · a
+      row and not a fix now because its only evidence-grounded closure is
+      rower-visible copy needing a Gate 0, which is a different weight class
+      from the rest of this phase. **The research also killed the closure this
+      row proposes** (spec §10): the one captured 409 carries a top-level
+      `"id": 85560` exactly where `client.ts:417` reads it, so that body takes
+      the DUPLICATE arm and never sticks; its message text is the two words
+      `Duplicate Result`, which contain no id to parse. Concept2's API
+      documentation is not committed to this repo in any form, so no vendor
+      sentence defines the 409 body shape at all.
       Filed by #363's review (F7). `postResult` answers a 409 whose body
       carries no numeric `id` as `{kind:"c2_error", status:409}`, and #363
       excludes 409 from the retry band — correctly, because retrying would
@@ -3320,7 +3339,13 @@ condition for working on them is a quiet week, not an incident.
       out of the message text or giving the rower a "Concept2 already has
       this" state. **S**
 
-- [ ] **No committed capture shows `VERIFIED ✓`.** Phase AV ships the mark
+- [ ] **SPLIT OUT OF THIS PHASE 2026-09-12 (James) — no committed capture
+      shows `VERIFIED ✓`.** · dies 2026-11-10 · a row and not a fix now
+      because closing it means routing a READ against a Concept2-dark stack,
+      which is a larger fake than anything else in this phase and is its own
+      piece of work. **It does NOT share a blocker with the free-row capture
+      below** — that was this section's own false premise, corrected above.
+      Phase AV ships the mark
       with client tests and two biting mutations, but the screenshots stack
       cannot photograph it, for a reason already written down at length in
       `e2e/screenshots.spec.ts`'s Wave E PR2 header: this stack is
