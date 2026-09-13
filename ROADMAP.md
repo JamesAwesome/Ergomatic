@@ -3026,6 +3026,44 @@ Each needs erg time or a deliberate recording session.
   fake store's insertion ordering — NAMED, not chosen, per this entry's own
   standard. What both signatures share is a request seeing state that some
   other test owns.
+- **THE E2E SUITE FLAKES, and this is the second recorded occurrence.**
+  · dies 2026-10-13 · a row and not a fix now because a hunt needs a
+  reproduction and neither occurrence has one; what it needs first is a
+  COUNT, which nothing currently collects.
+  **Occurrence 1, 2026-09-12 (#419's main run):** one failure in
+  `design.spec.ts` (the doors-back assertion), green on re-run. Recorded at
+  the time as "second occurrence files a row" — **and then not written down
+  anywhere in this file**, which is why this row opens by saying so. A flake
+  remembered only in a session is a flake nobody can count.
+  **Occurrence 2, 2026-09-13 (PR #423, run 34737876236):** THREE failures
+  plus one flaky in a single run, 565 passed — `connected.spec.ts:2236` (the
+  NFC scan's `✓ Monitor found` status never appeared),
+  `design.spec.ts:7601` (a pairing locator), `design.spec.ts:776` (an axe
+  `page.evaluate` timing out at 30 s) and `stats.spec.ts:46`
+  (`LIFETIME · 54,752 M`). **All four passed on a re-run of the IDENTICAL
+  commit**, and main was green at the time, so the branch's own diff is
+  excluded — it touched only the log detail's two components plus a
+  comments-only edit to `fake.ts` (verified by filtering the diff to
+  non-comment lines, which returned nothing).
+  **What the two occurrences have in common is the only lead:** both hit
+  `design.spec.ts`, and occurrence 2's four failures span four unrelated
+  specs at once — which reads like the runner rather than any one test. The
+  axe timeout is the most suggestive single data point, since it is the
+  heaviest step in the suite.
+  **Do NOT open this as a hunt.** The first thing it needs is a count over
+  time: how often, which specs, whether it correlates with runner load. Three
+  named specs and one number are not a population, and chasing a
+  reproduction from here is how the last two days would have gone if anyone
+  had tried. **The cheap first move** is to stop discarding the evidence —
+  the `playwright-report` artifact is already uploaded on every red run
+  (occurrence 2's is artifact 10311637594), so a count is recoverable from CI
+  history without instrumenting anything.
+  **The trap for whoever picks this up:** a re-run that goes green is not
+  evidence the test is flaky rather than order-dependent. Occurrence 2's
+  re-run was `--failed`, so it ran those specs in a DIFFERENT population than
+  the full suite did. Re-run the whole suite before concluding anything about
+  isolation. **S**
+
 - **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
   `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
   clears thumbs previously set to a real value`, then `GET/PUT /api/prefs` >
