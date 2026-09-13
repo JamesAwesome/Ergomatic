@@ -5,10 +5,13 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    // v0.46.0: git log v0.45.0..main --oneline — FORTY merges besides this
-    // notes PR itself, each accounted for (RF15; no --merges, which returns
-    // empty on this squash-merged repo). Three days of mostly agent-facing
-    // work; TWO reach a rower:
+    // v0.46.0: git log v0.45.0..main --oneline — FORTY-ONE merges besides
+    // this notes PR itself, each accounted for (RF15; no --merges, which
+    // returns empty on this squash-merged repo). Three days of mostly
+    // agent-facing work; THREE reach a rower:
+    //   #418 the News tab stops jumping when it opens — item 3. Merged by a
+    //     parallel session between the notes' accounting and the notes PR;
+    //     added in the follow-up before the tag (RF15's exact case).
     //   #402 a reopened free row shows the rate it showed live — item 1.
     //   #385 the app stops saying programming failed for a workout the erg
     //     is already holding — item 2. The PR called nothing "visible"
@@ -36,6 +39,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     items: [
       "A free row you reopen from History shows the same RATE it showed you live. The stored row carried no note of being a free row, so the reopened screen guessed wrong and showed a dash where the monitor's own average belonged.",
       "The app no longer tells you programming failed for a workout the erg has already taken. A hiccup on the phone side after the erg confirmed the workout used to be reported as the erg refusing it.",
+      "The News tab opens and stays put. It used to paint, then shift every row sideways and drop the list while the unread marks arrived. The marks now have their space from the first paint, and after the first open of a session they appear at once.",
     ],
   },
   {
