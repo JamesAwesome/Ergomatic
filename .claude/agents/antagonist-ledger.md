@@ -6,6 +6,16 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## Account-access amendment hardening, 2026-09-13 (AUTH, lens 1)
+
+- **BROKEN:** one protected-route guard could enforce removal. Session resolution refreshes before middleware can reject and has direct consumers; the losing cookie can also refresh during bearer precedence. The corrected contract puts the saved-email decision inside resolution before refresh and forbids fallback from a denied winning credential.
+- **BROKEN:** rechecking a pending provider email at confirmation was sufficient. Conflict resolution can return a concurrently created subject, making that account's saved email authoritative. The corrected contract checks both the candidate and returned canonical row before grant/session side effects.
+- **BROKEN:** an in-flight link's live original session implied continued access. Every read/claim/accept/finalize transition must recheck the current process policy.
+- **BROKEN:** boot could establish valid Apple registration. It establishes only local configuration shape; registration, association and credential acceptance remain real-provider release gates.
+- **HELD:** restricted/public is deterministic; restricted defaults closed, empty admits nobody, public ignores the list, normalized saved email owns access, denial preserves stored data and unexpired session rows, and provider availability remains independent.
+- **DISPOSITION:** controller folded the findings once, explicitly named both legacy Google email writers and added the policy/session/attempt lifetime table. No prescribed blocks; lens 2 skipped.
+- **LIMIT:** no live host, provider authorization, runtime probe or original Apple implementation review was performed. The prior broad code lens remains INCOMPLETE.
+
 ## 2026-09-12 — News layout-shift spec (`/harden` lens 1, full pass: invented mechanism + RF27)
 
 Spec: `docs/superpowers/specs/2026-09-12-news-layout-shift-design.md`. Eight

@@ -836,8 +836,13 @@ it lands the stranger on this same denial.
       not planned on in either direction.
 - [ ] **An open sign-up policy, replacing deny-by-default.** **James approved
       new rowers creating accounts on 2026-09-12**, while choosing Apple
-      sign-in as the first slice. The approved design uses shared open admission
-      for Apple and Google, first-account confirmation in the updated client,
+      sign-in as the first slice. **Access-policy amendment approved
+      2026-09-13:** `ACCESS_MODE=restricted|public` replaces the front-door
+      switch. Restricted is the default; `ALLOWED_EMAILS` controls both
+      providers and existing sessions, and an empty list admits nobody.
+      Removing an account email blocks its next protected request after
+      configuration reload while retaining its data. Public mode supports
+      open admission. The design retains first-account confirmation in the updated client,
       and explicit provider linking from You; email never joins accounts.
       Legacy Google endpoints keep their successful response contracts for
       installed builds. The denied-user surface stops being a dead end.
@@ -882,7 +887,7 @@ it lands the stranger on this same denial.
 - [ ] **Apple sign-in** (moved from Phase PROD; the duplicate entry that lived
       under triggered follow-ons is deleted). **FIRST, ruled by James
       2026-09-12; design and rendered Gate 0 APPROVED the same day.** Covers
-      native and web Apple, shared open signup,
+      native and web Apple, shared restricted/public account access,
       and explicit linking from You so either provider opens the same account.
       Reuse openid-client/jose server-side; the native design uses a small
       AuthenticationServices bridge because the installed plugin's Apple arm

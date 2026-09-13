@@ -175,6 +175,11 @@ toolkit, not a history.
 
 ## Techniques that keep paying
 
+- **An access check after session resolution can refresh the credential it denies.** Put policy before expiry extension; enumerate direct resolver consumers and the losing credential in bearer/cookie precedence.
+- **A pending-new identity can become an existing account at conflict resolution.** Check the candidate before creation and the canonical row returned by the conflict path before grants or sessions. The pending provider email no longer owns access once a subject winner exists.
+- **A live original-session foreign key proves liveness, not current entitlement.** Trace every attempt transition through its original-session resolver and apply current account policy before advancement.
+- **Boot proves configuration shape, not provider registration.** Presence, syntax and bounds are locally checkable; account-console association and credential acceptance require a real provider exchange.
+
 - **A failed CAS can still erase the winner in its catch.** Hold two supported callbacks after they read the same authorization stage; let one commit, then release the loser and inspect the real row after cleanup. Apple auth's version guard rejected correctly while ID-only failure cleanup deleted the winner's pending credential. Trace ownership through the exception path, and through every await in client cancellation.
 - **A plugin with no logging calls can still log its whole credential through the bridge.** Follow `call.resolve` into native serialization and JavaScript `fromNative`, then run the vendor bridge with the actual build's logging configuration; a plugin-only forbidden-string test cannot gate that producer. Native authorization identity also does not prove JavaScript document identity.
 

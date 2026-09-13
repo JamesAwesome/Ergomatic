@@ -1,4 +1,4 @@
-# Wave A — Apple sign-in and open accounts
+# Wave A — Apple sign-in and account access
 
 ## What and why
 
@@ -10,7 +10,10 @@ never becomes a reason to create a link or merge two accounts.
 **APPROVED — James approved the design and rendered Gate 0 on 2026-09-12.**
 The approval includes new rowers creating accounts, Apple Hide My Email,
 and explicit linking in both directions. Google remains available. The
-implementation follows the shared signup policy and screens below.
+implementation follows the shared signup policy and screens below. James
+approved the account-access amendment on 2026-09-13: restricted access by
+default, the same allowlist for both providers, and removal blocking existing
+sessions after configuration reload.
 Base inspected: `60ee51b9`; worktree: `.claude/worktrees/wave-a-apple`.
 
 ## Scope and sequence
@@ -26,24 +29,94 @@ partial-baseline disclosure remains separate. This slice does not close Wave A.
 built and validated first, but the new front door is enabled for external
 TestFlight only with in-app deletion available. The earlier Wave A research
 already established that account-creation and deletion obligations travel
-together; this is not a new reason to reorder implementation. One server
-switch, `FRONT_DOOR_ENABLED`, defaults false and gates Apple availability
-and open admission together. While false, the current Google allowlist
-behavior remains. When true, all Apple configuration is required at boot.
-An additive unauthenticated auth-options endpoint lets the updated app show
+together; this is not a new reason to reorder implementation. Provider
+availability and account access are separate, as defined below. An additive
+unauthenticated auth-options endpoint lets the updated app show
 only available provider controls; a missing endpoint on an older server
-falls back to the current Google door. The implementation plan tests both
-switch states and does not silently enable public signup at merge.
+falls back to the current Google door. Merging this code does not select
+public access or waive the deletion release gate.
 
 Google’s existing authorization endpoints and installed clients remain
 compatible, including their successful `{token}` native response. The new
 client uses new provider-neutral endpoints for first-account confirmation;
 legacy Google endpoints retain their direct-create response contract after
 successful authentication. They do not start returning a pending-account
-response to an installed client that cannot handle one. `ALLOWED_EMAILS`
-stops controlling new-account admission on both
-Google paths as well as Apple. `C2_ALLOWED_EMAILS` remains the separate
-Concept2 rollout policy; it is not a signup policy.
+response to an installed client that cannot handle one. `C2_ALLOWED_EMAILS`
+remains the separate Concept2 rollout policy; it is not a signup policy.
+
+### Account access — approved amendment, 2026-09-13
+
+`ACCESS_MODE` replaces the `FRONT_DOOR_ENABLED` environment switch. Its
+accepted values are `restricted` and `public`, with surrounding whitespace
+ignored. Missing or blank selects `restricted`; any other value rejects
+startup. Restricted mode requires membership in `ALLOWED_EMAILS` for both
+new and existing accounts, through Apple or Google, on native and web,
+including legacy Google endpoints. An empty restricted allowlist admits
+nobody. Public mode admits accounts without consulting the allowlist; it
+does not relax provider verification or account-linking requirements.
+Email matching retains the existing trim-and-lowercase normalization.
+
+Resolve an existing account by its verified provider subject first, then
+check its saved `users.email`. The provider's current email cannot substitute
+for that account access key. Returning legacy Google logins therefore stop
+overwriting the saved email in both the Google-only sign-in helper and the
+combined-flow legacy Google path; an updated display name may still be saved.
+Linking continues to preserve the account profile. For a new
+account, use the nonempty verified email supplied by its provider. Apple
+Hide My Email works: an Apple-first account uses its actual relay address
+in the allowlist, while Apple linked to a Google-created account uses that
+account's saved email. Matching emails never link or merge accounts.
+
+Check access before creating an account, minting a session, or completing
+a sign-in. Recheck a pending signup at confirmation, since an attempt can
+survive a process restart with different access configuration. If a concurrent
+signup already won the provider subject, authorize the returned canonical
+account email before storing its grant or minting its session; an allowed
+candidate email cannot admit a disallowed existing account.
+
+Resolve active cookie and bearer sessions against the same policy inside
+session resolution, before refreshing or returning a session. This applies
+to direct callers as well as protected-route middleware. A denied bearer
+credential must not fall back to an allowed cookie; a denied secondary
+credential must not be refreshed during disagreement checks. Linking
+transitions must also reject an original session whose account no longer
+has access, including reads and provider callback/proof transitions. Denial
+must not advance or attach the link.
+
+Configuration is loaded at server startup. Once the deployment reloads the
+changed configuration, removing an account email denies its next protected
+request and later sign-ins through either provider. Requests already admitted
+by the previous process may finish. Accounts, workouts and other account data
+remain stored. No permanent session-revocation state or client cache wipe is
+introduced: a still-unexpired token can become eligible again if the account
+is reallowed. Existing session-denial and sign-in error screens are reused;
+this amendment does not add copy or layout or promise immediate client
+navigation on every denied data request.
+
+| State | Created and replaced | Lifetime and removal |
+|---|---|---|
+| Access policy | One immutable snapshot of the validated mode and normalized allowlist at process startup | Replaced on process/container restart; never stored in a session or attempt |
+| Session | Existing session mint paths | Access denial does not delete or refresh it; existing signout, expiry cleanup and account-deletion behavior remain |
+| Pending auth attempt | Existing begin/proof transitions | May survive restart; every subsequent transition uses the running process's policy; existing completion, cancel and expiry cleanup remain |
+
+Apple availability comes from its configuration. All five Apple settings
+absent or blank preserves Google-only operation, including HTTP localhost.
+Any Apple setting present requires the complete locally valid Apple configuration
+and HTTPS site URL; partial or invalid configuration rejects startup.
+Complete locally valid Apple configuration enables Apple and the new provider flow
+in either access mode. Google keeps its existing credential-based
+availability. No replacement Apple feature switch is introduced. The
+auth-options response retains its existing capability field for client
+compatibility; it does not expose or choose the access policy. Local boot
+validation does not establish Apple portal association or credential
+acceptance; real provider authorization and native/web continuity remain
+release gates.
+
+The existing deployment is staging and should use restricted access with
+explicit tester emails. Future production may select public access after
+its release gates are met. The existing secret-gated E2E sign-in helper
+remains test-only; ordinary test fixtures choose their access policy
+explicitly, and production defaults never open access to accommodate tests.
 
 The PM phase-open recommendation is Apple on both surfaces and explicit
 linking in both directions. Native-only Apple would leave an Apple-only
