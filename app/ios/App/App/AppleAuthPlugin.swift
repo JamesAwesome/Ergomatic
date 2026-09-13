@@ -125,9 +125,15 @@ public final class AppleAuthPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func finishActive(token: UUID, outcome: AppleAuthorizationOutcome) {
-        guard activeToken == token, let call = activeCall,
-              let requestedState = activeState
-        else { return }
+        // TWO clauses, never three. Folding `activeState` in here would mean a
+        // future edit that leaves it nil returns WITHOUT `clearActive()`, so
+        // `activeController` stays non-nil, every later authorize rejects
+        // "busy", and the current call is never resolved or rejected — the JS
+        // promise hangs and the rower sits on a spinner with no error path.
+        // Nothing compiles this file in CI, so that would not be caught.
+        // Capture it instead, release the operation, and fail closed below.
+        guard activeToken == token, let call = activeCall else { return }
+        let requestedState = activeState
         clearActive()
 
         switch outcome {
@@ -155,6 +161,10 @@ public final class AppleAuthPlugin: CAPPlugin, CAPBridgedPlugin {
             // "is this the credential for the request I just made". So fall
             // back to what we sent, and reject only a genuine MISMATCH, which
             // is the case actually worth catching.
+            guard let requestedState else {
+                call.reject("Apple returned incomplete authorization proof", "invalidResponse")
+                return
+            }
             let echoedState = credential.state.flatMap { $0.isEmpty ? nil : $0 }
             guard echoedState == nil || echoedState == requestedState else {
                 call.reject("Apple echoed a different authorization state", "invalidResponse")

@@ -399,11 +399,17 @@ describe("supported auth producers through Express and signed tokens", () => {
     expect(raw).toContain("HttpOnly");
     expect(raw).toContain("Secure");
     expect(raw).toContain("SameSite=None");
-    expect(raw).toContain("Path=/api/auth");
+    // ANCHORED: `toContain("Path=/api/auth")` also accepted
+    // `Path=/api/auth/nowhere`, which is a sibling of the very mutation this
+    // test names.
+    expect(raw).toMatch(/Path=\/api\/auth(;|$)/);
     // Independent literal, never the production constant (RF21): 300s is the
     // contract, and it must equal the attempt TTL or the rower is wedged
     // between a live row and a dead binding.
-    expect(raw).toMatch(/Max-Age=(299|300)/);
+    // ANCHORED for the same reason: the unanchored form matched
+    // `Max-Age=3000`, so a 10x drift away from the contract this comment
+    // states passed cleanly.
+    expect(raw).toMatch(/Max-Age=(299|300)(;|$)/);
   });
 
   it("legacy native Google denies an unverified email the same way with the front door on", async () => {

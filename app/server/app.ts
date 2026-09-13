@@ -114,8 +114,10 @@ export function createApp(deps: AppDeps) {
     // coincidence that `frontDoorConfig` validates the same env vars those
     // three objects are built from. Deriving both from `available()` means a
     // provider can never be advertised to the client and then refused by the
-    // route, and a third provider joins by adding a member to AuthProvider
-    // rather than by editing this handler. Output is byte-identical under
+    // route. (It does NOT make the handler provider-agnostic: the literal
+    // below still enumerates apple and google by hand, as does `AuthOptions`,
+    // so a third provider is still an edit here. An earlier draft of this
+    // comment claimed otherwise.) Output is byte-identical under
     // every configuration reachable today; the legacy arm below still answers
     // when no front door exists at all.
     const front = deps.frontDoor;

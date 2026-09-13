@@ -16,10 +16,68 @@ describe("front-door boot and options", () => {
     const deps = baseDeps();
     const res = await request(createApp(deps)).get("/api/auth/options");
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({
+    // `google` asserted too: the legacy arm is the only thing answering when
+    // there is no front door, and leaving it out of this shape meant the
+    // whole field was unpinned on the one path that still uses it.
+    expect(res.body).toStrictEqual({
       frontDoorEnabled: false,
       apple: { native: false, web: false },
+      google: { native: false, web: false },
     });
+  });
+
+  /**
+   * THE FRONT-DOOR ARMS OF /api/auth/options, which nothing executed. Every
+   * test that passes a `frontDoor` never calls this route, and every client
+   * and e2e test mocks the route outright — so the four `providers.available`
+   * calls the handler makes were unreachable by any project (RF24: the gate
+   * has to START upstream of the producer). The seam is reachable in
+   * production: all five APPLE_* set, GOOGLE_CLIENT_ID set, and
+   * GOOGLE_CLIENT_SECRET absent is a real deployment, and it is the ONLY
+   * shape where the four arms do not all agree — which is what makes one
+   * fixture enough to make all four mutable to red. Swap any
+   * `available(x, y)` for a different pair and this goes red.
+   */
+  it("reports each provider and surface from the front door's own availability", async () => {
+    const key = await exportPKCS8(
+      (await generateKeyPair("ES256", { extractable: true })).privateKey,
+    );
+    const config = await frontDoorConfig(
+      {
+        APPLE_NATIVE_CLIENT_ID: "haus.waffle.test",
+        APPLE_WEB_CLIENT_ID: "haus.waffle.test.web",
+        APPLE_TEAM_ID: "TEAMID",
+        APPLE_KEY_ID: "KEYID",
+        APPLE_PRIVATE_KEY: key,
+        GOOGLE_IOS_CLIENT_ID: "google.native",
+        GOOGLE_CLIENT_ID: "google.web",
+        // The deployment that makes the four arms disagree: a web client id
+        // with no secret cannot complete an exchange, so web Google must be
+        // advertised as unavailable even though its client id is set.
+        GOOGLE_CLIENT_SECRET: "",
+      },
+      "https://erg.test",
+    );
+    expect(config).not.toBeNull();
+    const frontDoor = await createFrontDoor(
+      { query: async () => ({ rows: [], rowCount: 0 }) } as unknown as pg.Pool,
+      baseDeps().sessions,
+      config!,
+      createAccessPolicy("public", ""),
+    );
+    try {
+      const res = await request(
+        createApp(baseDeps({ frontDoor, oauth: null, nativeVerifier: null })),
+      ).get("/api/auth/options");
+      expect(res.status).toBe(200);
+      expect(res.body).toStrictEqual({
+        frontDoorEnabled: true,
+        apple: { native: true, web: true },
+        google: { native: true, web: false },
+      });
+    } finally {
+      frontDoor.close();
+    }
   });
   it("keeps Apple unavailable when all settings are absent or blank", async () => {
     expect(await frontDoorConfig({}, "http://localhost:5173")).toBeNull();

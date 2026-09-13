@@ -302,10 +302,11 @@ describe("signed provider proof", () => {
     ]);
     expect(call.body.get("client_secret")).toBe("secret");
     expect(call.body.get("client_id")).toBe("google.web");
-    // The PKCE verifier is the producer/consumer seam: `authorizationUrl`
-    // sends S256(verifier) and this sends the verifier. Both derive from
-    // bindingHash:nonce, so a non-empty value here that matches the
-    // challenge is what proves the pair, not its literal text.
+    // The PKCE verifier's PAIRING with the challenge is guaranteed
+    // structurally — `authorizationUrl` and `verify` both call the same
+    // `verifier(c)` — and is NOT asserted here; this test does not compute
+    // S256 or compare it to anything. What it actually gates is the key set
+    // above, which goes red if `code_verifier` stops being sent at all.
     const verifier = call.body.get("code_verifier")!;
     expect(verifier.length).toBeGreaterThan(20);
     expect(verifier).not.toContain("secret");

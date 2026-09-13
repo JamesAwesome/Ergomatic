@@ -46,7 +46,7 @@ function rejectionCodes(source: string): string[] {
 }
 
 describe("AppleAuth native contract", () => {
-  it("keeps bridge result logging disabled and registers the app Console override first", () => {
+  it("keeps bridge result logging disabled and registers the app Console override", () => {
     const config = read("capacitor.config.ts");
     expect(config).toContain('loggingBehavior: "none"');
     expect(consolePlugin).toContain('let jsName = "Console"');
@@ -125,6 +125,13 @@ describe("AppleAuth native contract", () => {
     // into the next attempt is the lifetime shape RF27 exists for, and this
     // line is what goes red if `clearActive` forgets it.
     expect(swift).toContain("let requestedState = activeState");
+    // The mismatch guard itself, not just the ref it reads. Deleting the whole
+    // guard left this census green: the reject-count below would have caught
+    // it, but only incidentally, and a later reject added elsewhere would
+    // restore the count and hide it again.
+    expect(swift).toContain(
+      "guard echoedState == nil || echoedState == requestedState",
+    );
     expect(swift.match(/activeController = nil/g)).toHaveLength(1);
     expect(swift.match(/activeDelegate = nil/g)).toHaveLength(1);
     expect(swift.match(/activeCall = nil/g)).toHaveLength(1);
@@ -133,13 +140,16 @@ describe("AppleAuth native contract", () => {
 
   it("exposes a bounded error vocabulary without credential storage or logs", () => {
     const codes = rejectionCodes(swift);
-    // Ten reject SITES, six distinct codes. The tenth arrived with the
-    // nil-state fallback, which rejects a genuine state MISMATCH while no
-    // longer rejecting mere absence — it reuses `invalidResponse` rather than
-    // widening the vocabulary, which is why the set below is unchanged. The
-    // set is the real invariant here; the count only guards against a reject
-    // being added without anyone looking at what it says.
-    expect(codes).toHaveLength(10);
+    // Eleven reject SITES, six distinct codes. Two arrived with the nil-state
+    // fallback: one for a genuine state MISMATCH (absence alone no longer
+    // rejects), and one fail-closed arm for a nil `requestedState`, which
+    // exists so `finishActive` can release the operation before it decides —
+    // a return that skipped `clearActive` would wedge the plugin on "busy"
+    // forever. Both reuse `invalidResponse` rather than widening the
+    // vocabulary, which is why the set below is unchanged. The set is the
+    // real invariant; the count only guards against a reject being added
+    // without anyone looking at what it says.
+    expect(codes).toHaveLength(11);
     expect([...new Set(codes)].sort()).toStrictEqual([
       "authorizationFailed",
       "badRequest",
