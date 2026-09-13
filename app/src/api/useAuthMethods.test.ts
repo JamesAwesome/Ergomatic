@@ -65,37 +65,94 @@ describe("useAuthMethods", () => {
     },
   );
 
-  it("ignores a late success after unmount", async () => {
-    let resolve!: (response: Response) => void;
-    vi.mocked(api).mockReturnValue(
-      new Promise<Response>((done) => {
-        resolve = done;
-      }),
-    );
-    const { unmount } = renderHook(() => useAuthMethods("late-success"));
-    unmount();
-    await act(async () => {
-      resolve(
+  /**
+   * RETARGETED, because the two tests that used to sit here could not go red.
+   * They unmounted, resolved late, and asserted `api` was called once — which
+   * was already true BEFORE the unmount, so they passed with or without the
+   * `if (live)` guards. Moving them is not enough either: React 19 silently
+   * no-ops a setState on an unmounted component, so deleting the guards is
+   * genuinely unobservable on the unmount path. There is nothing to catch.
+   *
+   * The effect cleanup runs on a DEPENDENCY CHANGE too, and that race is both
+   * real and observable: `SignInMethods` re-keys this hook after a link
+   * result (`methodsRefreshKey`), so a slow in-flight read for the OLD key can
+   * land after the new one and repaint stale CONNECTED rows. That is the
+   * invariant the guards actually protect, and this is the layer where
+   * removing them goes red.
+   */
+  it("a late response from a superseded refreshKey never overwrites the current one", async () => {
+    let resolveFirst!: (response: Response) => void;
+    vi.mocked(api)
+      .mockReturnValueOnce(
+        new Promise<Response>((done) => {
+          resolveFirst = done;
+        }),
+      )
+      .mockResolvedValueOnce(
         new Response(JSON.stringify({ apple: true, google: true }), {
           status: 200,
         }),
       );
-    });
-    expect(api).toHaveBeenCalledOnce();
-  });
-
-  it("ignores a late failure after unmount", async () => {
-    let reject!: (error: Error) => void;
-    vi.mocked(api).mockReturnValue(
-      new Promise<Response>((_resolve, fail) => {
-        reject = fail;
+    const { result, rerender } = renderHook(
+      ({ key }: { key: string }) => useAuthMethods(key),
+      { initialProps: { key: "first" } },
+    );
+    rerender({ key: "second" });
+    await waitFor(() =>
+      expect(result.current).toStrictEqual({
+        state: "ready",
+        methods: { apple: true, google: true },
       }),
     );
-    const { unmount } = renderHook(() => useAuthMethods("late-failure"));
-    unmount();
+    // The superseded read now lands, carrying the OPPOSITE answer. Independent
+    // literals: the stale payload disagrees with the live one on both fields,
+    // so a leak is unambiguous rather than coincidentally equal.
     await act(async () => {
-      reject(new Error("offline"));
+      resolveFirst(
+        new Response(JSON.stringify({ apple: false, google: false }), {
+          status: 200,
+        }),
+      );
     });
-    expect(api).toHaveBeenCalledOnce();
+    expect(result.current).toStrictEqual({
+      state: "ready",
+      methods: { apple: true, google: true },
+    });
+    expect(api).toHaveBeenCalledTimes(2);
+  });
+
+  it("a late FAILURE from a superseded refreshKey never overwrites the current one", async () => {
+    let rejectFirst!: (error: Error) => void;
+    vi.mocked(api)
+      .mockReturnValueOnce(
+        new Promise<Response>((_resolve, fail) => {
+          rejectFirst = fail;
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ apple: true, google: true }), {
+          status: 200,
+        }),
+      );
+    const { result, rerender } = renderHook(
+      ({ key }: { key: string }) => useAuthMethods(key),
+      { initialProps: { key: "first" } },
+    );
+    rerender({ key: "second" });
+    await waitFor(() =>
+      expect(result.current).toStrictEqual({
+        state: "ready",
+        methods: { apple: true, google: true },
+      }),
+    );
+    await act(async () => {
+      rejectFirst(new Error("offline"));
+    });
+    // Without the catch-arm guard the rower's real methods list is replaced by
+    // an error state produced by a request they already superseded.
+    expect(result.current).toStrictEqual({
+      state: "ready",
+      methods: { apple: true, google: true },
+    });
   });
 });

@@ -53,14 +53,19 @@ describe("AppleAuth native contract", () => {
     expect(consolePlugin).toContain(
       'CAPPluginMethod(name: "log", returnType: CAPPluginReturnNone)',
     );
-    const consoleRegistration = controller.indexOf(
+    // REGISTRATION ORDER IS NOT ASSERTED, deliberately. This used to pin
+    // `console < webAuth` under the title "registers the app Console override
+    // first", which reads as proving the override works and proves nothing:
+    // the three registrations carry distinct jsNames, so their order among
+    // THEMSELVES cannot matter. What makes the override take effect is vendor
+    // sequencing — CapacitorBridge registers CAPConsolePlugin during bridge
+    // construction, CAPBridgeViewController calls capacitorDidLoad afterwards,
+    // and registerPluginInstance replaces by jsName — none of which a source
+    // grep can see. Pinning that the registration EXISTS is the honest
+    // remainder (RF26: a census proves structure, not runtime invocation).
+    expect(controller).toContain(
       "bridge?.registerPluginInstance(ErgomaticConsolePlugin())",
     );
-    const webAuthRegistration = controller.indexOf(
-      "bridge?.registerPluginInstance(WebAuthPlugin())",
-    );
-    expect(consoleRegistration).toBeGreaterThan(-1);
-    expect(consoleRegistration).toBeLessThan(webAuthRegistration);
   });
 
   it("registers the same plugin and promise method in Swift and TypeScript", () => {
@@ -111,16 +116,30 @@ describe("AppleAuth native contract", () => {
     );
     expect(swift).toContain("private var activeCall: CAPPluginCall?");
     expect(swift).toContain(
-      "guard activeToken == token, let call = activeCall else { return }",
+      "guard activeToken == token, let call = activeCall",
     );
+    // `activeState` joined the operation's refs when the nil-state fallback
+    // landed: `finishActive` needs the state WE sent in order to complete a
+    // credential that echoes none. It is per-attempt authority, so it is
+    // cleared with the rest of them and exactly once — a stale value surviving
+    // into the next attempt is the lifetime shape RF27 exists for, and this
+    // line is what goes red if `clearActive` forgets it.
+    expect(swift).toContain("let requestedState = activeState");
     expect(swift.match(/activeController = nil/g)).toHaveLength(1);
     expect(swift.match(/activeDelegate = nil/g)).toHaveLength(1);
     expect(swift.match(/activeCall = nil/g)).toHaveLength(1);
+    expect(swift.match(/activeState = nil/g)).toHaveLength(1);
   });
 
   it("exposes a bounded error vocabulary without credential storage or logs", () => {
     const codes = rejectionCodes(swift);
-    expect(codes).toHaveLength(9);
+    // Ten reject SITES, six distinct codes. The tenth arrived with the
+    // nil-state fallback, which rejects a genuine state MISMATCH while no
+    // longer rejecting mere absence — it reuses `invalidResponse` rather than
+    // widening the vocabulary, which is why the set below is unchanged. The
+    // set is the real invariant here; the count only guards against a reject
+    // being added without anyone looking at what it says.
+    expect(codes).toHaveLength(10);
     expect([...new Set(codes)].sort()).toStrictEqual([
       "authorizationFailed",
       "badRequest",

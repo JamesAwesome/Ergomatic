@@ -380,6 +380,32 @@ describe("supported auth producers through Express and signed tokens", () => {
     );
     expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
   });
+  it("the web attempt cookie carries every attribute the flow depends on", async () => {
+    // Eleven sites in this file do `.headers["set-cookie"][0].split(";")[0]`
+    // and hand-replay the name=value pair, so every ATTRIBUTE was discarded —
+    // and supertest implements no cookie policy, so nothing noticed. Setting
+    // `path` to "/nowhere", or dropping Secure or HttpOnly, left the whole
+    // suite green while breaking every web sign-in in a real browser (the
+    // Apple callback is a cross-site form POST, so SameSite=None + Secure is
+    // load-bearing, not hygiene). `cookies.test.ts` already pins the session
+    // cookie this way; this is the same check for the attempt cookie.
+    const begin = await request(app)
+      .post("/api/auth/web/attempts")
+      .set("Origin", "https://erg.test")
+      .send({ purpose: "signin", provider: "apple" });
+    expect(begin.status).toBe(200);
+    const raw = (begin.headers["set-cookie"] as unknown as string[])[0];
+    expect(raw).toContain("erg_auth_attempt=");
+    expect(raw).toContain("HttpOnly");
+    expect(raw).toContain("Secure");
+    expect(raw).toContain("SameSite=None");
+    expect(raw).toContain("Path=/api/auth");
+    // Independent literal, never the production constant (RF21): 300s is the
+    // contract, and it must equal the attempt TTL or the rower is wedged
+    // between a live row and a dead binding.
+    expect(raw).toMatch(/Max-Age=(299|300)/);
+  });
+
   it("legacy native Google denies an unverified email the same way with the front door on", async () => {
     // `signin.ts` states the shared gate sequence "email_verified -> existing-sub
     // -> policy -> ..." and answers 403 {outcome:"denied", email}. With the front
