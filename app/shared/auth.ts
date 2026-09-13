@@ -51,10 +51,6 @@ export type AuthErrorCode =
 export interface AuthError {
   error: AuthErrorCode;
 }
-export interface AppleName {
-  givenName?: string;
-  familyName?: string;
-}
 export interface NativeProof {
   bindingSecret: string;
   state: string;

@@ -101,7 +101,7 @@ describe("supported auth producers through Express and signed tokens", () => {
     await container?.stop();
   });
   beforeEach(async () => {
-    await pool.query("TRUNCATE users CASCADE");
+    await pool.query("TRUNCATE users,auth_attempts CASCADE");
     codes.clear();
     exchangeOutsideLock = false;
   });
@@ -234,5 +234,203 @@ describe("supported auth producers through Express and signed tokens", () => {
     expect(response.body.token).toStrictEqual(expect.any(String));
     expect(response.body).not.toHaveProperty("outcome");
     expect(response.body.user.email).toBe("outside@allowlist.test");
+  });
+  async function googleJwt(
+    nonce: string,
+    sub = "google",
+    audience = "google.native",
+  ) {
+    return new SignJWT({
+      sub,
+      nonce,
+      email: "original@test",
+      email_verified: true,
+      name: "Original",
+    })
+      .setIssuer("https://accounts.google.com")
+      .setAudience(audience)
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .setProtectedHeader({ alg: "RS256", kid: "test" })
+      .sign(rsa.privateKey);
+  }
+  it("native Google signup, fresh Google proof and Apple target finalize one account", async () => {
+    const start = (
+      await request(app)
+        .post("/api/auth/native/attempts")
+        .send({ purpose: "signin", provider: "google" })
+    ).body;
+    const pending = await request(app)
+      .post(`/api/auth/native/attempts/${start.attemptId}/proof`)
+      .send({
+        bindingSecret: start.bindingSecret,
+        state: start.state,
+        idToken: await googleJwt(start.nonce),
+      });
+    expect(pending.body.outcome).toBe("confirm");
+    const signed = (
+      await request(app)
+        .post(`/api/auth/native/attempts/${start.attemptId}/confirm`)
+        .send({ bindingSecret: start.bindingSecret })
+    ).body;
+    const begin = await request(app)
+      .post("/api/auth/native/attempts")
+      .auth(signed.token, { type: "bearer" })
+      .send({ purpose: "link", provider: "apple" });
+    expect(begin.status).toBe(200);
+    const b = begin.body;
+    expect(b.stage).toBe("reauth");
+    expect(b.provider).toBe("google");
+    const target = (
+      await request(app)
+        .post(`/api/auth/native/attempts/${b.attemptId}/proof`)
+        .send({
+          bindingSecret: b.bindingSecret,
+          state: b.state,
+          idToken: await googleJwt(b.nonce),
+        })
+    ).body;
+    expect(target.stage).toBe("target");
+    expect(target.nonce).not.toBe(b.nonce);
+    const token = await jwt(target.nonce, "native.app");
+    codes.set("target", token);
+    const ready = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/proof`)
+      .send({
+        bindingSecret: b.bindingSecret,
+        state: target.state,
+        idToken: token,
+        authorizationCode: "target",
+        name: "Added Provider",
+      });
+    expect(ready.body.outcome).toBe("link_ready");
+    const finalized = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/finalize`)
+      .auth(signed.token, { type: "bearer" })
+      .send({ bindingSecret: b.bindingSecret });
+    expect(finalized.body).toStrictEqual({ outcome: "linked" });
+    const methods = await request(app)
+      .get("/api/auth/methods")
+      .auth(signed.token, { type: "bearer" });
+    expect(methods.body).toStrictEqual({ apple: true, google: true });
+    const me = await request(app)
+      .get("/api/me")
+      .auth(signed.token, { type: "bearer" });
+    expect(me.body.user).toStrictEqual(signed.user);
+  });
+  it.each([
+    {},
+    { purpose: "wrong", provider: "apple" },
+    { purpose: "signin", provider: "other" },
+  ])("rejects malformed begin without minting %#", async (body) => {
+    const res = await request(app).post("/api/auth/native/attempts").send(body);
+    expect(res.status).toBe(400);
+    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
+  });
+  it("wrong state leaves operation intact, native cancellation erases it, replay expires", async () => {
+    const b = (
+      await request(app)
+        .post("/api/auth/native/attempts")
+        .send({ purpose: "signin", provider: "apple" })
+    ).body;
+    const wrong = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/proof`)
+      .send({
+        bindingSecret: b.bindingSecret,
+        state: "wrong",
+        idToken: "token",
+        authorizationCode: "code",
+      });
+    expect(wrong.status).toBe(401);
+    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(1);
+    const cancelled = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/cancel`)
+      .send({ bindingSecret: b.bindingSecret });
+    expect(cancelled.status).toBe(204);
+    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
+    const replay = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/confirm`)
+      .send({ bindingSecret: b.bindingSecret });
+    expect(replay.status).toBe(410);
+  });
+  it("web two-proof callback only stages until current-session same-origin finalize", async () => {
+    const start = await request(app)
+      .post("/api/auth/web/attempts")
+      .set("Origin", "https://erg.test")
+      .send({ purpose: "signin", provider: "google" });
+    const s = start.body;
+    const startCookie = start.headers["set-cookie"][0].split(";")[0];
+    codes.set(
+      "google-web",
+      await googleJwt(s.nonce, "google-web", "google.web"),
+    );
+    const callback = await request(app)
+      .get("/api/auth/google/callback")
+      .query({ state: s.state, code: "google-web" })
+      .set("Cookie", startCookie);
+    expect(callback.headers.location).toBe(`/?authAttempt=${s.attemptId}`);
+    const signed = await request(app)
+      .post(`/api/auth/web/attempts/${s.attemptId}/confirm`)
+      .set("Origin", "https://erg.test")
+      .set("Cookie", startCookie)
+      .send({});
+    const sessionCookie = (signed.headers["set-cookie"] as unknown as string[])
+      .find((c) => c.startsWith("erg_session="))!
+      .split(";")[0];
+    const begun = await request(app)
+      .post("/api/auth/web/attempts")
+      .set("Origin", "https://erg.test")
+      .set("Cookie", sessionCookie)
+      .send({ purpose: "link", provider: "apple" });
+    expect(begun.status).toBe(200);
+    const b = begun.body;
+    const binding = begun.headers["set-cookie"][0].split(";")[0];
+    codes.set(
+      "reauth-google",
+      await googleJwt(b.nonce, "google-web", "google.web"),
+    );
+    const reauth = await request(app)
+      .get("/api/auth/google/callback")
+      .set("Cookie", binding)
+      .query({ state: b.state, code: "reauth-google" });
+    expect(reauth.headers.location).toBe(`/?authAttempt=${b.attemptId}`);
+    const resumed = await request(app)
+      .get(`/api/auth/web/attempts/${b.attemptId}`)
+      .set("Cookie", binding);
+    expect(resumed.body.stage).toBe("target");
+    const target = resumed.body;
+    const token = await jwt(target.nonce, "web.app");
+    codes.set("target-web", token);
+    const apple = await request(app)
+      .post("/api/auth/apple/callback")
+      .set("Origin", "https://appleid.apple.com")
+      .set("Cookie", binding)
+      .type("form")
+      .send({ state: target.state, code: "target-web", id_token: token });
+    expect(apple.headers.location).toBe(`/?authAttempt=${b.attemptId}`);
+    expect(
+      (await pool.query("SELECT apple_sub FROM users")).rows,
+    ).toStrictEqual([{ apple_sub: null }]);
+    const ready = await request(app)
+      .get(`/api/auth/web/attempts/${b.attemptId}`)
+      .set("Cookie", binding);
+    expect(ready.body.outcome).toBe("link_ready");
+    const current = (
+      await request(app).post("/api/auth/native").send({ idToken: "other" })
+    ).body.token;
+    const changed = await request(app)
+      .post(`/api/auth/web/attempts/${b.attemptId}/finalize`)
+      .set("Origin", "https://erg.test")
+      .set("Cookie", binding)
+      .auth(current, { type: "bearer" })
+      .send({});
+    expect(changed.status).toBe(409);
+    expect(changed.body.error).toBe("account_changed");
+    const complete = await request(app)
+      .post(`/api/auth/web/attempts/${b.attemptId}/finalize`)
+      .set("Origin", "https://erg.test")
+      .set("Cookie", [binding, sessionCookie])
+      .send({});
+    expect(complete.body).toStrictEqual({ outcome: "linked" });
   });
 });
