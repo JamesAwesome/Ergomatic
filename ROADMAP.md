@@ -580,7 +580,8 @@ projection type and a case-insensitive text scan over the stats code
 (§8.4). The RC-5 seam is accepted and counted (`storedTierRows`; the surface
 line naming it was struck by ruling 19), never corrected.
 
-- [ ] **PR 0 — the spec, this section, and the DBA agent**
+- [x] **PR 0 — MERGED as #411 (`3137fb25`), ticked 2026-09-12. The spec,
+      this section, and the DBA agent**
       (`.claude/agents/dba.md` + `dba-techniques.md` + `dba-ledger.md`;
       proposes, never writes; every verdict carries measured numbers).
       Gates, all RUN at `93b91d66` and applied (spec §15): antagonist ANCHOR
@@ -589,7 +590,8 @@ line naming it was struck by ruling 19), never corrected.
       pass on the `GET /api/stats/rows` query shape and growth (PASS WITH
       ROWS, 1 row). Docs-only, plus the `CLAUDE.md` three-agents paragraph
       (ruling 8).
-- [ ] **PR 1 (TRIAD) — `rowContribution` + the `buildHeroes` refactor
+- [x] **PR 1 (TRIAD) — MERGED as #417 (`f69871cb`), ticked 2026-09-12,
+      released in v0.46.0. `rowContribution` + the `buildHeroes` refactor
       (mapping `endedBy ?? null`, proved with `tsc -p tsconfig.app.json`),
       `logbookWatts`/`logbookCalPerHour` MOVED into `app/domain/logbook.ts`
       with `src/session/logbookDerived.ts` re-exporting (no behaviour
@@ -1777,7 +1779,7 @@ fixed.
       `.env` are `LOGBOOK_CLIENT_ID_DEV`/`LOGBOOK_CLIENT_SECRET_DEV`, not the
       `C2_*` names `c2-crossconnect.ts` reads; and a token refresh with scope
       `results:read` is REJECTED, it needs `user:read,results:write`.
-- [ ] **Why does Concept2 show no Verify button on a row carrying interval
+- [x] **Why does Concept2 show no Verify button on a row carrying interval
       data?** **ANSWERED 2026-09-07 and CLOSED — it was never about interval
       data.** Concept2 offers the Verification Code field only when the row's
       OVERALL distance or time hits a ranking standard, matched exactly;
@@ -1920,12 +1922,13 @@ fixed.
       four plan tasks are complete and merged as #350 and released in v0.42.0 (build 902, 2026-09-07)
       (`as1-short-frame`); the checkbox stays open until the reporter confirms it fixed THEIR monitor — see the two open items below. **M**
 
-- [ ] **MERGED #361 (2026-09-08), UNRELEASED — a monitor we cannot decode
+- [x] **MERGED #361 (2026-09-08), RELEASED v0.43.0 — a monitor we cannot decode
       says nothing at all.** The connected screen now reads `NO READINGS`
       instead of `READY` when a characteristic's bytes fail to decode
       12 times across 5 seconds and no frame has ever been emitted this
       sitting, so the app stops promising a piece it cannot start. The
-      checkbox stays open until it ships in a tag.
+      checkbox ticked 2026-09-12 on the evidence that it shipped:
+      `git tag --contains 66571388` returns v0.43.0 (2026-09-08) onward.
       Spec: `docs/superpowers/specs/2026-09-07-undecodable-monitor-design.md`.
       Gate 0 APPROVED 2026-09-07 (Option 1: the warning REPLACES the READY
       state rather than sitting above it — a banner over a screen still
@@ -1939,10 +1942,11 @@ fixed.
       reported incident. Needs a fake control holding a NAMED characteristic
       undecodable, shaped like `failSubscribe`. **M**
 
-- [ ] **We never check WHICH Concept2 machine is attached, and record
-      everything as a row.** IN FLIGHT as Phase MT (spec approved 2026-09-08,
-      Option A + denylist) — see the phase section below. James, 2026-09-08.
-      **The box stays OPEN until it ships in a tag**, the convention the row
+- [x] **We never check WHICH Concept2 machine is attached, and record
+      everything as a row.** SHIPPED as Phase MT (#366, `a476cbc6`, released
+      in v0.43.0 on 2026-09-08) — see the phase section below, whose own
+      residuals stay open. James, 2026-09-08.
+      **The box ticked when it shipped in a tag**, the convention the row
       above states outright; an earlier revision ticked it at spec approval.
       The PM5 fits the RowErg, SkiErg and BikeErg, and `ergMachineType` — the
       field that says which — had NO consumer anywhere in `app/src` or
@@ -2084,12 +2088,14 @@ fixed.
       from the step itself on rows saved after PR 2; older rows keep the
       dash. **S**
 
-- [ ] **354 code comments cite `interface-notes.md §N` — a file that does
+- [ ] **357 code comments cite `interface-notes.md §N` — a file that does
       not exist** (`docs/monitor/` holds `pm5-interface-notes.md`;
       `grep -rn "interface-notes.md" app/src app/domain | grep -v
-      pm5-interface | wc -l` → 354 across 41 files, 2026-09-07). RF16's
+      pm5-interface | wc -l` → 357 across 32 files, re-measured
+      2026-09-12; it read 354 across 41 files on 2026-09-07, so the
+      citations grew while the files holding them shrank). RF16's
       dangling-citation corollary, at scale; every one is the short name
-      for the same file, so a mechanical `sed` fixes it, but 41 files is
+      for the same file, so a mechanical `sed` fixes it, but 32 files is
       not a rider on an unrelated PR. Its own docs-class PR, or the next
       sweep that already touches `driver.ts` wholesale. **S**
 
@@ -2516,7 +2522,16 @@ the pass takes.** What is missing is that nobody scheduled it. **And it is
 ACCRETING while unopened:** two of its five members were ADDED on 2026-09-07
 by PM gates (`PM5 · PER INTERVAL` over Concept2's arithmetic; AVG HR derived
 from the trace), so the longer it stays shut the larger its Gate 0 gets.
-**NEXT (≤0.25): none owed — this one needs a date, not an answer.**
+**NEXT (≤0.25): none owed — this one needed a date, not an answer, and now
+has one.** · dies 2026-10-12 (set 2026-09-12, proposed by the controller at
+the housekeeping sweep before Wave A opens; James rules at that PR's review) ·
+this is a row and not a fix now because its five members share ONE Gate 0 by
+James's own 2026-08-31 ruling, and fixing any one of them alone is the
+third-of-a-screen approval that ruling exists to prevent. The date is two days
+past Wave A's own (2026-10-10), so it asks the only question that rots here:
+did Wave A finish, and did this then open. **The accretion is the cost of
+waiting** — the pass gained two members in one day on 2026-09-07, so a slip
+re-dates a LARGER gate than the one being deferred.
 
 - [ ] **Phase LP's strip eyebrow says `PM5 · PER INTERVAL` over two
       columns that are Concept2's arithmetic** (PM final gate #327,
