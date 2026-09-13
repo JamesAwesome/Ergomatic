@@ -129,6 +129,34 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **The deviation-in-the-presentation pattern reaches a MEASURED number, and then two numbers circulate.** #417 disclosed a short hero in the body (≈169 px) while §5 still read 181 and the re-review had measured 163; nothing gated the height, and the spec's prose described a legend the approved artboard did not draw. **When a PR re-aligns to an artboard, the artboard wins and the SPEC is what needs the edit — with one number and the command that produced it.**
 - **`ci-changes.sh`'s docs allowlist is a live hole wherever a test reads a file under `docs/` by name.** #417 patched it for `docs/design/career-stats/seed.mjs` and shipped the comment "One file under `docs/` is CODE"; `src/test/captures.ts:21` + `captures.test.ts` read named captures from `docs/monitor/sessions/`. **Before accepting an allowlist patch, grep the test tree for runtime reads of the skipped prefixes** — the patch's own comment is where the next false absolute lands.
 
+- **A phase's exit text names the caption, and the better implementation ships a
+  different one — so the criterion is unmet by a change that improved it.** PS
+  criterion 5 required `TWO ROWS MAKE A CHART` on all three PR-2 charts; TEST
+  TREND draws a chart at ONE point on purpose (a single test IS a result, and
+  "rows" is the wrong noun for tests), and the deviation reached neither the PR
+  body's four-item list nor the ROADMAP. **At every close gate, grep each exit
+  criterion's own quoted STRING against the shipped tree** — a criterion written
+  as copy is falsifiable in one command, and a deviation that improves the
+  product still owes the edit.
+- **A hand-back's copy census is wrong in both directions, and the costly error
+  is the over-ask.** #424 escalated `Couldn't load your tests.` — a verbatim
+  sibling of `Couldn't load your stats.`, which PR 1 shipped on the same page,
+  one of eleven sites using the pattern — while omitting `NO 2K OR 6K TEST
+  LOGGED`, the only new string a tester with no tests actually sees. **Before
+  carrying a string to James, grep its family (`Couldn't load your`) and count
+  the sites; then enumerate every new user-visible literal in the diff
+  (`git diff ... | grep '^+export const [A-Z_]* ='`) rather than the ones the
+  author remembered.** Asking him to re-rule a settled convention spends the
+  gate's credibility on the PR where a real question is beside it.
+- **Ship the TRIAD half early and the post-ship note costs artboards, not
+  rework.** PS rulings 20-21 arrived after build 977 was on James's phone and
+  landed as one chevron and one `:active` rule — because Gate 0 had already made
+  the hero its own component and the door one control. Rulings 18-19, made on
+  rendered output mid-phase, cost spec and e2e-literal edits in the NEXT PR.
+  **At phase open, ask which PR-1 decisions make a later "can it look tappable?"
+  a CSS question instead of a redesign** — that is what buys the right to tag
+  before the phase is finished.
+
 ## Recommendations that turned out wrong
 
 - **2026-08-13 — the CR2 item 0 hypothesis and its oracle.** Both written into

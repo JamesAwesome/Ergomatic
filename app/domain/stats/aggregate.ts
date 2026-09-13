@@ -5,7 +5,12 @@
  * season curve, streaks and avg m/day are PR 2.
  */
 import { logbookWatts } from "../logbook.js";
-import { inRange, type DateRange } from "./calendar.js";
+import {
+  compareDates,
+  inRange,
+  type CalendarDate,
+  type DateRange,
+} from "./calendar.js";
 import type { DatedStatsRow } from "./statsRow.js";
 
 export interface Totals {
@@ -137,4 +142,17 @@ export function timeByType(
     seconds: seconds[key],
     share: seconds[key] / total,
   }));
+}
+
+/** The earliest row date, or null with no rows — what ALL's range line
+ *  names (`ALL TIME · SINCE <date>`, §14 ruling 21). */
+export function earliestDate(
+  rows: readonly DatedStatsRow[],
+): CalendarDate | null {
+  let earliest: CalendarDate | null = null;
+  for (const r of rows) {
+    if (earliest === null || compareDates(r.date, earliest) < 0)
+      earliest = r.date;
+  }
+  return earliest;
 }

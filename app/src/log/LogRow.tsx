@@ -1,5 +1,5 @@
 import TypeBadge from "../components/TypeBadge";
-import { fmtMeters } from "../../domain/format.js";
+import { fmtMeters, MONTH_ABBREV } from "../../domain/format.js";
 import { fmtDuration } from "../../domain/duration.js";
 import FreeRowChip from "../workout/FreeRowChip";
 import { fmtSplit } from "../../domain/format.js";
@@ -25,20 +25,6 @@ import type { RecentLog } from "../api/useRecentLogs";
 // literal "/10" here would contradict that already-decided,
 // already-documented scale, so this uses "/5" like every other effort
 // display in the app.
-const MONTH_ABBREV = [
-  "JAN",
-  "FEB",
-  "MAR",
-  "APR",
-  "MAY",
-  "JUN",
-  "JUL",
-  "AUG",
-  "SEP",
-  "OCT",
-  "NOV",
-  "DEC",
-];
 
 function formatLogDate(loggedAt: string): string {
   const d = new Date(loggedAt);

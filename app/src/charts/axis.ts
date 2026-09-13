@@ -5,7 +5,7 @@
  * same file).
  */
 
-import { fmtSplit } from "../../domain/format.js";
+import { fmtMeters, fmtSplit } from "../../domain/format.js";
 import { fmtDuration } from "../../domain/duration.js";
 
 /**
@@ -66,7 +66,7 @@ export function chooseTicks(domain: [number, number], count: number): number[] {
   return ticks;
 }
 
-export type TickKind = "pace" | "rate" | "hr" | "time";
+export type TickKind = "pace" | "rate" | "hr" | "time" | "split" | "metres";
 
 /**
  * Format a single axis tick value. Pace ALWAYS goes through the house
@@ -96,5 +96,41 @@ export function formatTick(value: number, kind: TickKind): string {
       return String(Math.round(value));
     case "time":
       return fmtDuration(value / 600);
+    // Phase PS PR 2 (career-stats spec §5 item 6): a WHOLE-SECOND split
+    // tick, `1:55`, at `chooseTicks`'s own 1/2/5 steps — `"pace"` prints
+    // tenths (`1:55.0`), which a gridline never needs. Takes SECONDS, like
+    // `"pace"`; routed through the house `fmtDuration` (minutes), never a
+    // bespoke `m:ss`.
+    case "split":
+      return fmtDuration(value / 60);
+    // A metres gridline: the house thousands grouping, `0` at the floor.
+    case "metres":
+      return fmtMeters(value);
+  }
+}
+
+/**
+ * The metres axes' domain top (Phase PS PR 2, `docs/design/career-stats/
+ * build.mjs` `niceMax`): the series' maximum rounded UP to the smallest
+ * step in 1 / 2 / 5 × 10^k (k ≥ 3) that leaves at most `maxLines`
+ * gridlines above zero — so `13,000 → 15,000 by 5,000`, `43,012 → 60,000
+ * by 20,000`, and nothing below 1,000 (`0 → 1,000 by 1,000`). The ladder
+ * continues past the design's 20,000 (its fallback capped the STEP at
+ * 20,000, which a 2,000,000 m season would turn into 100 gridlines).
+ * `chooseTicks([0, max], max / step + 1)` reproduces exactly this grid.
+ */
+export function niceMax(
+  value: number,
+  maxLines = 4,
+): { max: number; step: number } {
+  // NaN/Infinity would never satisfy `max / step <= maxLines`: the ladder
+  // below has no other exit, so a non-finite value is the floor, not a hang.
+  const v = Number.isFinite(value) ? Math.max(value, 1) : 1;
+  for (let base = 1000; ; base *= 10) {
+    for (const f of [1, 2, 5]) {
+      const step = base * f;
+      const max = Math.ceil(v / step) * step;
+      if (max / step <= maxLines) return { max, step };
+    }
   }
 }

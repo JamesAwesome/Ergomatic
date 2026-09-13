@@ -9,7 +9,8 @@ approved design (2026-09-12) is the authority for every decision below; five
 points where a repo fact pulled against it were put to him and ruled the same
 day, three more were ruled at the phase-open gates, and eight at Gate 0 on
 the rendered canvas (rulings 9-16; §5, §15) — §14 records each ruling
-(RF10).
+(RF10). Two more were RULED on PR 2's Gate 0 addendum boards (rulings
+20-21; §5.1), asked and answered after v0.46.0 shipped PR 1.
 
 ## What and why
 
@@ -274,7 +275,10 @@ are absent (hard delete, `data.ts:1583`).
 - **Metres per week** (PR 2) = Σ `workMeters` over `rows(R, ALL)` grouped by
   the Monday-start week of the row's date, drawn as eight bars ending at the
   week containing the range's LAST day (today for every preset; TO for
-  CUSTOM). Gate 0 pins the ALL series for the seed: `0 · 0 · 10,000 · 0 · 0 ·
+  CUSTOM — and a CUSTOM `to` after today is clamped to today by
+  `customRange`, the ONE owner of that clamp, so the totals, the range
+  line and the bars all read the clamped range; `metresPerWeek` keeps its
+  own clamp as defence, pinned). Gate 0 pins the ALL series for the seed: `0 · 0 · 10,000 · 0 · 0 ·
   13,000 · 3,000 · 2,000` for the weeks of 2026-07-20 … 2026-09-07 with
   today = 2026-09-12 (`compute.mjs`). The calendar's current week is drawn in
   `--ink` and labelled `THIS WK`; every other week in `--ink-4` (§14 ruling
@@ -296,7 +300,8 @@ constructs a `Date` from a string (§3, §8.3).
   literals: `2026-04-30 → season 2026`, `2026-05-01 → season 2027`.
 - **Presets:** ALL (no bound) · SEASON (current season to today) · YEAR
   (Jan 1 to today) · MONTH (1st to today) · 30 DAYS (today − 29 … today)
-  · CUSTOM (from, to; both inclusive; from ≤ to). "Today" is the device's
+  · CUSTOM (from, to; both inclusive; from ≤ to; a `to` after today is
+  clamped to today — §3.2). "Today" is the device's
   date, converted by the adapter like every row date.
 - **Week** starts Monday. Week of d = the Monday ≤ d (ISO). Pinned:
   `2026-09-13` (Sunday) → week of `2026-09-07`; `2026-09-14` → itself.
@@ -304,14 +309,28 @@ constructs a `Date` from a string (§3, §8.3).
   where days = (today − May 1) + 1, INCLUDING today (§14 ruling 3; the
   Honor Board page does not state its divisor). Pinned: on May 1 it is 1.
 - **Streak (Ergomatic-invented):** a week counts when ≥ 1 row (ALL) has its
-  date in it. CURRENT = the run of counting weeks ending at the week
-  containing today, or at last week if this week has none yet — a streak is
-  not broken by a week that has not finished. LONGEST = the longest run of
-  consecutive counting weeks anywhere in the rower's history. Both are
-  integers ≥ 0.
-- **Test trend:** two series (`2k`, `6k`) of `splitSeconds` over
-  `loggedAt`'s date, from `GET /api/test-history`, not filtered by the range
-  (a trend needs its whole history; the filter bar says so). **This is the
+  date in it — **ROWS, not metres:** a week whose only row contributes
+  `null` or 0 `workMeters` (a `stored`-tier row with `distanceMeters` null,
+  say) still counts, because the rower rowed that week whatever the record
+  kept. CURRENT = the run of counting weeks ending at the week containing
+  today, or at last week if this week has none yet — a streak is not broken
+  by a week that has not finished. LONGEST = the longest run of consecutive
+  counting weeks WITHIN THE CURRENT SEASON — the same May 1 … today row set
+  as every other figure in the card (invariant 19; §14 ruling 22, which
+  withdrew this line's earlier "anywhere in the rower's history": a run
+  that ends before May 1 never counts, and a run straddling May 1 is
+  counted from May 1). Both are integers ≥ 0.
+  **`docs/design/career-stats/seed.mjs`'s `streaks()` keys on METRES and is
+  therefore NOT the reference for the streak** (PR 2 delta pass,
+  2026-09-12); this rule is, and §8.3 pins the null-metres week.
+- **Test trend:** two series (`2k`, `6k`) of `splitSeconds` over the date
+  of `test_history.loggedAt` — the APPEND instant, which equals the log's
+  save instant on every production path (`PUT /api/baselines`'s
+  `isTestResult` arm, `routes/data.ts:1151`, appends at request time) —
+  from `GET /api/test-history`, not filtered by the range (a trend needs its
+  whole history). Because x is the append instant,
+  a test seeded for a past date must BACKDATE its `test_history` row as
+  well as its log (§8.5). **This is the
   ONE figure on the page that does not drop when its log row is deleted**
   (§14 ruling 4): `test_history.sessionLogId` is `ON DELETE SET NULL`
   (`schema.ts:531-537`) because the test record is the rower's own history
@@ -509,7 +528,8 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
   bar** — six 44 px chips `ALL · SEASON · YEAR · MONTH · 30 DAYS · CUSTOM`
   (58 px wide each at the 350 px content width), roving-tabindex radiogroup
   copied from `PaceRefInput` (RF8), ALL selected on first open; NO caption
-  under it (ruling 18 struck `RANGE APPLIES TO …`). CUSTOM reveals
+  under it (ruling 18 struck `RANGE APPLIES TO …`) but ONE range LINE,
+  ruling 21's variant A on every preset (§5.1). CUSTOM reveals
   two `<input type="date">` at 16 px (44 px tall), seeded FROM = today − 29,
   TO = today, applied on change, and while FROM > TO the previous range
   stays and the inputs read `FROM MUST NOT FOLLOW TO` (A5b).
@@ -518,7 +538,9 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
   line and the `n OF m MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS`
   footnote).** The page is the title, the filter bar, the TOTALS heading
   and card, the TIME BY TYPE heading, bar and legend, and the empty-state
-  lines only. The card itself is the header row `ALL ROWS | MACHINE`, rows METRES /
+  lines only (the range line, §14 ruling 21, is the one exception — one
+  line, every preset, §5.1). The card itself is the header row
+  `ALL ROWS | MACHINE`, rows METRES /
   TIME / SESSIONS in both columns, then REST METRES / CALORIES / AVG WATTS
   under MACHINE only (§14 ruling 5: calories and watts are rows of this
   group, never a group of their own — the "lifetime + monthly" ruling is
@@ -529,11 +551,19 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
   · WORK-ONLY ROWS` line — the exclusions those captions named (§3.2,
   ruling 6) still hold in the numbers, unlabelled.
   (3) **METRES PER WEEK** (PR 2) — eight bars ≤ 24 px wide on a `linearScale`
-  y-axis with `chooseTicks` gridlines, captioned `EIGHT WEEKS ENDING AT THE
-  RANGE'S LAST DAY · WEEKS BEGIN MONDAY · THIS WEEK IN INK`; the current week
-  in `--ink`, the others in `--ink-4`; bars carry their value label above
-  when non-zero (A3: `10,000`, `13,000`, `2,000`); x labels every other week
-  by date (`27 JUL · 10 AUG · 24 AUG · THIS WK`).
+  y-axis with `chooseTicks` gridlines and NO caption (rulings 18/19 struck
+  the design's `EIGHT WEEKS ENDING AT THE RANGE'S LAST DAY …` line); the window
+  anchors on `to ?? today` (the range's TO for CUSTOM, today for every
+  preset); the current week in `--ink`, the others in `--ink-4`; **value
+  labels on the CURRENT bar and the TALLEST bar only** — A3's own rule
+  (`build.mjs`: `cur || i === maxI`), so A3 carries exactly two bar labels,
+  `13,000` and `2,000`; the `10,000` the first draft read as a bar label is
+  a GRIDLINE TICK (PR 2 delta pass, 2026-09-12). **Weeks that start before
+  the range's FROM render as a dashed `--rule-2` outline** (out of range —
+  reachable on MONTH, 30 DAYS and any CUSTOM whose FROM is inside the
+  window; never on ALL); the week containing FROM is in range even when
+  FROM is not a Monday — a partial first week is drawn like any other. x
+  labels every other week by date (`27 JUL · 10 AUG · 24 AUG · THIS WK`).
   (4) **TIME BY TYPE** (PR 1 — the hero already needs the computation and
   the bar, so the group ships at no extra cost, §9) — the same stacked bar
   as the hero, with NO caption (ruling 18 struck `WORK TIME · NO TYPE IS
@@ -541,27 +571,56 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
   per non-empty bucket: swatch, name, time, whole-percent share (A3: `AN
   13:43 6% · AT 1:03:39 27% · O2 1:44:04 43% · TR 23:07 10% · NO TYPE
   35:06 15%`).
-  (5) **SEASON <name>** (PR 2; A3 reads `SEASON 2027`), captioned `MAY 1 TO
-  TODAY · ALWAYS THIS SEASON · NOT FILTERED` — the cumulative curve (2 px
+  (5) **SEASON <name>** (PR 2; A3 reads `SEASON 2027`), with NO caption
+  (rulings 18/19 struck the design's `MAY 1 TO TODAY · ALWAYS THIS SEASON ·
+  NOT FILTERED` line) — the cumulative curve (2 px
   `--ink` line, ≥ 8 px end dot, y-axis in metres, x labels `MAY · AUG · NOV
   · FEB · APR`) with its end label `43,012 TODAY`; under it three figures:
   `AVG M/DAY` `319 M`, `CURRENT STREAK` `3` `WEEKS · ERGOMATIC`, `LONGEST
-  STREAK` `3` `WEEKS · ERGOMATIC` (the streak strip, A3, is 16 Monday-start
-  cells, rowed cells filled `--ink`, not-rowed cells outlined `--rule-2`).
+  STREAK` `3` `WEEKS · ERGOMATIC` (A3 also draws a 16-cell streak strip; it
+  is NOT built — §11, PR 3 or never).
+  **Every figure in this card — the curve, `<n> TODAY`, AVG M/DAY and both
+  streaks — is computed from ONE row set, the UNFILTERED current-season rows
+  (invariant 19).** The approved A5-CustomOpen artboard breaks this: its
+  curve reads `18,000 TODAY` (the FILTERED set) beside `AVG M/DAY 319`
+  (319 × 135 = 43,065, the unfiltered set) under a caption reading `NOT
+  FILTERED` — the builder passed two row sets to one card (PR 2 delta pass,
+  2026-09-12); the invariant governs, not the artboard. **Empty states —
+  ONE rule (James, 2026-09-12, the PR 2 plan's reconciliation):** the card
+  renders at ≥ 1 season row; at 0 season rows it reads `NO ROWS THIS SEASON
+  YET`, whatever the lifetime count — reachable by every rower every early
+  May; the curve needs ≥ 2 points, so at exactly 1 season row the card
+  reads `TWO ROWS MAKE A CHART`, like the other charts.
   (6) **TEST TREND** (PR 2) — 2k (`--ink`) and 6k (`--type-o2`) as two series
-  of split seconds over date on `linearScale`/`chooseTicks(kind: "pace")`
-  with the axis inverted so faster is higher (the caption ends `FASTER IS
-  UP`; ticks `1:54 · 1:58 · 2:02 · 2:06`), 2 px lines, ≥ 8 px dots with a
+  of split seconds over the date of `test_history.loggedAt` (the append
+  instant, §3.3) on `linearScale`, the axis inverted so faster is higher
+  (`FASTER IS UP` sits in the legend). **The y-axis uses a NEW `TickKind`,
+  `"split"`,** added to `src/charts/axis.ts`'s union (`"pace" | "rate" |
+  "hr" | "time"` today, `axis.ts:69`): whole-second splits printed `m:ss`
+  with no tenths (`1:55 · 2:00 · 2:05`), at `chooseTicks`'s own nice steps
+  only — `chooseTicks(domain, count)` takes NO kind (`axis.ts:52`) and its
+  `niceNum` admits only 1/2/5/10 × 10^k, so the 4-second step behind the
+  first draft's hand-typed `1:54 · 1:58 · 2:02 · 2:06` is unreachable, and
+  `formatTick(v, "pace")` would print `1:55.0` (PR 2 delta pass, 2026-09-12;
+  A3's ticks were typed and sliced in `build.mjs`, never produced by the
+  primitive). The domain top follows `build.mjs`'s `niceMax` rule (`:159`):
+  the series' maximum rounded UP to the smallest step in 1/2/5 × 10^k that
+  leaves ≤ 4 gridlines — the rule under which `chooseTicks` reproduces A3's
+  metres ticks exactly (delta pass, HELD); for the seed's split domain
+  `[112, 126]` at count 4 the primitive yields `115 · 120 · 125`, printed
+  `1:55 · 2:00 · 2:05`. 2 px lines, ≥ 8 px dots with a
   2 px surface ring, the last point of each series labelled (`6K 2:01.4`,
-  `2K 1:54.0`), a `2K · 6K` legend, captioned `ALL TESTS · KEPT WHEN A LOG
-  IS DELETED · NOT FILTERED` so the one exception is said where it shows.
+  `2K 1:54.0`), a `2K · 6K · FASTER IS UP` legend, and NO caption (rulings
+  18/19 struck the design's `ALL TESTS · KEPT WHEN A LOG IS DELETED · NOT
+  FILTERED` line; the one exception is stated in §3.3, invariant 13 and the
+  chart's accessible name, not on the surface).
 - **Empty states**, honest text and never sample data:
   - **0 rows** (A6a; §14 ruling 16): the page is `← BACK`, `Stats` and `NO
     ROWS YET · YOUR FIRST SAVED ROW STARTS THE COUNT` — **the filter bar is
     hidden**, and so is every group.
   - **1 row** (A6b): the filter bar and TOTALS render in full (`237` W for
     R13 alone; A6b's `1 OF 1 CARRY …` line was struck by ruling 19); METRES PER WEEK, TIME
-    BY TYPE and SEASON each read `TWO ROWS MAKE A CHART` under their caption
+    BY TYPE and SEASON each read `TWO ROWS MAKE A CHART` under their heading
     (PR 1 renders TIME BY TYPE's; PR 2 the other two); TEST TREND draws its
     one point — a record of one is still a record.
   - **Zero `pm5` rows in range** (A6c; ruling 16 — every tester who has never
@@ -578,9 +637,12 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
     omits those rows.
   - **No test history**: `NO 2K OR 6K TEST LOGGED` under the TEST TREND
     caption (A6c).
-  - **A CUSTOM range with no rows**: `NO ROWS BETWEEN <from> AND <to>` — not
-    drawn at Gate 0; the plan renders it in the TOTALS group's place with the
-    filter bar still shown (the rower needs the bar to leave the range).
+  - **A CUSTOM range with no rows**: the range line itself carries it, in
+    its own spelling — `NO ROWS · 20 TO 31 JUL 2026` (one line; the PR 2
+    review struck a second ISO caption, `NO ROWS BETWEEN 2026-07-20 AND
+    2026-07-31`, that had stacked under it) — not drawn at Gate 0; the
+    groups it filters are absent and the filter bar stays (the rower needs
+    the bar to leave the range).
 - **Gate 0 — APPROVED 2026-09-12 (James), exit criterion 4 met.** What was
   shown: the You hero in three candidate heights (H1 / H2 / H3, portrait and
   landscape) beside the current You screen, the whole subpage at 390×844 and
@@ -612,11 +674,59 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
     canvas), `← BACK` 44 px min
     height and width, each filter chip 44 × 58 px, each date input 44 px
     tall, tab items 44 px + safe-area padding, Sign out 44 px. Chart marks
-    are not tap targets in PR 1; PR 2's hover/tooltip layer owns them, with
-    a hit target larger than the mark (dataviz).
+    are not tap targets in PR 1 or PR 2; the hover/tooltip layer that would
+    own them (with a hit target larger than the mark, dataviz) is PR 3 or
+    never (§11).
   - The dataviz palette validator's lightness-band and chroma-floor checks
     fail for every house token because the palette is deliberately muted;
     reported, not acted on (A7).
+
+### 5.1 PR 2 addendum (Gate 0 RULED 2026-09-12)
+
+Two notes from James on 2026-09-12, given after v0.46.0 (build 977, PR 1)
+was on his phone, rendered as boards (`docs/design/career-stats/README.md`,
+"PR 2 addendum": `B0`-`B3` and their pressed frames, `C1`) and RULED by him
+on sight the same day. §14 rulings 20 and 21 are the record; this section
+carries what PR 2 builds.
+
+- **Hero affordance (§14 ruling 20 — B1).** "On the You tab I'd like to
+  experiment with how to indicate that the row is clickable." The hero is
+  the door to `/you/stats` (ruling 10) and, as shipped, signalled nothing
+  tappable. **Built:** a trailing `›` chevron, vertically centred, its
+  right edge on the `.you-doors` chevron column (the hero's `padding: 12px
+  2px` already matches `.diag-row`'s `13px 2px`), in the doors' own style
+  — mono 12 px / 0.08em, `--ink-3` on `--page` (6.69:1) — with the
+  figures, bar and legend in a column beside it (`B1-You`: 140 px, the
+  same as shipped; the column loses the chevron's width). **And a pressed
+  state:** `.you-stats-hero:active { background: var(--surface-sunken) }`
+  — the fill measures 1.06:1 against `--page` (a cue, not a mark) and
+  every text and data-mark pairing on it clears its floor
+  (`contrast.json`, the `surface-sunken` rows). Invariant 16 holds
+  unchanged: ONE focusable control, no nested interactive element, the
+  accessible name EXACTLY `Stats` by the explicit `aria-label="Stats"`
+  already on the link; the chevron is `aria-hidden`, like the doors'.
+  Not taken: the card edge (`B2`, 148 px) and the `STATS ›` label (`B3`).
+- **Range line under the filter bar (§14 ruling 21 — variant A, every
+  preset).** "I'd like the date range for a season to be visible when you
+  click on it — for consistency maybe all date ranges become visible?"
+  **Built:** one line of mono caps directly under the filter bar (under
+  the CUSTOM inputs when they are shown), `.stats-caption`'s style
+  (`--ink-3` on `--page`, 6.69:1), naming the days the totals cover —
+  never a day the range does not contain (`presetRange`,
+  `app/domain/stats/calendar.ts`, sets `to = today` for SEASON, YEAR,
+  MONTH and 30 DAYS). Copy, with today = 2026-09-12 on the Gate 0 seed:
+  ALL `ALL TIME · SINCE 8 NOV 2025` (the earliest row's date); SEASON
+  `1 MAY TO 12 SEP 2026`; YEAR `1 JAN TO 12 SEP 2026`; MONTH `1 TO 12 SEP
+  2026`; 30 DAYS `14 AUG TO 12 SEP 2026`; CUSTOM the two inputs' values
+  in the same shape — `14 AUG TO 12 SEP 2026` for the seeded pair. The
+  shape collapses a shared year and a shared month (`build.mjs`
+  `rangeText`); across years both ends print in full; a one-day range is
+  ONE date, `1 OCT 2026` (§14 ruling 23). While CUSTOM's pair
+  is unusable (FROM > TO, or a cleared field) the line names the range
+  still APPLIED — the same range the totals show — beside the error
+  sentence. It is the ONE prose line on the page: rulings 18 and 19 stand
+  otherwise, and it is hidden with the filter bar at zero rows (ruling
+  16). Variant B (the preset's own span with `· TO DATE`) is not taken.
 
 ## 6. Where the risk is
 
@@ -681,7 +791,8 @@ which of them the gap was.
     (James, 2026-09-12: the integration is not production yet.)
 13. A deleted log row is absent from every stats figure on the next mount;
     the test trend alone keeps its point, by the schema's deliberate `SET
-    NULL` (§3.3, §14 ruling 4), and its caption says so.
+    NULL` (§3.3, §14 ruling 4); no surface caption says so since rulings
+    18/19 — the record and the chart's accessible name do.
 14. The domain never reads a clock or a timezone and never parses a date
     string: today and every row date are `{ y, m, d }` inputs.
 15. The stats surface renders a bounded state for any row count: the route
@@ -703,6 +814,14 @@ which of them the gap was.
     the ones `compute.mjs` prints (§8.5), with the clock pinned to
     2026-09-12 — a change to any of those figures is a change to what a
     number means and takes the TRIAD gate.
+19. **The SEASON card is one row set:** the cumulative curve, its `<n>
+    TODAY` end label, AVG M/DAY and both streaks are computed from the SAME
+    set — every row whose date is in the current season, NEVER the filter's
+    range — so no two figures in the card can disagree about which rows
+    exist (§5 item 5; the approved A5 artboard mixed the two sets and the
+    invariant governs). LONGEST is the longest run within this set (§14
+    ruling 22). At 0 season rows the card reads `NO ROWS THIS SEASON YET`,
+    whatever the lifetime count; at 1 it reads `TWO ROWS MAKE A CHART`.
 
 ## 8. Testing — each gate with RF26's five-part contract
 
@@ -747,8 +866,19 @@ supported save path produces the projection the surface sums."
 ### 8.3 Calendar pins and the zone test (RF21; invariants 5, 6, 10, 14)
 
 Season: `2026-04-30 → 2026`, `2026-05-01 → 2027`. Week: `2026-09-13 →
-2026-09-07`. Avg/day divisor on May 1 = 1. Streak: weeks {W1, W2, W4} with
-today in W5 → current 0, longest 2; with today in W4 → current 1. Empty
+2026-09-07`. Avg/day divisor on May 1 = 1. Streak (§3.3's rule, with
+W1..W5 = the Monday-start weeks of 2026-08-10 … 2026-09-07): rows in
+{W1, W2, W4} with today in W5 (W5 empty, so CURRENT falls back to last
+week) → current 1, longest 2; rows in {W1, W2, W4, W5} with today in W5
+(the current week HAS a row) → current 2, longest 2; with today in W4 →
+current 1. (The first draft's pin read `current 0` for the first case and
+contradicted §3.3 and invariant 10 — PR 2 delta pass, 2026-09-12.) The
+null-metres pin: rows in {W1, W2} where W2's only row is a `stored`-tier row
+with `workMeters: null` → current 2 with today in W2, longest 2 — rows, not
+metres (§3.3). The pre-May-1 pin (ruling 22): the seed plus four rows in the
+weeks of 2026-04-06 … 04-27 → longest STILL 3; and with today = 2026-05-06
+and one row on May 5 beside those four → current 1, longest 1 — an April
+run never joins a May streak. Empty
 range → every total 0, sessions 0, avg watts `undefined`. Every pin is a
 `{ y, m, d }` literal; the domain has no `Date` to get wrong. (4) Each pin's
 mutation is the off-by-one in the constant it guards (a `<` for `<=`), and
@@ -775,7 +905,12 @@ process's zone, and the test process's zone is one where it matters."
 ### 8.4 Structural gate for invariant 12
 
 A unit test reads every file under `app/domain/stats/`, `src/you/stats/`
-(which now holds `YouStatsHero.tsx`, §5) and `src/api/useStatsRows.ts`
+(which now holds `YouStatsHero.tsx`, §5) and the stats hooks under
+`src/api/` — `useStatsRows.ts` AND, from PR 2, `useTestHistory.ts` (the
+trend's hook, which also needs the §8.3 `TZ` pin since it converts
+`test_history.loggedAt` the same way), so the scan is widened from the
+single file to both, or to a `src/api/use*Stats*.ts`-style glob that
+catches the next one (PR 2 delta pass, 2026-09-12) —
 as text and asserts, CASE-INSENSITIVELY, that none contains `verified`,
 `c2ResultId`, `c2UserId`, `concept2` or `/api/concept2` — the real module is
 `src/api/useConcept2Link.ts` (capital C), and a case-sensitive scan for
@@ -819,11 +954,34 @@ behaviour (RF26).
     for the weeks of 2026-07-20 … 2026-09-07. SEASON: `43,012 TODAY`, AVG
     M/DAY 319 (43,012 / 135), CURRENT STREAK 3, LONGEST 3. TEST TREND: six
     points, T1/T3/T5 with `sessionLogId` null.
+  - **The seed is BLIND to boundaries (PR 2 delta pass, 2026-09-12), so PR
+    2 adds fixtures beside it:** not one of the 13 rows sits on any preset's
+    `from` or `to` (newest 09-11 against today 09-12), so an inclusive/
+    exclusive off-by-one anywhere ABOVE `inRange` is invisible to the whole
+    reference fixture while `inRange` itself is pinned; its streaks are 3/3
+    so CURRENT ≠ LONGEST is never exercised; and every week up to today has
+    a row, so the unfinished-week fallback branch is never taken. PR 2's
+    unit and e2e gates therefore ALSO run: (a) one row dated today
+    (2026-09-12) and one dated 2026-05-01 — a row on each of SEASON's, and
+    every preset's, `to` and on SEASON's `from`; (b) an older run of FOUR
+    counting weeks so LONGEST reads 4 while CURRENT stays 3; (c) the seed
+    with R13 (the only 2026-09-07-week row) DROPPED, so this week is empty
+    and CURRENT falls back to last week. **And say which pins a Sunday-start
+    mutation moves:** METRES PER WEEK does — the series becomes `2,000 · 0 ·
+    10,000 · 0 · 0 · 8,000 · 8,000 · 2,000` — and so do the `mondayOf` pin
+    and §8.3's three `streakOf` pins, whose W1..W5 keys are Mondays; the
+    seed's 3/3 streak does NOT move and NEITHER does fixture (b) (its weeks
+    shift together — measured, PR 2 plan), so (b) gates the CURRENT/LONGEST
+    transposition, not the week start; a convention bug that no pin can
+    move is not gated.
 - **The clock is pinned.** Every figure above depends on today = 2026-09-12
   (the season, 30 DAYS, MONTH, the week axis, the divisor 135, the streaks);
   the e2e pins the browser clock to that date AND the browser's zone
   (Playwright `timezoneId`), and seeds each row's `loggedAt` at local NOON of
-  its seed date so no zone can move a row across midnight. The unit tests
+  its seed date so no zone can move a row across midnight — **and the six
+  `test_history` rows are BACKDATED the same way**, because the trend's x
+  is `test_history.loggedAt`, the append instant (§3.3): a test row seeded
+  at request time would plot every point on today. The unit tests
   pass `today` as the `{ y, m, d }` triple (§3). A test that reads the real
   clock is wrong by construction (invariant 14).
 - Client: filter presets select the right rows (the four preset totals
@@ -851,8 +1009,9 @@ behaviour (RF26).
   `Stats`, tap the LEGEND and assert `/you/stats`; assert ALL `56,752` and
   MACHINE `36,752`, `718`, `1,731`, `176` (no prose lines to assert since
   ruling 19); delete R13 (a `pm5` row, 2,000
-  m) through the UI, reload, assert LIFETIME `54,752`, MACHINE `34,752` and
-  `7 OF 9`. Mutation: make the ALL column filter `source === "pm5"` → the
+  m) through the UI, reload, assert LIFETIME `54,752` and MACHINE `34,752`
+  (the `7 OF 9` line was struck by rulings 18/19 and is not asserted).
+  Mutation: make the ALL column filter `source === "pm5"` → the
   ALL literal fails while MACHINE passes (the case that proves the two
   columns are computed independently). This run is bounded below the fake's
   first frame by construction — nothing here connects a monitor (RF41).
@@ -899,15 +1058,30 @@ behaviour (RF26).
   §8.2 fixture carries ≥ 1 `stored`-tier row. The verdict names the scale
   that decided it.
 - **PR 2 — the remaining charts: METRES PER WEEK, the SEASON group
-  (cumulative curve, AVG M/DAY, CURRENT and LONGEST STREAK), TEST TREND,
-  and the hover/tooltip layer.** Every one was designed and approved at
-  Gate 0 (ruling 11; §5 items 3, 5, 6), so PR 2 carries no design gate of
-  its own unless the rendered thing changes. Gates: antagonist DELTA pass
+  (cumulative curve, AVG M/DAY, CURRENT and LONGEST STREAK), TEST TREND
+  (the hover/tooltip layer once listed here is PR 3 or never, §11) — plus
+  James's two 2026-09-12 notes: the
+  hero's tappable affordance and the range line under the filter bar
+  (§5.1).** The charts were designed and approved at Gate 0 (ruling 11; §5
+  items 3, 5, 6), so they carry no design gate of their own unless the
+  rendered thing changes; **the two notes DID carry one** — a Gate 0
+  addendum rendering the affordance candidates and the range line, RULED
+  by James on sight 2026-09-12 (§14 rulings 20 and 21: the B1 chevron with
+  the proposed pressed fill; range-line variant A on every preset), and
+  their implementation follows those rulings. The range line is the one
+  prose line rulings 18 and 19 allow back. Gates: the Gate 0 addendum
+  (RULED, both notes); antagonist DELTA pass
   scoped to §3.3 streak/avg-per-day and §3.2 metres-per-week definitions
   only (new invariant classes against the anchor's vetted ground; AVG WATTS
-  and time by type ship in PR 1); DBA SKIP stated aloud unless a query
-  changes (test-history's GET is unchanged); no PM per-PR gate (non-triad
-  UI).
+  and time by type ship in PR 1; the two notes are copy and layout, nothing
+  for it to attack) — **RUN 2026-09-12 against the vetted ground: six
+  mechanism breaks, all folded into §3.3, §5 items 3/5/6, §5.1, §7
+  invariant 19, §8.3-8.5 and §12 the same day** (ledger:
+  `antagonist-ledger.md`, "Phase PS PR 2 delta pass, 2026-09-12"); the
+  §8.5 boundary fixtures (a row on today and on 2026-05-01, the 4-week
+  streak, the R13-dropped variant) and the Sunday-start statement are PR
+  2 gates; DBA SKIP stated aloud unless a query changes (test-history's
+  GET is unchanged); no PM per-PR gate (non-triad UI).
 - Fast path applies to nothing here (`app/domain/` and `app/server/` in
   PR 1; a wrong version produces a wrong number). PR 1 is one plan: the
   domain function and its contract test, the route and its seam test, and
@@ -938,11 +1112,15 @@ behaviour (RF26).
 5. **Totals at ≥ 1 row, verified at PR 1:** a rower with one saved row sees
    real totals on You and `/you/stats` equal to that row's detail hero; at
    0 rows, the §5 empty state; with no `pm5` row, the MACHINE column's.
-   **Charts at ≥ 2 points:** TIME BY TYPE at PR 1, METRES PER WEEK, SEASON
-   and TEST TREND at PR 2 — each renders at two rows in range and reads
-   `TWO ROWS MAKE A CHART` below. Each half is checked at the PR that ships
-   it — a criterion cannot be verified on a build where its code does not
-   exist (RF24).
+   **Charts at ≥ 2 points:** TIME BY TYPE at PR 1, METRES PER WEEK and
+   SEASON at PR 2 — each renders at two rows in range and reads `TWO ROWS
+   MAKE A CHART` below. **TEST TREND is the exception and ships one
+   deliberately (PR 2):** a single test result IS a result, so the chart
+   draws it as one dot on a ±5 s domain rather than refusing; `rows` is
+   also the wrong noun for a test. Its own empty state is `NO 2K OR 6K TEST
+   LOGGED` at zero. Each half is checked at the PR that ships it — a
+   criterion cannot be verified on a build where its code does not exist
+   (RF24).
 7. **The reference fixture agrees with the canvas:** the e2e and client
    figures for the Gate 0 seed (§8.5) are the ones `compute.mjs` prints and
    the artboards show, with the clock pinned to 2026-09-12; the hero is one
@@ -960,7 +1138,9 @@ PBs and Lifetime Bests; the Million Metre Club; Concept2 import or catch-up
 metres; storing machine type (the existing register row owns it; every row
 is a RowErg row until then); `completedAt` as the row date; per-row watts;
 charts beyond the six Gate 0 drew (the hero bar, metres per week, time by
-type, the season curve and streak strip, the test trend). **Generated columns,
+type, the season curve, the test trend). **The hover/tooltip layer §9 once
+named for PR 2 and A3's 16-cell streak strip: PR 3 or never (James,
+2026-09-12) — no row.** **Generated columns,
 an index, or any migration:** the DBA measures and James rules — a
 stored-shape change is its own TRIAD row outside PS, and the 2026-09-12
 measurement found neither Wave E row reachable from this route's shape
@@ -986,6 +1166,14 @@ never change a number here** — §7 invariant 12 forbids it structurally.
   and files the list as a row (§13) rather than widening its own risk model
   into a list-surface change.
 - The RC-5 hazard the deferred PS row carried is §6, resolved by naming.
+- **Hardening debt, stated and not owed a row (PR 2 delta pass,
+  2026-09-12):** `PUT /api/baselines`'s `isTestResult` arm
+  (`routes/data.ts:1151`) appends `test_history` rows KEYLESS — its
+  `sessionLogId` is `NULLS DISTINCT`, so a null-linked append is never
+  deduplicated — and has ZERO senders in `app/src` and `app/e2e`
+  (`grep -rn isTestResult app/src app/e2e` → nothing, 2026-09-12); the
+  trend draws whatever that arm has stored, and nothing in production
+  reaches it today.
 
 ## 13. Rows to file (dies date + clause)
 
@@ -1043,7 +1231,8 @@ the record.
 4. **The test trend SHOWS points whose log was deleted.** `SET NULL` is
    deliberate (`schema.ts:531-537`); the test record is its own history.
    It is the one figure on the page that does not drop with a deleted log,
-   stated in §3.3, §4.3, invariant 13 and the group's caption (§5).
+   stated in §3.3, §4.3 and invariant 13 (the group's caption was struck by
+   rulings 18/19).
 5. **CALORIES & WATTS fold into TOTALS** as two more rows under the MACHINE
    column; the separate group is gone from §5, §9 and the ROADMAP section.
 6. **AVG WATTS EXCLUDES `stored`-tier rows** (rows carrying only the fused
@@ -1137,6 +1326,57 @@ the record.
     aggregate (tested; they still govern the watts exclusion) and nothing
     renders them. Rulings 1 and 15's SURFACE lines are superseded; their
     definitions stand.
+20. **RULED 2026-09-12, on sight of the addendum boards (asked the same
+    day, after v0.46.0 build 977 was released with PR 1) — the You hero's
+    affordance is B1:** a trailing `›` chevron aligned with the chevrons of
+    the `.you-doors` rows below it, in the doors' own style (`--ink-3`
+    mono on `--page`, 6.69:1, `contrast.json`), the hero's height
+    unchanged at 140 px (`hero-heights.json` `B1: 140`; the bar loses the
+    chevron column's width), PLUS the faint `--surface-sunken` fill on
+    `:active` as the pressed state — accepted AS PROPOSED (the stylesheet
+    had no `:active` rule anywhere; the fill measures 1.06:1 against
+    `--page`, a touch-feedback cue and not a data mark, and every text and
+    mark pairing on it clears its floor — `--ink` 14.5:1, `--ink-3` 6.3:1,
+    every bar segment ≥ 4.48:1 (`--ink-4`, the NO TYPE segment, is the
+    floor case), `contrast.json`'s `surface-sunken` rows).
+    The card edge (B2) and the `STATS ›` label (B3) are NOT taken.
+    Invariant 16 holds unchanged: still ONE focusable control, no nested
+    interactive element, the accessible name EXACTLY `Stats` by an
+    explicit `aria-label="Stats"` on the link — the chevron is
+    `aria-hidden` decoration like the doors' own.
+21. **RULED 2026-09-12, same sitting — the range line is variant A on
+    EVERY preset.** One mono-caps line under the filter bar, in
+    `.stats-caption`'s style (`--ink-3` on `--page`, 6.69:1), naming the
+    days the totals actually cover — `presetRange` sets `to = today`, so
+    the line never names a day the range does not contain. With today =
+    2026-09-12 and the Gate 0 seed: ALL `ALL TIME · SINCE 8 NOV 2025`
+    (the FIRST row's date, R1); SEASON `1 MAY TO 12 SEP 2026`; YEAR
+    `1 JAN TO 12 SEP 2026`; MONTH `1 TO 12 SEP 2026`; 30 DAYS `14 AUG TO
+    12 SEP 2026`; CUSTOM the two inputs' values in the same shape (the
+    seeded pair reads `14 AUG TO 12 SEP 2026`). The shape is
+    `build.mjs`'s `rangeText`: the year once when both ends share it, the
+    month once when both ends share it, both ends in full across years
+    (`8 NOV 2025 TO 12 SEP 2026` is the across-years form). It is the ONE
+    prose line on the page — rulings 18 and 19 stand otherwise — and it
+    is hidden with the filter bar at zero rows (ruling 16). Variant B
+    (`SEASON 2027 · 1 MAY 2026 TO 30 APR 2027 · TO DATE`, which wraps to
+    two lines at 390 px) is NOT taken; §5.1's first-draft
+    `1 MAY 2026 TO 12 SEP 2026` was the pre-board spelling and the
+    board's `1 MAY TO 12 SEP 2026` is the one he approved.
+22. **LONGEST STREAK is the longest run WITHIN THIS SEASON (2026-09-12, on
+    the PR 2 plan's Deviation 1).** Invariant 19 wins: both streaks, the
+    curve, `<n> TODAY` and AVG M/DAY read the one May 1 … today row set;
+    §3.3's "anywhere in the rower's history" is withdrawn. A run that ends
+    before May 1 never counts and a run straddling May 1 is counted from
+    May 1 (the cost, accepted: a rower six weeks deep on May 3 reads
+    `CURRENT STREAK 1`). Pinned in §8.3 and in the plan's Task 3 with its
+    mutation (streak keys taken from every row instead of the season's).
+23. **A one-day range reads as a single date (2026-09-13, PR 2 review).**
+    `1 OCT 2026`, never `1 TO 1 OCT 2026`; the `TO` form returns the moment
+    the two ends differ (`11 TO 12 SEP 2026`). Ruling 21's three shapes
+    stand for every range longer than a day. Applied in `fmtRange`
+    (`src/you/stats/format.ts`) and pinned in `format.test.ts`
+    (`12 SEP 2026` for from = to = today).
 
 ## 15. Gate record (PR 0, at `93b91d66`)
 

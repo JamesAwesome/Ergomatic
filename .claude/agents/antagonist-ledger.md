@@ -16,6 +16,103 @@ to touch.
 - **DISPOSITION:** controller folded the findings once, explicitly named both legacy Google email writers and added the policy/session/attempt lifetime table. No prescribed blocks; lens 2 skipped.
 - **LIMIT:** no live host, provider authorization, runtime probe or original Apple implementation review was performed. The prior broad code lens remains INCOMPLETE.
 
+## Phase PS PR 2 plan — /harden lens 2, 2026-09-13 (prescribed code read as code)
+
+Plan at `dd34e025`; the sources reinstated at their real paths — tsc
+app/server/e2e 0, eslint + prettier clean, unit 58/58, client 196/196 before
+the pass. Six findings, four MECHANISM, all folded the same day; the loop
+closes here.
+
+- **`niceMax(NaN | Infinity)` loops forever** — the 1/2/5 ladder's only
+  exit is `max / step <= maxLines`, which neither satisfies (exit 124 under
+  `timeout 5`); pins at 0 and 1,000 were green. Guarded to the floor
+  (`{ 1000, 1000 }`). Folding it found the second half: a vitest per-test
+  `timeout` CANNOT interrupt a synchronous loop (measured — the whole run
+  still hangs with `{ timeout: 2000 }` on the pin), so the mutation is run
+  under an external `timeout` and `EXIT=124` is the red.
+- **A CUSTOM `to` after today anchored METRES PER WEEK on a future week** —
+  this week mid-chart, five future zero baselines. The domain clamps the
+  anchor to today; `max={today}` on both date inputs as a hint, not the
+  gate.
+- **`PAD_R 52` clips a last-day-of-month trend label** (~53 px of mono from
+  x ≈ 276 in a 320 viewBox). The label flips left of the dot when it would
+  overrun (`LABEL_ROOM`), pinned with a Sep 30 test row; a 60 % rule would
+  have flipped the seed's own labels onto the line.
+- **`seedGate0Tests` turned a mistyped seed log into a silent throwaway**
+  — now throws `no seeded log`.
+- The house's FIRST `:active` rule had no gate: a Chromium `mouse.down`
+  assertion reads `--surface-sunken`'s rgb off the pressed hero (mutation:
+  delete the rule → `rgba(0, 0, 0, 0)`); WKWebView tap behaviour for
+  `:active` is UNTESTED until a device look (no `touchstart` listener in
+  `src/`). `NOTHING IN THESE EIGHT WEEKS` misnamed null-metres rows (a
+  stored-tier row is a session with `workMeters: null`) → `NO METRES IN
+  THESE EIGHT WEEKS`, predicate unchanged.
+- HELD: no self-comparing test (`compute.mjs` is seed-only, every pin a
+  literal); all four A→B seams start upstream of A; the R13-delete trend
+  assertion is live only because the hero click remounts — now stated as a
+  precondition (RF38). Noted for James's hand-back, not a defect: at 0 rows
+  the trend is hidden by ruling 16, so a rower whose only log is deleted
+  keeps the point (ruling 4) but never sees it.
+
+## Phase PS PR 2 plan, /harden lens 1, 2026-09-12 (the charts — DELTA against the PS vetted ground)
+
+Plan: `docs/superpowers/plans/2026-09-12-career-stats-pr2-plan.md` at
+`4df5d610`. Delta pass: the mechanisms PR 2 invents (the week bars, the
+season card, the trend, the range line) against the anchor's ground; every
+finding folded into the plan the same day.
+
+- **BROKEN — the week bars' `aria-label` reported an out-of-range week as
+  `0`.** `role="img"` prunes an SVG's `<text>` (ARIA 1.2 presentational
+  children), so the label built from `values.map(fmtMeters)` was the ONLY
+  thing assistive tech heard, and it said `0` for a slot the chart draws as
+  a dashed OUT OF RANGE outline. Rulings 18/19 had struck the caption that
+  once carried the words. `StackedBar.tsx` (`aria-hidden` + a real-text
+  legend) is the safe shape already in the tree. Fix: `weekBarsLabel`
+  builds from the bars' MEANING (`outside the range`, `this week <n>`), with
+  a client test on the 30 DAYS case and the raw-values mutation; the season
+  label now says `<n> today`, avg/day and both streaks; the trend label
+  says the latest 2k and 6k splits (its `<p>` legend carries only the
+  series names).
+- **BROKEN — `testTrend`'s comment named an authority the store lacks.**
+  "The adapter's append order breaks ties" — `stores/testHistory.ts`
+  `list()` orders by `desc(loggedAt)` alone; the wire has no tiebreaker.
+  Reworded: same-day ties are UNORDERED and unreachable in production
+  (`sessionLogId` UNIQUE + `defaultNow()`); no store change (the DBA skip
+  stands).
+- **HELD — every domain literal**, re-derived from an independent
+  `days_from_civil` port: the eight-week series, the week starts, the
+  current/out-of-range flags, the season's 9 / 43,012 / 135 / 319, the
+  cumulatives, `{3, 3}`, fixtures (a)/(b)/(c), the ruling-22 pins, and
+  mutant (e)'s `{5, 5}`. Deviation 10 survived once the Sunday-start mutant
+  was applied at EVERY `mondayOf` call site — fixture (b) reads `{3, 4}`
+  both ways, and three of the four `streakOf` pins move instead.
+  `niceMax` ↔ `chooseTicks([0, max], max / step + 1)` agree by
+  construction; `fmtDuration`'s `Math.round` absorbs `125.00000000000001`;
+  `DELETE /api/logs/:id` → 200 `{ unCounted }`; `POST /api/test-history`
+  → 201 `{ id }`; the raw-SQL backdate bypasses no producer (the row is
+  created by the route, only its instant is moved); `SET NULL` is driven by
+  the supported DELETE; `SCANNED_DIRS` covers `src/you/stats/` as a
+  directory, so the three new groups are scanned; an out-of-range week is
+  empty by construction (its rows are outside the range that summed it).
+- **UNTESTED → pinned:** fixture (a)'s May 1 row keys to Monday Apr 27,
+  BEFORE `season.start` — its streak is now asserted (`{3, 3}`) and a
+  straddling run (May 1 + May 6 + May 20 joining R5) pins `{3, 4}` where a
+  key clamped to May 1 reads `{3, 3}` (mutation run); eight all-zero bars
+  with ≥ 2 rows in range (ALL with only old rows) now render `NOTHING IN
+  THESE EIGHT WEEKS` (copy pending James) with a test and the
+  dropped-branch mutation; `fmtRangeLine`'s `{ from, to: null }` arm had
+  no producer (`presetRange`/`customRange` set both ends) and is deleted —
+  a one-sided range reads as ALL.
+- **Bookkeeping:** "three `.stats-card`s" → four (TOTALS, METRES PER WEEK,
+  SEASON, TEST TREND); ticks and legend on the card are `--ink-3` on
+  `--surface` 7.43:1, not the page's 6.69:1; `seed.mjs`'s `streaks()`
+  computed LONGEST over all history against ruling 22 — season-scoped, and
+  `compute.mjs`'s printout does not move (`CURRENT 3 · LONGEST 3`,
+  `contrast.json` byte-identical); `backdateTestHistory` shares
+  `backdateLog`'s pg block through `backdateRow(table, …)`; `axis.ts`
+  already imported `fmtSplit` (the plan's import line said otherwise).
+- Techniques 43-44 proposed and landed.
+
 ## 2026-09-12 — News layout-shift spec (`/harden` lens 1, full pass: invented mechanism + RF27)
 
 Spec: `docs/superpowers/specs/2026-09-12-news-layout-shift-design.md`. Eight
@@ -160,6 +257,38 @@ mutations run and reverted, worktree clean.
   site under the required key; exit criterion 1 red at 7; criterion 5b; the
   `EndedBy` order safety; the witness's scope; mutation 1 below the seam; no
   session-scoped state.
+
+## Phase PS PR 2 delta pass, 2026-09-12 (the charts — against the PS vetted ground)
+
+- BROKEN: §8.3's streak pin contradicts §3.3 and invariant 10 — the rule
+  and `seed.mjs`'s `streaks()` both give CURRENT 1 for rows in {W1, W2, W4}
+  with today in W5 (run over W1..W5 = 2026-08-10 … 09-07), not the pinned 0.
+- BROKEN: the reference `streaks()` keys on METRES while the spec keys on
+  ROWS — the stored tier returns `distanceMeters` as `number | null`, so a
+  null-metres week counts under the spec and not under the reference.
+- BROKEN: A5-CustomOpen's season card mixes row sets — `18,000 TODAY`
+  beside `AVG M/DAY 319` (319 × 135 = 43,065) under `NOT FILTERED`.
+- BROKEN: §5(6)'s axis is unreachable — `chooseTicks([112,126],4)` =
+  115/120/125; `formatTick(·,"pace")` = `1:55.0…` against A3's hand-typed
+  1:54·1:58·2:02·2:06; `build.mjs` hardcodes the ticks and slices them.
+- BROKEN: §5(3)'s bar-label rule (A3 carries two labels; `10,000` is a
+  gridline) and the omitted dashed out-of-range bar.
+- BROKEN: `1 MAY 2026 TO 30 APR 2027` against `presetRange`'s `to = today`
+  (`14 AUG TO 12 SEP 2026` holds).
+- BROKEN: the trend's x is `test_history.loggedAt` at append — the e2e must
+  backdate test rows; `useTestHistory` needs the `TZ` pin and sits outside
+  §8.4's scan.
+- HELD: Monday-start; the today-anchored 8-week window; the inclusive
+  divisor 135; always-this-season; `sessionLogId` UNIQUE + SET NULL;
+  `chooseTicks` reproducing A3's metres ticks exactly given `niceMax`; a
+  fifth `TickKind` being the trace-truth precedent.
+- Seed blindness: no boundary rows; 3/3 unmoved by Sunday-start while
+  metres/week moves; current === longest; the unfinished-week branch untaken.
+- Hardening debt: `PUT /api/baselines`'s `isTestResult` arm appends keyless,
+  zero senders.
+- Could not establish whether the range line is wanted under a bar whose
+  caption ruling 18 struck (scope).
+- All folded in the spec the same day.
 
 ## Phase PS PR 1 delta pass, 2026-09-12 (the implementation plan — /harden lens 1)
 

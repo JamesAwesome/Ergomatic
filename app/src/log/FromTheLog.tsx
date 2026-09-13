@@ -13,7 +13,7 @@ import MachineSummaryTable from "../session/MachineSummaryTable";
 import { resolveBackTarget } from "../shell/BackLink";
 import Concept2SendBlock from "./Concept2SendBlock";
 import { buildStoredSummary, type StoredLog } from "./storedSummary";
-import { useConcept2Link } from "../api/useConcept2Link";
+import { useConcept2Link, type Concept2Link } from "../api/useConcept2Link";
 import { sentResultId } from "./concept2Send";
 import TraceChart from "./TraceChart";
 import { displayVerificationCode } from "../../domain/monitor/verificationCode.js";
@@ -54,13 +54,13 @@ function machineConfirmedValueLine(row: StoredLog): string {
 // model (Global Constraints: "the block reads ... off the fetched
 // StoredLog row and NOTHING else") — this screen's ONE other component
 // that skips the view model, by the same spec's own explicit instruction.
-function MachineConfirmedBlock({ row }: { row: StoredLog }) {
-  // Phase AV: the LIVE link, for the account gate below. This is a SECOND
-  // `useConcept2Link()` on this screen — `Concept2SendBlock` already calls
-  // it — so the log detail now issues two GET /api/concept2/link. Filed in
-  // ROADMAP rather than left silent; the hook has no shared cache today and
-  // lifting it is a refactor this PR does not need to carry.
-  const { link } = useConcept2Link();
+function MachineConfirmedBlock({
+  row,
+  link,
+}: {
+  row: StoredLog;
+  link: Concept2Link | null;
+}) {
   if (row.machineWorkSeconds === null) return null;
   const bytes = row.machineSummary?.verificationBytes;
   // Phase AV (Gate 0 approved 2026-09-07): Concept2 has accepted this row
@@ -282,6 +282,22 @@ export default function FromTheLog() {
   // state machine currently holds, including right after a successful
   // PATCH's own `setRow` call.
   const row = fetchState.state === "ready" ? fetchState.row : null;
+
+  // ONE read of the Concept2 link for the whole screen, consumed by both
+  // blocks below. Lifted here in Phase TD (TD-4), and it is not only a
+  // request count: `useConcept2Link` registers `pageshow` and
+  // `visibilitychange` PER INSTANCE, so two instances read twice on every
+  // FOREGROUND as well as on mount — and because the two held independent
+  // state, a rower who relinked to a different Concept2 account kept a
+  // stale VERIFIED tick on this screen until the next remount, defeating
+  // the very account gate `MachineConfirmedBlock` exists for. One instance
+  // means one `reload`, so the mark now re-evaluates with the send block.
+  //
+  // The read fires at PARENT mount, so `loading`, `error` and `not-found`
+  // now issue one where they issued none — a reduction on the ready path
+  // and an addition on the other three, which is a net better shape and not
+  // the pure halving the original row claimed.
+  const { link, failed, reload } = useConcept2Link();
 
   // §5F: a 404'd id always shows `← LOG`, overriding the origin-based
   // resolution below — the row is gone, so a stale "← TODAY"/"← PLAN"
@@ -591,7 +607,7 @@ export default function FromTheLog() {
               this stored view has no equivalent of; the closest analog on
               THIS screen is directly below the interval table and above
               the trace chart, where it sits below. */}
-          <MachineConfirmedBlock row={row} />
+          <MachineConfirmedBlock row={row} link={link} />
 
           {/* Trace-rendering spec (Phase LT spec 3), §1: "above the plan
               footer on the stored one" — `row.series` is `null` (not just
@@ -612,7 +628,12 @@ export default function FromTheLog() {
               plan footer" — both hold only in this order, so the send
               block sits between them. Reads `row` directly, never the view
               model, the same constraint `MachineConfirmedBlock` carries. */}
-          <Concept2SendBlock row={row} />
+          <Concept2SendBlock
+            row={row}
+            link={link}
+            failed={failed}
+            reload={reload}
+          />
 
           {/* §1 Placement: "Bottom of the view, below the plan footer —
               last, quiet, away from Edit." Copy is a pure function of

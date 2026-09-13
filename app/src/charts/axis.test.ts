@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { chooseTicks, formatTick } from "./axis.js";
+import { chooseTicks, formatTick, niceMax } from "./axis.js";
+import { domainFromReadings } from "./scale.js";
 import { fmtSplit } from "../../domain/format.js";
 
 describe("chooseTicks", () => {
@@ -80,5 +81,59 @@ describe("formatTick", () => {
     expect(formatTick(0, "time")).toBe("0:00");
     expect(formatTick(2422, "time")).toBe("4:02"); // step-3's own final t
     expect(formatTick(600, "time")).toBe("1:00");
+  });
+});
+
+// Phase PS PR 2 (career-stats spec §5 items 3/5/6).
+describe("formatTick split and metres", () => {
+  it("split prints a whole-second m:ss with no tenths: 115 → 1:55, 120 → 2:00, 125 → 2:05", () => {
+    expect([115, 120, 125].map((v) => formatTick(v, "split"))).toStrictEqual([
+      "1:55",
+      "2:00",
+      "2:05",
+    ]);
+  });
+  it("metres prints the house thousands grouping and 0 at the floor", () => {
+    expect(formatTick(0, "metres")).toBe("0");
+    expect(formatTick(5000, "metres")).toBe("5,000");
+    expect(formatTick(20000, "metres")).toBe("20,000");
+  });
+});
+
+describe("niceMax — the metres domain top, ≤ 4 gridlines above zero", () => {
+  it("13,000 → 15,000 by 5,000 (A3); 43,012 → 60,000 by 20,000; 0 and 1,000 → 1,000 by 1,000", () => {
+    expect(niceMax(13000)).toStrictEqual({ max: 15000, step: 5000 });
+    expect(niceMax(43012)).toStrictEqual({ max: 60000, step: 20000 });
+    expect(niceMax(0)).toStrictEqual({ max: 1000, step: 1000 });
+    expect(niceMax(1000)).toStrictEqual({ max: 1000, step: 1000 });
+  });
+  // The ladder's only exit is `max / step <= maxLines`, which NaN and
+  // Infinity never satisfy: without the guard this test HANGS the worker —
+  // synchronously, so no per-test timeout can interrupt it (measured: the
+  // whole run dies under an external `timeout`, exit 124). Run the file
+  // under `timeout` when mutating the guard; that exit code is the red.
+  it("NaN and Infinity read as the floor, 1,000 by 1,000 — never a hang", () => {
+    expect(niceMax(NaN)).toStrictEqual({ max: 1000, step: 1000 });
+    expect(niceMax(Infinity)).toStrictEqual({ max: 1000, step: 1000 });
+  });
+  it("continues the 1/2/5 ladder past 20,000: 80,001 → 100,000 by 50,000; 2,000,000 → 2,000,000 by 500,000", () => {
+    expect(niceMax(80001)).toStrictEqual({ max: 100000, step: 50000 });
+    expect(niceMax(2000000)).toStrictEqual({ max: 2000000, step: 500000 });
+  });
+  it("chooseTicks([0, max], max / step + 1) reproduces the grid: 0 · 5,000 · 10,000 · 15,000, and 0 · 1,000", () => {
+    expect(chooseTicks([0, 15000], 4)).toStrictEqual([0, 5000, 10000, 15000]);
+    expect(chooseTicks([0, 60000], 4)).toStrictEqual([0, 20000, 40000, 60000]);
+    expect(chooseTicks([0, 1000], 2)).toStrictEqual([0, 1000]);
+    expect(chooseTicks([0, 2000000], 5)).toStrictEqual([
+      0, 500000, 1000000, 1500000, 2000000,
+    ]);
+  });
+  it("the trend's split domain from the primitives: domainFromReadings of the seed's six splits at minHeight 10 is [112, 126], and chooseTicks at 4 gives 115 · 120 · 125", () => {
+    expect(
+      domainFromReadings([124.8, 117.6, 122.9, 115.3, 121.4, 114], {
+        minHeight: 10,
+      }),
+    ).toStrictEqual([112, 126]);
+    expect(chooseTicks([112, 126], 4)).toStrictEqual([115, 120, 125]);
   });
 });

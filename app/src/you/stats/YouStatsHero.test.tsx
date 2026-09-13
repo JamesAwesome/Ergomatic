@@ -130,3 +130,25 @@ describe("YouStatsHero — Gate 0's H3 hero, and the door (spec §5, invariant 1
     expect(hero.querySelector("svg")).toBeNull();
   });
 });
+
+// Phase PS PR 2 (§14 ruling 20, B1): the chevron is decoration inside the
+// one control — hidden from the accessible tree, and no second focusable.
+describe("the hero's chevron (ruling 20)", () => {
+  it("renders one aria-hidden › beside the body, the control is still the only focusable and still named Stats", async () => {
+    mockRows(GATE0_ROWS);
+    const { default: YouStatsHero } = await import("./YouStatsHero");
+    render(
+      <MemoryRouter>
+        <YouStatsHero />
+      </MemoryRouter>,
+    );
+    const hero = await screen.findByRole("link", { name: "Stats" });
+    const chevron = hero.querySelector(".you-stats-chevron");
+    expect(chevron?.textContent).toBe("\u203a");
+    expect(chevron?.getAttribute("aria-hidden")).toBe("true");
+    expect(hero.querySelectorAll("a, button, [tabindex]")).toHaveLength(0);
+    expect(
+      hero.querySelector(".you-stats-body .stats-legend-line"),
+    ).not.toBeNull();
+  });
+});

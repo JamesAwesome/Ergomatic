@@ -6,6 +6,8 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import {
   backdateLog,
+  markRowVerified,
+  seedGate0Tests,
   signInViaBackdoor,
   stubBluetoothScanFailure,
 } from "./helpers";
@@ -2665,6 +2667,7 @@ test("import", async ({ page }) => {
  *  whatever that zone is; `new Date("YYYY-MM-DDT12:00:00")` is Node's
  *  local parse, and `toISOString()` hands `backdateLog` the instant. */
 async function seedGate0Stats(page: Page): Promise<void> {
+  const ids: Record<string, string> = {};
   for (const { id, date, body } of GATE0_LOG_BODIES) {
     const created = await page.evaluate(async (b) => {
       const res = await fetch("/api/logs", {
@@ -2675,11 +2678,13 @@ async function seedGate0Stats(page: Page): Promise<void> {
       return { ok: res.ok, text: await res.text() };
     }, body);
     if (!created.ok) throw new Error(`${id}: ${created.text}`);
-    await backdateLog(
-      (JSON.parse(created.text) as { id: string }).id,
-      new Date(`${date}T12:00:00`).toISOString(),
-    );
+    ids[id] = (JSON.parse(created.text) as { id: string }).id;
+    await backdateLog(ids[id], new Date(`${date}T12:00:00`).toISOString());
   }
+  // PR 2: the six test rows too, backdated the same way (local noon).
+  await seedGate0Tests(page, ids, (d) =>
+    new Date(`${d}T12:00:00`).toISOString(),
+  );
 }
 
 // Phase PS PR 1 (Gate 0 A3): the subpage on the same seed, ALL selected.
@@ -2691,9 +2696,9 @@ test("you-stats", async ({ page }) => {
   await seedGate0Stats(page);
   await page.clock.install({ time: new Date("2026-09-12T09:00:00") });
   await page.goto("/you/stats");
-  // Ruling 19: no prose on the page; the AVG WATTS row is the last thing the
-  // seeded card renders.
-  await page.getByRole("row", { name: /^AVG WATTS/ }).waitFor();
+  // PR 2: the TEST TREND is the last group and its 2k label the last thing
+  // the seeded page renders (two fetches; the second lands after the first).
+  await page.getByText("2K 1:54.0").waitFor();
   // /you/stats is a plain-flow route with the fixed `.tabbar` on screen
   // (not in HIDDEN_TABBAR_PREFIXES); a fullPage capture re-paints that bar
   // in every stitched segment (reason 1 above) — the first capture drew it
@@ -3625,7 +3630,7 @@ async function postLog(
       | "interrupted"
       | null;
   },
-): Promise<void> {
+): Promise<string> {
   const result = await page.evaluate(async (b) => {
     const source =
       b.source ??
@@ -3653,6 +3658,12 @@ async function postLog(
   if (!result.ok) {
     throw new Error(`postLog failed: ${result.status} ${result.body}`);
   }
+  // The new row's id, for the captures that must then write a column the
+  // route cannot set (`markRowVerified`). Additive: every existing caller
+  // ignores the return, and a body that is not JSON throws here rather than
+  // handing back a silent `undefined` that a later seam would apply to
+  // nothing.
+  return (JSON.parse(result.body) as { id: string }).id;
 }
 
 // Trace-rendering spec (Phase LT spec 3), Task 3, RE-SEEDED for the PM
@@ -6944,8 +6955,18 @@ async function routeC2(page: Page, fake: C2ShotFake): Promise<void> {
  *  shape `isSendable` accepts. Same walk-2026-08-24 exit-7 numbers the
  *  `log-detail` capture above seeds, so a reader comparing the two images
  *  is looking at the same session. */
-async function seedC2Row(page: Page, title: string): Promise<void> {
-  await postLog(page, {
+async function seedC2Row(
+  page: Page,
+  title: string,
+  /** Opt-in extras, merged last. Exists so the VERIFIED capture can add the
+   *  machine fields WITHOUT changing the three captures that already use
+   *  this fixture — `MachineConfirmedBlock` returns null unless
+   *  `machineWorkSeconds` is set, so those captures have never drawn the
+   *  block and must keep not drawing it (RF1: commit only the captures your
+   *  diff touches). */
+  extra: Record<string, unknown> = {},
+): Promise<string> {
+  return postLog(page, {
     workoutTitle: title,
     workoutType: "O2",
     source: "pm5",
@@ -6982,6 +7003,7 @@ async function seedC2Row(page: Page, title: string): Promise<void> {
         actualSpm: 28,
       },
     ],
+    ...extra,
   });
 }
 
@@ -7385,6 +7407,76 @@ test("log-concept2-sent", async ({ page }) => {
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-concept2-sent.png"),
   });
+});
+
+test("log-concept2-verified", async ({ page }) => {
+  // Phase AV's VERIFIED mark, photographed for the first time. Until now no
+  // committed capture showed it, and the reason was structural rather than
+  // anyone forgetting: `POST /api/concept2/results/:logId` is the only
+  // writer of `verified`, and this stack is Concept2-DARK by construction
+  // (`compose.yml` passes `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`,
+  // `screenshots.sh` exports no `C2_*`), so that route answers 403 before it
+  // writes anything.
+  //
+  // SEEDED THROUGH THE SAME SEAM `backdateLog` USES, for the same reason:
+  // the route cannot set the column, so the capture writes it through the
+  // stack's own published Postgres port (`helpers.ts`'s `markRowVerified`).
+  // That seeds PAST the producer and says nothing about the send path —
+  // which is gated where it belongs, in
+  // `server/routes/concept2Send.integration.test.ts` against real Postgres.
+  // What this proves is the half that had no gate at all: the stored column
+  // travels DB -> `logs.get` -> `GET /api/logs/:id` -> the component ->
+  // pixels.
+  const fake: C2ShotFake = {
+    link: { status: 200, body: C2_SHOT_LINKED },
+    send: { status: 200, body: {} },
+  };
+  await routeC2(page, fake);
+  await signInViaBackdoor(page, {
+    email: "screenshots-c2-verified@e2e.test",
+    name: "Screenshot Tester",
+  });
+  // The machine fields are what make `MachineConfirmedBlock` render at all
+  // — it returns null on `machineWorkSeconds === null` before it considers
+  // the mark — and they are the same exit-7 walk values the
+  // `log-detail-machine-confirmed` capture seeds, so a reader comparing the
+  // two images is looking at one session.
+  const logId = await seedC2Row(page, "Sea Fret", {
+    machineWorkSeconds: 124.0,
+    machineWorkMeters: 500,
+  });
+  // 2211 is `C2_SHOT_LINKED`'s own `c2UserId`. The mark is gated on the row
+  // and the LIVE link agreeing about the account (`FromTheLog.tsx`), so a
+  // mismatch here renders nothing at all — which is leg 2 below.
+  await markRowVerified(logId, 339, 2211);
+  await openC2LogDetail(page, "Sea Fret");
+
+  // LEG 1 — the mark renders off a stored column.
+  await expect(page.locator(".log-machine-verified")).toHaveText("VERIFIED ✓");
+  await page
+    .locator(".log-machine-confirmed")
+    .evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-concept2-verified.png"),
+  });
+
+  // LEG 2 — and it is GATED ON THE ACCOUNT, which is the half a single leg
+  // cannot prove (RF38: a property of how the test got there is an
+  // assertion, not a comment). Re-answer the link as a DIFFERENT Concept2
+  // account and reload: the mark must vanish while the block it sits in
+  // stays, or the first leg is only showing that a boolean was seeded.
+  fake.link = {
+    status: 200,
+    body: { ...C2_SHOT_LINKED, c2UserId: 9999 },
+  };
+  await page.reload();
+  // The SENTINEL that keeps both legs honest: the block itself is still
+  // there, so leg 2's absence is the mark being withheld rather than the
+  // screen failing to render.
+  await expect(
+    page.getByRole("group", { name: "MACHINE CONFIRMED · WORK ONLY" }),
+  ).toBeVisible();
+  await expect(page.locator(".log-machine-verified")).toHaveCount(0);
 });
 
 test("log-concept2-no-weight", async ({ page }) => {

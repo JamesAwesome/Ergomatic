@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { presetRange } from "./calendar.js";
-import { summarize, timeByType } from "./aggregate.js";
+import { earliestDate, summarize, timeByType } from "./aggregate.js";
 import { GATE0_ROWS, GATE0_TODAY } from "./gate0Seed.js";
 
 // Every expected value is `compute.mjs`'s printout for the Gate 0 seed
@@ -133,5 +133,16 @@ describe("timeByType — five buckets in stack order, empty buckets omitted (inv
         to: { y: 2030, m: 1, d: 1 },
       }),
     ).toStrictEqual([]);
+  });
+});
+
+describe("earliestDate — the first row's date for ALL's range line (§14 ruling 21)", () => {
+  it("the seed's earliest is R1, 2025-11-08, whatever the input order; no rows → null", () => {
+    expect(earliestDate([...GATE0_ROWS].reverse())).toStrictEqual({
+      y: 2025,
+      m: 11,
+      d: 8,
+    });
+    expect(earliestDate([])).toBeNull();
   });
 });

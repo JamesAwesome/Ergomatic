@@ -85,8 +85,14 @@ export function timeByType(set) {
   return { buckets: b, total };
 }
 
+// LONGEST is the longest run WITHIN THIS SEASON (spec §14 ruling 22,
+// 2026-09-12): the week set is the season's rows, May 1 .. today — the same
+// set the curve and AVG M/DAY read (invariant 19). Identical on this seed
+// (no pre-May-1 run touches a May week); the PR 2 domain pins the case that
+// differs. Still keyed on metres here (a week with a null-metres row would
+// read "-"): NOT the streak's reference — the spec's rule is.
 export function streaks(set) {
-  const wm = weekMeters(set);
+  const wm = weekMeters(inRange(set, seasonStart, today));
   const weeks = Object.keys(wm).sort();
   let longest = 0, run = 0, prev = null;
   for (const w of weeks) { run = prev !== null && addDays(prev, 7) === w ? run + 1 : 1; longest = Math.max(longest, run); prev = w; }

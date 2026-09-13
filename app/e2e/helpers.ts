@@ -1,3 +1,4 @@
+import { GATE0_TEST_BODIES } from "../src/test/gate0LogBodies";
 import type { Page } from "@playwright/test";
 
 /** Supported browser for warning and scan-failure flows. Register before
@@ -226,7 +227,21 @@ export async function stableBoundingBox(
  * caller asserts the backdate took by reading `loggedAt` back through
  * the API (RF38: a property of how the test got there is an assertion).
  */
-export async function backdateLog(id: string, instant: string): Promise<void> {
+/** Backdates one row's `logged_at` through the stack's published Postgres
+ *  port. An explicit instant (`…Z`), never a zone name: what the browser
+ *  then reads as the row's date is decided by ITS zone alone
+ *  (`toCalendarDate`). */
+/** One statement against the stack's published Postgres port, asserting it
+ *  touched exactly one row. Extracted when a SECOND direct writer arrived
+ *  (`markRowVerified` below) rather than duplicating the connection block —
+ *  the port, credentials and the exactly-one-row check are the same problem
+ *  both times, and a silently-zero-row update is the failure mode that would
+ *  make either caller's capture a lie. */
+async function writeOneRow(
+  label: string,
+  sql: string,
+  params: readonly unknown[],
+): Promise<void> {
   const { default: pg } = await import("pg");
   const client = new pg.Client({
     host: "127.0.0.1",
@@ -237,18 +252,137 @@ export async function backdateLog(id: string, instant: string): Promise<void> {
   });
   await client.connect();
   try {
-    // An explicit instant (`…Z`), never a zone name: what the browser then
-    // reads as the row's date is decided by ITS zone alone (`toCalendarDate`).
-    const res = await client.query(
-      "update session_logs set logged_at = $2::timestamptz where id = $1",
-      [id, instant],
-    );
+    const res = await client.query(sql, [...params]);
     if (res.rowCount !== 1) {
-      throw new Error(
-        `backdateLog: expected 1 row for ${id}, got ${res.rowCount}`,
-      );
+      throw new Error(`${label}: expected 1 row, got ${String(res.rowCount)}`);
     }
   } finally {
     await client.end();
   }
+}
+
+function backdateRow(
+  table: "session_logs" | "test_history",
+  id: string,
+  instant: string,
+): Promise<void> {
+  return writeOneRow(
+    `backdateRow(${table}) for ${id}`,
+    `update ${table} set logged_at = $2::timestamptz where id = $1`,
+    [id, instant],
+  );
+}
+
+/** Marks one saved row as accepted AND verified by Concept2, the way the
+ *  send route would have.
+ *
+ *  WHY THIS EXISTS. `POST /api/concept2/results/:logId` is the only writer
+ *  of `verified` (and of `c2_result_id`), and the screenshots stack is
+ *  Concept2-DARK by construction — `compose.yml` passes
+ *  `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}` and `screenshots.sh` exports no
+ *  `C2_*` — so that route answers 403 before it writes anything. Without a
+ *  seam, `VERIFIED ✓` could never be photographed, and it never had been.
+ *  This is the same manoeuvre, for the same reason, as `backdateRow` above:
+ *  the route cannot set the column, so the capture writes it directly
+ *  through the stack's own published port.
+ *
+ *  WHAT IT DOES NOT PROVE, stated so no capture built on it over-claims: it
+ *  seeds PAST the producer, so it says nothing about the send path. That
+ *  path is gated where it belongs — `concept2Send.integration.test.ts`
+ *  drives the real route against real Postgres. What this seam buys is the
+ *  half that had no gate at all: that the stored column travels
+ *  DB → `logs.get` → `GET /api/logs/:id` → the component → pixels. */
+export function markRowVerified(
+  id: string,
+  c2ResultId: number,
+  c2UserId: number,
+): Promise<void> {
+  return writeOneRow(
+    `markRowVerified for ${id}`,
+    "update session_logs set verified = true, c2_result_id = $2, c2_user_id = $3 where id = $1",
+    [id, c2ResultId, c2UserId],
+  );
+}
+
+export function backdateLog(id: string, instant: string): Promise<void> {
+  return backdateRow("session_logs", id, instant);
+}
+
+/** Phase PS PR 2: the trend's x is `test_history.loggedAt`, the APPEND
+ *  instant (spec §3.3), so a seeded test is backdated like its log. */
+export function backdateTestHistory(
+  id: string,
+  instant: string,
+): Promise<void> {
+  return backdateRow("test_history", id, instant);
+}
+
+/** Seeds the Gate 0 seed's six test rows through `POST /api/test-history`
+ *  against the seeded logs (`ids` maps seed id → log id). A test whose seed
+ *  `log` is null is keyed to a THROWAWAY log that is then deleted through
+ *  `DELETE /api/logs/:id` — the schema's `ON DELETE SET NULL` is what makes
+ *  the point survive (§14 ruling 4), exercised on the supported path
+ *  (RF24). Every row is then backdated to `instantFor(date)`. Returns
+ *  seed id → test_history id. */
+export async function seedGate0Tests(
+  page: Page,
+  ids: Record<string, string>,
+  instantFor: (date: string) => string,
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const t of GATE0_TEST_BODIES) {
+    // A mistyped seed `log` must fail loudly, never become a throwaway.
+    if (t.log !== null && ids[t.log] === undefined)
+      throw new Error(`${t.id}: no seeded log ${t.log}`);
+    let logId = t.log === null ? undefined : ids[t.log];
+    let throwaway: string | undefined;
+    if (logId === undefined) {
+      const created = await page.evaluate(async () => {
+        const res = await fetch("/api/logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workoutId: null,
+            workoutTitle: "Throwaway test log",
+            workoutType: "TR",
+            held: null,
+            effort: null,
+            notes: null,
+            advancesPlan: false,
+            source: "manual",
+            steps: [{ label: "Work", actualMeters: 2000, actualSeconds: 480 }],
+          }),
+        });
+        return { ok: res.ok, text: await res.text() };
+      });
+      if (!created.ok) throw new Error(`${t.id} throwaway: ${created.text}`);
+      throwaway = (JSON.parse(created.text) as { id: string }).id;
+      logId = throwaway;
+    }
+    const posted = await page.evaluate(
+      async (b) => {
+        const res = await fetch("/api/test-history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(b),
+        });
+        return { ok: res.ok, text: await res.text() };
+      },
+      { distance: t.distance, splitSeconds: t.splitSeconds, logId },
+    );
+    if (!posted.ok) throw new Error(`${t.id}: ${posted.text}`);
+    out[t.id] = (JSON.parse(posted.text) as { id: string }).id;
+    if (throwaway !== undefined) {
+      // `DELETE /api/logs/:id` answers 200 with a body (`routes/data.ts`,
+      // `res.json({ unCounted })`), not 204: `ok` is the check.
+      const deleted = await page.evaluate(async (id) => {
+        const res = await fetch(`/api/logs/${id}`, { method: "DELETE" });
+        return { ok: res.ok, status: res.status };
+      }, throwaway);
+      if (!deleted.ok)
+        throw new Error(`${t.id} throwaway delete: ${deleted.status}`);
+    }
+    await backdateTestHistory(out[t.id]!, instantFor(t.date));
+  }
+  return out;
 }

@@ -81,6 +81,14 @@ requirements).
   — jsdom loads and the tests pass. Note this form collapses a signal death
   to exit 1 — see recurring failure 40. Prefer `pnpm test --project client`
   when you do not need a file filter.
+  **A THIRD footgun on the same command: `console.log` from a client test
+  never reaches stdout** (jsdom owns the console; `--silent=false` does not
+  help), while `process.stdout.write` does. Assertions are unaffected — only
+  the human-readable readout is lost, which is the part a reader trusts. It
+  bites investigative probes that dump a ring buffer and quote it back as
+  evidence, and it bit one: a spike's report carried "verbatim" entries that
+  could not have come from the command it cited. Route probe readouts through
+  `process.stdout.write` or commit them to a file (docs/TESTING.md §11).
 - `pnpm dist:grep` — the production-bundle gate. CI runs it in the `app` job
   right after `pnpm build`; it proves named dev-only seams are absent from
   `dist/`.
@@ -246,6 +254,24 @@ requirements).
   — an agent the corpus does not name is invisible to every future
   dispatch** (James, 2026-09-12, Phase PS PR 0, which added `dba` while
   this bullet still said two).
+  **AND IT ADDS THE CODEX POINTER, `.codex/agents/<name>.toml`, WHICH IS
+  ~500 BYTES AND NEVER A COPY.** Copy `antagonist.toml` and change the two
+  strings: `name`, `description`, `sandbox_mode = "read-only"`, and a
+  `developer_instructions` block whose whole body says to read
+  `.claude/agents/<name>.md` "without copying or translating its paths".
+  **There is no gate on this and deliberately none** (James, 2026-09-13:
+  agents are added about twice a year, so a CI check would cost more than
+  it catches) — which is exactly why the warning is here, in the paragraph
+  you are already required to edit. _What happened, so the shape is
+  concrete:_ `dba`'s adapter was generated as an 11,893-byte FORK of
+  `dba.md` with `.claude/` rewritten to `.Codex/`. The three files it told
+  the DBA to read "before anything else" — its techniques file, its ledger,
+  and the agent briefing — did not exist at those paths, so a Codex DBA
+  would have started every engagement blind while the file looked complete.
+  It sat untracked in the main checkout and no gate anywhere could see it;
+  it surfaced only because a phase teardown ran `git status` on the main
+  checkout. Fixed 2026-09-13. **A `.toml` over about a kilobyte is a fork,
+  not an adapter** — that one number is the whole check.
   - **All three agents are PHASE-GROUPED with a triad override (James,
     2026-08-16 — replaces the per-spec/per-brief triggers; motivation:
     CR2 ran ~9 antagonist dispatches where ~4-5 carried all the catches,
