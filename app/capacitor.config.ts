@@ -15,6 +15,9 @@ const config: CapacitorConfig = {
   appId: "haus.waffle.ergomatic",
   appName: "Ergomatic",
   webDir: "dist/client",
+  // Debug bridge result logging serializes plugin responses, including transient
+  // Apple credentials. Application console diagnostics use the Console plugin.
+  loggingBehavior: "none",
   plugins: {
     CapacitorHttp: {
       enabled: true,
