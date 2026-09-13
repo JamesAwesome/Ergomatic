@@ -62,6 +62,7 @@ const tok = {
   page: "#f4f1e8", surface: "#fffdf7", ink: "#1b1a17", "ink-2": "#3f3c35", "ink-3": "#57544c",
   "ink-4": "#6f6a5f", "ink-5": "#a09a8c", rule: "#d8d3c4", "rule-2": "#ded8c9", "rule-3": "#c9c3b2",
   accent: "#b5341f", "on-color": "#fffdf7", "type-an": "#5c4382", "type-o2": "#2a6275", "type-at": "#8a5f18",
+  "surface-sunken": "#efeade", // PR 2 addendum: the drawn pressed fill (B1-B3)
 };
 const lum = (hex) => {
   const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
@@ -87,6 +88,29 @@ const pairs = [
   ["type-at", "surface", "non-text", "AT segment + legend swatch"],
   ["type-o2", "surface", "non-text", "O2 segment + legend swatch, 6k line + dots"],
   ["rule-2", "surface", "non-text", "gridlines, not-rowed streak cell outline (decorative: the rowed fill carries the state)"],
+  // ---- PR 2 addendum (2026-09-12): the You hero affordance options B1-B3,
+  // their pressed state, and the Stats range line (C1). The shipped hero
+  // sits on --page, so its bar segments are measured on --page here too —
+  // the Gate 0 rows above measured them on --surface only.
+  ["type-an", "page", "non-text", "hero bar AN segment on --page (shipped, B1, B3)"],
+  ["type-at", "page", "non-text", "hero bar AT segment on --page (shipped, B1, B3)"],
+  ["type-o2", "page", "non-text", "hero bar O2 segment on --page (shipped, B1, B3)"],
+  ["ink", "page", "non-text", "hero bar TR segment on --page (shipped, B1, B3)"],
+  ["ink-4", "page", "non-text", "hero bar NO TYPE segment on --page (shipped, B1, B3)"],
+  ["ink-3", "page", "text", "B1 chevron, B3 STATS › label, C1 range line (door-row style on --page)"],
+  ["rule", "surface", "non-text", "B2 card border against its own --surface fill (house hairline, as .you)"],
+  ["rule", "page", "non-text", "B2 card border against the page (house hairline, as .you)"],
+  ["ink-3", "surface", "text", "B2 chevron and legend percentages on the card"],
+  ["ink", "surface-sunken", "text", "PRESSED (proposed): figures and legend keys on the --surface-sunken fill"],
+  ["ink-3", "surface-sunken", "text", "PRESSED (proposed): chevron, STATS › label, legend percentages on the fill"],
+  ["type-an", "surface-sunken", "non-text", "PRESSED (proposed): AN segment on the fill"],
+  ["type-at", "surface-sunken", "non-text", "PRESSED (proposed): AT segment on the fill"],
+  ["type-o2", "surface-sunken", "non-text", "PRESSED (proposed): O2 segment on the fill"],
+  ["ink", "surface-sunken", "non-text", "PRESSED (proposed): TR segment on the fill"],
+  ["ink-4", "surface-sunken", "non-text", "PRESSED (proposed): NO TYPE segment on the fill"],
+  ["surface-sunken", "page", "non-text", "PRESSED (proposed): the fill itself against --page (B1, B3) — a state cue beside the hairlines, not a data mark"],
+  ["surface-sunken", "surface", "non-text", "PRESSED (proposed): the B2 card fill against its resting --surface — never adjacent, the card swaps whole"],
+  ["rule-2", "surface-sunken", "non-text", "PRESSED (proposed): the B1/B3 hairlines against the fill (house hairline)"],
 ];
 console.log("\n== Contrast (WCAG 2.1; AA text 4.5:1, non-text 3:1)");
 const table = pairs.map(([fg, bg, kind, use]) => {

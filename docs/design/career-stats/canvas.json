@@ -140,8 +140,128 @@
       "x": 1260,
       "y": 10980,
       "w": 1180,
-      "h": 1000,
+      "h": 1600,
       "title": "A7 · contrast + hit targets"
+    },
+    {
+      "file": "B0-You.dc.html",
+      "x": 0,
+      "y": 12700,
+      "w": 390,
+      "h": 844,
+      "title": "B0 · hero AS SHIPPED (control)"
+    },
+    {
+      "file": "B1-You.dc.html",
+      "x": 480,
+      "y": 12700,
+      "w": 390,
+      "h": 844,
+      "title": "B1 · chevron"
+    },
+    {
+      "file": "B1-Pressed.dc.html",
+      "x": 960,
+      "y": 12700,
+      "w": 390,
+      "h": 420,
+      "title": "B1 · pressed"
+    },
+    {
+      "file": "B2-You.dc.html",
+      "x": 1440,
+      "y": 12700,
+      "w": 390,
+      "h": 844,
+      "title": "B2 · card edge + chevron"
+    },
+    {
+      "file": "B2-Pressed.dc.html",
+      "x": 1920,
+      "y": 12700,
+      "w": 390,
+      "h": 420,
+      "title": "B2 · pressed"
+    },
+    {
+      "file": "B3-You.dc.html",
+      "x": 2400,
+      "y": 12700,
+      "w": 390,
+      "h": 844,
+      "title": "B3 · STATS › label"
+    },
+    {
+      "file": "B3-Pressed.dc.html",
+      "x": 2880,
+      "y": 12700,
+      "w": 390,
+      "h": 420,
+      "title": "B3 · pressed"
+    },
+    {
+      "file": "B0-YouLandscape.dc.html",
+      "x": 0,
+      "y": 13700,
+      "w": 844,
+      "h": 720,
+      "title": "B0 landscape (control)"
+    },
+    {
+      "file": "B1-YouLandscape.dc.html",
+      "x": 940,
+      "y": 13700,
+      "w": 844,
+      "h": 720,
+      "title": "B1 landscape"
+    },
+    {
+      "file": "B2-YouLandscape.dc.html",
+      "x": 1880,
+      "y": 13700,
+      "w": 844,
+      "h": 720,
+      "title": "B2 landscape"
+    },
+    {
+      "file": "B3-YouLandscape.dc.html",
+      "x": 2820,
+      "y": 13700,
+      "w": 844,
+      "h": 720,
+      "title": "B3 landscape"
+    },
+    {
+      "file": "C1-RangeLines.dc.html",
+      "x": 0,
+      "y": 14560,
+      "w": 1240,
+      "h": 1160,
+      "title": "C1 · range line, six states, variants A and B"
+    },
+    {
+      "file": "C1b-StatsSeasonA.dc.html",
+      "x": 1320,
+      "y": 14560,
+      "w": 390,
+      "h": 844,
+      "title": "C1b · Stats, SEASON selected, variant A"
+    },
+    {
+      "file": "C1c-StatsSeasonB.dc.html",
+      "x": 1800,
+      "y": 14560,
+      "w": 390,
+      "h": 844,
+      "title": "C1c · Stats, SEASON selected, variant B"
+    },
+    {
+      "file": "A6d-EmptySeason.dc.html",
+      "x": 1900,
+      "y": 8540,
+      "w": 390,
+      "h": 240,
+      "title": "A6d · SEASON, no rows this season yet (added 2026-09-12)"
     }
   ],
   "annotations": [
@@ -178,7 +298,14 @@
       "x": 960,
       "y": 5940,
       "w": 420,
-      "text": "A5: the CUSTOM range Aug 14 .. Sep 12 has four rows; METRES PER WEEK draws the eight weeks ending Sep 12 and dashes the weeks that begin before the range (Jul 20 .. Aug 10) as empty slots. SEASON and TEST TREND are unchanged by the filter."
+      "text": "A5: the CUSTOM range Aug 14 .. Sep 12 has four rows; METRES PER WEEK draws the eight weeks ending Sep 12 and marks the weeks that begin before the range (Jul 20 .. Aug 10) as OUT OF RANGE slots — a dashed --rule-2 outline (decorative, 1.40:1) labelled once across the run. SEASON and TEST TREND are unchanged by the filter.\nCORRECTED 2026-09-12 (antagonist delta pass): the draft's SEASON curve was drawn from the FILTERED rows (18,000 TODAY beside AVG M/DAY 319); the curve now draws from the unfiltered season rows, 43,012 TODAY, as its caption says."
+    },
+    {
+      "id": "a3-trend",
+      "x": 1400,
+      "y": 3400,
+      "w": 420,
+      "text": "TEST TREND y axis, CORRECTED 2026-09-12 (antagonist delta pass): ticks are what the app's primitives emit — chooseTicks([112, 126], 4) = 115 / 120 / 125 (nice steps are 1·2·5·10 × 10^k; the draft's 4 s step cannot occur), printed as whole-second splits 1:55 · 2:00 · 2:05 by a \"split\" tick kind PR 2 adds (formatTick(·, \"pace\") prints tenths). This replaces the hand-typed 1:54 · 1:58 · 2:02 · 2:06 on the approved draft; the points and lines are unchanged."
     },
     {
       "id": "a6-note",
@@ -186,6 +313,20 @@
       "y": 8540,
       "w": 420,
       "text": "A6b (one row): TOTALS render; METRES PER WEEK, TIME BY TYPE and SEASON each read TWO ROWS MAKE A CHART; TEST TREND draws the single T6 point (a record of one is still a record). A6c (three manual rows): MACHINE column reads NO MONITOR ROWS YET with its rows hidden; the charts render from the three rows; no test history, so TEST TREND reads NO 2K OR 6K TEST LOGGED."
+    },
+    {
+      "id": "b-heights",
+      "x": 3360,
+      "y": 12700,
+      "w": 460,
+      "text": "PR 2 ADDENDUM · You hero affordance (James: \"experiment with how to indicate that the row is clickable\").\nHeights at 390px, Chromium, hairline/edge to hairline/edge (hero-heights.json):\nB0 as shipped · 140px (you.png: 140)\nB1 chevron · 140px · touch target unchanged (the chevron is inside the one Link) · the bar loses ~19px of width to the chevron column · chevron right edge = the doors' chevron column\nB2 card + chevron · 148px · +8px (16px card padding, as the identity card) · the chevron sits 16px in, NOT on the doors' column · the hairlines go\nB3 STATS › · 140px · touch target unchanged · the figures already wrap at this width (LIFETIME / SEASON on two lines, as shipped), so the label rides LIFETIME's line and SEASON wraps under it\nPortrait fold: unchanged for all three — the doors are pinned to the bottom (margin-top: auto) and the hero has ~380px of slack above them (B0). Landscape: all scroll (ruling 14); row 9 shows the +8px on B2 moves nothing above the fold.\nPRESSED: --surface-sunken (#efeade) over the whole control. PROPOSED, not house — index.css has no :active rule (grep, 0 hits). Contrast on the fill (contrast.json): --ink 14.50:1, --ink-3 6.30:1, AN 6.78, AT 4.69, O2 5.64, NO TYPE 4.48 — text ≥ 4.5:1 and marks ≥ 3:1 throughout; the fill itself against --page is 1.06:1 (a state cue, not a data mark) — A7."
+    },
+    {
+      "id": "c1-note",
+      "x": 2280,
+      "y": 14560,
+      "w": 460,
+      "text": "PR 2 ADDENDUM · Stats range line (James: \"the date range for a season to be visible when you click on it — maybe all date ranges become visible?\").\nDrawn for all six presets, in .stats-caption's shipped style (--ink-3 on --page 6.69:1). It is the ONE prose line back after rulings 18-19.\nPICK A OR B (C1 rows; C1b and C1c show each on the full page): SEASON, YEAR and MONTH apply a range that ends TODAY (presetRange, domain/stats/calendar.ts), so A names the range the totals cover (1 MAY TO 12 SEP 2026) and B names the preset's own span with a TO DATE marker (SEASON 2027 · 1 MAY 2026 TO 30 APR 2027 · TO DATE). ALL, 30 DAYS and CUSTOM are identical in both.\nMEASURED COSTS (Chromium, 390px): B's SEASON line (44 characters) WRAPS to two lines at the 350px content width; A's longest is 22 characters, one line. Any range line adds ~25px, and on the SEASON page that pushes the last TIME BY TYPE legend row (NO TYPE) under the tab bar before the first scroll (C1b/C1c) — the shipped ALL page (you-stats.png) fit without scrolling.\nCUSTOM: the line repeats the two inputs' values (as briefed) — say if that is one line too many."
     }
   ],
   "launch": {

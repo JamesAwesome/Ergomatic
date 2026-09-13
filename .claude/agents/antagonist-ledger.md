@@ -151,6 +151,38 @@ mutations run and reverted, worktree clean.
   `EndedBy` order safety; the witness's scope; mutation 1 below the seam; no
   session-scoped state.
 
+## Phase PS PR 2 delta pass, 2026-09-12 (the charts — against the PS vetted ground)
+
+- BROKEN: §8.3's streak pin contradicts §3.3 and invariant 10 — the rule
+  and `seed.mjs`'s `streaks()` both give CURRENT 1 for rows in {W1, W2, W4}
+  with today in W5 (run over W1..W5 = 2026-08-10 … 09-07), not the pinned 0.
+- BROKEN: the reference `streaks()` keys on METRES while the spec keys on
+  ROWS — the stored tier returns `distanceMeters` as `number | null`, so a
+  null-metres week counts under the spec and not under the reference.
+- BROKEN: A5-CustomOpen's season card mixes row sets — `18,000 TODAY`
+  beside `AVG M/DAY 319` (319 × 135 = 43,065) under `NOT FILTERED`.
+- BROKEN: §5(6)'s axis is unreachable — `chooseTicks([112,126],4)` =
+  115/120/125; `formatTick(·,"pace")` = `1:55.0…` against A3's hand-typed
+  1:54·1:58·2:02·2:06; `build.mjs` hardcodes the ticks and slices them.
+- BROKEN: §5(3)'s bar-label rule (A3 carries two labels; `10,000` is a
+  gridline) and the omitted dashed out-of-range bar.
+- BROKEN: `1 MAY 2026 TO 30 APR 2027` against `presetRange`'s `to = today`
+  (`14 AUG TO 12 SEP 2026` holds).
+- BROKEN: the trend's x is `test_history.loggedAt` at append — the e2e must
+  backdate test rows; `useTestHistory` needs the `TZ` pin and sits outside
+  §8.4's scan.
+- HELD: Monday-start; the today-anchored 8-week window; the inclusive
+  divisor 135; always-this-season; `sessionLogId` UNIQUE + SET NULL;
+  `chooseTicks` reproducing A3's metres ticks exactly given `niceMax`; a
+  fifth `TickKind` being the trace-truth precedent.
+- Seed blindness: no boundary rows; 3/3 unmoved by Sunday-start while
+  metres/week moves; current === longest; the unfinished-week branch untaken.
+- Hardening debt: `PUT /api/baselines`'s `isTestResult` arm appends keyless,
+  zero senders.
+- Could not establish whether the range line is wanted under a bar whose
+  caption ruling 18 struck (scope).
+- All folded in the spec the same day.
+
 ## Phase PS PR 1 delta pass, 2026-09-12 (the implementation plan — /harden lens 1)
 
 Target: `docs/superpowers/plans/2026-09-12-career-stats-pr1-plan.md` at

@@ -23,7 +23,7 @@
 //   · Hover/tooltip layers are implementation (PR 2), not drawn.
 import { writeFileSync, readFileSync } from "node:fs";
 import {
-  today, rows, tests, fmtM, fmtT, fmtSplit, mondayOf, dayIndex, inRange, seasonStart,
+  today, rows, tests, fmtM, fmtT, fmtSplit, mondayOf, dayIndex, inRange, seasonStart, addDays,
   totals, weekMeters, weeksEnding, TYPE_ORDER, timeByType, streaks, seasonCumulative,
 } from "./seed.mjs";
 
@@ -178,10 +178,15 @@ function barsSvg(set, { w, h = 132, end = today, rangeFrom = null, hero = false 
     if (!hero) s += tick(padL - 6, y(v) + 3, v === 0 ? "0" : fmtM(v), "end");
   }
   const maxI = vals.indexOf(Math.max(...vals));
+  // Weeks that begin before the range's start are OUT OF RANGE slots: a
+  // dashed --rule-2 outline (decorative, 1.40:1 — it marks "no data by
+  // construction", not a value) labelled once across the run so the spec
+  // can name it (antagonist delta pass, 2026-09-12).
+  const outIdx = weeks.map((wk, i) => (rangeFrom !== null && wk < mondayOf(rangeFrom) ? i : -1)).filter((i) => i >= 0);
   weeks.forEach((wk, i) => {
     const x = padL + slot * i + (slot - bw) / 2, v = vals[i];
     const cur = wk === mondayOf(end), out = rangeFrom !== null && wk < mondayOf(rangeFrom);
-    if (out) s += `<rect x="${x}" y="${padT}" width="${bw}" height="${ph}" fill="none" stroke="${T.rule2}" stroke-dasharray="2 3"/>`;
+    if (out) s += `<rect x="${x}" y="${padT}" width="${bw}" height="${ph}" fill="none" stroke="${T.rule2}" stroke-width="1.5" stroke-dasharray="3 3"/>`;
     else if (v > 0) {
       const top = y(v), hh = padT + ph - top;
       s += `<path d="M${x} ${padT + ph} V${top + 4} a4 4 0 0 1 4 -4 h${bw - 8} a4 4 0 0 1 4 4 V${padT + ph} Z" fill="${cur ? T.ink : T.ink4}"/>`;
@@ -190,6 +195,10 @@ function barsSvg(set, { w, h = 132, end = today, rangeFrom = null, hero = false 
     } else s += `<line x1="${x}" x2="${x + bw}" y1="${padT + ph}" y2="${padT + ph}" stroke="${cur ? T.ink : T.ink4}" stroke-width="2"/>`;
     if (i % 2 === 1 || i === 7) s += tick(padL + slot * i + slot / 2, h - 5, i === 7 ? (cur ? "THIS WK" : dayMon(wk)) : dayMon(wk));
   });
+  if (outIdx.length > 0 && !hero) {
+    const cx = padL + slot * (outIdx[0] + outIdx[outIdx.length - 1] + 1) / 2;
+    s += `<text x="${cx}" y="${padT + ph / 2 + 3}" font-size="8" letter-spacing="0.08" fill="${T.ink3}" text-anchor="middle">OUT OF RANGE</text>`;
+  }
   return s + "</svg>";
 }
 
@@ -240,7 +249,12 @@ function trendSvg(ts, { w, h = 150 }) {
   const x = (d) => padL + (dayIndex(d, from) / span) * pw;
   const y = (sec) => padT + ((sec - lo) / (hi - lo)) * ph;
   let s = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="2k and 6k test splits over time">`;
-  for (const sec of [114, 118, 122, 126]) s += `<line x1="${padL}" x2="${w - padR}" y1="${y(sec)}" y2="${y(sec)}" stroke="${T.rule2}"/>` + tick(padL - 6, y(sec) + 3, fmtSplit(sec).slice(0, -2), "end");
+  // Ticks are what the app's own primitives emit (antagonist delta pass,
+  // 2026-09-12): chooseTicks([112, 126], 4) — niceNum(14/3) = 5 — gives
+  // 115 / 120 / 125, printed as whole-second splits 1:55 · 2:00 · 2:05 (a
+  // "split" tick kind PR 2 adds; formatTick(·, "pace") prints tenths). This
+  // REPLACES the approved draft's hand-typed 1:54 · 1:58 · 2:02 · 2:06.
+  for (const sec of [115, 120, 125]) s += `<line x1="${padL}" x2="${w - padR}" y1="${y(sec)}" y2="${y(sec)}" stroke="${T.rule2}"/>` + tick(padL - 6, y(sec) + 3, fmtSplit(sec).slice(0, -2), "end");
   ["2025-11-01", "2026-01-01", "2026-03-01", "2026-05-01", "2026-07-01", "2026-09-01"].forEach((d) => s += tick(x(d), h - 5, MON[Number(d.slice(5, 7)) - 1]));
   for (const [kind, color] of [["6k", T.o2], ["2k", T.ink]]) {
     const pts = ts.filter((t) => t.kind === kind);
@@ -268,7 +282,11 @@ function statsPage({ set, all = rows, strip, extra = "", w, rangeFrom = null, no
   const st = streaks(all);
   const sc = seasonCumulative(all);
   const twoRows = (n, inner) => (n < 2 ? card(emptyLine("TWO ROWS MAKE A CHART")) : card(inner));
-  const seasonInner = twoRows(sc.pts.length, seasonSvg(set, { w }) + `<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid ${T.rule2};">${statTile("AVG M/DAY", fmtM(Math.round(sc.avgPerDay)), "M")}${statTile("CURRENT STREAK", st.current, "WEEKS · ERGOMATIC")}${statTile("LONGEST STREAK", st.longest, "WEEKS · ERGOMATIC")}</div>`);
+  // SEASON is NOT FILTERED (spec §5): curve AND tiles draw from `all`. The
+  // Gate 0 draft passed the FILTERED set to the curve, so A5 showed
+  // `18,000 TODAY` beside `AVG M/DAY 319` — fixed 2026-09-12 (antagonist
+  // delta pass); README "PR 2 addendum".
+  const seasonInner = twoRows(sc.pts.length, seasonSvg(all, { w }) + `<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid ${T.rule2};">${statTile("AVG M/DAY", fmtM(Math.round(sc.avgPerDay)), "M")}${statTile("CURRENT STREAK", st.current, "WEEKS · ERGOMATIC")}${statTile("LONGEST STREAK", st.longest, "WEEKS · ERGOMATIC")}</div>`);
   const testSet = one ? tests.slice(-1) : (noMonitor ? [] : tests);
   const trendInner = testSet.length === 0 ? card(emptyLine("NO 2K OR 6K TEST LOGGED")) : card(trendSvg(testSet, { w }) + trendLegend);
   return backLink + title("Stats") + strip + extra
@@ -386,9 +404,193 @@ files["Seed.dc.html"] = head("Seed rows and arithmetic") + `<div style="width: 1
   <pre style="margin: 16px 0 0; font-family: ${MONO}; font-size: 11.5px; line-height: 1.55; color: ${T.ink}; white-space: pre;">${arithmetic}</pre>
 </div>` + foot;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PR 2 ADDENDUM (James, 2026-09-12, after seeing v0.46.0 on the phone):
+//   (1) "on the You tab I'd like to experiment with how to indicate that the
+//       row is clickable" — the shipped hero (140 px, no caption after
+//       rulings 18-19) signals nothing tappable. B1 chevron · B2 card edge +
+//       chevron · B3 `STATS ›` on the figures' line.
+//   (2) "I'd like the date range for a season to be visible when you click
+//       on it — for consistency maybe all date ranges become visible?" —
+//       C1: one range line under the filter bar for EVERY preset.
+// Every piece below transcribes the SHIPPED rule it names (index.css at
+// v0.46.0 = 60ee51b9), NOT the Gate 0 draft above: A2-H3 over-draws the
+// caption ruling 18 struck and measured 181 px where the phone shows 140.
+// B0 is that transcription rendered unchanged, as the control the three
+// options are measured against (hero-heights.json, Chromium at 390 px).
+// ═══════════════════════════════════════════════════════════════════════════
+T.sunken = "#efeade"; // --surface-sunken (tokens.css:7): the drawn PRESSED fill
+const heights = JSON.parse(readFileSync(new URL("./hero-heights.json", import.meta.url), "utf8").toString() || "{}");
+const px = (k) => (heights[k] === undefined ? "?" : `${heights[k]}`);
+
+// .you-stats-figures: wrap, space-between, gap 4px 12px, mono 13/500/0.08em tabular.
+// At 346 px the two spans do NOT fit on one line (LIFETIME ~168 px + 12 +
+// SEASON ~194 px), so they wrap exactly as you.png shows.
+const heroFigures = (extra = "") => `<p style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin: 0; ${mono(13, "0.08em", T.ink)} font-weight: 500; font-variant-numeric: tabular-nums; ${extra}"><span style="white-space: nowrap;">LIFETIME · ${lifeM} M</span><span style="white-space: nowrap;">SEASON 2027 · ${seasM} M</span></p>`;
+// .stacked-bar: the shipped StackedBar.tsx (WIDTH 320 viewBox, width 100%,
+// height 24, preserveAspectRatio none) — the 2 px gaps stretch with it.
+const heroBar = () => stackSvg(rows, { w: 320, legend: false }).replace(`width="320" height="24"`, `width="100%" height="24" preserveAspectRatio="none" style="display: block;"`);
+// .stats-legend-line + .stats-legend-chip: wrap, gap 6px 14px, mono 10/0.06em
+// --ink-3, keys --ink, 10 px swatches. Five chips need ~362 px, so the last
+// (NO TYPE 15%) wraps to a second row at every width drawn here.
+function heroLegend() {
+  const { buckets, total } = timeByType(rows);
+  const items = TYPE_ORDER.filter((k) => buckets[k] > 0).map((k) => `<span style="display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;"><span style="width: 10px; height: 10px; background: ${TYPE_FILL[k]}; flex: none;"></span><span style="color: ${T.ink};">${k}</span><span>${Math.round(100 * buckets[k] / total)}%</span></span>`).join("");
+  return `<p style="display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; ${mono(10, "0.06em")}">${items}</p>`;
+}
+// The doors' own chevron: `.diag-row` mono 12/0.08em --ink-3, `&rsaquo;`.
+const chevron = `<span aria-hidden="true" style="${mono(12, "0.08em")} flex: none;">&rsaquo;</span>`;
+const column = (inner) => `<div style="display: flex; flex-direction: column; gap: 10px; flex: 1 1 0; min-width: 0;">${inner}</div>`;
+const hairlines = `border-top: 1px solid ${T.rule2}; border-bottom: 1px solid ${T.rule2};`;
+/** The hero, one variant, resting or PRESSED. `pressed` paints
+ *  --surface-sunken over the whole control — PROPOSED: index.css has no
+ *  `:active` rule anywhere (grep ':active' app/src/index.css → 0 hits,
+ *  2026-09-12), so the house has no pressed idiom to transcribe. */
+function heroVariant(variant, { pressed = false } = {}) {
+  const open = `display: flex; margin-top: 12px; padding: 12px 2px; min-height: 44px; ${hairlines} color: ${T.ink}; ${pressed ? `background: ${T.sunken};` : ""}`;
+  const body = heroFigures() + heroBar() + heroLegend();
+  switch (variant) {
+    case "B0": // .you-stats-hero as shipped (v0.46.0)
+      return `<a id="hero" aria-label="Stats" style="${open} flex-direction: column; gap: 10px;">${body}</a>`;
+    case "B1": // + a trailing chevron, vertically centred, right edge at the doors' chevron column (padding 2px, as .diag-row)
+      return `<a id="hero" aria-label="Stats" style="${open} align-items: center; gap: 12px;">${column(body)}${chevron}</a>`;
+    case "B2": // the identity card's edge (.you: --surface, 1px --rule, 2px radius, 16px padding, gap 12px) + the chevron; the hairlines go
+      return `<a id="hero" aria-label="Stats" style="display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 16px; min-height: 44px; background: ${pressed ? T.sunken : T.surface}; border: 1px solid ${T.rule}; border-radius: 2px; color: ${T.ink};">${column(body)}${chevron}</a>`;
+    case "B3": { // `STATS ›` in the door-row style on the figures' FIRST line; the figures wrap beside it
+      const label = `<span style="${mono(12, "0.08em")} white-space: nowrap; flex: none; line-height: 20px;">STATS <span aria-hidden="true">&rsaquo;</span></span>`;
+      const head = `<div style="display: flex; align-items: flex-start; gap: 12px;">${heroFigures("flex: 1 1 0; min-width: 0;")}${label}</div>`;
+      return `<a id="hero" aria-label="Stats" style="${open} flex-direction: column; gap: 10px;">${head}${heroBar()}${heroLegend()}</a>`;
+    }
+  }
+  throw new Error(variant);
+}
+// The doors as SHIPPED on the capture's account (ruling 10: no STATS row;
+// CONCEPT2 is conditional and absent on the screenshot account).
+const doorsShipped = `<nav aria-label="More" style="margin-top: auto; display: flex; flex-direction: column;">${door("BASELINES", "2K 1:52.0 · 6K 2:02.0")}${door("SETTINGS")}${door("DIAGNOSTICS")}</nav>`;
+const youBody = (variant) => identity("Screenshot Tester", "screenshots-you-stable0000000-s...", "ST") + heroVariant(variant) + doorsShipped;
+const B_TITLE = { B0: "hero as shipped (control)", B1: "chevron", B2: "card edge + chevron", B3: "STATS › label" };
+for (const v of ["B0", "B1", "B2", "B3"]) {
+  files[`${v}-You.dc.html`] = head(`${v} You, ${B_TITLE[v]}`) + phone({ ...PORTRAIT, h: 844, body: youBody(v) }) + foot;
+  files[`${v}-YouLandscape.dc.html`] = head(`${v} You landscape, ${B_TITLE[v]}`) + phone({ ...LANDSCAPE, h: 720, body: youBody(v) }) + foot;
+  if (v === "B0") continue;
+  // Pressed: resting over pressed, same width, so the fill is the only difference.
+  const cap = (t) => `<p style="margin: 0 0 6px; ${mono(9, "0.14em", T.accent)}">${t}</p>`;
+  files[`${v}-Pressed.dc.html`] = head(`${v} pressed state`) + `<div style="width: 390px; height: 420px; background: ${T.page}; border: 1px solid ${T.rule3}; padding: 20px 20px 0; box-sizing: border-box;">
+  ${cap("RESTING")}${heroVariant(v)}
+  <div style="height: 24px;"></div>
+  ${cap("PRESSED · :ACTIVE · --SURFACE-SUNKEN FILL (PROPOSED — NO HOUSE :ACTIVE RULE EXISTS)")}${heroVariant(v, { pressed: true })}
+</div>` + foot;
+}
+
+// ---- C1: the range line, one per preset, from the seed's own dates.
+const seasonEnd = addDays(seasonStart, 364); // 2027-04-30
+const lastOfMonth = (d) => { const [y, m] = d.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
+const dmy = (d) => `${dayMon(d)} ${d.slice(0, 4)}`;
+/** `1 TO 30 SEP 2026` inside one month, `14 AUG TO 12 SEP 2026` inside one
+ *  year, `1 MAY 2026 TO 30 APR 2027` across years. House: caps, mono. */
+function rangeText(from, to) {
+  if (from.slice(0, 7) === to.slice(0, 7)) return `${Number(from.slice(8))} TO ${Number(to.slice(8))} ${MON[Number(to.slice(5, 7)) - 1]} ${to.slice(0, 4)}`;
+  if (from.slice(0, 4) === to.slice(0, 4)) return `${dayMon(from)} TO ${dmy(to)}`;
+  return `${dmy(from)} TO ${dmy(to)}`;
+}
+const CUSTOM_FROM = "2026-08-14", CUSTOM_TO = today; // the seeded pair (A5)
+// TWO variants for the three presets whose applied range ends TODAY
+// (presetRange in domain/stats/calendar.ts: from … today) — antagonist
+// delta pass, 2026-09-12: naming `30 APR 2027` alone would claim seven
+// future months while the totals stop at today. A = the range the totals
+// actually cover; B = the preset's own span with a TO DATE marker. ALL, 30
+// DAYS and CUSTOM are identical in both. James picks.
+const Y = today.slice(0, 4);
+const RANGE_A = {
+  ALL: `ALL TIME · SINCE ${dmy(rows[0].date)}`,
+  SEASON: rangeText(seasonStart, today),
+  YEAR: rangeText(`${Y}-01-01`, today),
+  MONTH: rangeText(`${today.slice(0, 7)}-01`, today),
+  "30 DAYS": rangeText(addDays(today, -29), today),
+  CUSTOM: rangeText(CUSTOM_FROM, CUSTOM_TO),
+};
+const RANGE_B = {
+  ...RANGE_A,
+  SEASON: `SEASON 2027 · ${rangeText(seasonStart, seasonEnd)} · TO DATE`,
+  YEAR: `${rangeText(`${Y}-01-01`, `${Y}-12-31`)} · TO DATE`,
+  MONTH: `${rangeText(`${today.slice(0, 7)}-01`, lastOfMonth(today))} · TO DATE`,
+};
+const RANGE = { A: RANGE_A, B: RANGE_B };
+// .stats-caption: mono 11/0.06em --ink-3, margin 8px 0 0 — the ONE prose
+// line allowed back after rulings 18 and 19 (§14).
+const rangeLineHtml = (sel, variant) => `<p id="range-line" style="margin: 8px 0 0; ${mono(11, "0.06em")}">${RANGE[variant][sel]}</p>`;
+// .stats-chips / .stats-chip as shipped: 12px above, 1px --rule-3 frame, 2px
+// radius, six flex:1 chips (44 min, padding 0 2px), mono 11/500/0.04em,
+// --ink-2 on --surface, selected --on-color on --ink. NO caption (ruling 18).
+function shippedFilterBar(selected, variant = "A") {
+  const segs = ["ALL", "SEASON", "YEAR", "MONTH", "30 DAYS", "CUSTOM"].map((s, i) => {
+    const on = s === selected;
+    return `<span role="radio" aria-checked="${on}" style="flex: 1; min-width: 44px; min-height: 44px; padding: 0 2px; display: flex; align-items: center; justify-content: center; background: ${on ? T.ink : T.surface}; color: ${on ? T.on : T.ink2}; ${i < 5 ? `border-right: 1px solid ${T.rule3};` : ""} font-family: ${MONO}; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; white-space: nowrap;">${s}</span>`;
+  }).join("");
+  const bar = `<div role="radiogroup" aria-label="Range" style="display: flex; margin-top: 12px; border: 1px solid ${T.rule3}; border-radius: 2px; overflow: hidden;">${segs}</div>`;
+  // .stats-custom / .stats-date / .stats-date input as shipped; a date input's
+  // width is INTRINSIC (Chromium ≈ 150 px), drawn at 150.
+  const field = (label, v) => `<label style="display: flex; flex-direction: column; gap: 4px; ${mono(11, "0.06em")}"><span>${label}</span><span style="display: flex; align-items: center; width: 150px; min-height: 44px; padding: 0 8px; box-sizing: border-box; background: ${T.surface}; border: 1px solid ${T.rule3}; border-radius: 2px; font-family: ${MONO}; font-size: 16px; letter-spacing: 0; color: ${T.ink};">${v}</span></label>`;
+  const custom = selected === "CUSTOM" ? `<div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;">${field("FROM", CUSTOM_FROM)}${field("TO", CUSTOM_TO)}</div>` : "";
+  return bar + custom + rangeLineHtml(selected, variant);
+}
+// TOTALS as shipped (TotalsGroup.tsx + .stats-card/.stats-table): no prose.
+function shippedTotals(set) {
+  const t = totals(set), m = t.machine;
+  const thc = (x) => `<th style="text-align: right; white-space: nowrap; padding: 0 0 6px 12px; ${mono(10, "0.14em")} font-weight: 400;">${x}</th>`;
+  const thr = (x) => `<th scope="row" style="text-align: left; width: 112px; height: 36px; vertical-align: middle; border-top: 1px solid ${T.rule2}; ${mono(10, "0.14em")} font-weight: 400;">${x}</th>`;
+  const tdv = (x) => `<td style="text-align: right; height: 36px; vertical-align: middle; border-top: 1px solid ${T.rule2}; padding-left: 12px; font-size: 15px; font-weight: 500; color: ${T.ink}; white-space: nowrap;">${x}</td>`;
+  const row = (l, a, b) => `<tr>${thr(l)}${tdv(a)}${tdv(b)}</tr>`;
+  return `<section style="margin-top: 24px;"><h2 style="margin: 0; ${mono(12, "0.1em", T.ink)} font-weight: 600;">TOTALS</h2>
+  <div style="margin-top: 12px; padding: 10px 14px 4px; background: ${T.surface}; border: 1px solid ${T.rule2}; border-radius: 2px;"><table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-family: ${MONO}; font-variant-numeric: tabular-nums;">
+  <thead><tr><th style="width: 112px;"></th>${thc("ALL ROWS")}${thc("MACHINE")}</tr></thead>
+  <tbody>${row("METRES", fmtM(t.all.meters), fmtM(m.meters))}${row("TIME", fmtT(t.all.seconds), fmtT(m.seconds))}${row("SESSIONS", t.all.sessions, m.sessions)}${row("REST METRES", "", fmtM(m.restMeters))}${row("CALORIES", "", fmtM(m.calories))}${row("AVG WATTS", "", m.avgWatts ?? "—")}</tbody></table></div></section>`;
+}
+// TIME BY TYPE as shipped (TimeByTypeGroup.tsx + .stats-legend-row): the bar,
+// then one grid row per non-empty bucket — swatch · key · time · percent.
+function shippedTimeByType(set) {
+  const { buckets, total } = timeByType(set);
+  const rowsHtml = TYPE_ORDER.filter((k) => buckets[k] > 0).map((k) => `<li style="display: grid; grid-template-columns: 12px 1fr auto auto; gap: 8px; align-items: center; padding: 6px 0; font-family: ${MONO}; font-size: 12px; font-variant-numeric: tabular-nums; color: ${T.ink};"><span style="width: 12px; height: 12px; background: ${TYPE_FILL[k]};"></span><span>${k}</span><span>${fmtT(buckets[k])}</span><span style="color: ${T.ink3};">${Math.round(100 * buckets[k] / total)}%</span></li>`).join("");
+  return `<section style="margin-top: 24px;"><h2 style="margin: 0; ${mono(12, "0.1em", T.ink)} font-weight: 600;">TIME BY TYPE</h2>${stackSvg(set, { w: 320, legend: false }).replace(`width="320" height="24"`, `width="100%" height="24" preserveAspectRatio="none" style="display: block;"`)}<ul style="list-style: none; margin: 8px 0 0; padding: 0;">${rowsHtml}</ul></section>`;
+}
+// C1 — the six states, cropped to the filter bar, on one board: row A (all
+// six) and row B (the three that differ).
+const c1Frame = (sel, variant) => `<div style="width: 350px;"><p style="margin: 0 0 4px; ${mono(9, "0.14em", T.accent)}">${variant} · ${sel} SELECTED</p><div style="background: ${T.page}; border: 1px solid ${T.rule3}; padding: 0 20px 16px; box-sizing: border-box; width: 390px; margin-left: -20px;">${shippedFilterBar(sel, variant)}</div></div>`;
+const PRESET_NAMES = ["ALL", "SEASON", "YEAR", "MONTH", "30 DAYS", "CUSTOM"];
+const rowHead = (t) => `<h2 style="font-family: ${SERIF}; font-weight: 500; font-size: 18px; margin: 24px 0 10px;">${t}</h2>`;
+files["C1-RangeLines.dc.html"] = head("C1 Range line, six states, two variants") + `<div style="width: 1240px; padding: 24px 24px 24px 44px; background: ${T.surface}; box-sizing: border-box;">
+  <h1 style="font-family: ${SERIF}; font-weight: 500; font-size: 24px; margin: 0 0 4px;">C1 · the range line under the filter bar, every preset — two variants</h1>
+  <p style="margin: 0 0 4px; font-size: 13px; color: ${T.ink3}; max-width: 110ch; line-height: 1.5;">James, 2026-09-12: "I'd like the date range for a season to be visible when you click on it — for consistency maybe all date ranges become visible?" Drawn for all six. <b>This is the ONE prose line allowed back after rulings 18 and 19</b> (§14; the Stats page otherwise renders no caption). Style is <code>.stats-caption</code> as shipped: IBM Plex Mono 11 px, 0.06em, caps, middle dots, no em-dash, <code>--ink-3</code> on <code>--page</code> = <b>6.69:1</b> (text floor 4.5:1), 8 px under the chips — and under the CUSTOM inputs, where it repeats the inputs' own values. Not a control: no hit target. Dates are the seed's: ALL starts at R1 (${rows[0].date}); today is ${today}; CUSTOM is the seeded pair ${CUSTOM_FROM} to ${CUSTOM_TO}.</p>
+  <p style="margin: 0; font-size: 13px; color: ${T.ink}; max-width: 110ch; line-height: 1.5;"><b>Pick A or B.</b> SEASON, YEAR and MONTH apply a range that ends TODAY (<code>presetRange</code>, domain/stats/calendar.ts), so a line reading <code>1 MAY 2026 TO 30 APR 2027</code> alone would claim seven future months. <b>A</b> names the range the totals actually cover. <b>B</b> names the preset's own span and marks it <code>· TO DATE</code>. ALL, 30 DAYS and CUSTOM are the same in both.</p>
+  ${rowHead("A · the range the totals cover")}
+  <div style="display: grid; grid-template-columns: repeat(3, 350px); gap: 28px 60px;">${PRESET_NAMES.map((s) => c1Frame(s, "A")).join("")}</div>
+  ${rowHead("B · the preset's own span · TO DATE (ALL, 30 DAYS and CUSTOM as in A)")}
+  <div style="display: grid; grid-template-columns: repeat(3, 350px); gap: 28px 60px;">${["SEASON", "YEAR", "MONTH"].map((s) => c1Frame(s, "B")).join("")}</div>
+  <pre style="margin: 20px 0 0; font-family: ${MONO}; font-size: 11.5px; line-height: 1.6; color: ${T.ink};">A\n${PRESET_NAMES.map((k) => `  ${k.padEnd(8)} ${RANGE_A[k]}`).join("\n")}\nB\n${["SEASON", "YEAR", "MONTH"].map((k) => `  ${k.padEnd(8)} ${RANGE_B[k]}`).join("\n")}</pre>
+</div>` + foot;
+// C1b / C1c — the whole Stats page as shipped, SEASON selected, with its
+// range line in variant A and in variant B.
+const seasonSet = inRange(rows, seasonStart, today);
+for (const v of ["A", "B"]) {
+  files[`C1${v === "A" ? "b" : "c"}-StatsSeason${v}.dc.html`] = head(`C1${v === "A" ? "b" : "c"} Stats, SEASON selected, variant ${v}`) + phone({ ...PORTRAIT, h: 844, body: backLink + title("Stats") + shippedFilterBar("SEASON", v) + shippedTotals(seasonSet) + shippedTimeByType(seasonSet) }) + foot;
+}
+// A6d — SEASON at zero rows THIS season with ≥ 2 lifetime rows (every early
+// May): the group's own empty line, cropped to the group. Drawn with a
+// hypothetical today of 3 MAY 2027 (season 2028), so the seed's thirteen
+// rows are all lifetime and none is this season's.
+files["A6d-EmptySeason.dc.html"] = head("A6d Season, no rows yet") + `<div style="width: 390px; height: 240px; background: ${T.page}; border: 1px solid ${T.rule3}; padding: 20px; box-sizing: border-box;">
+  <p style="margin: 0 0 8px; ${mono(9, "0.14em", T.accent)}">TODAY = 3 MAY 2027 · 13 LIFETIME ROWS · 0 THIS SEASON</p>
+  ${groupHead("SEASON 2028")}${caption("MAY 1 TO TODAY · ALWAYS THIS SEASON · NOT FILTERED")}${card(emptyLine("NO ROWS THIS SEASON YET"))}
+</div>` + foot;
+
 // A7 — contrast and hit targets
 const contrast = JSON.parse(readFileSync(new URL("./contrast.json", import.meta.url), "utf8"));
-const cRows = contrast.pairs.map((p) => `<tr>${[p.fg + " " + p.fgHex, p.bg + " " + p.bgHex, p.kind, p.ratio.toFixed(2) + ":1", p.floor + ":1", `<span style="color: ${p.pass ? T.ink : T.accent}; font-weight: 600;">${p.pass ? "PASS" : "FAIL"}</span>`, p.use].map(td).join("")}</tr>`).join("");
+/** A ratio from contrast.json by token names, so no note hand-types one. */
+const cr = (fg, bg) => { const p = contrast.pairs.find((q) => q.fg === fg && q.bg === bg); if (!p) throw new Error(`no pair ${fg} on ${bg}`); return p.ratio.toFixed(2); };
+// The WHERE column wraps (the addendum's rows carry a sentence each); the
+// other six stay nowrap.
+const tdw = (t) => td(t).replace("white-space: nowrap;", "white-space: normal; line-height: 1.4;");
+const cRows = contrast.pairs.map((p) => `<tr>${[p.fg + " " + p.fgHex, p.bg + " " + p.bgHex, p.kind, p.ratio.toFixed(2) + ":1", p.floor + ":1", `<span style="color: ${p.pass ? T.ink : T.accent}; font-weight: 600;">${p.pass ? "PASS" : "FAIL"}</span>`].map(td).join("")}${tdw(p.use)}</tr>`).join("");
 const hits = [
   ["You hero block (opens /you/stats)", "H1 / H2 / H3 portrait heights are measured in the browser and stated on the canvas note beside A2; each ≥ 44px, full width"],
   ["STATS door row (.diag-row)", "44px min-height, full width"],
@@ -398,9 +600,14 @@ const hits = [
   ["Tab bar item (.tab)", "44px min-height + safe-area padding, 78px wide"],
   ["Sign out (.button-outline)", "44px min-height"],
   ["Chart marks (bars, dots, cells)", "not tap targets in PR 1; PR 2's hover/tooltip layer owns them (dataviz: hit target larger than the mark)"],
+  ["PR 2 addendum · B0 hero as shipped (control)", `${px("B0")}px tall at 390px (Chromium; you.png measures 140 hairline to hairline), full width, one tap target`],
+  ["PR 2 addendum · B1 hero + chevron", `${px("B1")}px tall, full width; the chevron is inside the same single target — nothing new to tap`],
+  ["PR 2 addendum · B2 hero as a card + chevron", `${px("B2")}px tall (16px card padding replaces the 12px open padding), full width, one target`],
+  ["PR 2 addendum · B3 hero + STATS › label", `${px("B3")}px tall, full width; the label is text inside the one target, not a second control`],
+  ["PR 2 addendum · C1 range line", "not a control (a caption under the chips); the six chips stay 44 × 58px"],
 ];
 files["A7-Contrast.dc.html"] = head("A7 Contrast and hit targets") + `<div style="width: 1180px; padding: 24px; background: ${T.surface};">
-  <h1 style="font-family: ${SERIF}; font-weight: 500; font-size: 24px; margin: 0 0 4px;">Every colour pairing on A2 to A6, computed</h1>
+  <h1 style="font-family: ${SERIF}; font-weight: 500; font-size: 24px; margin: 0 0 4px;">Every colour pairing on A2 to A6 and the PR 2 addendum (B0-B3, C1), computed</h1>
   <p style="margin: 0 0 16px; font-size: 13px; color: ${T.ink3};">${contrast.formula}. Hexes are ${contrast.tokens}, verbatim. Text floor 4.5:1 (no large text is used); non-text floor 3:1 (WCAG 1.4.11).</p>
   <table style="width: 100%;"><thead><tr>${["FOREGROUND", "BACKGROUND", "KIND", "RATIO", "FLOOR", "", "WHERE"].map(th).join("")}</tr></thead><tbody>${cRows}</tbody></table>
   <p style="margin: 12px 0 0; font-size: 13px; color: ${T.ink3}; max-width: 100ch; line-height: 1.5;">FAILs, each stated: the house hairlines (<code>.pace-ref-bases</code>, <code>.you</code>) predate this design and sit beside text carrying the same state. The handoff's muted bar tone (decision 9, #c9c3b2) fails 3:1 and so does --ink-5, so previous-week bars are DRAWN in --ink-4 (5.29:1); this deviates from the handoff and is flagged for the ruling. Gridlines and the not-rowed streak cell's outline are decorative: the data marks (bars, dots, rowed cells) carry the state at ≥ 5.29:1.
@@ -414,6 +621,7 @@ files["Main.dc.html"] = head("Career stats on You") + `<div style="width: 1180px
   <h1 style="font-family: ${SERIF}; font-weight: 500; font-size: 28px; margin: 0 0 8px;">Phase PS Gate 0 · career stats on the You tab</h1>
   <p style="margin: 0 0 12px; font-size: 14px; line-height: 1.5; max-width: 100ch;">What you are approving: a hero on You under the identity card (three candidates, H1 metres per week · H2 streak strip · H3 time by type; each carries LIFETIME and SEASON work metres and is one tap target) with a STATS door above BASELINES, and the <code>/you/stats</code> subpage behind it: a six-way range filter, TOTALS in two columns (ALL ROWS beside MACHINE), then METRES PER WEEK, TIME BY TYPE, SEASON (cumulative curve, avg m/day, streaks) and TEST TREND (2k and 6k). Every chart is drawn from the same thirteen seeded rows and six test rows; the arithmetic is on the Seed artboard.</p>
   <p style="margin: 0; font-size: 13px; color: ${T.ink3}; line-height: 1.6;">Row 1: A1 You today (the committed captures). Row 2: the three hero candidates, portrait. Row 3: the same three in landscape. Row 4: A3 the subpage in portrait and A4 in landscape; the dashed red line is the viewport bottom. Row 5: A5 CUSTOM open and A5b its FROM-after-TO state. Row 6: A6 the empty states. Row 7: the seed and the contrast and hit-target tables.<br>Matched: app/src/theme/tokens.css (page #f4f1e8, surface #fffdf7, ink scale, type colours, 2px radius, 44px tap), index.css .you / .diag-row / .back-link / .screen-title / .pace-ref-chip / .tab / .trace-line, Newsreader · Archivo · IBM Plex Mono.</p>
+  <p style="margin: 12px 0 0; font-size: 13px; color: ${T.ink}; line-height: 1.6; max-width: 100ch;"><b>PR 2 addendum (2026-09-12, after v0.46.0 shipped; A-boards untouched).</b> Row 8: B0 the hero exactly as shipped (the control), then B1 chevron · B2 card edge + chevron · B3 STATS › label — each portrait board with its PRESSED state beside it. Row 9: B1-B3 in landscape. Row 10: C1 the range line under the filter bar in all six states, and C1b the shipped Stats page with SEASON selected. A7 carries the new pairings and heights.</p>
 </div>` + foot;
 
 for (const [name, src] of Object.entries(files)) writeFileSync(new URL(`./${name}`, import.meta.url), src);
@@ -437,16 +645,35 @@ const boards = [
   { file: "A6b-Empty1Row.dc.html", x: 480, y: 8540, w: 390, h: 1900, title: "A6b · one row" },
   { file: "A6c-NoMonitorRows.dc.html", x: 960, y: 8540, w: 390, h: 2300, title: "A6c · three rows, none from a monitor" },
   { file: "Seed.dc.html", x: 0, y: 10980, w: 1180, h: 1500, title: "Seed rows + arithmetic" },
-  { file: "A7-Contrast.dc.html", x: 1260, y: 10980, w: 1180, h: 1000, title: "A7 · contrast + hit targets" },
+  { file: "A7-Contrast.dc.html", x: 1260, y: 10980, w: 1180, h: 1600, title: "A7 · contrast + hit targets" },
+  // ---- PR 2 addendum rows (8-10)
+  { file: "B0-You.dc.html", x: 0, y: 12700, w: 390, h: 844, title: "B0 · hero AS SHIPPED (control)" },
+  { file: "B1-You.dc.html", x: 480, y: 12700, w: 390, h: 844, title: "B1 · chevron" },
+  { file: "B1-Pressed.dc.html", x: 960, y: 12700, w: 390, h: 420, title: "B1 · pressed" },
+  { file: "B2-You.dc.html", x: 1440, y: 12700, w: 390, h: 844, title: "B2 · card edge + chevron" },
+  { file: "B2-Pressed.dc.html", x: 1920, y: 12700, w: 390, h: 420, title: "B2 · pressed" },
+  { file: "B3-You.dc.html", x: 2400, y: 12700, w: 390, h: 844, title: "B3 · STATS › label" },
+  { file: "B3-Pressed.dc.html", x: 2880, y: 12700, w: 390, h: 420, title: "B3 · pressed" },
+  { file: "B0-YouLandscape.dc.html", x: 0, y: 13700, w: 844, h: 720, title: "B0 landscape (control)" },
+  { file: "B1-YouLandscape.dc.html", x: 940, y: 13700, w: 844, h: 720, title: "B1 landscape" },
+  { file: "B2-YouLandscape.dc.html", x: 1880, y: 13700, w: 844, h: 720, title: "B2 landscape" },
+  { file: "B3-YouLandscape.dc.html", x: 2820, y: 13700, w: 844, h: 720, title: "B3 landscape" },
+  { file: "C1-RangeLines.dc.html", x: 0, y: 14560, w: 1240, h: 1160, title: "C1 · range line, six states, variants A and B" },
+  { file: "C1b-StatsSeasonA.dc.html", x: 1320, y: 14560, w: 390, h: 844, title: "C1b · Stats, SEASON selected, variant A" },
+  { file: "C1c-StatsSeasonB.dc.html", x: 1800, y: 14560, w: 390, h: 844, title: "C1c · Stats, SEASON selected, variant B" },
+  { file: "A6d-EmptySeason.dc.html", x: 1900, y: 8540, w: 390, h: 240, title: "A6d · SEASON, no rows this season yet (added 2026-09-12)" },
 ];
-const heights = JSON.parse(readFileSync(new URL("./hero-heights.json", import.meta.url), "utf8").toString() || "{}");
 const annotations = [
   { id: "hero-heights", x: 1440, y: 1420, w: 420, text: `Hero heights in portrait, measured in Chromium at 390px (hero-heights.json):\nH1 METRES PER WEEK · ${heights.H1 ?? "?"}px\nH2 STREAK WEEK STRIP · ${heights.H2 ?? "?"}px\nH3 TIME BY TYPE · ${heights.H3 ?? "?"}px\nEach is one 44px+ tap target opening /you/stats; the doors group keeps DIAGNOSTICS last. In portrait all four doors stay above the 844px fold for every candidate; in landscape every candidate scrolls (accepted 2026-09-12).` },
   { id: "a2-check", x: 1440, y: 1640, w: 420, text: `Headline figures, recomputed from the seed rows (Seed artboard):\nLIFETIME = all thirteen rows = ${lifeM} M\nSEASON 2027 = rows dated May 1 2026 or later (R5..R13) = ${seasM} M\nH1 bars: ${wk8.map((w) => fmtM(wmAll[w] ?? 0)).join(" · ")} (weeks of Jul 20 .. Sep 7)\nH2 strip: ${weeksEnding(today, 16).map((w) => (wmAll[w] ? "■" : "□")).join("")}, streak 3 / longest 3\nH3 stack: AN 5.7% · AT 26.6% · O2 43.4% · TR 9.6% · NO TYPE 14.6%` },
   { id: "a3-check", x: 0, y: 5830, w: 480, text: "A3/A4 TOTALS: ALL 56,752 m / 3:59:39 / 13. MACHINE 36,752 m / 2:34:31 / 10; 8 OF 10 own totals; rest 718; calories 1,731 (8 OF 10); avg watts 176 over the nine non-stored pm5 rows. Seam line counts R1 (ruled: singular form, full-width n OF m line). Filter scope is stated under the strip: TOTALS, METRES PER WEEK and TIME BY TYPE follow the range; SEASON and TEST TREND never do." },
   { id: "palette-note", x: 560, y: 5830, w: 480, text: "TIME BY TYPE stack order is AN · AT · O2 · TR · NO TYPE, not the spec's listing AN · O2 · AT · TR · NO TYPE: the dataviz palette validator fails the O2↔AN adjacency (normal-vision ΔE 11.3 < 15, deutan 4.9) and passes the drawn order (16.8 / 13.5). Previous-week bars are --ink-4, not the handoff's #c9c3b2 (1.73:1 < 3:1). Both are deviations for the ruling (A7)." },
-  { id: "a5-note", x: 960, y: 5940, w: 420, text: "A5: the CUSTOM range Aug 14 .. Sep 12 has four rows; METRES PER WEEK draws the eight weeks ending Sep 12 and dashes the weeks that begin before the range (Jul 20 .. Aug 10) as empty slots. SEASON and TEST TREND are unchanged by the filter." },
+  { id: "a5-note", x: 960, y: 5940, w: 420, text: "A5: the CUSTOM range Aug 14 .. Sep 12 has four rows; METRES PER WEEK draws the eight weeks ending Sep 12 and marks the weeks that begin before the range (Jul 20 .. Aug 10) as OUT OF RANGE slots — a dashed --rule-2 outline (decorative, 1.40:1) labelled once across the run. SEASON and TEST TREND are unchanged by the filter.\nCORRECTED 2026-09-12 (antagonist delta pass): the draft's SEASON curve was drawn from the FILTERED rows (18,000 TODAY beside AVG M/DAY 319); the curve now draws from the unfiltered season rows, 43,012 TODAY, as its caption says." },
+  { id: "a3-trend", x: 1400, y: 3400, w: 420, text: "TEST TREND y axis, CORRECTED 2026-09-12 (antagonist delta pass): ticks are what the app's primitives emit — chooseTicks([112, 126], 4) = 115 / 120 / 125 (nice steps are 1·2·5·10 × 10^k; the draft's 4 s step cannot occur), printed as whole-second splits 1:55 · 2:00 · 2:05 by a \"split\" tick kind PR 2 adds (formatTick(·, \"pace\") prints tenths). This replaces the hand-typed 1:54 · 1:58 · 2:02 · 2:06 on the approved draft; the points and lines are unchanged." },
   { id: "a6-note", x: 1440, y: 8540, w: 420, text: "A6b (one row): TOTALS render; METRES PER WEEK, TIME BY TYPE and SEASON each read TWO ROWS MAKE A CHART; TEST TREND draws the single T6 point (a record of one is still a record). A6c (three manual rows): MACHINE column reads NO MONITOR ROWS YET with its rows hidden; the charts render from the three rows; no test history, so TEST TREND reads NO 2K OR 6K TEST LOGGED." },
+  // ---- PR 2 addendum notes
+  { id: "b-heights", x: 3360, y: 12700, w: 460, text: `PR 2 ADDENDUM · You hero affordance (James: "experiment with how to indicate that the row is clickable").\nHeights at 390px, Chromium, hairline/edge to hairline/edge (hero-heights.json):\nB0 as shipped · ${px("B0")}px (you.png: 140)\nB1 chevron · ${px("B1")}px · touch target unchanged (the chevron is inside the one Link) · the bar loses ~19px of width to the chevron column · chevron right edge = the doors' chevron column\nB2 card + chevron · ${px("B2")}px · +8px (16px card padding, as the identity card) · the chevron sits 16px in, NOT on the doors' column · the hairlines go\nB3 STATS › · ${px("B3")}px · touch target unchanged · the figures already wrap at this width (LIFETIME / SEASON on two lines, as shipped), so the label rides LIFETIME's line and SEASON wraps under it\nPortrait fold: unchanged for all three — the doors are pinned to the bottom (margin-top: auto) and the hero has ~380px of slack above them (B0). Landscape: all scroll (ruling 14); row 9 shows the +8px on B2 moves nothing above the fold.\nPRESSED: --surface-sunken (#efeade) over the whole control. PROPOSED, not house — index.css has no :active rule (grep, 0 hits). Contrast on the fill (contrast.json): --ink ${cr("--ink", "--surface-sunken")}:1, --ink-3 ${cr("--ink-3", "--surface-sunken")}:1, AN ${cr("--type-an", "--surface-sunken")}, AT ${cr("--type-at", "--surface-sunken")}, O2 ${cr("--type-o2", "--surface-sunken")}, NO TYPE ${cr("--ink-4", "--surface-sunken")} — text ≥ 4.5:1 and marks ≥ 3:1 throughout; the fill itself against --page is ${cr("--surface-sunken", "--page")}:1 (a state cue, not a data mark) — A7.` },
+  { id: "c1-note", x: 2280, y: 14560, w: 460, text: `PR 2 ADDENDUM · Stats range line (James: "the date range for a season to be visible when you click on it — maybe all date ranges become visible?").\nDrawn for all six presets, in .stats-caption's shipped style (--ink-3 on --page 6.69:1). It is the ONE prose line back after rulings 18-19.\nPICK A OR B (C1 rows; C1b and C1c show each on the full page): SEASON, YEAR and MONTH apply a range that ends TODAY (presetRange, domain/stats/calendar.ts), so A names the range the totals cover (1 MAY TO 12 SEP 2026) and B names the preset's own span with a TO DATE marker (SEASON 2027 · 1 MAY 2026 TO 30 APR 2027 · TO DATE). ALL, 30 DAYS and CUSTOM are identical in both.\nMEASURED COSTS (Chromium, 390px): B's SEASON line (44 characters) WRAPS to two lines at the 350px content width; A's longest is 22 characters, one line. Any range line adds ~25px, and on the SEASON page that pushes the last TIME BY TYPE legend row (NO TYPE) under the tab bar before the first scroll (C1b/C1c) — the shipped ALL page (you-stats.png) fit without scrolling.\nCUSTOM: the line repeats the two inputs' values (as briefed) — say if that is one line too many.` },
 ];
 writeFileSync(new URL("./canvas.json", import.meta.url), JSON.stringify({ artboards: boards, annotations, launch: { view: "canvas" } }, null, 2) + "\n");
 console.log(`wrote ${Object.keys(files).length} artboards + canvas.json`);

@@ -344,6 +344,31 @@ toolkit, not a history.
     accounts. The repo already bounded one instance of this by KEYING the fact
     to `user.id` (`You.tsx`'s `clearConcept2Seen`); an unkeyed cache inherits
     the gap without the bound.
+39. **When a spec cites the numbers ON an approved artboard, extract the
+    artboard's own text nodes and diff them against the spec's sentence.**
+    PS §5 said week bars "carry their value label when non-zero (A3: 10,000,
+    13,000, 2,000)"; A3's week SVG holds exactly two bar labels and the cited
+    `10,000` is a GRIDLINE TICK (`build.mjs`: `cur || i === maxI`). A spec
+    generalises a RULE from a rendered FRAME and the rule is usually wider
+    than the frame.
+40. **A hand-drawn artboard is not a call of the primitive it claims.** PS §5
+    said the trend axis is `chooseTicks(kind: "pace")`; `chooseTicks(domain,
+    count)` takes no kind, `niceNum` admits only 1/2/5/10×10^k so the
+    artboard's 4-second step is unreachable, and `formatTick(v,"pace")`
+    prints `1:55.0` where the artboard's `.slice(0,-2)` printed `1:54`. Run
+    the primitive on the artboard's own domain before believing "drawn on X".
+41. **Check that a card's figures come from ONE row set.** PS's approved A5
+    shows a season curve labelled `18,000 TODAY` beside `AVG M/DAY 319` under
+    a caption reading `NOT FILTERED`: the builder passed the FILTERED set to
+    the curve and the unfiltered one to the tile. RF7, applied to two
+    mechanisms in one frame rather than to one headline.
+42. **List the fixture's dates against every BOUNDARY the code computes, not
+    against the rule the boundary implements.** Not one of PS's 13 seed rows
+    sits on any preset's `from` or `to` (newest 09-11 vs today 09-12), so
+    every inclusive/exclusive off-by-one above `inRange` is invisible to the
+    whole reference fixture — while `inRange` itself is pinned. And ask which
+    pins a convention bug CANNOT move: the metres/week series moves under
+    Sunday-start; the 3/3 streak does not.
 
 ## Things attacked and found sound
 

@@ -540,7 +540,12 @@ phase" is not a reason to leave a wrong number on a screen.
 
 **Status: OPEN 2026-09-12 — spec approved by James the same day; the three
 phase-open gates (antagonist anchor, PM slate, DBA spec pass) ran at
-`93b91d66` and are applied in PR 0 (spec §15).** **TRIAD on PR 1** (a
+`93b91d66` and are applied in PR 0 (spec §15). PR 0 LANDED #411 and PR 1
+LANDED #417 the same day; v0.46.0 (build 977) RELEASED 2026-09-12 carrying
+PR 1, so exit criterion 6 — James's eyeball check against his Concept2
+logbook — is now RUNNABLE on that build (its `dies` stamp is on the Exit
+paragraph below). PR 2 is next; James's two 2026-09-12 notes ride it
+behind a Gate 0 addendum (spec §5.1).** **TRIAD on PR 1** (a
 number's meaning: every figure is a SUM over stored rows whose metres
 already mean two things — fused before RC-5, work-only after, no marker).
 **M.** · dies 2026-10-12 · a month from
@@ -660,11 +665,40 @@ line naming it was struck by ruling 19), never corrected.
       seconds over date from the existing `GET /api/test-history`, faster
       is up — the ONE figure that keeps a point whose log row was deleted,
       because `test_history.session_log_id` is `ON DELETE SET NULL` on
-      purpose; its caption says so), and the hover/tooltip layer.** Gates:
-      antagonist DELTA pass on the streak/avg-per-day/metres-per-week
-      definitions only (watts and time by type ship in PR 1); DBA SKIP said
-      aloud unless a query changes; no per-PR PM gate (non-triad UI); no
-      second design gate unless the rendered thing changes.
+      purpose; its caption says so), and the hover/tooltip layer — plus
+      James's two notes of 2026-09-12, asked after build 977 was on his
+      phone, both OPEN design items behind a Gate 0 addendum (spec §5.1,
+      rulings 20-21 pending): (a) "experiment with how to indicate that
+      the row is clickable" — the hero is the door and signals nothing
+      tappable; the addendum renders two or three affordances (a chevron
+      aligned with the door rows, a card edge, a `STATS ›` label) for him
+      to pick on sight; (b) "the date range for a season visible when you
+      click on it — for consistency maybe all date ranges" — one mono-caps
+      range line under the filter bar in one of two shapes on the boards,
+      A `1 MAY 2026 TO 12 SEP 2026` (the days the filter selects —
+      `presetRange` sets `to = today`) or B `SEASON 2027 · 1 MAY 2026 TO
+      30 APR 2027 · TO DATE`; `14 AUG TO 12 SEP 2026` for 30 DAYS; ALL from
+      the first row's date; CUSTOM from the inputs), the one prose line
+      rulings 18-19 allow back, and whether every preset shows it is his
+      call on sight. Neither is implemented before the addendum is
+      approved.** Gates: the Gate 0 addendum for the two notes; antagonist
+      DELTA pass on the streak/avg-per-day/metres-per-week definitions
+      only (watts and time by type ship in PR 1; the notes are copy and
+      layout) — **RUN 2026-09-12: six mechanism breaks, folded into the
+      spec the same day** (the §8.3 streak pin contradicted its own rule;
+      the streak keys on ROWS not metres and `seed.mjs`'s `streaks()` is
+      not its reference; the SEASON card is ONE unfiltered row set,
+      invariant 19, with a `NO ROWS THIS SEASON YET` state; the trend's x
+      is `test_history.loggedAt` at append, so the e2e backdates test rows,
+      and its axis is a new `TickKind "split"` at `chooseTicks`'s own steps;
+      bar labels on the current and tallest bars only, with dashed
+      out-of-range weeks; the SEASON range line must match `to = today`) —
+      plus the boundary fixtures the pass named (a row on today and on
+      2026-05-01, a 4-week streak so current ≠ longest, the seed with R13
+      dropped) and a statement of which pins a Sunday-start mutation moves;
+      DBA SKIP said aloud unless a query changes; no per-PR PM gate
+      (non-triad UI); no second design gate on the charts unless the
+      rendered thing changes.
 
 **Rows this phase files (dated; the hand-back list at PR 2):**
 
@@ -748,7 +782,10 @@ with the §9 protocol's numbers at
 app/domain/stats app/src/you/stats app/src/api/useStatsRows.ts` empty,
 pasted; **James's eyeball check** — LIFETIME and THIS SEASON on You beside
 his Concept2 logbook page, both pairs of numbers and the gap's explanation
-(rest metres, rows never sent, fused rows) in the phase's close record.
+(rest metres, rows never sent, fused rows) in the phase's close record —
+RUNNABLE since v0.46.0 (build 977, 2026-09-12) · dies 2026-10-12 · the
+phase's only external oracle (RF11) and it needs his eyes and his logbook,
+not a desk session; dated on the way past (campsite rule, PR 2 prep).
 **No hardware walk** — nothing here reaches the wire.
 
 ## Wave A — The front door

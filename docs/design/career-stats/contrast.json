@@ -199,6 +199,215 @@
       "ratio": 1.4,
       "floor": 3,
       "pass": false
+    },
+    {
+      "fg": "--type-an",
+      "fgHex": "#5c4382",
+      "bg": "--page",
+      "bgHex": "#f4f1e8",
+      "kind": "non-text",
+      "use": "hero bar AN segment on --page (shipped, B1, B3)",
+      "ratio": 7.21,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--type-at",
+      "fgHex": "#8a5f18",
+      "bg": "--page",
+      "bgHex": "#f4f1e8",
+      "kind": "non-text",
+      "use": "hero bar AT segment on --page (shipped, B1, B3)",
+      "ratio": 4.98,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--type-o2",
+      "fgHex": "#2a6275",
+      "bg": "--page",
+      "bgHex": "#f4f1e8",
+      "kind": "non-text",
+      "use": "hero bar O2 segment on --page (shipped, B1, B3)",
+      "ratio": 5.99,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--ink",
+      "fgHex": "#1b1a17",
+      "bg": "--page",
+      "bgHex": "#f4f1e8",
+      "kind": "non-text",
+      "use": "hero bar TR segment on --page (shipped, B1, B3)",
+      "ratio": 15.41,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--ink-4",
+      "fgHex": "#6f6a5f",
+      "bg": "--page",
+      "bgHex": "#f4f1e8",
+      "kind": "non-text",
+      "use": "hero bar NO TYPE segment on --page (shipped, B1, B3)",
+      "ratio": 4.76,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--ink-3",
+      "fgHex": "#57544c",
+      "bg": "--page",
+      "bgHex": "#f4f1e8",
+      "kind": "text",
+      "use": "B1 chevron, B3 STATS › label, C1 range line (door-row style on --page)",
+      "ratio": 6.69,
+      "floor": 4.5,
+      "pass": true
+    },
+    {
+      "fg": "--rule",
+      "fgHex": "#d8d3c4",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "non-text",
+      "use": "B2 card border against its own --surface fill (house hairline, as .you)",
+      "ratio": 1.47,
+      "floor": 3,
+      "pass": false
+    },
+    {
+      "fg": "--rule",
+      "fgHex": "#d8d3c4",
+      "bg": "--page",
+      "bgHex": "#f4f1e8",
+      "kind": "non-text",
+      "use": "B2 card border against the page (house hairline, as .you)",
+      "ratio": 1.32,
+      "floor": 3,
+      "pass": false
+    },
+    {
+      "fg": "--ink-3",
+      "fgHex": "#57544c",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "text",
+      "use": "B2 chevron and legend percentages on the card",
+      "ratio": 7.43,
+      "floor": 4.5,
+      "pass": true
+    },
+    {
+      "fg": "--ink",
+      "fgHex": "#1b1a17",
+      "bg": "--surface-sunken",
+      "bgHex": "#efeade",
+      "kind": "text",
+      "use": "PRESSED (proposed): figures and legend keys on the --surface-sunken fill",
+      "ratio": 14.5,
+      "floor": 4.5,
+      "pass": true
+    },
+    {
+      "fg": "--ink-3",
+      "fgHex": "#57544c",
+      "bg": "--surface-sunken",
+      "bgHex": "#efeade",
+      "kind": "text",
+      "use": "PRESSED (proposed): chevron, STATS › label, legend percentages on the fill",
+      "ratio": 6.3,
+      "floor": 4.5,
+      "pass": true
+    },
+    {
+      "fg": "--type-an",
+      "fgHex": "#5c4382",
+      "bg": "--surface-sunken",
+      "bgHex": "#efeade",
+      "kind": "non-text",
+      "use": "PRESSED (proposed): AN segment on the fill",
+      "ratio": 6.78,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--type-at",
+      "fgHex": "#8a5f18",
+      "bg": "--surface-sunken",
+      "bgHex": "#efeade",
+      "kind": "non-text",
+      "use": "PRESSED (proposed): AT segment on the fill",
+      "ratio": 4.69,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--type-o2",
+      "fgHex": "#2a6275",
+      "bg": "--surface-sunken",
+      "bgHex": "#efeade",
+      "kind": "non-text",
+      "use": "PRESSED (proposed): O2 segment on the fill",
+      "ratio": 5.64,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--ink",
+      "fgHex": "#1b1a17",
+      "bg": "--surface-sunken",
+      "bgHex": "#efeade",
+      "kind": "non-text",
+      "use": "PRESSED (proposed): TR segment on the fill",
+      "ratio": 14.5,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--ink-4",
+      "fgHex": "#6f6a5f",
+      "bg": "--surface-sunken",
+      "bgHex": "#efeade",
+      "kind": "non-text",
+      "use": "PRESSED (proposed): NO TYPE segment on the fill",
+      "ratio": 4.48,
+      "floor": 3,
+      "pass": true
+    },
+    {
+      "fg": "--surface-sunken",
+      "fgHex": "#efeade",
+      "bg": "--page",
+      "bgHex": "#f4f1e8",
+      "kind": "non-text",
+      "use": "PRESSED (proposed): the fill itself against --page (B1, B3) — a state cue beside the hairlines, not a data mark",
+      "ratio": 1.06,
+      "floor": 3,
+      "pass": false
+    },
+    {
+      "fg": "--surface-sunken",
+      "fgHex": "#efeade",
+      "bg": "--surface",
+      "bgHex": "#fffdf7",
+      "kind": "non-text",
+      "use": "PRESSED (proposed): the B2 card fill against its resting --surface — never adjacent, the card swaps whole",
+      "ratio": 1.18,
+      "floor": 3,
+      "pass": false
+    },
+    {
+      "fg": "--rule-2",
+      "fgHex": "#ded8c9",
+      "bg": "--surface-sunken",
+      "bgHex": "#efeade",
+      "kind": "non-text",
+      "use": "PRESSED (proposed): the B1/B3 hairlines against the fill (house hairline)",
+      "ratio": 1.18,
+      "floor": 3,
+      "pass": false
     }
   ]
 }
