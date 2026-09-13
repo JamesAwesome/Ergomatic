@@ -218,9 +218,13 @@ attempt ID to provider, purpose, surface, nonce/state, a browser/device
 binding secret hash, expiry, and (for linking) the original user and session
 identity. Pending first-account confirmation may retain the verified
 provider profile and exchanged Apple refresh token until account creation.
-It never has an Ergomatic user session. Explicit cancel and successful
-completion erase pending credentials immediately. Expiry ends authority
-immediately; physical deletion has the separate cleanup contract below.
+It never has an Ergomatic user session. Acknowledged explicit cancel and
+successful completion erase pending credentials immediately. If cancellation
+is not acknowledged, the client retains only the authority needed to retry
+cleanup and uses the existing failure notice; it cannot report cancellation
+or advance to usual sign-in. Offline/closed clients rely on expiry cleanup.
+Expiry ends authority immediately; physical deletion has the separate cleanup
+contract below.
 
 ### Stored shapes and query contract
 
@@ -288,15 +292,20 @@ per originating session. Users grow with completed accounts; grant rows are
 at most two per Apple-linked user under the two-client configuration.
 
 `server/auth/attempts.ts` owns expiry checks and physical cleanup.
-`server/index.ts` runs its sweep at startup before auth readiness and every
-60 seconds while serving. Failed cleanup is logged without secret data and
+The front-door lifecycle created by `server/index.ts` runs its sweep at startup
+before auth readiness and every 60 seconds while serving. That same owner
+sweeps expired sessions under an independent error boundary, so one cleanup
+failure cannot prevent the other from being attempted. Failed attempt cleanup
+is logged without secret data and
 new anonymous starts fail closed until a successful sweep; existing
 unexpired login/link completion remains available. Shutdown clears the
 timer. No design claims physical deletion during a stopped server: expired
 rows can remain on disk until restart, but can confer no authority. Backup
 retention belongs to the existing backup/deletion policy, not to a TTL
-claim. The native operation also discards in-memory credentials on every
-terminal outcome.
+claim. Native provider tokens/codes are discarded when their proof work ends;
+an uncertain cancel retains only the operation/binding authority needed for
+cleanup retry. Confirmed completion/cancel and explicit local teardown release
+that remaining authority.
 
 The migration is additive before Apple users exist. The first Apple-only
 account makes the release an authentication rollback floor: an older
@@ -382,6 +391,12 @@ invalidates the link. The linking transaction must recheck that the original
 session still exists, belongs to the original user, and equals the session
 currently presented by this browser/app before attaching.
 
+Both proof providers must be available on the current surface before linking
+can begin or retry. Unavailable Add actions remain visible and disabled;
+direct controller entry points enforce the same requirement. An idle visit
+to the dedicated linking route returns to You instead of rendering a blank
+screen.
+
 Native Google reauthentication uses `forcePrompt: true` plus the operation’s
 nonce, and the server requires the matching signed nonce claim. The
 installed plugin’s interactive branch forwards nonce; its ordinary restore
@@ -395,7 +410,7 @@ existing provider identity; it never silently swaps the original session.
 |---|---|---|---|
 | Server attempt and binding hash | Begin login/link | Atomic consume, cancel, expiry cleanup | Expired rows confer no authority; link requires its original live session |
 | Web attempt binding cookie | Web begin | Completion/cancel; cookie expiry | Reload may resume only the same unexpired operation; another browser cannot |
-| Native operation/binding secret | Native begin | Any terminal outcome | Not persisted; relaunch abandons it |
+| Native operation/binding secret | Native begin | Confirmed terminal outcome or explicit local teardown; uncertain cancel retains cleanup authority | Not persisted; relaunch abandons it |
 | Fresh existing-provider proof | Successful link reauthentication | Link completion/cancel/expiry | Bound to original operation and session; never reusable by another operation |
 | Pending signup profile/grant | Verified unknown identity | Create/cancel/expiry | Only its bound continuation can create; no authenticated user session yet |
 | Apple grant | Account creation/link/sign-in exchange | Account deletion/revocation policy in following slice | Server-owned; survives sign-out for later revocation |

@@ -7,18 +7,24 @@ Source commits: `33ccd85e07227082722089bb4fe7cc5f220b5765`,
 
 ## Change
 
-`app/capacitor.config.ts` now sets `loggingBehavior: "none"`, the actual
+At the source commits above, `app/capacitor.config.ts` sets `loggingBehavior: "none"`, the actual
 Capacitor configuration owner. This disables credential-bearing native result
-serialization and JavaScript `logFromNative` output in Debug builds. It does
-not remove application diagnostics: the installed bridge's Console plugin path
-still forwards an ordinary synthetic application message.
+serialization and JavaScript `logFromNative` output in Debug builds. The
+historical test proved that JavaScript still forwards an ordinary synthetic
+application message to the Console plugin. It did not exercise the native
+sink: the built-in Console plugin also uses the disabled `CAPLog`, so that
+message is not printed there. The current correction contract is in
+`../2026-09-13-apple-native.md`; the results below remain historical evidence
+for the original credential-log correction, not proof that native diagnostics
+were preserved.
 
 `app/scripts/apple-auth-privacy.test.mjs` consumes either the synced native
 config or a built App bundle's config, pins the installed Capacitor 8.5.1
 configuration-to-logging path, executes the installed `native-bridge.js`, and
 delivers `ERGOMATIC_SYNTHETIC_APPLE_CREDENTIAL_F3` through an AppleAuth result.
 The test asserts that the credential is absent from captured bridge logs and
-that a noncredential application diagnostic still reaches the Console plugin.
+that a noncredential application diagnostic still reaches the JavaScript-to-native
+Console dispatch boundary.
 The complete committed patch is `38-f3-source.patch`.
 
 ## Root cause and proof boundary

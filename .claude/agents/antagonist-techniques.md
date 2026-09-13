@@ -8,6 +8,8 @@ toolkit, not a history.
 
 ## Falsified claims, and how
 
+- **A native logger unit test can prove the sink while missing the bridge that selects it.** For a Console override, drive `console.*` inside the loaded production WKWebView and capture process stdout; in the same host, send a forbidden synthetic result through native `toJs` and JavaScript `fromNative`. Read the no-callback error branch too: it can call patched `console.warn` even when generic logging is disabled.
+
 - **"The paused derivation depends on seeing zero stroke rates."** Believed
   because a long comment discussed `spm === 0` at length. False: that passage is
   the epitaph of a DELETED predicate, and the live guard is on

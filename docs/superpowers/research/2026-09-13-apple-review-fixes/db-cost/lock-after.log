@@ -1,0 +1,5 @@
+ total_rows | expired_rows | live_rows 
+------------+--------------+-----------
+         20 |            0 |        20
+(1 row)
+

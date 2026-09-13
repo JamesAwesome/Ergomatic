@@ -1,0 +1,5 @@
+       fixture       | total_rows | expired_rows | live_rows | heap_bytes | index_bytes | total_bytes 
+---------------------+------------+--------------+-----------+------------+-------------+-------------
+ growth-after-delete |      90000 |            0 |     90000 |   14901248 |    17612800 |    32555008
+(1 row)
+

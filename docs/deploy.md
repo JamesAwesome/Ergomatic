@@ -176,10 +176,29 @@ audiences. Changes require container recreation. Compose's double-quoted
 actual line breaks, so the PEM can occupy one quoted assignment. Do not print
 a resolved compose configuration containing real credentials.
 
+Keep the native App ID, web Services ID and service key associated with the
+intended Apple developer team. Apple states: “The user identifier remains
+unique and static for your developer team.” Its relay documentation also
+scopes private addresses to the developer team. Separate app groups alone
+are not a documented reason to expect new subjects or relay addresses;
+a developer-team transfer needs Apple's explicit migration process. Keep
+separate environment Services IDs/callbacks, and verify real native/web
+account continuity before public activation. These are configuration
+requirements, not a claim that the live continuity check has passed.
+[Identity-token contract](https://developer.apple.com/documentation/signinwithapple/receiving-a-users-identity-token)
+· [relay scope](https://developer.apple.com/documentation/signinwithapple/communicating-using-the-private-email-relay-service)
+· [team transfer](https://developer.apple.com/documentation/signinwithapple/transferring-your-apps-and-users-to-another-team).
+
 Hide My Email works through the Apple subject. In restricted mode, an
 Apple-first account needs its actual relay address in `ALLOWED_EMAILS`.
 Apple linked to an existing Google account uses that account's saved email
-for access, so adding the relay address is unnecessary. Sending mail to relay
+for access, so adding the relay address is unnecessary. If an Apple-first
+tester's relay address is not yet listed, they can retrieve it from their
+Apple Account's Sign in with Apple → Apps and Websites details for Ergomatic,
+then give that address to the operator for the allowlist. After the API
+configuration reloads, they can retry sign-in. Apple's
+[relay guide](https://developer.apple.com/documentation/signinwithapple/communicating-using-the-private-email-relay-service)
+documents where users can view and manage the address. Sending mail to relay
 addresses is a separate configuration: register outgoing email sources with Apple's relay service
 before adding an email-sending feature. This login slice adds no email sender.
 

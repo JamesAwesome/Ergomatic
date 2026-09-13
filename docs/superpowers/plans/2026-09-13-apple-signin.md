@@ -14,7 +14,7 @@
 
 - Worktree: `.claude/worktrees/wave-a-apple`; no source edits to main, no merge or phone install under this approval.
 - Native deployment floor: iOS 15.0; native bundle ID `haus.waffle.ergomatic`.
-- `FRONT_DOOR_ENABLED` defaults false; Apple and open admission remain dark together until deletion is available for external TestFlight.
+- `ACCESS_MODE=restricted|public` controls account admission; restricted is the default and applies to both providers and existing sessions. Apple availability follows its complete local configuration independently. Public activation and external TestFlight retain the deletion and real-provider release gates.
 - Preserve existing Google endpoint response contracts and the older-server Google fallback.
 - Apple Hide My Email addresses are opaque; no email-based identity join or merge. Missing display name is `Rower`.
 - New Apple accounts require a nonempty verified email; returning accounts resolve subject before profile requirements.
@@ -38,11 +38,11 @@ Candidate adoption uses the repository-approved inline-author shape: retain and 
 
 - [x] Complete and paste-test the server module, including real PostgreSQL behavior.
 - [x] Fold confirmed mechanism findings and DBA plan measurements; adopt server `259882ba` with real hooks and committed mutation evidence.
-- [ ] Complete the interrupted code-lens and independent spec/quality review gates.
+- [ ] Original code-lens verdict remains incomplete after the platform block; carry that unresolved handback gate without resuming the excluded execution. Separately scoped spec/quality checks must state their own limits.
 
 ### Task 2: Native Apple authorization bridge
 
-**Files and executable steps:** `2026-09-13-apple-native.md` beside this plan.
+**Current contract and historical authoring record:** `2026-09-13-apple-native.md` beside this plan. The original paste-tested blocks are historical evidence, not instructions to overwrite current source.
 
 **Interfaces:** Produces `AppleAuth.authorize({nonce:string,state:string})` returning `{idToken:string,authorizationCode:string,state:string,name?:string}`. Owns the thin native TypeScript interface, Swift plugin, controller registration, entitlement and Xcode membership. Does not own adapter orchestration.
 
@@ -62,16 +62,16 @@ Candidate adoption uses the repository-approved inline-author shape: retain and 
 
 ### Task 4: Integrated release and review evidence
 
-**Files and executable content:** `app/src/adapters/linkFlow.test.ts` (queued empty-state regression; complete tested patch and mutation receipts in `apple-callback-evidence/`), `2026-09-13-apple-deployment.md` beside this plan; `.env.example`, `compose.yml`, `docs/deploy.md`, `docs/RELEASING.md`, approved spec/review records and relevant standing-agent ledger proposals.
+**Files and provenance:** `app/src/adapters/linkFlow.test.ts` (queued empty-state regression; complete tested patch and mutation receipts in `apple-callback-evidence/`), `2026-09-13-apple-deployment.md` beside this plan; `.env.example`, `compose.yml`, `docs/deploy.md`, `docs/RELEASING.md`, approved spec/review records and relevant standing-agent ledger proposals.
 
-**Interfaces:** Consumes server configuration names and migration behavior. Produces deploy instructions that keep the feature dark, name Apple portal prerequisites and preserve Apple-only account access through an explicit rollback floor.
+**Interfaces:** Consumes server configuration names and migration behavior. Produces restricted staging setup instructions, Apple portal prerequisites and the activation-dependent rollback floor that preserves Apple-only account access.
 
 - [x] Validate composed configuration and deployment instructions against the implemented server.
 - [x] Run branch lint, typecheck, format, unit/client/integration, build and production-bundle gates; run named browser specs locally and inspect corrected screenshots.
 - [ ] Complete whole-branch spec/quality, DBA PR and PM final-PR reviews; fold findings in one coordinated fix wave.
-- [ ] Open one coherent PR, verify CI for its exact head and present the review verdict plus proposed/overdue roadmap rows to James for the repository-required handback.
+- [x] Open draft PR #425 and preserve source-pinned verification, review limits and the ROADMAP handback. Each later push still requires its own exact-head CI; opening the draft does not satisfy the remaining review/merge gates.
 
-Current ordinary verification and source provenance are recorded in `apple-integrated-evidence/report.md`. Full coverage passes 343 files / 8,784 tests, with one skip; aggregate statements/branches/functions/lines are 98.26/96.54/98.98/98.99 and domain remains 100%. Parent integration also fixes historical migration fixtures, retains cap-sync’s generated manifest order, restores the approved alert borders and 480px auth-flow content width, and waits for loaded statistics before You captures. A draft PR must state the incomplete review gates rather than claim merge readiness.
+Historical original-implementation verification and source provenance are recorded in `apple-integrated-evidence/report.md`, pinned to the commits named there. Its original 343-file / 8,784-test coverage result is historical; subsequent access-policy and review-fix commits have their own source-pinned evidence and exact-head CI in PR #425. Parent integration also fixes historical migration fixtures, retains cap-sync’s generated manifest order, restores the approved alert borders and 480px auth-flow content width, and waits for loaded statistics before You captures. A draft PR must state the incomplete review gates rather than claim merge readiness.
 
 Raw `.log` references in this evidence collection are preserved at their original paths inside the [raw-log archive](../apple-raw-logs.md). Its member hashes were verified before bundling; the archive keeps the PR within GitHub’s file-count limit.
 

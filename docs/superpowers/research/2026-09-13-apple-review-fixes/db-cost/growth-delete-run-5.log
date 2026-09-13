@@ -1,0 +1,11 @@
+Delete on sessions  (cost=0.00..3069.00 rows=0 width=0) (actual time=6.406..6.407 rows=0.00 loops=1)
+  Buffers: shared hit=11819
+  WAL: records=10000 bytes=540000
+  ->  Seq Scan on sessions  (cost=0.00..3069.00 rows=9999 width=6) (actual time=0.004..5.001 rows=10000.00 loops=1)
+        Filter: (expires_at < '2026-09-13 12:00:00+00'::timestamp with time zone)
+        Rows Removed by Filter: 90000
+        Buffers: shared hit=1819
+Planning:
+  Buffers: shared hit=83
+Planning Time: 0.058 ms
+Execution Time: 6.421 ms

@@ -1,0 +1,12 @@
+ fixture | total_rows | expired_rows | live_rows | heap_bytes | index_bytes | total_bytes 
+---------+------------+--------------+-----------+------------+-------------+-------------
+ growth  |     100000 |        10000 |     90000 |   14901248 |    17612800 |    32555008
+(1 row)
+
+        indexname        |                                        indexdef                                         
+-------------------------+-----------------------------------------------------------------------------------------
+ sessions_pkey           | CREATE UNIQUE INDEX sessions_pkey ON public.sessions USING btree (id)
+ sessions_token_hash_key | CREATE UNIQUE INDEX sessions_token_hash_key ON public.sessions USING btree (token_hash)
+ sessions_user_id_idx    | CREATE INDEX sessions_user_id_idx ON public.sessions USING btree (user_id)
+(3 rows)
+
