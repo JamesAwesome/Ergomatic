@@ -2451,9 +2451,40 @@ axis-quantity question — take the surviving work-versus-rest mismatches
 together, in ONE design pass with ONE Gate 0, rather than approving a third of
 a screen at a time. **OPEN QUESTION: none — the ruling already says what shape
 the pass takes.** What is missing is that nobody scheduled it. **And it is
-ACCRETING while unopened:** two of its five members were ADDED on 2026-09-07
-by PM gates (`PM5 · PER INTERVAL` over Concept2's arithmetic; AVG HR derived
-from the trace), so the longer it stays shut the larger its Gate 0 gets.
+ACCRETING while unopened:** two members were ADDED on 2026-09-07 by PM gates
+(`PM5 · PER INTERVAL` over Concept2's arithmetic; AVG HR derived from the
+trace), so the longer it stays shut the larger its Gate 0 gets.
+
+**THREE CORRECTIONS TO THIS SECTION'S OWN BOOKKEEPING, measured at the
+census 2026-09-13.** Take none of the below on trust (RF10) — it has been
+wrong in three ways at once:
+1. **It is SIX members, not five** (seven with the Stats row above). "Five"
+   was false when written, by nine days: commit `4df2737c` (2026-09-09) added
+   the phrase and the rest-bands annotation in one diff, but `git log -S` puts
+   the rest-bands bullet here since `e4773c44` on 2026-08-31, the day the pass
+   opened. A third count, "four bullets", is in
+   `docs/superpowers/specs/2026-09-06-logbook-parity-design.md`.
+2. **The eyebrow is over the TABLE, not the tiles, and the real defect is
+   worse than this section says.** The six machine tiles
+   (`PostWorkoutSummary.tsx`'s `MachineTierBlock`) carry NO eyebrow, heading
+   or provenance label of any kind; the single `PM5 · PER INTERVAL` string
+   lives on `MachineSummaryTable.tsx`, a separate block further down, which
+   is 4/6 the machine's figures and 2/6 ours. So the derived tiles are
+   UNLABELLED rather than mislabelled.
+3. **`931` / `929` is an e2e SEED, not a record.** It is
+   `design.spec.ts` and `screenshots.spec.ts` fixture data. The measured band
+   a rower could actually see is watts ≤1 W and cal/hr **24-78 on six of
+   nine sessions** (`2026-09-06-logbook-parity-design.md`). A Gate 0 artboard
+   built on 931/929 would show a 2 cal/hr gap where the real one reaches 78.
+
+**AND THE AXIS THIS PASS WAS GOING TO OFFER IS PROBABLY WRONG.**
+"Derived versus measured" does not survive our own wire notes:
+`docs/monitor/pm5-interface-notes.md` §27.5 measures the PM5's own watts
+field against `2.80/pace³` and finds agreement under 1 W — **the monitor's
+watts is itself a derivation of pace, so nothing on that strip is
+measured.** The honest axis is WHOSE ARITHMETIC, which James already ruled
+(§3.1, the logbook's). Putting the wrong axis on the board asks him to rule
+on a distinction that does not exist.
 **NEXT (≤0.25): none owed — this one needed a date, not an answer, and now
 has one.** · dies 2026-10-12 (set 2026-09-12, proposed by the controller at
 the housekeeping sweep before Wave A opens; James rules at that PR's review) ·
