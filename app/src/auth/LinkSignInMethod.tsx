@@ -59,6 +59,7 @@ export default function LinkSignInMethod({
         <div className="auth-actions">
           <AuthProviderButton
             provider={firstDone ? target : usual}
+            disabled={firstDone && auth.targetAuthorizationBusy}
             label={
               firstDone ? undefined : `Confirm with ${providerName(usual)}`
             }

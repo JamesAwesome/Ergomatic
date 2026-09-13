@@ -217,3 +217,51 @@ test("linking Apple proves Google then Apple and preserves the signed-in account
     }, title);
   }
 });
+
+test("a lost finalize response reports uncertainty without claiming failure or success", async ({
+  page,
+}, testInfo) => {
+  let finalizations = 0;
+  await enableFrontDoor(page);
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({
+      status: 200,
+      json: { apple: true, google: true },
+    }),
+  );
+  await page.route("**/api/auth/web/attempts/lost-finalize", (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        outcome: "link_ready",
+        attemptId: "lost-finalize",
+        purpose: "link",
+        targetProvider: "apple",
+        expiresAt: "2026-09-13T00:05:00.000Z",
+      },
+    }),
+  );
+  await page.route(
+    "**/api/auth/web/attempts/lost-finalize/finalize",
+    async (route) => {
+      finalizations += 1;
+      expect(route.request().method()).toBe("POST");
+      expect(route.request().postDataJSON()).toStrictEqual({});
+      await route.abort("connectionfailed");
+    },
+  );
+  await signInViaBackdoor(page, {
+    email: `apple-lost-finalize-${testInfo.parallelIndex}@e2e.test`,
+    name: "Apple Link Tester",
+  });
+
+  await page.goto("/?authAttempt=lost-finalize");
+  await expect(page.getByRole("alert")).toHaveText(
+    "We couldn’t confirm the result. Check your sign-in methods and try again.",
+  );
+  expect(finalizations).toBe(1);
+  await expect(page.locator(".auth-method-connected")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Add Apple" })).toHaveCount(0);
+  await expect(page.getByText(/Nothing changed/)).toHaveCount(0);
+  await expect(page.getByRole("status")).toHaveCount(0);
+});

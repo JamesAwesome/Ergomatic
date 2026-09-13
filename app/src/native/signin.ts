@@ -41,6 +41,14 @@ export async function nativeGoogleProof(
   nonce: string,
 ): Promise<{ idToken: string }> {
   await initNativeAuth();
+  return nativeGoogleProofAfterInit(nonce);
+}
+
+/** Runs the provider interaction after the auth-flow owner has initialized
+ * the plugin and rechecked that its operation is still current. */
+export async function nativeGoogleProofAfterInit(
+  nonce: string,
+): Promise<{ idToken: string }> {
   const res = await SocialLogin.login({
     provider: "google",
     options: { forcePrompt: true, nonce },

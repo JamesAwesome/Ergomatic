@@ -55,6 +55,7 @@ export type AuthFlowView =
 export interface AuthFlowController {
   options: AuthOptionsView;
   view: AuthFlowView;
+  targetAuthorizationBusy: boolean;
   destination: "/" | "/you" | "/you/sign-in-methods" | null;
   startSignIn(provider: AuthProvider): Promise<void>;
   confirmAccount(): Promise<void>;
@@ -72,6 +73,7 @@ type ActiveStep = Exclude<AuthStep, SignedIn>;
 interface ActiveOperation {
   step: ActiveStep;
   bindingSecret?: string;
+  authorizationOwner?: symbol;
 }
 
 interface FlowContext {
@@ -79,6 +81,7 @@ interface FlowContext {
   generation: React.MutableRefObject<number>;
   operation: React.MutableRefObject<ActiveOperation | null>;
   onSignedIn: React.MutableRefObject<() => void>;
+  setTargetAuthorizationBusy: React.Dispatch<React.SetStateAction<boolean>>;
   setView: React.Dispatch<React.SetStateAction<AuthFlowView>>;
 }
 
@@ -183,6 +186,7 @@ function setFailure(
 ): void {
   if (context.generation.current !== generation) return;
   context.operation.current = null;
+  context.setTargetAuthorizationBusy(false);
   context.setView({
     kind: "error",
     purpose,
@@ -213,14 +217,56 @@ async function finishSignedIn(
     if (context.generation.current !== generation) return;
   }
   context.operation.current = null;
+  context.setTargetAuthorizationBusy(false);
   context.setView({ kind: "idle" });
   context.onSignedIn.current();
 }
 
-async function cancelActive(context: FlowContext): Promise<void> {
-  const active = context.operation.current;
-  context.operation.current = null;
-  if (!active) return;
+function ownsOperation(
+  context: FlowContext,
+  active: ActiveOperation,
+  generation: number,
+  owner?: symbol,
+): boolean {
+  return (
+    context.generation.current === generation &&
+    context.operation.current === active &&
+    (owner === undefined || active.authorizationOwner === owner)
+  );
+}
+
+function claimAuthorization(
+  context: FlowContext,
+  active: ActiveOperation,
+  generation: number,
+): symbol | null {
+  if (
+    !ownsOperation(context, active, generation) ||
+    active.authorizationOwner
+  ) {
+    return null;
+  }
+  const owner = Symbol("auth-authorization");
+  active.authorizationOwner = owner;
+  return owner;
+}
+
+function releaseAuthorization(
+  context: FlowContext,
+  active: ActiveOperation,
+  generation: number,
+  owner: symbol,
+): boolean {
+  if (!ownsOperation(context, active, generation, owner)) return false;
+  active.authorizationOwner = undefined;
+  return true;
+}
+
+async function cancelActive(
+  context: FlowContext,
+  active = context.operation.current,
+): Promise<boolean> {
+  if (!active || context.operation.current !== active) return active === null;
   const surface = context.native ? "native" : "web";
   const body = context.native ? { bindingSecret: active.bindingSecret } : {};
   try {
@@ -229,17 +275,24 @@ async function cancelActive(context: FlowContext): Promise<void> {
       body,
     );
   } catch {
-    // Local authority is already gone. The bound server attempt expires and
-    // cannot be completed from this client after its secret is discarded.
+    // The local holder still discards this attempt below. The bound server
+    // attempt expires and cannot be completed after its secret is discarded.
   }
+  if (context.operation.current !== active) return false;
+  context.operation.current = null;
+  return true;
 }
 
 async function finalizeLink(
   context: FlowContext,
+  active: ActiveOperation,
   generation: number,
+  owner?: symbol,
 ): Promise<void> {
-  const active = context.operation.current;
-  if (!active || active.step.outcome !== "link_ready") {
+  if (
+    !ownsOperation(context, active, generation, owner) ||
+    active.step.outcome !== "link_ready"
+  ) {
     throw new AuthRequestError("invalid_request");
   }
   const surface = context.native ? "native" : "web";
@@ -248,10 +301,11 @@ async function finalizeLink(
     `/api/auth/${surface}/attempts/${encodeURIComponent(active.step.attemptId)}/finalize`,
     body,
   );
-  if (context.generation.current !== generation) return;
+  if (!ownsOperation(context, active, generation, owner)) return;
   if (result.outcome !== "linked") throw new AuthRequestError("signin_failed");
   const targetProvider = active.step.targetProvider;
   context.operation.current = null;
+  context.setTargetAuthorizationBusy(false);
   context.setView({ kind: "linked", targetProvider });
 }
 
@@ -261,13 +315,20 @@ async function acceptStep(
   bindingSecret?: string,
   autoAuthorize = false,
   generation = context.generation.current,
+  existing?: ActiveOperation,
 ): Promise<void> {
   if (context.generation.current !== generation) return;
   if (step.outcome === "signed_in") {
     await finishSignedIn(context, step, generation);
     return;
   }
-  context.operation.current = { step, bindingSecret };
+  const active =
+    existing && context.operation.current === existing
+      ? existing
+      : { step, bindingSecret };
+  active.step = step;
+  if (bindingSecret !== undefined) active.bindingSecret = bindingSecret;
+  context.operation.current = active;
   if (step.outcome === "confirm") {
     context.setView({
       kind: "confirm",
@@ -277,10 +338,11 @@ async function acceptStep(
     return;
   }
   if (step.outcome === "link_ready") {
-    await finalizeLink(context, generation);
+    await finalizeLink(context, active, generation);
     return;
   }
   if (step.purpose === "link" && step.stage === "target") {
+    context.setTargetAuthorizationBusy(false);
     context.setView({
       kind: "link_authorize",
       targetProvider: step.targetProvider,
@@ -289,7 +351,9 @@ async function acceptStep(
     });
   }
   if (context.native && autoAuthorize) {
-    await authorizeNative(context, step, bindingSecret, generation);
+    const owner = claimAuthorization(context, active, generation);
+    if (!owner) return;
+    await authorizeNative(context, active, owner, generation);
   } else if (!context.native && autoAuthorize && step.authorizationUrl) {
     navigateWeb(step.authorizationUrl);
   }
@@ -297,12 +361,20 @@ async function acceptStep(
 
 async function authorizeNative(
   context: FlowContext,
-  step: Extract<AuthStep, { outcome: "authorize" }>,
-  bindingSecret?: string,
+  active: ActiveOperation,
+  owner: symbol,
   generation = context.generation.current,
 ): Promise<void> {
-  if (!bindingSecret) throw new AuthRequestError("invalid_request");
+  const step = active.step;
+  if (
+    step.outcome !== "authorize" ||
+    !ownsOperation(context, active, generation, owner)
+  ) {
+    return;
+  }
+  const bindingSecret = active.bindingSecret;
   try {
+    if (!bindingSecret) throw new AuthRequestError("invalid_request");
     let proof: {
       state: string;
       idToken: string;
@@ -311,25 +383,42 @@ async function authorizeNative(
     };
     if (step.provider === "apple") {
       const { AppleAuth } = await import("../native/appleAuth");
+      if (!ownsOperation(context, active, generation, owner)) return;
       proof = await AppleAuth.authorize({
         nonce: step.nonce,
         state: step.state,
       });
     } else {
-      const { nativeGoogleProof } = await import("../native/signin");
-      proof = { ...(await nativeGoogleProof(step.nonce)), state: step.state };
+      const { initNativeAuth, nativeGoogleProofAfterInit } =
+        await import("../native/signin");
+      if (!ownsOperation(context, active, generation, owner)) return;
+      await initNativeAuth();
+      if (!ownsOperation(context, active, generation, owner)) return;
+      proof = {
+        ...(await nativeGoogleProofAfterInit(step.nonce)),
+        state: step.state,
+      };
     }
-    if (context.generation.current !== generation) return;
+    if (!ownsOperation(context, active, generation, owner)) return;
     const next = await postJson<AuthStep>(
       `/api/auth/native/attempts/${encodeURIComponent(step.attemptId)}/proof`,
       { bindingSecret, ...proof },
     );
-    if (context.generation.current !== generation) return;
-    await acceptStep(context, next, bindingSecret, false, generation);
+    if (!ownsOperation(context, active, generation, owner)) return;
+    if (next.outcome === "link_ready") {
+      active.step = next;
+      await finalizeLink(context, active, generation, owner);
+      return;
+    }
+    if (!releaseAuthorization(context, active, generation, owner)) return;
+    context.setTargetAuthorizationBusy(false);
+    await acceptStep(context, next, bindingSecret, false, generation, active);
   } catch (error) {
-    if (context.generation.current !== generation) return;
+    if (!ownsOperation(context, active, generation, owner)) return;
     const cancelled = isProviderCancellation(error);
-    await cancelActive(context);
+    const cleaned = await cancelActive(context, active);
+    if (!cleaned || context.generation.current !== generation) return;
+    context.setTargetAuthorizationBusy(false);
     if (cancelled) {
       context.setView({
         kind: "cancelled",
@@ -394,12 +483,14 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
   const onSignedInRef = useRef(onSignedIn);
   const [options, setOptions] = useState<AuthOptionsView>({ state: "loading" });
   const [view, setView] = useState<AuthFlowView>({ kind: "idle" });
+  const [targetAuthorizationBusy, setTargetAuthorizationBusy] = useState(false);
   const context = useMemo<FlowContext>(
     () => ({
       native,
       generation,
       operation,
       onSignedIn: onSignedInRef,
+      setTargetAuthorizationBusy,
       setView,
     }),
     [native],
@@ -503,6 +594,7 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
   async function start(provider: AuthProvider, purpose: AuthPurpose) {
     const startGeneration = ++generation.current;
     operation.current = null;
+    setTargetAuthorizationBusy(false);
     setView({ kind: "busy", purpose });
     try {
       if (native) {
@@ -535,6 +627,7 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
   return {
     options,
     view,
+    targetAuthorizationBusy,
     destination: destinationFor(view),
     startSignIn: (provider) => start(provider, "signin"),
     async confirmAccount() {
@@ -574,6 +667,7 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
     prepareLink(provider) {
       generation.current += 1;
       operation.current = null;
+      setTargetAuthorizationBusy(false);
       setView({ kind: "link_confirm", targetProvider: provider });
     },
     async startPreparedLink() {
@@ -583,15 +677,20 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
     async authorizeLinkTarget() {
       const active = operation.current;
       if (!active || active.step.outcome !== "authorize") return;
+      const authorizationGeneration = generation.current;
+      const owner = claimAuthorization(
+        context,
+        active,
+        authorizationGeneration,
+      );
+      if (!owner) return;
       if (native) {
-        await authorizeNative(
-          context,
-          active.step,
-          active.bindingSecret,
-          generation.current,
-        );
+        setTargetAuthorizationBusy(true);
+        await authorizeNative(context, active, owner, authorizationGeneration);
       } else if (active.step.authorizationUrl) {
         navigateWeb(active.step.authorizationUrl);
+      } else {
+        releaseAuthorization(context, active, authorizationGeneration, owner);
       }
     },
     async cancel() {
@@ -602,8 +701,10 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
           : "signin");
       const targetProvider = operation.current?.step.targetProvider;
       const cancelGeneration = ++generation.current;
-      await cancelActive(context);
+      const active = operation.current;
+      await cancelActive(context, active);
       if (generation.current !== cancelGeneration) return;
+      setTargetAuthorizationBusy(false);
       setView({
         kind: "cancelled",
         purpose,
@@ -613,11 +714,13 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
     reset() {
       generation.current += 1;
       operation.current = null;
+      setTargetAuthorizationBusy(false);
       setView({ kind: "idle" });
     },
     abandon() {
       generation.current += 1;
       operation.current = null;
+      setTargetAuthorizationBusy(false);
       setView({ kind: "idle" });
     },
   };

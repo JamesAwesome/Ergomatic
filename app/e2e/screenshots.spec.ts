@@ -7748,3 +7748,52 @@ test("apple-link-confirm-landscape", async ({ page }) => {
   await page.setViewportSize({ width: 844, height: 390 });
   await captureAppleMethods(page, "apple-link-confirm-landscape.png", true);
 });
+
+async function captureAppleUncertainResult(
+  page: Page,
+  fileName: string,
+): Promise<void> {
+  await page.route("**/api/auth/options", (route) =>
+    route.fulfill({ status: 200, json: APPLE_AUTH_OPTIONS }),
+  );
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({ status: 200, json: { apple: true, google: true } }),
+  );
+  await page.route("**/api/auth/web/attempts/capture-uncertain", (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        outcome: "link_ready",
+        attemptId: "capture-uncertain",
+        purpose: "link",
+        targetProvider: "apple",
+        expiresAt: "2026-09-13T00:05:00.000Z",
+      },
+    }),
+  );
+  await page.route(
+    "**/api/auth/web/attempts/capture-uncertain/finalize",
+    (route) => route.abort("connectionfailed"),
+  );
+  await signInViaBackdoor(page, {
+    email: `screenshots-apple-uncertain-${fileName}@e2e.test`,
+    name: "Maya Chen",
+  });
+  await page.goto("/?authAttempt=capture-uncertain");
+  await expect(page.getByRole("alert")).toHaveText(
+    "We couldn’t confirm the result. Check your sign-in methods and try again.",
+  );
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, fileName) });
+}
+
+test("apple-link-result-uncertain", async ({ page }) => {
+  await captureAppleUncertainResult(page, "apple-link-result-uncertain.png");
+});
+
+test("apple-link-result-uncertain-landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await captureAppleUncertainResult(
+    page,
+    "apple-link-result-uncertain-landscape.png",
+  );
+});

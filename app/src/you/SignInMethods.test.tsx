@@ -21,6 +21,7 @@ function controller(view: AuthFlowView): AuthFlowController {
       google: true,
     },
     view,
+    targetAuthorizationBusy: false,
     destination: null,
     startSignIn: vi.fn(),
     confirmAccount: vi.fn(),
@@ -83,6 +84,44 @@ describe("SignInMethods", () => {
     expect(retryAuth.prepareLink).toHaveBeenCalledWith("apple");
   });
 
+  it("refetches authoritative methods before showing an uncertain finalize result", async () => {
+    let reads = 0;
+    vi.mocked(api).mockImplementation(async () => {
+      reads += 1;
+      return new Response(
+        JSON.stringify(
+          reads === 1
+            ? { apple: false, google: true }
+            : { apple: true, google: true },
+        ),
+        { status: 200 },
+      );
+    });
+    const { rerender } = render(
+      <SignInMethods auth={controller({ kind: "idle" })} />,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Add Apple" }),
+    ).toBeVisible();
+
+    rerender(
+      <SignInMethods
+        auth={controller({
+          kind: "error",
+          purpose: "link",
+          code: "signin_failed",
+          targetProvider: "apple",
+        })}
+      />,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We couldn’t confirm the result. Check your sign-in methods and try again.",
+    );
+    await waitFor(() => expect(reads).toBe(2));
+    expect(screen.queryByRole("button", { name: "Add Apple" })).toBeNull();
+    expect(screen.getAllByText("CONNECTED")).toHaveLength(2);
+  });
+
   it.each([
     [
       {
@@ -91,7 +130,7 @@ describe("SignInMethods", () => {
         code: "attempt_expired",
         targetProvider: "google",
       },
-      "This linking attempt expired. Nothing changed. Start linking again.",
+      "We couldn’t confirm the result. Check your sign-in methods and try again.",
     ],
     [
       {
@@ -104,7 +143,7 @@ describe("SignInMethods", () => {
     ],
     [
       { kind: "error", purpose: "link", code: "signin_failed" },
-      "That linking attempt didn’t work. Nothing changed. Start linking again.",
+      "We couldn’t confirm the result. Check your sign-in methods and try again.",
     ],
   ] as const)("renders the bounded link terminal copy", async (view, copy) => {
     vi.mocked(api).mockImplementation(

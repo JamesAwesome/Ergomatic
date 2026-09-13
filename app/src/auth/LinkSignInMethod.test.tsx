@@ -14,6 +14,7 @@ function controller(view: AuthFlowView): AuthFlowController {
       google: true,
     },
     view,
+    targetAuthorizationBusy: false,
     destination: "/you/sign-in-methods",
     startSignIn: vi.fn(),
     confirmAccount: vi.fn(),

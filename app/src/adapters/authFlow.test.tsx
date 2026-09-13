@@ -1,10 +1,18 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const seam = vi.hoisted(() => ({
   native: false,
   api: vi.fn(),
   appleAuthorize: vi.fn(),
+  googleInit: vi.fn(),
   googleProof: vi.fn(),
   storeToken: vi.fn(),
   navigateWeb: vi.fn(),
@@ -16,12 +24,23 @@ vi.mock("../native/appleAuth", () => ({
   AppleAuth: { authorize: seam.appleAuthorize },
 }));
 vi.mock("../native/signin", () => ({
+  initNativeAuth: seam.googleInit,
   nativeGoogleProof: seam.googleProof,
+  nativeGoogleProofAfterInit: seam.googleProof,
 }));
 vi.mock("../native/session", () => ({ storeToken: seam.storeToken }));
 vi.mock("./webNavigate", () => ({ navigateWeb: seam.navigateWeb }));
 
 import { useAuthFlow } from "./authFlow";
+import LinkSignInMethod from "../auth/LinkSignInMethod";
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
 
 const ok = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -39,6 +58,8 @@ beforeEach(() => {
   seam.native = false;
   seam.api.mockReset();
   seam.appleAuthorize.mockReset();
+  seam.googleInit.mockReset();
+  seam.googleInit.mockResolvedValue(undefined);
   seam.googleProof.mockReset();
   seam.storeToken.mockReset();
   seam.navigateWeb.mockReset();
@@ -107,6 +128,286 @@ describe("useAuthFlow", () => {
 
     expect(seam.googleProof).not.toHaveBeenCalled();
     expect(result.current.view).toStrictEqual({ kind: "idle" });
+  });
+
+  it("keeps one rendered native target action in flight through provider, proof, and finalization", async () => {
+    seam.native = true;
+    seam.googleProof.mockResolvedValue({ idToken: "google-proof" });
+    const appleProof = deferred<{
+      idToken: string;
+      authorizationCode: string;
+      state: string;
+    }>();
+    const targetProof = deferred<Response>();
+    const finalization = deferred<Response>();
+    seam.appleAuthorize.mockReturnValue(appleProof.promise);
+    let proofCount = 0;
+    let cancelCount = 0;
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/native/attempts") {
+        return ok({
+          outcome: "authorize",
+          attemptId: "single-flight",
+          purpose: "link",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "google",
+          stage: "reauth",
+          nonce: "google-nonce",
+          state: "google-state",
+          bindingSecret: "single-binding",
+        });
+      }
+      if (path === "/api/auth/native/attempts/single-flight/proof") {
+        proofCount += 1;
+        if (proofCount === 1) {
+          return ok({
+            outcome: "authorize",
+            attemptId: "single-flight",
+            purpose: "link",
+            targetProvider: "apple",
+            expiresAt: "soon",
+            provider: "apple",
+            stage: "target",
+            nonce: "apple-nonce",
+            state: "apple-state",
+          });
+        }
+        return targetProof.promise;
+      }
+      if (path === "/api/auth/native/attempts/single-flight/finalize") {
+        return finalization.promise;
+      }
+      if (path === "/api/auth/native/attempts/single-flight/cancel") {
+        cancelCount += 1;
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+
+    let auth!: ReturnType<typeof useAuthFlow>;
+    function Harness() {
+      auth = useAuthFlow(() => {});
+      return (
+        <>
+          <button onClick={() => auth.prepareLink("apple")}>Add Apple</button>
+          <LinkSignInMethod auth={auth} />
+        </>
+      );
+    }
+    render(<Harness />);
+    await waitFor(() => expect(auth.options.state).toBe("ready"));
+    fireEvent.click(screen.getByRole("button", { name: "Add Apple" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Confirm with Google" }),
+    );
+    const target = await screen.findByRole("button", {
+      name: "Continue with Apple",
+    });
+
+    act(() => {
+      fireEvent.click(target);
+      fireEvent.click(target);
+    });
+    await waitFor(() => expect(seam.appleAuthorize).toHaveBeenCalledOnce());
+    expect(target).toBeDisabled();
+    expect(cancelCount).toBe(0);
+
+    await act(async () => {
+      appleProof.resolve({
+        idToken: "apple-proof",
+        authorizationCode: "apple-code",
+        state: "apple-state",
+      });
+      await waitFor(() => expect(proofCount).toBe(2));
+    });
+    await act(async () => auth.authorizeLinkTarget());
+    expect(seam.appleAuthorize).toHaveBeenCalledOnce();
+    expect(cancelCount).toBe(0);
+
+    await act(async () => {
+      targetProof.resolve(
+        ok({
+          outcome: "link_ready",
+          attemptId: "single-flight",
+          purpose: "link",
+          targetProvider: "apple",
+          expiresAt: "soon",
+        }),
+      );
+      await Promise.resolve();
+    });
+    await act(async () => auth.authorizeLinkTarget());
+    expect(seam.appleAuthorize).toHaveBeenCalledOnce();
+    expect(cancelCount).toBe(0);
+
+    await act(async () => {
+      finalization.resolve(ok({ outcome: "linked" }));
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(auth.view).toStrictEqual({
+        kind: "linked",
+        targetProvider: "apple",
+      }),
+    );
+    expect(cancelCount).toBe(0);
+  });
+
+  it("keeps a newly prepared link when an older provider cancellation finishes cleanup", async () => {
+    seam.native = true;
+    seam.googleProof.mockResolvedValue({ idToken: "google-proof" });
+    seam.appleAuthorize.mockRejectedValue({ code: "cancelled" });
+    const cancelResponse = deferred<Response>();
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/native/attempts") {
+        return ok({
+          outcome: "authorize",
+          attemptId: "stale-cancel",
+          purpose: "link",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "google",
+          stage: "reauth",
+          nonce: "google-nonce",
+          state: "google-state",
+          bindingSecret: "cancel-binding",
+        });
+      }
+      if (path === "/api/auth/native/attempts/stale-cancel/proof") {
+        return ok({
+          outcome: "authorize",
+          attemptId: "stale-cancel",
+          purpose: "link",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "apple",
+          stage: "target",
+          nonce: "apple-nonce",
+          state: "apple-state",
+        });
+      }
+      if (path === "/api/auth/native/attempts/stale-cancel/cancel") {
+        return cancelResponse.promise;
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+
+    let auth!: ReturnType<typeof useAuthFlow>;
+    function Harness() {
+      auth = useAuthFlow(() => {});
+      return (
+        <>
+          <button onClick={() => auth.prepareLink("apple")}>Add Apple</button>
+          <button onClick={() => auth.prepareLink("google")}>Add Google</button>
+          <LinkSignInMethod auth={auth} />
+        </>
+      );
+    }
+    render(<Harness />);
+    await waitFor(() => expect(auth.options.state).toBe("ready"));
+    fireEvent.click(screen.getByRole("button", { name: "Add Apple" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Confirm with Google" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue with Apple" }),
+    );
+    await waitFor(() =>
+      expect(seam.api).toHaveBeenCalledWith(
+        "/api/auth/native/attempts/stale-cancel/cancel",
+        expect.anything(),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Google" }));
+    expect(screen.getByRole("heading", { name: "Add Google" })).toBeVisible();
+    await act(async () => {
+      cancelResponse.resolve(new Response(null, { status: 204 }));
+      await Promise.resolve();
+    });
+    expect(auth.view).toStrictEqual({
+      kind: "link_confirm",
+      targetProvider: "google",
+    });
+    expect(screen.getByRole("heading", { name: "Add Google" })).toBeVisible();
+  });
+
+  it("does not launch Google after initialization loses its operation", async () => {
+    seam.native = true;
+    seam.appleAuthorize.mockResolvedValue({
+      idToken: "apple-proof",
+      authorizationCode: "apple-code",
+      state: "apple-state",
+    });
+    const initialization = deferred<void>();
+    seam.googleInit.mockReturnValue(initialization.promise);
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/native/attempts") {
+        return ok({
+          outcome: "authorize",
+          attemptId: "held-init",
+          purpose: "link",
+          targetProvider: "google",
+          expiresAt: "soon",
+          provider: "apple",
+          stage: "reauth",
+          nonce: "apple-nonce",
+          state: "apple-state",
+          bindingSecret: "init-binding",
+        });
+      }
+      if (path === "/api/auth/native/attempts/held-init/proof") {
+        return ok({
+          outcome: "authorize",
+          attemptId: "held-init",
+          purpose: "link",
+          targetProvider: "google",
+          expiresAt: "soon",
+          provider: "google",
+          stage: "target",
+          nonce: "google-nonce",
+          state: "google-state",
+        });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+
+    let auth!: ReturnType<typeof useAuthFlow>;
+    function Harness() {
+      auth = useAuthFlow(() => {});
+      return (
+        <>
+          <button onClick={() => auth.prepareLink("google")}>Add Google</button>
+          <button onClick={() => auth.prepareLink("apple")}>Add Apple</button>
+          <LinkSignInMethod auth={auth} />
+        </>
+      );
+    }
+    render(<Harness />);
+    await waitFor(() => expect(auth.options.state).toBe("ready"));
+    fireEvent.click(screen.getByRole("button", { name: "Add Google" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Confirm with Apple" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue with Google" }),
+    );
+    await waitFor(() => expect(seam.googleInit).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Apple" }));
+    await act(async () => {
+      initialization.resolve();
+      await Promise.resolve();
+    });
+    expect(seam.googleProof).not.toHaveBeenCalled();
+    expect(auth.view).toStrictEqual({
+      kind: "link_confirm",
+      targetProvider: "apple",
+    });
   });
 
   it("keeps native Apple credentials and the binding secret out of the screen view", async () => {

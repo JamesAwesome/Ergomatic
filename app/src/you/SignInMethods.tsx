@@ -25,18 +25,19 @@ function linkNotice(auth: AuthFlowController): React.ReactNode {
       </p>
     );
   }
-  if (view.code === "attempt_expired") {
-    return (
-      <p className="notice auth-notice-error" role="alert">
-        This linking attempt expired. Nothing changed. Start linking again.
-      </p>
-    );
-  }
   if (view.code === "account_conflict" && view.targetProvider) {
     return (
       <p className="notice auth-notice-error" role="alert">
         That {name(view.targetProvider)} sign-in is already connected to another
         Ergomatic account. Nothing changed.
+      </p>
+    );
+  }
+  if (view.code === "signin_failed" || view.code === "attempt_expired") {
+    return (
+      <p className="notice auth-notice-error" role="alert">
+        We couldn’t confirm the result. Check your sign-in methods and try
+        again.
       </p>
     );
   }
@@ -47,12 +48,20 @@ function linkNotice(auth: AuthFlowController): React.ReactNode {
   );
 }
 
+function methodsRefreshKey(view: AuthFlowController["view"]): string {
+  if (view.kind === "linked") return `linked-${view.targetProvider}`;
+  if (
+    view.kind === "error" &&
+    view.purpose === "link" &&
+    (view.code === "signin_failed" || view.code === "attempt_expired")
+  ) {
+    return `uncertain-${view.targetProvider ?? "unknown"}`;
+  }
+  return "current";
+}
+
 export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
-  const refreshKey =
-    auth.view.kind === "linked"
-      ? `linked-${auth.view.targetProvider}`
-      : "current";
-  const methods = useAuthMethods(refreshKey);
+  const methods = useAuthMethods(methodsRefreshKey(auth.view));
   const notice = linkNotice(auth);
   if (auth.options.state !== "ready" || !auth.options.frontDoorEnabled) {
     return null;
@@ -63,8 +72,11 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
   const retryProvider =
     auth.view.kind === "error" &&
     auth.view.purpose === "link" &&
-    (auth.view.code === "attempt_expired" ||
-      auth.view.code === "account_changed")
+    (auth.view.code === "account_changed" ||
+      ((auth.view.code === "attempt_expired" ||
+        auth.view.code === "signin_failed") &&
+        auth.view.targetProvider !== undefined &&
+        !methods.methods[auth.view.targetProvider]))
       ? auth.view.targetProvider
       : undefined;
   return (
