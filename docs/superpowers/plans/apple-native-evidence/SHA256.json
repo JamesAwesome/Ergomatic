@@ -29,5 +29,6 @@
   "09-ios-status-after-sync.log": "ea60abc12bdb9a74dddbf7ba656df3d2aaeb96be8e985efd11add336e9fb8f25",
   "01-red-test.log": "17d1bbe53f57aebb79c2e852307ebeee0c8d3a0133b0c178a150a906639fdff0",
   "06-plutil.log": "02357fc26761f5a5e699db3df6da1958b9bf4c5cad4f4a426bc82843fcc27614",
-  "mutation-logging-green.log": "849c7a642129678df2cb2f706f8c4f61e77ce8bb122a11b1d2ffe2b8d27ec70e"
+  "mutation-logging-green.log": "849c7a642129678df2cb2f706f8c4f61e77ce8bb122a11b1d2ffe2b8d27ec70e",
+  "19-pipefail-build.log": "b192ca4eca33bd482ba7b4dbe8b9876a1b63a0949b5c7af8af7cb576530783d8"
 }

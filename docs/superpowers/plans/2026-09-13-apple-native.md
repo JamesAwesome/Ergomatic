@@ -544,6 +544,7 @@ Expected: all commands pass. The final status contains only the four intended na
 From `app/ios/App/`:
 
 ```bash
+set -euo pipefail
 timeout 600 xcodebuild -list -project App.xcodeproj
 apple_dd="$(mktemp -d /tmp/ergomatic-apple-native-dd.XXXXXX)"
 timeout 1800 xcodebuild -scheme App -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath "$apple_dd" build CODE_SIGNING_ALLOWED=NO 2>&1 | tee /tmp/ergomatic-apple-native-build.log | tail -40
@@ -646,3 +647,8 @@ The complete prescribed files above were placed at their real paths in `/tmp/erg
 | checked Debug build settings | `CODE_SIGN_ENTITLEMENTS = App/App.entitlements`; `IPHONEOS_DEPLOYMENT_TARGET = 15.0` |
 
 The controller committed the tested native candidate as `202f6087` in the retained scratch worktree, with Husky formatting/lint/typecheck firing and the commit confirmed before any probe. All six probes above then failed their focused contract assertion and passed after restoration from that clean commit. Every mutation anchor was unique. The final worktree status was clean. Command: `NODE_OPTIONS=--no-experimental-webstorage pnpm --dir app exec vitest run --project unit scripts/apple-auth-contract.test.ts`. Exact fail/restore receipts are `apple-native-evidence/mutations.json` and its `mutation-*-{red,green}.log` files. These are source-contract probes, not runtime Apple authorization evidence.
+
+Phase 0 strengthened Step 8 with `set -euo pipefail`, then reran the exact
+block against unchanged `202f6087`: exit 0, `BUILD SUCCEEDED`, both source
+membership assertions passed, and iOS 15.0/entitlement settings matched.
+The revised-command receipt is `apple-native-evidence/19-pipefail-build.log`.
