@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { BrowserRouter, useLocation, useNavigate } from "react-router-dom";
 import SignIn from "./SignIn";
 import { useAuthFlow } from "./adapters/authFlow";
@@ -10,8 +10,11 @@ function AppContent() {
   const auth = useAuthFlow(refetch);
   const location = useLocation();
   const navigate = useNavigate();
+  const consumedAuthDestination = useRef(auth.destination);
 
   useEffect(() => {
+    if (consumedAuthDestination.current === auth.destination) return;
+    consumedAuthDestination.current = auth.destination;
     if (auth.destination && auth.destination !== location.pathname) {
       void navigate(auth.destination);
     }

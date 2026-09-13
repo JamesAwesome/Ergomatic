@@ -202,6 +202,12 @@ test("linking Apple proves Google then Apple and preserves the signed-in account
     }, title);
     expect(account.email).toContain("apple-link-");
     expect(account.retained).toBe(true);
+
+    await page.getByRole("link", { name: "LIBRARY", exact: true }).click();
+    await expect(page).toHaveURL(/\/library$/);
+    await expect(
+      page.getByRole("link", { name: "LIBRARY", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
   } finally {
     await page.evaluate(async (workoutTitle) => {
       const response = await fetch("/api/workouts");
@@ -264,4 +270,38 @@ test("a lost finalize response reports uncertainty without claiming failure or s
   await expect(page.getByRole("button", { name: "Add Apple" })).toHaveCount(0);
   await expect(page.getByText(/Nothing changed/)).toHaveCount(0);
   await expect(page.getByRole("status")).toHaveCount(0);
+
+  await page.getByRole("link", { name: "LIBRARY", exact: true }).click();
+  await expect(page).toHaveURL(/\/library$/);
+  await expect(
+    page.getByRole("link", { name: "LIBRARY", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+});
+
+test("a cancelled link return sends the rower to You once and releases ordinary navigation", async ({
+  page,
+}, testInfo) => {
+  await enableFrontDoor(page);
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({
+      status: 200,
+      json: { apple: false, google: true },
+    }),
+  );
+  await signInViaBackdoor(page, {
+    email: `apple-cancel-navigation-${testInfo.parallelIndex}@e2e.test`,
+    name: "Apple Link Tester",
+  });
+
+  await page.goto("/?authResult=cancelled&authPurpose=link&authProvider=apple");
+  await expect(page).toHaveURL(/\/you$/);
+  await expect(
+    page.getByRole("heading", { name: "SIGN-IN METHODS" }),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "LIBRARY", exact: true }).click();
+  await expect(page).toHaveURL(/\/library$/);
+  await expect(
+    page.getByRole("link", { name: "LIBRARY", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
 });

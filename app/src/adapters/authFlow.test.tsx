@@ -6,6 +6,8 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const seam = vi.hoisted(() => ({
@@ -14,6 +16,7 @@ const seam = vi.hoisted(() => ({
   appleAuthorize: vi.fn(),
   googleInit: vi.fn(),
   googleProof: vi.fn(),
+  nativeSignOut: vi.fn(),
   storeToken: vi.fn(),
   navigateWeb: vi.fn(),
 }));
@@ -27,12 +30,14 @@ vi.mock("../native/signin", () => ({
   initNativeAuth: seam.googleInit,
   nativeGoogleProof: seam.googleProof,
   nativeGoogleProofAfterInit: seam.googleProof,
+  nativeSignOut: seam.nativeSignOut,
 }));
 vi.mock("../native/session", () => ({ storeToken: seam.storeToken }));
 vi.mock("./webNavigate", () => ({ navigateWeb: seam.navigateWeb }));
 
 import { useAuthFlow } from "./authFlow";
 import LinkSignInMethod from "../auth/LinkSignInMethod";
+import You from "../You";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -61,6 +66,8 @@ beforeEach(() => {
   seam.googleInit.mockReset();
   seam.googleInit.mockResolvedValue(undefined);
   seam.googleProof.mockReset();
+  seam.nativeSignOut.mockReset();
+  seam.nativeSignOut.mockResolvedValue(undefined);
   seam.storeToken.mockReset();
   seam.navigateWeb.mockReset();
   window.history.replaceState(null, "", "/");
@@ -84,7 +91,7 @@ describe("useAuthFlow", () => {
     });
   });
 
-  it("does not resurrect a native link begin after You sign-out abandons it", async () => {
+  it("does not resurrect a native link begin after the flow is abandoned", async () => {
     seam.native = true;
     let resolveBegin!: (response: Response) => void;
     seam.api.mockImplementation(async (path: string) => {
@@ -105,8 +112,6 @@ describe("useAuthFlow", () => {
       await Promise.resolve();
     });
 
-    // `/you/sign-in-methods` is a normal history entry. Back can reveal You
-    // while this request is pending; successful sign-out calls abandon().
     act(() => result.current.abandon());
     await act(async () => {
       resolveBegin(
@@ -128,6 +133,66 @@ describe("useAuthFlow", () => {
 
     expect(seam.googleProof).not.toHaveBeenCalled();
     expect(result.current.view).toStrictEqual({ kind: "idle" });
+  });
+
+  it("abandons a held native link begin through the real You sign-out control", async () => {
+    seam.native = true;
+    const begin = deferred<Response>();
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/methods") {
+        return ok({ apple: false, google: true });
+      }
+      if (path === "/api/auth/native/attempts") return begin.promise;
+      return new Response(null, { status: 404 });
+    });
+    const onSignedOut = vi.fn();
+    let auth!: ReturnType<typeof useAuthFlow>;
+    let pending!: Promise<void>;
+    function Harness() {
+      auth = useAuthFlow(() => {});
+      return (
+        <MemoryRouter>
+          <You
+            user={{ id: "rower", name: "Rower", email: "rower@example.test" }}
+            onSignedOut={onSignedOut}
+            authFlow={auth}
+          />
+        </MemoryRouter>
+      );
+    }
+    render(<Harness />);
+    await waitFor(() => expect(auth.options.state).toBe("ready"));
+    act(() => auth.prepareLink("apple"));
+    await act(async () => {
+      pending = auth.startPreparedLink();
+      await Promise.resolve();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(seam.nativeSignOut).toHaveBeenCalledOnce();
+    expect(onSignedOut).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      begin.resolve(
+        ok({
+          outcome: "authorize",
+          attemptId: "late-you-link",
+          purpose: "link",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "google",
+          stage: "reauth",
+          nonce: "late-nonce",
+          state: "late-state",
+          bindingSecret: "late-binding",
+        }),
+      );
+      await pending;
+    });
+
+    expect(seam.googleProof).not.toHaveBeenCalled();
+    expect(auth.view).toStrictEqual({ kind: "idle" });
   });
 
   it("keeps one rendered native target action in flight through provider, proof, and finalization", async () => {
