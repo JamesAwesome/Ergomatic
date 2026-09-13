@@ -160,8 +160,14 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 ## Phase MT — the app refuses a machine it cannot record
 
-**Status: SPEC APPROVED 2026-09-08, in flight.** Shape approved by James the
-same day: **Option A (refuse the sitting) with a DENYLIST**. Spec:
+**Status: all three PRs merged — PR 1 (#366, `a476cbc6`) 2026-09-08 shipped in
+v0.43.0; the two design gates (#369) and the landscape budget (#370) in
+v0.44.0. Phase functionally done; `/close-phase` NOT yet run, and the
+residuals below stay open** — including the hardcoded `type: "rower"` at
+`app/server/concept2/mapping.ts:578`, which is the one a rower could still be
+bitten by. Corrected 2026-09-13 (James): this line read "in flight" for five
+days with zero open PRs. Shape approved by James 2026-09-08:
+**Option A (refuse the sitting) with a DENYLIST**. Spec:
 [docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md](docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md).
 
 The PM5 fits the RowErg, SkiErg and BikeErg, and `ergMachineType` — the field
@@ -2277,20 +2283,6 @@ fixed.
   the gate is the approval, not the presentation. Evidence:
   `docs/superpowers/audits/2026-08-28-codebase-integrity/findings.md`
   (§AUD-006, §V4).
-- **DONE — landed in Phase MD PR 3 (#412, 2026-09-12).** Two corrections on
-  the way past: there were FOUR mirrors, not three (the error-message prose in
-  `routes/data.ts` was the fourth, now derived), and the gate this row named
-  ("the POST seam test") was not the gate — `schema.test.ts`'s `EXHAUSTIVE`
-  pin was, and it became tautological once the type derives, so it is replaced
-  by a six-literal ordered pin. · dies 2026-09-19 (campsite: given a date on
-  the way past; it lands, so the date is the strike backstop) ·
-  **The server's `EndedBy` mirror can be derived, not hand-copied.**
-  `server/stores/logs.ts` already imports `../db/schema.js`, so
-  `export type EndedBy = (typeof endedByEnum.enumValues)[number]` plus
-  deriving `ENDED_BY_VALUES` from `endedByEnum.enumValues` would collapse
-  three mirrors to one; the POST seam test is the current gate. Rides the
-  next PR touching `server/stores/logs.ts`. Found same review.
-
 ## Tooling
 
 - **A `scripts/dist-grep.sh` needle is a fourth retyping of a literal, tied to
@@ -2304,128 +2296,6 @@ fixed.
   it to the bash array. Filed under Tooling rather than the connected surface,
   because nothing about it is connected-surface work. **S**
 
-- **`pnpm screenshots` rewrites captures no code change touched.** SIGHTED
-  five times over three weeks, in FOUR filings — the 2026-08-18 sighting never
-  got a row of its own; it rode inside the 2026-08-28 one. Those four rows were
-  deleted and reconciled into this one on 2026-09-08 (Phase MT close-out, ruled
-  DOC-only by James — the FIX CARRIES). The count moves with the corpus and
-  with the day, so the history is the useful part, not any single figure — and
-  the EARLIEST sighting is the one that says how long this has been visible:
-  - **2026-08-18 — one file, and it was reverted rather than explained**:
-    recorded as `today.png`'s "unexplained onboarding read-marker diff",
-    reverted where it surfaced and never explained. It rode inside the
-    2026-08-28 row below and was LOST when the rows were first merged into
-    this one; the merge's own review put it back, because on a row whose
-    entire stated value is the history, dropping the first entry while
-    counting the rest is that row's own failure mode.
-  - **2026-08-28 — 19 of 90 no longer reproduced**: `today*.png` (5), `log-*`
-    (4), `post-workout-*` (3), `you*.png` (6), `releases.png`. **Run as a
-    control on a second worktree whose branch touched none of those screens,
-    the SAME 19 moved** — so the drift is environmental, not anything a PR
-    did. Separately, `you.png` differed run-to-run against the same stack on
-    the same day (differing md5) while `today.png`, `releases.png` and
-    `log-history.png` held across those same two runs: staleness and
-    nondeterminism are two problems, not one.
-  - **2026-08-30 — 13 of 83 were not byte-stable** across two back-to-back
-    runs at the same commit: `log-delete-confirm`, `log-detail`,
-    `log-detail-legacy`, `log-monitor`, `log-monitor-landscape`,
-    `post-workout-summary`, `post-workout-summary-landscape` and all six
-    `you-*`. A further ~10 differed from the committed bytes only by the
-    seeded DATE STAMP (`AUG 25` → `AUG 30`), which is stable per-day and
-    re-churns on every calendar day.
-  - **2026-09-07 (PR #341) — ~61 PNGs per run**, measured twice on an
-    unchanged tree. **This is the filing that carries the CAUSE:** the two
-    runs differed only in the CLOCK rendered into the frame
-    (`SEP 7 · 00:15` → `12:49`, diff bounding box 37×11 px), and
-    `log-detail-legacy.png` moved 181 bytes while carrying no machine block
-    at all.
-  - **2026-09-08 (Phase MT) — 64 of 201**, by `git checkout --
-    docs/screenshots/` and a second run on the identical tree. That filing
-    said **"Cause unknown". It was already false when written** — the
-    2026-09-07 measurement above had named the clock a day earlier, and
-    nothing but reconciling the four rows surfaced the contradiction. Its own
-    observation (the churn spans concept2, justrow, diagnostics and log
-    captures, "so it smells like seeded data or a date rather than
-    antialiasing") is consistent with the clock.
-  **ATTRIBUTED 2026-09-10, and the cause list this row carried was wrong in
-  both directions.** Full measurement and evidence:
-  [the churn spec](docs/superpowers/specs/2026-09-10-screenshot-churn-design.md).
-  The headline: of 67 files differing from committed, only **36 actually
-  churned** — the other 33 reproduced byte-for-byte across two runs and were
-  simply STALE, so every prior filing (which counted the 67) over-reported by
-  half. **Two of the four causes above cannot be live:** the focus-dependent
-  hint's copy was DELETED on 2026-08-28 (`BaselineEditor.tsx:135-144`) and its
-  file is byte-stable, and no `log-monitor*` capture is nondeterministic at
-  all. **The two largest causes were never named here** — a generated identity
-  carrying `Date.now()` (`helpers.ts:117`, spliced into every e2e user's email
-  and rendered on screen), and a capture taken before the suggestion fetch
-  settles, which lands `LOADING…` in the frame (RF7's own failure mode, hiding
-  inside a churn count).
-  **Why it matters:** committed captures are the PR's visual record (RF7) and
-  a reviewer's only look at a screen. A `git status` full of noise buries the
-  frames a change actually altered — PR #341 reverted 61 by hand twice, and
-  Phase MT's PR worked around it by adding only the two frames its rule could
-  touch and discarding the rest.
-  **CLOSED AS A PROCESS RULE, NOT AN ENGINEERING PROBLEM — antagonist
-  premise pass 2026-09-11, adopted by James 2026-09-12.** The goal this row
-  chased, byte-stable captures, was never reachable and never needed:
-  nothing automated reads `docs/screenshots/` (CI runs `--project=chromium`
-  only), the floor is 7 changed pixels on a one-test run with every clock
-  frozen and a fresh database, and **the rule was already James's** —
-  `docs/TESTING.md`'s 2026-08-27 "maybe a scheduled reup", unimplemented for
-  two weeks while two sessions engineered around it (RF18 on process). The
-  rule now lives in TESTING.md §8, "Regenerate broadly; commit narrowly",
-  mirrored in RF1: commit only the captures for screens your diff touched,
-  `git checkout --` the rest, and one full-corpus recapture PR per release
-  tag. **What shipped and stays:** #394's settle waits and pins (RF7 fixes in
-  their own right) and its frozen fixture clocks (they keep a scoped
-  recapture from going inconsistent across dates); the fresh-database boot
-  and stable `RUN_ID` (`1d35a704`, +3.8s/run); and the one-word fix that was
-  the whole "no filter" premise — `screenshots.sh` now forwards `"$@"`, so
-  `pnpm screenshots -g "<test>"` scopes. **What was built and REVERTED:** a
-  secret-gated `loggedAt` backdate route (ruling 2B) — freezing every log to
-  one instant collapsed `ORDER BY logged_at DESC, id DESC` onto a random-UUID
-  tiebreak and traded a two-glyph churn for whole-frame row reordering. A
-  frozen key is a removed key.
-  **Two traps for whoever measures this again, both real:** back-to-back
-  runs MASK time-derived churn (the epoch prefix is stable inside an hour and
-  the UI truncates the email), and one pair of runs is an anecdote — 43
-  distinct files churned across three pairs and only 9 churned in all three.
-  **The 2026-08-30 measurement is
-  written out here rather than cited**, because that round's report lives
-  under git-excluded `.superpowers/` and a citation into it is unreachable to
-  anyone but the session that wrote it (RF16's corollary).
-- **DONE — the library seed mints deterministic ids (rides the
-  deterministic-seed-ids PR, spec
-  `docs/superpowers/specs/2026-09-12-deterministic-seed-ids-design.md`).**
-  Filed 2026-09-10 as "five captures render a fresh UUID"; the property
-  turned out to be the point, not the symptom. A fresh database now seeds
-  the same 302 `(title, id)` pairs as every other — UUIDv5 from the title
-  under a fixed namespace, applied only on the seed's INSERT branch, so
-  production's existing rows keep their ids and nothing migrates. Five
-  gates, each with a biting mutation; the antagonist pass found the
-  uniqueness gate was over the wrong array (302, not 300) and that a
-  duplicate title now fails boot instead of dropping silently — both
-  written into the spec. Five of the six `recovery-read-only-*` captures
-  were recaptured once in that PR and stop churning; the sixth,
-  `recovery-read-only-landscape.png`, never rendered the id in its 844×390
-  frame and never churned in any of eight measured runs.
-- **`src/monitor/useMonitorSession.test.ts` — a pre-existing flake**
-  (`listSessionLogs()` expected length 1, got 2: an extra session-log ring
-  entry, RF27's own territory) fired once during PR1.75b's coverage runs,
-  reported 2026-09-02, and passed on three isolated re-runs plus the very
-  next full coverage run. Not in that PR's diff (last touched at a prior
-  commit, `10b8aa94`). **CLOSED 2026-09-12 by Phase MD PR 2 (#413):**
-  mechanism bounded to cross-test leakage through the suite's single
-  `beforeEach` reset (INFERENCE — the only producer consistent with three
-  green isolated re-runs); unreproduced; NO hunt was run, because a filtered
-  re-run removes the very producers the mechanism needs and a timer-flushing
-  `afterEach` would mutate a file carrying 28 `useFakeTimers` calls;
-  re-opens on the next firing. **Written out here rather than cited to the report
-  that found it**, because that report lives under git-excluded
-  `.superpowers/` (recurring failure 16's corollary) — the same reason the
-  screenshot-flakiness item above is inlined. Rides the next PR touching
-  this file, or the next time it fires.
 - **A client test's `console.log` never reaches stdout, so any probe that
   REPORTS what it saw that way is reporting something nobody read.** Measured
   2026-09-12 during the Phase TD spike: under
@@ -2474,22 +2344,6 @@ within minutes of being asked, which is the fastest any row in this file has
 ever closed. A reader who takes this section's near-emptiness as "he owes
 nothing" will be wrong by five.
 
-- **RC-38 — DISCHARGED 2026-09-10.** James supplied the document the same day
-  it was asked for: `docs/monitor/PM5_CSAFECommunicationDefinition.pdf`,
-  revision 0.27. `OBJ_WORKOUTTYPE_T` is transcribed verbatim at
-  `app/domain/monitor/pm5/commands.ts`, and it CONFIRMS the reading we shipped
-  on — `0` is `WORKOUTTYPE_JUSTROW_NOSPLITS`, `1` is
-  `WORKOUTTYPE_JUSTROW_SPLITS`, `8` is `WORKOUTTYPE_VARIABLE_INTERVAL`. So
-  `0x01` is a JustRow, specifically the splits variant, and the old comment's
-  refusal to write `_SPLITS` without a quotable label was correct caution
-  rather than a missing fact. It also explains the corroborating capture: `0`
-  is not a separate idle CLASS but JustRow-without-splits, which is what a
-  virgin menu sits at, so the flip to `1` at the first pull is the machine
-  adopting its own 5-minute auto-splits. **The value we program the erg with
-  was right, and is now sourced rather than inferred.**
-  **The document settles more than this row** — it also carries
-  `OBJ_ERGMACHINETYPE_T`, which Phase MT's denylist keys on. Not applied here;
-  MT's own rows can quote it now that the PDF is in the repo.
 - _(previously none open)_ — the `/api/today` row that sat here from Phase SF PR1
   closed 2026-09-05: James ruled DELETE, and the route, its unit block and
   the isolation test's dependence on it left in the same PR (the "done is
@@ -2609,19 +2463,14 @@ in both orientations.**
 | Item                                       | What                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Evidence                     |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
 | **RC-8**                                   | Correct the fake's contradictions of the real wire. **3 of 5 corrected** in #182 T1 (`ergMachineType`, `intervalRestTimeSeconds`, `splitIntervalType`); the other two read as already conditional and want verification. Residual: `fake.ts`'s `toMachineIndex` is resting-conditional while `intervalIndex.ts`'s `toActualIndex` is unconditional. **Merged with LL's reconnect precondition — one piece of fake work, and specced apart it gets done twice** | `phase-rc.md`, `phase-ll.md`, `docs/testing/2026-09-04-unlogged-session-evidence.md` |
-| **RC-13**                                  | **DONE — landed 2026-09-09 (the RC-13 PR).** This row's old opening — _"The avg-pace verdict zero-fires on a rapid re-arm"_ — is the framing the phase-open antagonist pass FALSIFIED, and it is REPLACED rather than annotated, because the row itself recorded two agents misreading it as already fixed in one session. **NEITHER DOOR HAS A SUPPORTED PRODUCER.** `driver.program(` and `driver.beginFreeRow(` have exactly one non-test caller apiece, both in `useMonitorSession.ts`: the hook's `beginFreeRow` returns on `phase === "ended"`, `JustRow.tsx` adds an independent `armedThisStart` latch, and `session.program()`'s one caller (`ConnectedInterstitial.tsx`) is gated on `phase === "pairing"`, which is written only inside `connect()`, which itself refuses when a driver already exists — so `program()` always runs against a freshly minted driver whose `activeRun` is `null`. **AND THE GUARD THAT HOLDS IT HAS A DATE:** the `ended` clause is `8c8fe05e`, **2026-09-01**, "JustRow PR 2 (#259)" — ONE DAY AFTER James gave this order (2026-08-31) — and its own comment says it was added because the e2e flow caught the product re-arming the instant a row ended. His order was correct when he gave it; a different phase shut the door the next day, incidentally. A guard added reactively last week is not an invariant that has held for a year, which is what justified the code. **WHAT REPLACED IT:** both doors now call `settleOutgoingRun` — the containing wrapper around `drainSummaryReconcile`, so settle rather than cancel, and a settlement that throws cannot fail the replacement — placed ABOVE `program()`'s per-run reset block, so the settlement runs before `lastWorkStateAverageSplit = null` and the verdict cannot be filed with a false suppression reason; a re-entrant open/replace is refused at the driver itself (`replacingRun`) rather than by the hook's phase guard; and every `summary-reconciled` detail names its RELEASE CAUSE instead of asserting a 3000 ms window closed (which was already untrue on the existing drain paths). **THE LIVE HALF WAS THE CONTAINMENT, NOT THE DRAIN** — see RC-14 | `phase-rc.md`                |
 | **RC-13b**                                 | `drainSummaryReconcile` has no identity guard, unlike both scheduled callbacks (`armSummaryReconcile`'s and `noteTerminateObservations`'s each open `if (activeRun !== run) return;`). It reconciles whatever `activeRun` reads at the moment it runs, not the run whose deadline it is draining. RC-13 made its stated precondition TRUE by emptying the slot at every door, but the precondition is still ARGUED rather than structural. **Binding the run into the slot** — storing `{ run, cancel }` instead of a bare canceller — would make it structural, and is the fix if this is ever taken. **CLOSING CONDITION (written 2026-09-09, James's rule 2 applied retroactively):** struck at the first phase close where it is 30 days untouched, unless `drainSummaryReconcile` acquires a caller that can run against a different `activeRun` than the deadline was armed for. Until then the precondition is argued rather than structural, and the argument is recorded at the site | `phase-rc.md`                |
 | **RC-13d**                                 | **OPEN INFERENCE, deliberately unsettled:** whether a door settlement's `summary-observations` write lands on the OUTGOING record. `applyProducerCommit` keys on `next.startedAt` and a revision ref rather than on `identityRef`, and the hook's handler writes to `runRef.current`, which the hook does not touch before `await driver.program(p)` — **so it probably would**, INFERENCE, not measured. Left open on purpose: the only ordering that exercises it has no producer (RC-13), so a hook-level test of it would prove the consequence of a condition nothing creates. **Whoever adds a UI path that re-programs from `ready` inherits this question** and must settle it before that path ships. **CLOSING CONDITION (written 2026-09-09, James's rule 2 applied retroactively):** struck at the first phase close where it is 30 days untouched, unless a UI path that re-programs from `ready` exists. The question is meaningless without one, and the row itself says so | `phase-rc.md`                |
-| **RC-14**                                  | **DONE — fixed 2026-09-09 (the RC-14 PR).** The avg-pace verdict — one of the two genuinely independent oracles RC-9 built after RF11's mirror problem retired `recordTwdVerdict` — was reaching the in-memory ring and dying with the tab. No rower ever saw it and no saved row moved; the cost fell on whoever read a walk afterwards, and it cost more than one line, because the snapshot is taken at the most informative moment in the trace. **THIS ROW'S PREVIOUS ANSWER WAS WRONG AND IS REPLACED, NOT ANNOTATED** (the RC-13 row records two agents misreading an annotated row). It read *"the survivor set is three, not two, and the third is a throw inside a subscriber"* and prescribed a try/catch around `recordAvgPaceVerdict` plus a bracketing record. Nothing throws — RC-13's `emit` isolates per listener — so that instrument would have printed **nothing** while discharging James's order: RF21 with a paper trail. **THE MECHANISM, MEASURED (`c45d0d76`, two red tests, no production change).** `reconcileSummary`'s last act is `emit(summaryObservationsEvent(...))`; `emit` delivers synchronously on the caller's stack; the hook's `summary-observations` case ends with a synchronous `lingerFinishRef.current?.()`, which is the deferred teardown's `finish`. So `reconcileAndReleaseHandoff` -> `unsubscribeAndDisconnect` (which records `disconnect-requested`) -> `stash()` all run to completion INSIDE the driver's own stack, one statement before `recordAvgPaceVerdict(run)`. The stash had `disconnect-requested` last and no verdict; the ring had the verdict next. **THE WALK'S OWN TRIGGER, corrected in the same round:** `rests-finished-ring.json`'s seq 71 says the reconcile ran "when the 3000ms finish grace closed", and that string was HARDCODED on the walk build — RC-13 replaced it with a real release cause precisely because it was already untrue on the drain paths. The capture's `atMs` values settle it: seq 70 `verification-received` ...110, seq 71 ...111, seq 72 ...112, one millisecond apart. The walk drained inside the 0x003F notification (`maybeReconcileImmediately` -> `drainSummaryReconcile`), a third `recordAvgPaceVerdict` call site, now covered by its own test. **THE FIX:** `teardown`'s deferred `finish` keeps its second `stash()` and queues a THIRD via `queueMicrotask` — a third snapshot can only ADD, where moving the second one out would fall back to the linger-start bytes (less than today). Never a timer: a microtask checkpoint runs before control returns to the event loop, and pagehide/freeze/backgrounding are tasks. **THE INVARIANT IS BOUNDED, and the bound is the point:** every entry a session records SYNCHRONOUSLY BENEATH the teardown that serialises it, up to the moment that teardown takes its LAST snapshot, reaches that snapshot. "Beneath" means ON THE STACK WHEN THE SNAPSHOT IS TAKEN, not "anywhere later in the teardown's body" — the IMMEDIATE path stashes BEFORE `unsubscribeAndDisconnect()` and excludes its own disconnect entries by design, which that path's comment has always said. **THE FENCE IS THE HANG-UP, and it is not only about terminate observations:** entries a producer records after its own `await` reach no snapshot, because a microtask runs before a post-`await` continuation — and TWO producers past that line file ORACLE VERDICTS. `driver.disconnect()` reaches `drainSummaryReconcile` (which ends with `recordAvgPaceVerdict`) only AFTER `await terminateWritesDrained`, so a reconcile re-armed during the terminate wait files its verdict unseen; and the driver's 0x003A subscriber calls `recordRestDistanceVerdict` and stays live until `await t.disconnect()` resolves, after the third stash. **So "an absent verdict IS a finding" must never be restated absolutely.** The honest reading, and the one the walk procedure now carries: a verdict missing for a piece whose own summary frames are already IN the log is a finding; a verdict missing where the log shows `disconnect-deferred` or a `summary-half` at or after `disconnect-requested` is INCONCLUSIVE by design, as is an absent terminate-observations entry. Restating any of this unbounded is what put the last walk in the position of reading a silence as a result. **JAMES'S 2026-08-31 ORDER (*"do NOT hunt it; INSTRUMENT it"*) IS CLOSED ON A CHANGED BASIS, and this row says so rather than letting a fix retire it quietly.** His ruling priced a hunt of unknown length; one probe ended it. The DISCRIMINATOR half shipped — every `avg-pace-verdict` line now opens with `#N`, the driver's own verdict count, so `eventLog.record` can never fold two of them into one entry. **Both halves of that sentence are narrower than they sound, and the narrowing is the honest part.** The ordinal is PER CONNECTION: a driver and its log are minted together inside one successful GATT connect and every teardown hangs up, so a walk that leaves the connected screen between pieces gets one log and one `#1` per piece — walk 2026-08-25 is the shape, two pieces, two ring files, each starting at `seq 0`, one verdict apiece. W11's "N pieces ⇒ N lines" therefore stays a count ACROSS PASTES, not within one. And the fold it prevents has NO established production producer: two verdicts can only be consecutive in one ring if two runs share one driver, and the RC-13 row argues at length that neither door has a supported producer for that. The instrument is cheap, harmless, and removes a class rather than a sighting. The BRACKETING RECORD is DECLINED on merit: the survivor is named and removed, its mechanism is pinned by a test that goes red on exactly that mutation, the throw survivor records itself (RC-13's `listener-threw`), and all seven verdict branches record before returning, so "reached and silent" does not exist. **James can put the bracketing half back in one word.** **REGISTER:** this PR filed ZERO rows and struck THREE — RC-13a, RC-13c and RC-13e are now comments at `beginFreeRow()`, the `run-replaced` record call and the `HASH_SUBWINDOW_MS` declaration, each carrying its reasoning. RC-13b and RC-13d gained the 30-day closing conditions they were filed without. Four further findings went to comments rather than rows (the linger refs' lifetime, `cancel()`'s guard as the layer that holds it, the in-emit re-entrancy Shape A leaves live, and `e2e/diagnostics.spec.ts`'s immediate-path-only coverage). **THE SWEEP WAS NOT COMPLETE WHEN IT SAID IT WAS**, and the correction is recorded here rather than left to a commit body: the first pass claimed seven sites and missed two in SOURCE — `oracleCorpusReplay.test.ts`'s header (*"the silence RC-14 is open on … RC-14 stays open"*, in the file whose whole subject is this oracle) and `driver.ts`'s `emit` isolation comment (*"RC-14's row names a throw in here as one of three surviving explanations"*, pointing at a row that now says in bold that nothing threw). Both were found by a later review round and fixed. The lesson is the one CLAUDE.md already states and this branch still tripped over: a correction sweep goes through SOURCE as hard as it goes through docs, because a comment reads as rationale rather than as a claim                                                                                                                                                                                                                                                                                                | `phase-rc.md`                |
-| **RC-38**                                  | **DISCHARGED 2026-09-10.** `OBJ_WORKOUTTYPE_T` transcribed verbatim from `docs/monitor/PM5_CSAFECommunicationDefinition.pdf` rev 0.27 into `domain/monitor/pm5/commands.ts`; it confirms `0x01` is `WORKOUTTYPE_JUSTROW_SPLITS`. Full account in `## Needs a decision from James` above                                                                                                                                                                                                                                                                                                                       | `phase-rc.md`                |
 | **RC-11**                                  | The stroke-data reframe: three-way, not two. Owns RC-6's deferred `p: 0` half. Our series clock is a third quantity, and none of the three is C2's `time`                                                                                                                                                                                                                                                                                                      | `phase-rc.md`                |
-| **Session calories** — CLOSED by Phase LP 2026-09-06 (0x003A Total Calories is the honest total; per-split sum equals it on 9/9 committed captures) | 0x0033's `totalCalories` is INTERVAL-scoped (it resets at every boundary) and the 0x0039 summary carries no calorie field, so an honest session CAL needs the register-fold discipline CR2 spec 1 built for distance, plus an honest ramping fake (today's emits a constant 0, so **nothing can go red**), plus a walk photo. **ZONE rides behind it** — it needs a strap and a max-HR source the app lacks. **Ownerless since 2026-08-15**                    | `phase-cr2.md`               |
 | **Cross-pin the two distance derivations** | `sessionDistanceMeters` and `monitorDistanceMeters` are two derivations of one user-facing quantity, shipping on two screens with nothing comparing them                                                                                                                                                                                                                                                                                                       | `phase-cm.md`                |
 | **The fake's rest-distance lag**           | `restDistanceMeters` resets with no roughly three-frame lag, unlike the real wire                                                                                                                                                                                                                                                                                                                                                                              | `phase-cm.md`                |
 | **`MONITOR_SPM_MIN = 0`**                  | Re-parked at CR2's close, re-owned by LT spec 1                                                                                                                                                                                                                                                                                                                                                                                                                | `phase-cr2.md`               |
 | **The landscape gutter**                   | The phone timer's landscape gutter absorbs no left inset                                                                                                                                                                                                                                                                                                                                                                                                       | `phase-cr2.md`               |
 | **iOS 26 `100dvh`**                        | Under `viewport-fit=cover`. Wave D's native fake flag is what makes this answerable at a desk                                                                                                                                                                                                                                                                                                                                                                  | `phase-cr2.md`               |
-| **`PULL TO RESUME`** — **ORDER STRUCK 2026-09-09** | James, 2026-08-17: _"we never got rid of the pull to resume screen."_ CR2 2a task 5 only re-worded it. **James WITHDREW the removal order on 2026-09-09**, asked directly when the Phase OD sweep surfaced it at 23 days old: the screen stays. This is the author of an order withdrawing it, **not** a strike on a stated cost — RF30 does not apply and no receipt is owed. Recorded here rather than deleted, because the unwithdrawn 2026-08-17 quote still stands in `docs/history/triggered-follow-ons.md:301` and would otherwise resurrect it. **Every other site carrying the order, reconciled (CLAUDE.md's withdraw-then-grep rule):** `docs/history/triggered-follow-ons.md:301` — ANNOTATED with a dated disposition, verbatim text preserved; `docs/superpowers/specs/2026-08-22-link-truth-design.md:193` (_"The standing follow-on to REMOVE the PULL TO RESUME band entirely ... stays where it is"_) — STANDS as written: it is a dated design record that defers to this ROADMAP entry by name, so its pointer resolves here and reads the strike. Phase JR's "Owed within PR 2's own scope" block is NOT this order — it is the separate, still-live gap that `PULL TO RESUME` is undesigned on a free row's frozen clock, and it stands. Everything else the grep returns describes the SCREEN, which stays. **RESIDUAL, NOT STRUCK — the flash:** §2b's suspected mechanism was FALSIFIED (zero PAUSED firings across six captures) and the flash's real mechanism is still unexplained; it pairs with the stale-while-armed observation, still owed from the CR2 phone pass. **OPEN QUESTION:** does the flash survive now that the removal is off the table, i.e. is it a defect in its own right rather than a symptom of the band? **NEXT (≤0.25):** read `ConnectedSurface.tsx:795` and its `model.stale` producer and say whether a flash is reachable without a PAUSED firing | `phase-cr2.md` |
 | **Reconnect's three preconditions**        | Constraints on the deferred Correct Resume entry, not separate scheduled work. #183's gate requires a reconnect design to reset or quarantine `lastContinuityRef`'s count axis across a re-subscribe; preserving the old baseline without that policy is unresolved. | Correct Resume research, "Status: deferred, not an implementation contract" |
 | **Two declined CR questions**              | Projected finish split; distance intervals with a rate cap. Each waits on a hardware fact. Reconnect belongs to the deferred Correct Resume entry, not this row; its research does not authorize backfill or a MISSED writer. | `phase-cr.md`                |
 | **LL-F4**                                  | The `disconnected` handler records no liveness snapshot where `fail()` does, so a retry's ring has one fewer data point                                                                                                                                                                                                                                                                                                                                        | `phase-ll.md`                |
@@ -3350,6 +3199,11 @@ than back in the queue this was built to replace.
       the fixture those attempts kept producing. Biting mutation recorded:
       removing the route's try/catch gives `expected 500 to be 200`, and
       only this test fails. First DDL any server test here has issued.
+      **Preserved from the Icebox twin removed with this PR (James,
+      2026-09-13), because this row never carried it:** the catch
+      demonstrably WORKED all along — a forced `throw` placed inside the
+      route's own try returns 200 and only the row assertion fails. This was
+      a missing GATE, never a missing fix.
       Original filing follows. The
       catch in `routes/concept2.ts`'s reconciliation now warns rather than
       swallowing silently — that was the real defect (RF24's shape: a
@@ -3523,34 +3377,6 @@ than back in the queue this was built to replace.
 
 Not scheduled in any wave. Reconsider only when the recorded trigger fires;
 an iceboxed item is not a phase-close requirement.
-
-- **"A failing reconciliation does not fail the send" has no test — Phase AV,
-  2026-09-08.** **Trigger:** a Concept2 send returns 500, or a rower reports a
-  send that failed for no visible reason, at a time when `markC2Verified`
-  could have been throwing. Also fires if anyone edits that `try`/`catch` or
-  moves the reconciliation out of `resolveWeightClass`.
-  **What is guarded and what is not.** The catch demonstrably WORKS: a forced
-  `throw` placed inside the route's own try returns 200 and only the row
-  assertion fails. What has no gate is that a store failure cannot fail the
-  SEND — so an edit that broke it would ship silently, and the symptom would
-  be a send failing because a verdict could not be refreshed, which is exactly
-  what the catch exists to prevent.
-  **Why it is iceboxed rather than queued.** Four attempts, all abandoned
-  honestly. Every shape 500s in the FIXTURE rather than in the code, including
-  a minimal case with no store override and no spy at all, while the five
-  tests beside it pass — so something in `concept2.test.ts`'s reconciliation
-  describe is order- or id-dependent and was not found. Shipping a green test
-  that proved the wrong thing would have been worse than the gap (RF21).
-  **The route most likely to work, if the trigger fires:** an integration test
-  in `concept2Send.integration.test.ts`, where the store is REAL and can be
-  made to fail at the database rather than by replacing a method — which is
-  the manoeuvre that produced every one of the four fixture 500s.
-  **Its to-do twin now lives in Phase TD**, not in "Small, queued" where it
-  was first filed. This entry stays the tripwire; that one is the work.
-  **What DID ship, so this is a missing gate and not a missing fix:** the
-  catch warns instead of swallowing silently. Before it, a permanently broken
-  reconciliation emitted nothing at all, forever, because the success log is
-  gated on `upgraded > 0` — RF24's shape.
 
 - **Ask for the account picker only when the rower asked to switch — James,
   2026-09-07.** **Trigger:** the extra tap actually annoys someone. #356 sends
