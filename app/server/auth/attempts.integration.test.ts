@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
-import type pg from "pg";
+import pg from "pg";
 import { createDb } from "../db/index.js";
 import { startPostgres } from "../testing/postgres.js";
 import { createAttempts } from "./attempts.js";
@@ -250,6 +250,60 @@ describe("front-door transactions against Postgres", () => {
     expect(
       (await pool.query("SELECT stage FROM auth_attempts")).rows,
     ).toStrictEqual([{ stage: "link_ready" }]);
+  });
+  it("claim and same-session replacement wait without a lock-order cycle", async () => {
+    const b = await link();
+    let release!: () => void;
+    const pause = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reached!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const claimPool = new pg.Pool({
+      connectionString: container.getConnectionUri(),
+      application_name: "claim-order-test",
+    });
+    claimPool.on("connect", (client) => {
+      const originalQuery = client.query.bind(client);
+      client.query = (async (sql: string, values?: unknown[]) => {
+        const result = await originalQuery(sql, values);
+        if (sql.includes("FROM auth_attempts") && sql.endsWith("FOR UPDATE")) {
+          reached();
+          await pause;
+        }
+        return result;
+      }) as typeof client.query;
+    });
+    const claim = createAttempts(claimPool).claim(b.attempt);
+    await ready;
+    const replacement = store.begin({
+      surface: "native",
+      purpose: "link",
+      targetProvider: "apple",
+      originalSessionId: b.attempt.originalSessionId!,
+    });
+    const settled = Promise.allSettled([claim, replacement]);
+    let waiting = false;
+    for (let i = 0; i < 100; i++) {
+      const result = await pool.query<{ waiting: boolean }>(
+        "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock') AS waiting",
+      );
+      if (result.rows[0].waiting) {
+        waiting = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    release();
+    const results = await settled;
+    await claimPool.end();
+    expect(waiting).toBe(true);
+    expect(results.map((result) => result.status)).toStrictEqual([
+      "fulfilled",
+      "fulfilled",
+    ]);
   });
   it("caps anonymous residents at 512 without consuming existing work", async () => {
     await pool.query(

@@ -141,6 +141,10 @@ export function createAttempts(pool: pg.Pool) {
     return session;
   }
   async function bound(tx: pg.PoolClient, expected: Attempt) {
+    // Link mint and session deletion lock the session before its attempts.
+    // Keep that order for every transition so concurrent replacement cannot cycle.
+    if (expected.originalSessionId)
+      await original(tx, expected.originalSessionId, true);
     const a = await load(tx, expected.id, true);
     if (!same(a, expected)) throw new AuthFailure("attempt_expired");
     return a;
