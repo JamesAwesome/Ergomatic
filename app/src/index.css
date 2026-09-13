@@ -443,6 +443,10 @@ button:disabled {
   color: var(--ink-5);
 }
 
+button.auth-method-row:disabled .auth-method-action {
+  color: inherit;
+}
+
 .button-primary:disabled,
 .button-primary:disabled:hover {
   background: var(--rule);

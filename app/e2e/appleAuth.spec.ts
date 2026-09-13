@@ -58,7 +58,21 @@ test("signed-in methods disable Add when either proof is unavailable and idle de
 
   await page.goto("/you");
   await expect(page.getByText("CONNECTED")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add Apple" })).toBeDisabled();
+  const addApple = page.getByRole("button", { name: "Add Apple" });
+  await expect(addApple).toBeDisabled();
+  const disabledStyles = await addApple.evaluate((row) => {
+    const action = row.querySelector<HTMLElement>(".auth-method-action");
+    if (!action) throw new Error("Add action label missing");
+    return {
+      rowColor: getComputedStyle(row).color,
+      rowCursor: getComputedStyle(row).cursor,
+      actionColor: getComputedStyle(action).color,
+      actionCursor: getComputedStyle(action).cursor,
+    };
+  });
+  expect(disabledStyles.actionColor).toBe(disabledStyles.rowColor);
+  expect(disabledStyles.rowCursor).toBe("not-allowed");
+  expect(disabledStyles.actionCursor).toBe("not-allowed");
 
   await page.goto("/you/sign-in-methods");
   await expect(page).toHaveURL(/\/you$/);
