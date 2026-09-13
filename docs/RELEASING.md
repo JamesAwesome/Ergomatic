@@ -213,6 +213,8 @@ not a redeploy.
 | the tag carrying migration 0024 — **v0.39.0** (`workouts.pain` → `effort`, `session_logs.pain` → `effort`, both CHECKs renamed, `article_reads` `pain-scale` → `effort-scale`; Phase DE PR 2) | One-way RENAMEs. A pre-0024 image selects a column named `pain` that no longer exists and 500s every workout and log read; `deploy.sh`'s health-gated auto-rollback would restore exactly that image AFTER the migration has run, while the deploy log reports the rollback succeeded. FORWARD-FIX ONLY: fix and redeploy, or reverse the four RENAMEs and the `article_reads` slug UPDATE by hand in psql before rolling back. |
 | the tag carrying migration 0029 — **untagged as of 2026-09-12** (`workouts.difficulty` and its enum type DROPPED, `preferences.difficulties` DROPPED; Phase DE PR 3) | One-way DROPs, same class as the 0023 row above. A pre-0029 image's INSERT/UPDATE paths on `workouts` still name `difficulty` (the PR 1 derived-write compat every build up to and including v0.39.0 carries) and its `preferences` reads still declare `difficulties`, so any such image errors on every workout write and every `/api/prefs` read the moment it meets a post-0029 database — `column "difficulty" does not exist` / `column "difficulties" does not exist`. `deploy.sh`'s health-gated auto-rollback fires from its `ERR` trap AFTER the new container has already migrated, so it would restore exactly the broken pre-0029 image while the deploy log reports the rollback succeeded. FORWARD-FIX ONLY: fix and redeploy the newer SHA. |
 
+| The release carrying Apple sign-in and migration 0031 — untagged; activation-dependent authentication floor | The additive schema is compatible with the preceding image while unused. Once an Apple-only account exists, an image without Apple login cannot authenticate that rower, even though health and migrations pass. Keep all later deployment and rollback targets at or above this release after activation. Turning `FRONT_DOOR_ENABLED` off also removes Apple login, so it is not an account-preserving rollback for Apple-only rowers. Preserve the Apple-capable path and fix forward; do not delete or merge accounts to make an older image work. |
+
 **Not a floor — migration 0025 (`concept2_links.auto_send` / `send_failed_*`,
 Wave E auto-send).** All three columns are defaulted or nullable, so a server
 older than it inserts and reads the link row unchanged; the one new write,
@@ -228,6 +230,8 @@ nullable column accepts the value), selects by sub unchanged, and never reads
 the column off a row — so `deploy.sh`'s post-migration auto-rollback restores
 a working image, and drizzle's migrator boots the old binary against the
 ahead database without error (it compares only the newest applied
-timestamp; proven against Postgres 18.4 at the spec's antagonist pass). It
-becomes a floor only when a sub-less row exists, which no code can yet
-create; the PR that creates one adds the floor row here.
+timestamp; proven against Postgres 18.4 at the spec's antagonist pass).
+
+Migration 0030 alone did not add a producer of Apple-only accounts. The Apple
+front door now does; the activation-dependent authentication floor is recorded
+in the table above. Schema compatibility does not prove sign-in availability.

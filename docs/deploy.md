@@ -97,8 +97,10 @@ Two things that bite here:
 
 1. Google Cloud Console → APIs & Services → Credentials → Create credentials
    → OAuth client ID → type **Web application**, name `ergomatic`.
-2. Authorized redirect URIs — add BOTH:
+2. Authorized redirect URIs — preserve the existing callbacks and add the
+   confirmed-signup callback:
    - `https://ergomatic.waffle.haus/api/auth/callback`
+   - `https://ergomatic.waffle.haus/api/auth/google/callback` (open front door)
    - `http://localhost:5173/api/auth/callback` (local dev)
 3. Configure the consent screen if prompted (External, app name Ergomatic;
    publish it or add your rowers as test users).
@@ -111,7 +113,9 @@ Two things that bite here:
 6. `docker compose up -d` to recreate the app with the new env.
 
 Notes:
-- The allowlist is an **admission gate, not revocation**: removing an email
+- While `FRONT_DOOR_ENABLED` is not `1`, the allowlist gates account
+  creation. With the front door enabled, both providers admit new rowers.
+  The allowlist is an **admission gate, not revocation**: removing an email
   does not sign out an existing account. To off-board someone, delete their
   row in `users` (sessions cascade):
   `docker exec -it ergomatic-postgres psql -U ergomatic -c "delete from users where email='x@y.com'"`.
@@ -123,6 +127,50 @@ Notes:
 - `ALLOWED_EMAILS` changes take effect on container recreate, not live.
 - If sign-in breaks after a deploy, check the app logs for the boot warning
   about missing Google env before debugging anything else.
+
+## Apple and the open front door
+
+`FRONT_DOOR_ENABLED` enables only for the literal `1`. Leave it empty for this
+slice: Apple and new open-account admission are exposed together only after
+in-app deletion and the Wave A release gates pass. The disabled server keeps
+Google's existing admission allowlist. When enabled, Apple and Google allow
+new rowers; `C2_ALLOWED_EMAILS` still independently controls Concept2 access.
+
+Before enabling on an HTTPS deployment:
+
+1. Enable Sign in with Apple for the primary App ID `haus.waffle.ergomatic`.
+   Refresh provisioning for the native entitlement; an unsigned simulator
+   build does not verify provisioning or an actual Apple authorization.
+2. Register a distinct Services ID and associate it with that primary App ID.
+   Register the deployment domain and exact return URL
+   `https://ergomatic.waffle.haus/api/auth/apple/callback` (substitute the
+   configured `SITE_URL` origin for another deployment). Grouping and shared
+   subject identity still require the real native/web continuity check.
+3. Create a Sign in with Apple private key associated with the primary App ID.
+   Put its Team ID, Key ID and downloaded PKCS8 `.p8` key in the server-only
+   `APPLE_TEAM_ID`, `APPLE_KEY_ID` and `APPLE_PRIVATE_KEY` values. This is a
+   Sign in with Apple service key, separate from an App Store upload key.
+4. Set `APPLE_NATIVE_CLIENT_ID=haus.waffle.ergomatic` and
+   `APPLE_WEB_CLIENT_ID` to the registered Services ID. Neither is a secret;
+   the private key must never be a `VITE_` value or enter the app bundle.
+5. Add `https://ergomatic.waffle.haus/api/auth/google/callback` to the Google
+   web client's redirect URLs, preserving `/api/auth/callback` for installed
+   clients. For a different deployment use that HTTPS `SITE_URL` origin.
+
+The enabled server rejects missing or invalid Apple configuration at boot,
+including a non-HTTPS site or identical native/web audiences. Changes require
+container recreation. Compose's double-quoted `.env` values decode `\n` to
+actual line breaks, so the PEM can occupy one quoted assignment. Do not print
+a resolved compose configuration containing real credentials.
+
+Hide My Email works through the Apple subject; its relay email is stored as
+an opaque contact address. Sending mail to relay addresses is a separate
+configuration: register outgoing email sources with Apple's relay service
+before adding an email-sending feature. This login slice adds no email sender.
+
+PRIMARY setup references: [web association](https://developer.apple.com/help/account/capabilities/configure-sign-in-with-apple-for-the-web),
+[service key](https://developer.apple.com/help/account/capabilities/create-a-sign-in-with-apple-private-key),
+and [relay mail sources](https://developer.apple.com/help/account/capabilities/configure-private-email-relay-service).
 
 ## Concept2 logbook (optional, currently dark)
 
@@ -144,10 +192,10 @@ a fifth picks which Concept2 it talks to:
   does; nothing else has to change.
 
 Notes:
-- The two lists are independent, and both must admit a rower: `ALLOWED_EMAILS`
-  decides who gets an Ergomatic account at all, `C2_ALLOWED_EMAILS` who sees
-  the Concept2 card once they have one. Being on the second alone gets you
-  nowhere.
+- The two lists are independent. While the front door is disabled,
+  `ALLOWED_EMAILS` gates account creation; when enabled, both providers admit
+  new rowers. `C2_ALLOWED_EMAILS` controls the Concept2 card in either mode
+  and does not create an Ergomatic account.
 - A rower off the C2 list reads exactly what a flag-off server sends
   (`{available:false}`), so the card is simply absent — there is no error to
   explain.
