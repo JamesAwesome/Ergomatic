@@ -207,10 +207,25 @@ Asked for each row, because designing a state the real system lacks is how
 this repo shipped a PAUSED state the PM5 cannot have.
 
 - **TD-1.** Does Postgres let one UPDATE fail while a later UPDATE on a
-  different row in the same request succeeds? Yes — a row-scoped `CHECK` or a
-  `BEFORE UPDATE ... WHEN (OLD.id = ...)` trigger is exactly that, and raw
-  DDL in an integration test is already precedent here
-  (`schema.integration.test.ts:201`). (PRIMARY.)
+  different row in the same request succeeds? Yes — a
+  `BEFORE UPDATE ... WHEN (OLD.id = ...)` trigger is exactly that, and
+  `markC2Verified` is a single pooled `UPDATE ... RETURNING id`
+  (`stores/logs.ts:1174-1198`), so the trigger fires on precisely that
+  statement. (PRIMARY.)
+  **But the precedent this spec claimed does not exist.** An earlier revision
+  said "raw DDL in an integration test is already precedent here
+  (`schema.integration.test.ts:201`)". That line is
+  `db.execute(sql.raw(migrationSql))` over `drizzle/0008_strip_wu_steps.sql`,
+  whose only statement is an **`UPDATE`** — precedent for running arbitrary
+  SQL TEXT against the Testcontainer, which is what the mechanism needs, but
+  not for DDL. **No `CREATE TRIGGER` or `ALTER TABLE` exists in any server
+  test in this repo** (four `sql.raw` hits total:
+  `schema.integration.test.ts:201, :241, :302`,
+  `source.integration.test.ts:508`). TD-1's trigger would be the first, and
+  the implementer must know that rather than discover it. The nearest real
+  precedent for raw SQL EXPECTED TO FAIL is
+  `source.integration.test.ts:464-483`, using `pool.query` directly and
+  asserting on the Postgres error code.
 - **TD-4.** Does `useConcept2Link` have any shared cache that would make two
   callers one request? No — it is a per-call fetch with its own generation
   ref, which is why the second caller is a second request. (PRIMARY.)
@@ -258,7 +273,27 @@ under test". A trigger has no such trap. Secondary hazard, recorded because
 sets no `statement_timeout`, so a stray open transaction hangs the test to
 the 120 s cap instead of failing it.
 
-The second send's `recordC2Result` targets a different row and passes. `markC2Verified` runs on the pool, not inside
+The second send's `recordC2Result` targets a different row and passes.
+
+**Three things the implementer must not discover the hard way.** (1) The
+trigger needs a `CREATE FUNCTION` beside it, and both persist in the
+container every test in this file SHARES — so they are created and dropped
+inside a `try`/`finally`, and the `WHEN (OLD.id = ...)` is keyed to the id
+`postLog` just minted, which no sibling test can hold. (2) This file imports
+no `sql` from `drizzle-orm` and uses neither `db.execute` nor `pool.query`
+today; `pool` (`:183`) and `db` (`:184`) are both `describe`-scoped and
+either works. Use `pool.query`, as `source.integration.test.ts:466` does.
+(3) A new `it` needs a new email in `SEND_EMAILS` (`:121`) and its own
+`C2_USER_*` literal — `concept2_links.c2_user_id` is UNIQUE for the whole
+database and every test here shares one container, so a reused id reds a
+SIBLING test rather than this one.
+
+**Fallback, if the trigger proves unworkable:**
+`vi.spyOn(stores.logs, "markC2Verified").mockRejectedValueOnce(...)` — weaker,
+being a method replacement rather than a real store failure, but still the
+real app and the real route, so it does not carry the fixture hazard that
+killed the four earlier attempts. Recorded so the implementer has a stated
+second option rather than inventing one under pressure. `markC2Verified` runs on the pool, not inside
 `withLinkLock`'s transaction (`stores/concept2.ts:300-339`, entered only at
 `:1023`/`:1129`, both returned before `:1357`), so nothing downstream is
 poisoned.
@@ -336,7 +371,13 @@ renders on every ended state, held or not.
 **The capture must not navigate or unmount before delivering.** The window is
 2 s wide and waiting for `endSession()` to resolve already spends ~1.5 s of
 it at a real 2 Hz cadence. The positive check is the free-row analogue of
-`connected.spec.ts:916`: assert the URL is still the pre-navigation one.
+`connected.spec.ts:919`: assert the URL is still the pre-navigation one.
+(`:916` is the "Wrapping up" visibility assertion; `:919` is the URL one.)
+**Both are net additions** — the `justrow-log` capture has no
+`deliverSummary` anywhere on its path today, and its only URL assertion
+(`screenshots.spec.ts:6699`) fires AFTER the navigation. The nearest in-file
+style model is `screenshots.spec.ts:5818-5823`, where the PROGRAMMED capture
+already delivers a summary on its End flow.
 
 **Accepted and stated: THREE of the six tiles render dashes, and three carry
 figures.** An earlier revision of this section said four dashed including
@@ -376,7 +417,8 @@ does not produce, and `screenshots.spec.ts`'s header and the PR body both say
 so in one line rather than letting the frame imply otherwise.
 
 **Why the capture is still worth taking:** today `docs/screenshots/justrow-log.png`
-cannot show the tier block AT ALL — `JustRowLog.tsx:380-383` gates it on
+cannot show the tier block AT ALL — `app/src/justrow/JustRowLog.tsx:380-384`
+gates it on
 `summaryTotals !== undefined && workDistanceMeters > 0 && workElapsedSeconds > 0`.
 The deliverable is not the PNG; it is a capture STEP that currently produces
 a frame missing the thing it exists to show, which is worse than no step
@@ -482,10 +524,11 @@ regardless.
    §1.6 records that `loading`, `error` and `not-found` gain a read they did
    not have.
 
-`Concept2SendBlock.test.tsx` (29 `it`s, `renderBlock` at `:133`) moves to
-passing props; the five assertions keyed on the block's own fetch (`:142,
-:149, :160, :182`, mock arms at `:88, :117, :232`) move up to
-`FromTheLog.test.tsx` or are rewritten.
+`Concept2SendBlock.test.tsx` (29 `it`s, `renderBlock` declared at `:130`)
+moves to passing props; the **four** assertions keyed on the block's own
+fetch (`:142, :149, :160, :182` — an earlier revision called them five, and
+the list was right while the count was one high; mock arms at `:88, :117,
+:232`) move up to `FromTheLog.test.tsx` or are rewritten.
 
 ### 7.3 I4 — the capture
 
@@ -496,8 +539,11 @@ passing props; the five assertions keyed on the block's own fetch (`:142,
    revision named "the tiles present in the committed PNG" — **a PNG is not
    an assertion and nothing can go red on it.** The gate asserts
    `[data-testid="summary-machine-tier"]` (`PostWorkoutSummary.tsx:367`)
-   before the shot is taken, plus the URL check proving pre-navigation. The
-   committed image is the record; the locator is the gate.
+   before the shot is taken, plus the URL check proving pre-navigation.
+   Individual tiles are reachable by role+name — each is `role="group"` with
+   `aria-label={label}` (`PostWorkoutSummary.tsx:342-352`) — which is how
+   §4.3's table is checked tile by tile rather than by eye. The committed
+   image is the record; the locator is the gate.
 4. **Deciding-source mutation: delay the delivery past the 2000 ms linger,
    not "remove the tick".** An earlier revision said remove the tick, and
    that mutation is vacuous — the browser fake self-ticks every 100 ms on an
@@ -564,11 +610,20 @@ Gates that SKIP, with the reason said aloud:
 4. **The capture was opened and looked at** (RF7), and the tile states read
    off the image match §4.3's table. A predicted tile state is not a
    verified one.
-5. **The Icebox twin of TD-1 is REMOVED in the same PR.** `# Icebox` carries
-   "'A failing reconciliation does not fail the send' has no test — Phase AV,
+5. **The Icebox twin of TD-1 is PUT TO JAMES in the PR's hand-back list, and
+   removed only on his ruling.** `ROADMAP.md:3475-3483` carries "'A failing
+   reconciliation does not fail the send' has no test — Phase AV,
    2026-09-08" with its own trigger, and TD-1's row says "Keep them in step".
-   The file's contract is one home per body of work; a tripwire for a gate
-   that now exists is furniture.
+   The file's contract is one home per body of work, and a tripwire for a
+   gate that now exists is furniture — so the recommendation is REMOVE. But
+   removing a row is a STRIKE, and nothing is struck without James (RF30:
+   striking an item is a decision he does not get to make again). An earlier
+   revision of this criterion said the PR removes it; that was the spec
+   proposing to break the rule the spec is written under.
+   **One fact in that entry must survive wherever it lands**, because TD-1's
+   own row does not carry it: "a forced `throw` placed inside the route's own
+   try returns 200 and only the row assertion fails" — the invariant is known
+   to HOLD; what is missing is only the gate.
 6. **Phase TD's own disposition is recorded, per James's ruling 2026-09-12:**
    the section STAYS OPEN as the standing home for debt rows
    (`ROADMAP.md:43`) and `/close-phase` is explicitly NOT run on it. The
