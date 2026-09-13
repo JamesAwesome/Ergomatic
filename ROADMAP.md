@@ -2551,6 +2551,27 @@ in both orientations.**
       pass does not currently cover, and it landed 2026-09-12 (Phase PS PR 1
       and PR 2), two days AFTER this pass was dated. Whether it joins the
       pass or is fixed ahead of it is James's call at the Gate 0. **S**
+      **MEASURED ON PRODUCTION 2026-09-13, and it downgrades this row: the
+      gap there is EXACTLY ZERO.** James's data holds 26 `pm5` rows — 10
+      `steps`, 8 `machine`, 6 `work-pair` and **2 `stored`** — and both
+      stored rows carry a NULL distance and time, so they contribute nothing
+      to either population: 111,118 m and 29,747 s on both, **146 W on
+      both**. So no rower can see this today, and the 176-vs-174 above is an
+      E2E FIXTURE artefact, not a shipped defect.
+      **It is still latent and it will fire.** `stored` is not a legacy tier
+      — it is the fallback rung of a four-rung ladder
+      (`rowContribution.ts`), reached whenever work-only cannot be
+      established. The first such row that carries a DISTANCE — a link-lost
+      session that still recorded metres — makes the gap visible at once,
+      and nothing prevents one.
+      **The capture was NOT made to reconcile, deliberately.** The seed
+      builds its stored row "by having nothing else" with a distance, and it
+      is the only row covering that tier; tidying the frame would delete the
+      coverage and hide the behaviour. Instead `screenshots.spec.ts`'s
+      `you-stats` now PINS all three numbers with independent literals and a
+      comment naming the seam, so a reviewer recomputing from the frame is
+      told why rather than chasing a ghost — and so this assertion is what
+      goes red when the design pass rules.
 
 - **The chart's axes** — should `traceModel.ts`'s `t` and `d` become a true
   work-only clock? The PR-2 collision is discharged by labelling
