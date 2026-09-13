@@ -130,3 +130,45 @@ export function parseDate(value: string): CalendarDate | null {
   if (!m) return null;
   return { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) };
 }
+
+/** 0 = Sunday … 6 = Saturday. 1970-01-01 (day 0) was a Thursday (4). */
+export function dayOfWeek(date: CalendarDate): number {
+  return (((toDayNumber(date) + 4) % 7) + 7) % 7;
+}
+
+/** The Monday ≤ d — a week starts Monday (spec §3.3, invariant 6). Pinned:
+ *  `2026-09-13` (Sunday) → `2026-09-07`; `2026-09-14` → itself. */
+export function mondayOf(date: CalendarDate): CalendarDate {
+  return addDays(date, -((dayOfWeek(date) + 6) % 7));
+}
+
+export function firstOfMonth({ y, m }: CalendarDate): CalendarDate {
+  return { y, m, d: 1 };
+}
+
+/** The last day of d's month: the day before the next month's first. */
+export function lastOfMonth({ y, m }: CalendarDate): CalendarDate {
+  return addDays(
+    m === 12 ? { y: y + 1, m: 1, d: 1 } : { y, m: m + 1, d: 1 },
+    -1,
+  );
+}
+
+/** Every month's first day from `from`'s month through `to`'s month,
+ *  inclusive, ascending — the x-axis label candidates of a date chart. */
+export function monthStarts(
+  from: CalendarDate,
+  to: CalendarDate,
+): CalendarDate[] {
+  const out: CalendarDate[] = [];
+  let cur = firstOfMonth(from);
+  const last = firstOfMonth(to);
+  while (compareDates(cur, last) <= 0) {
+    out.push(cur);
+    cur =
+      cur.m === 12
+        ? { y: cur.y + 1, m: 1, d: 1 }
+        : { y: cur.y, m: cur.m + 1, d: 1 };
+  }
+  return out;
+}

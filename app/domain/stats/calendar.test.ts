@@ -5,7 +5,12 @@ import {
   parseDate,
   compareDates,
   customRange,
+  dayOfWeek,
+  firstOfMonth,
   fromDayNumber,
+  lastOfMonth,
+  mondayOf,
+  monthStarts,
   inRange,
   presetRange,
   seasonOf,
@@ -102,5 +107,60 @@ describe("parseDate / fmtDate — the one YYYY-MM-DD pair (spec §3: the domain 
     expect(parseDate("")).toBeNull(); // a cleared <input type="date">
     expect(parseDate("2026-9-1")).toBeNull(); // not the input's own format
     expect(parseDate("2026-09-01T00:00:00Z")).toBeNull();
+  });
+});
+
+describe("weeks and months (spec §3.3: a week starts Monday)", () => {
+  it("mondayOf: Sunday 2026-09-13 → 09-07; Monday 2026-09-14 → itself; Friday 2026-08-14 → 08-10", () => {
+    expect(mondayOf({ y: 2026, m: 9, d: 13 })).toStrictEqual({
+      y: 2026,
+      m: 9,
+      d: 7,
+    });
+    expect(mondayOf({ y: 2026, m: 9, d: 14 })).toStrictEqual({
+      y: 2026,
+      m: 9,
+      d: 14,
+    });
+    expect(mondayOf({ y: 2026, m: 8, d: 14 })).toStrictEqual({
+      y: 2026,
+      m: 8,
+      d: 10,
+    });
+    expect(dayOfWeek({ y: 1970, m: 1, d: 1 })).toBe(4); // a Thursday
+    expect(dayOfWeek({ y: 1969, m: 12, d: 28 })).toBe(0); // a Sunday, before day 0
+  });
+
+  it("lastOfMonth handles February, a leap year and December; monthStarts spans inclusive months", () => {
+    expect(lastOfMonth({ y: 2026, m: 2, d: 3 })).toStrictEqual({
+      y: 2026,
+      m: 2,
+      d: 28,
+    });
+    expect(lastOfMonth({ y: 2028, m: 2, d: 3 })).toStrictEqual({
+      y: 2028,
+      m: 2,
+      d: 29,
+    });
+    expect(lastOfMonth({ y: 2026, m: 12, d: 3 })).toStrictEqual({
+      y: 2026,
+      m: 12,
+      d: 31,
+    });
+    expect(
+      monthStarts({ y: 2025, m: 11, d: 22 }, { y: 2026, m: 1, d: 17 }),
+    ).toStrictEqual([
+      { y: 2025, m: 11, d: 1 },
+      { y: 2025, m: 12, d: 1 },
+      { y: 2026, m: 1, d: 1 },
+    ]);
+    expect(
+      monthStarts({ y: 2026, m: 9, d: 2 }, { y: 2026, m: 9, d: 11 }),
+    ).toStrictEqual([{ y: 2026, m: 9, d: 1 }]);
+    expect(firstOfMonth({ y: 2026, m: 9, d: 11 })).toStrictEqual({
+      y: 2026,
+      m: 9,
+      d: 1,
+    });
   });
 });
