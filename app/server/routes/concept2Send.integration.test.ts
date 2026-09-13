@@ -127,6 +127,7 @@ const SEND_EMAILS = new Set([
   "send-noweight@c2send.test",
   "send-dup@c2send.test",
   "send-relink@c2send.test",
+  "send-reconcile-throws@c2send.test",
   "send-lp-intervals@c2send.test",
 ]);
 
@@ -166,6 +167,8 @@ const C2_USER_SENT = 700339;
 // two users linking the same account is a 409 by design, and reusing
 // C2_USER_SENT here reddened the sibling test rather than this one.
 const C2_USER_RECONCILE = 700399;
+// TD-1: its own account, for the same UNIQUE reason as the ids above.
+const C2_USER_RECONCILE_THROWS = 700400;
 const C2_USER_DUP = 700340;
 const C2_USER_FIRST = 700341;
 const C2_USER_SECOND = 700342;
@@ -527,6 +530,112 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
     // THE OLDER ROW PICKED IT UP, from Concept2's own word, through every
     // real layer.
     expect((await readRow(bearer, olderId)).verified).toBe(true);
+  });
+
+  it("a reconciliation whose store write THROWS still answers 200, and still records the send", async () => {
+    // THE OTHER HALF of the catch at `routes/concept2.ts:1239-1266`. Its
+    // sibling above gates that a WORKING reconciliation reaches the DB;
+    // this gates that a FAILING one cannot fail the send. Four earlier
+    // attempts (2026-09-08) were abandoned because every shape produced a
+    // 500 from the FIXTURE rather than from the code under test.
+    //
+    // THE FAILURE IS ROW-SCOPED, and that is the whole trick. Dropping,
+    // renaming or revoking `session_logs.verified` cannot work:
+    // `recordC2Result` writes the same column on the same table
+    // (`stores/logs.ts`) and `logs.get` selects it on this handler's first
+    // statement, so the REQUEST breaks rather than the reconciliation —
+    // which is almost certainly what the four attempts were hitting. A
+    // trigger keyed to ONE row id fails `markC2Verified`'s UPDATE and
+    // nothing else. A lock is no good either: `db/pool.ts` sets no
+    // `statement_timeout`, so the send would hang to the 120s cap instead
+    // of erroring.
+    //
+    // FIRST DDL IN ANY SERVER TEST HERE. The four existing `sql.raw` uses
+    // run DML, not DDL, so there is no house pattern to copy and the
+    // create/drop pair is written out in full.
+    const { bearer, userId } = await signIn("send-reconcile-throws");
+    await linkAccount({
+      userId,
+      c2UserId: C2_USER_RECONCILE_THROWS,
+      username: "jamesawesome",
+    });
+
+    const olderId = await postLog(bearer);
+    fetchMock.mockImplementation(async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.includes("/api/users/me/results?")) {
+        return jsonResponse(200, declarationListBody("H"));
+      }
+      return jsonResponse(201, created201(9201, C2_USER_RECONCILE_THROWS));
+    });
+    await request(app)
+      .post(`/api/concept2/results/${olderId}`)
+      .set("Authorization", bearer)
+      .send({ tz: "Europe/London" });
+    // Asserted, not assumed: if it started verified this test could not
+    // tell a blocked upgrade from a no-op.
+    expect((await readRow(bearer, olderId)).verified).not.toBe(true);
+
+    // Interpolated rather than parameterised: CREATE TRIGGER takes no bind
+    // parameters. `olderId` is a UUID this test just minted through the
+    // real route, so no sibling test in this shared container can hold it.
+    await pool.query(`
+      create or replace function td1_block_verify() returns trigger
+      language plpgsql as $$
+      begin raise exception 'TD-1: forced markC2Verified failure'; end $$;
+    `);
+    await pool.query(`
+      create trigger td1_block_verify_trg before update on session_logs
+      for each row when (old.id = '${olderId}'::uuid)
+      execute function td1_block_verify();
+    `);
+
+    try {
+      const freshId = await postLog(bearer);
+      fetchMock.mockImplementation(
+        async (input: Parameters<typeof fetch>[0]) => {
+          const url = String(input);
+          if (url.includes("/api/users/me/results?")) {
+            const body = declarationListBody("H");
+            return jsonResponse(200, {
+              data: [
+                {
+                  id: 9201,
+                  type: "rower",
+                  weight_class: "H",
+                  date_utc: "2026-08-22 10:00:30",
+                  date: "2026-08-22 06:00:30",
+                  verified: true,
+                },
+                ...body.data,
+              ],
+            });
+          }
+          return jsonResponse(201, created201(9202, C2_USER_RECONCILE_THROWS));
+        },
+      );
+
+      const second = await request(app)
+        .post(`/api/concept2/results/${freshId}`)
+        .set("Authorization", bearer)
+        .send({ tz: "Europe/London" });
+
+      // THE INVARIANT.
+      expect(second.status).toBe(200);
+      // And the send actually LANDED — a 200 that wrote nothing would
+      // satisfy the status assertion while losing the row, which is the
+      // failure this gate would otherwise be blind to.
+      expect((await readRow(bearer, freshId)).c2ResultId).toBe(9202);
+      // The older row did NOT upgrade. This is what proves the
+      // reconciliation genuinely threw rather than being skipped — without
+      // it, a route that stopped reconciling entirely would pass.
+      expect((await readRow(bearer, olderId)).verified).not.toBe(true);
+    } finally {
+      await pool.query(
+        "drop trigger if exists td1_block_verify_trg on session_logs",
+      );
+      await pool.query("drop function if exists td1_block_verify()");
+    }
   });
 
   it("a row sent through the real route reads back as SENT to the client's own predicate", async () => {
