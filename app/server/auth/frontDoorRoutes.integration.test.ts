@@ -433,4 +433,65 @@ describe("supported auth producers through Express and signed tokens", () => {
       .send({});
     expect(complete.body).toStrictEqual({ outcome: "linked" });
   });
+  it.each([
+    { state: "" },
+    { idToken: "" },
+    { authorizationCode: "" },
+    { authorizationCode: undefined },
+    { name: "x".repeat(201) },
+  ])(
+    "native malformed proof changes no account or attempt %#",
+    async (override) => {
+      const b = (
+        await request(app)
+          .post("/api/auth/native/attempts")
+          .send({ purpose: "signin", provider: "apple" })
+      ).body;
+      const res = await request(app)
+        .post(`/api/auth/native/attempts/${b.attemptId}/proof`)
+        .send({
+          bindingSecret: b.bindingSecret,
+          state: b.state,
+          idToken: "token",
+          authorizationCode: "code",
+          ...override,
+        });
+      expect(res.status).toBe(400);
+      expect(
+        (await pool.query("SELECT stage FROM auth_attempts")).rows,
+      ).toStrictEqual([{ stage: "authorize" }]);
+      expect((await pool.query("SELECT id FROM users")).rowCount).toBe(0);
+    },
+  );
+  it("wrong callback provider cannot consume valid operation; old callback cannot cancel confirmation", async () => {
+    const begin = await request(app)
+      .post("/api/auth/web/attempts")
+      .send({ purpose: "signin", provider: "apple" });
+    const b = begin.body;
+    const cookie = begin.headers["set-cookie"][0].split(";")[0];
+    const wrong = await request(app)
+      .get("/api/auth/google/callback")
+      .set("Cookie", cookie)
+      .query({ state: b.state, error: "access_denied" });
+    expect(wrong.headers.location).toContain("authError=invalid_proof");
+    expect(
+      (await pool.query("SELECT stage FROM auth_attempts")).rows,
+    ).toStrictEqual([{ stage: "authorize" }]);
+    const token = await jwt(b.nonce, "web.app");
+    codes.set("confirm", token);
+    await request(app)
+      .post("/api/auth/apple/callback")
+      .set("Cookie", cookie)
+      .type("form")
+      .send({ state: b.state, code: "confirm", id_token: token });
+    const stale = await request(app)
+      .post("/api/auth/apple/callback")
+      .set("Cookie", cookie)
+      .type("form")
+      .send({ state: b.state, error: "user_cancelled_authorize" });
+    expect(stale.headers.location).toContain("authError=attempt_expired");
+    expect(
+      (await pool.query("SELECT stage FROM auth_attempts")).rows,
+    ).toStrictEqual([{ stage: "confirm" }]);
+  });
 });

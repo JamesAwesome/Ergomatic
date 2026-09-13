@@ -373,4 +373,28 @@ describe("front-door transactions against Postgres", () => {
     expect((await running).signedIn?.user.id).toBe(owner.rows[0].id);
     expect((await pool.query("SELECT id FROM users")).rowCount).toBe(1);
   });
+  it("rejects stale existing-provider proof even if target attempt has a later expiry", async () => {
+    const b = await link();
+    const target = (
+      await store.accept(await store.claim(b.attempt), {
+        sub: "google",
+        email: "",
+        emailVerified: false,
+        name: "Rower",
+      })
+    ).attempt!;
+    const ready = (await store.accept(await store.claim(target), apple))
+      .attempt!;
+    await pool.query(
+      "UPDATE auth_attempts SET reauthenticated_at=now()-interval '5 minutes',expires_at=now()+interval '5 minutes' WHERE id=$1",
+      [ready.id],
+    );
+    const expired = await store.read(b.attempt.id, b.bindingSecret, "native");
+    await expect(
+      store.finalize(expired, b.attempt.originalSessionId!),
+    ).rejects.toThrow("attempt_expired");
+    expect(
+      (await pool.query("SELECT apple_sub FROM users")).rows,
+    ).toStrictEqual([{ apple_sub: null }]);
+  });
 });
