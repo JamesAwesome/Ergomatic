@@ -159,3 +159,5 @@ screenshot-wait tail. No full test rerun was needed for that non-runtime tail.
 The separate security review remains INCOMPLETE after a platform
 cybersecurity-risk block. This evidence package does not investigate, resume,
 or represent that review as passed.
+
+Raw `.log` references in this evidence collection are preserved at their original paths inside the [raw-log archive](../../apple-raw-logs.md). Its member hashes were verified before bundling; the archive keeps the PR within GitHub’s file-count limit.

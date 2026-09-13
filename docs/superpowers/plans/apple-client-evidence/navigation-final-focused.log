@@ -1,9 +1,0 @@
-
- RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/apple-client-plan-scratch/app
-
-
- Test Files  7 passed (7)
-      Tests  74 passed (74)
-   Start at  02:10:58
-   Duration  2.89s (transform 736ms, setup 508ms, import 1.03s, tests 2.81s, environment 2.46s)
-

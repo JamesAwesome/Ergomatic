@@ -1,7 +1,0 @@
-checkout_head=c8ba5f12b381d55ab8cc2ec504cbfdc56319b2ab
-portrait_alert_top_border=srgb(181,52,31)
-landscape_alert_top_border=srgb(181,52,31)
-confirm_action_first_accent_pixel=182,0: (181,52,31)  #B5341F  srgb(181,52,31)
-confirm_action_last_accent_pixel=661,0: (181,52,31)  #B5341F  srgb(181,52,31)
-approved_action={"text":"Confirm with Google","width":480,"height":52}
-readiness_visual=methods,portrait uncertainty,and landscape uncertainty all show LIFETIME/SEASON; no LOADING copy

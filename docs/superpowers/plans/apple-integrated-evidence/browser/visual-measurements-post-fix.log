@@ -1,7 +1,0 @@
-checkout_head=d5421946ad5ab825dadefb390a7da2e07350e7f1
-portrait_alert_top_border=srgb(181,52,31)
-landscape_alert_top_border=srgb(181,52,31)
-confirm_action_first_accent_pixel=182,0: (181,52,31)  #B5341F  srgb(181,52,31)
-confirm_action_last_accent_pixel=661,0: (181,52,31)  #B5341F  srgb(181,52,31)
-approved_action={"text":"Confirm with Google","width":480,"height":52}
-loading_copy_count_landscape=visually observed: 1

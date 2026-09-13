@@ -1,2 +1,0 @@
-{"afterWinner":{"location":"/?authAttempt=ebf4cd3d-d44f-4afb-8735-45dc9972f054","rows":[{"stage":"confirm","version":3,"grant":true}]}}
-{"afterLoser":{"location":"/?authError=attempt_expired&authPurpose=signin&authProvider=apple","rows":[]}}

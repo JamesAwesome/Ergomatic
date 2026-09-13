@@ -1,4 +1,0 @@
-Listing tests:
-  [chromium] › design.spec.ts:634:3 › Apple front door and sign-in methods › welcome and confirmation keep approved provider order, geometry, palette and accessible names
-  [chromium] › design.spec.ts:706:3 › Apple front door and sign-in methods › You methods and the two-proof screen keep 44px controls and hide the tab bar during linking
-Total: 2 tests in 1 file

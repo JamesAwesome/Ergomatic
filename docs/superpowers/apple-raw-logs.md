@@ -1,0 +1,214 @@
+# Apple implementation raw logs
+
+The 187 original `.log` files are preserved byte-for-byte in
+[apple-raw-logs.tar.gz](apple-raw-logs.tar.gz), with their original repository
+paths. Bundling them keeps the PR below GitHub’s 300-file diff limit; product
+source, plans, reports, designs, captures and structured evidence remain plain
+files. No log was normalized or edited.
+
+Reports and existing SHA manifests still name the original paths. To inspect
+those files or replay a manifest check, unpack into a temporary directory and
+use the same relative paths there:
+
+```bash
+mkdir -p /tmp/ergomatic-apple-logs
+# From the repository root:
+tar -xzf docs/superpowers/apple-raw-logs.tar.gz -C /tmp/ergomatic-apple-logs
+```
+
+Archive SHA-256: `58ff564d122cbc8dbd814c750ab7dc949678df9cad4bb82b82e48f2c43b29fc6`.
+
+Each member was read back from the archive and compared with its original
+SHA-256 before the loose copy was removed from this branch. The member manifest
+below records every original path and hash. The separate native/full-coverage
+archives retain their own contents and checksums unchanged.
+
+```text
+1d66faad74f5e8709353f7288592866bd3a9095da1174a916e7aa632949971e2  docs/superpowers/plans/apple-callback-evidence/empty-state-format-check.log
+067fc30845e83dcbd306bd52529023bb4e8218ec4e9f8fde1c4ec11d0bc9ab47  docs/superpowers/plans/apple-callback-evidence/empty-state-green.log
+8050392360406c51f11e7d5350c0b4a0a2b23ed687d8355ffb6d4f66112395c3  docs/superpowers/plans/apple-callback-evidence/empty-state-lint.log
+9b220923461c76d72a873b892ddb4b0afbc66898ffc16948e0e2b485886cc414  docs/superpowers/plans/apple-callback-evidence/empty-state-mutant.log
+4d12812bec47195f11aacfe24962a6968c19d9631ca0a54c2c0834c354a5b3d2  docs/superpowers/plans/apple-callback-evidence/empty-state-restored.log
+73beb054e81371c3d1c9306c3a98e46f5c26b2ea118e938795e9be49facafe6d  docs/superpowers/plans/apple-callback-evidence/empty-state-typecheck.log
+4a6df8f767aac75f1a50904af407215d968ddc34fdc6fe5e4a3b11b945f8ec69  docs/superpowers/plans/apple-client-evidence/harden-f4-browser-green.log
+95611b9165d5899f4184143883f100c0055bd7930ca5488363198731ca42c6b8  docs/superpowers/plans/apple-client-evidence/harden-final-green.log
+254b25b6005ccf55b340fa3dd740933a0d1d61bb83b19e2ed87b964057f7aae3  docs/superpowers/plans/apple-client-evidence/harden-mutations/f2-init-ownership.log
+42a77fb3ecf6f3d62658f9d8379cb07ac83cc09a3980b2a6bd093e39a49e91ef  docs/superpowers/plans/apple-client-evidence/harden-mutations/f2-rendered-busy.log
+bba432e4503b6e506e4212b760a86e81a80bb4ff050964bedb34ef61d96c815b  docs/superpowers/plans/apple-client-evidence/harden-mutations/f2-singleflight.log
+558f303b07ac9e104ba8968aca3a1396227ee1f9dc9935cd15962cf04c8fcfde  docs/superpowers/plans/apple-client-evidence/harden-mutations/f2-stale-cancel.log
+0b43e07c1ece1269c83107ad75bca06381513c630db61122c4307c5640dacf49  docs/superpowers/plans/apple-client-evidence/harden-mutations/f4-authoritative-methods.log
+96a0f39251086e87a8aea15469d88501b34cd066a3c481e59a1e41d476a3bca5  docs/superpowers/plans/apple-client-evidence/harden-mutations/f4-expiry-copy.log
+b507ee7a32e2a8b1100cb45e0f377dcbbd7fa6859f929c490c72f06a910848df  docs/superpowers/plans/apple-client-evidence/harden-mutations/f4-false-certainty-browser.log
+8aa5192d626ef4ae33a4cb4263fa93b509e0fed0ab63769c1d60eef5a3bb82d0  docs/superpowers/plans/apple-client-evidence/navigation-final-focused.log
+aa7f72a6c58b0cd495b3498f684651d3b25f61bb006c0b8c2be2e2e63daf3da0  docs/superpowers/plans/apple-client-evidence/navigation-fixed-build.log
+518456b52648a62ea1141a0edb903cffaf74d0c36357c00650a5d7b0c556194d  docs/superpowers/plans/apple-client-evidence/navigation-green-browser.log
+47b7e6dd3bd36d2cd14e8681a58e53100929c9b3ff1aec655cd4382e4d4cda38  docs/superpowers/plans/apple-client-evidence/navigation-mutations/consume-destination.log
+489d0ad911412581d7641e49faa0e1d9bcad0313e3933300d21332d405194e26  docs/superpowers/plans/apple-client-evidence/navigation-mutations/signout-abandon.log
+8c8f1a6458c4ce049359d04d9c50781b49ef96cd5e7b1ffcc1e0ec896d13546b  docs/superpowers/plans/apple-client-evidence/navigation-red-browser.log
+796a073ba3e297ad4ee97c98bc45dc5eaf9c94a24faea36d17669adbbba55e48  docs/superpowers/plans/apple-client-evidence/navigation-restored-browser.log
+3f097a09c846fc7795f001a454f0d93e7bd35e535a3f7e72070bc76261d1d4dc  docs/superpowers/plans/apple-integrated-evidence/browser/apple-auth-list.log
+b38abe4c5b8523ce07a56f27415ae7e161b1ec7be6a4303379bfa1c0ded94e7c  docs/superpowers/plans/apple-integrated-evidence/browser/apple-design-list.log
+1cb797d8a8a5a60ae2b858642aba40aaa95a06ffbb4b60d28af5ed7f7993a669  docs/superpowers/plans/apple-integrated-evidence/browser/apple-png-hash-diff.log
+649670e41aed3ddf9d4531e5747bf7ae56a0128e0a339865f6d6d3a025ad7d38  docs/superpowers/plans/apple-integrated-evidence/browser/apple-screenshots-list.log
+42fc8a811f4219fa001e614e1fb7c73c41b1249a787ea7c61fc8f204df23146d  docs/superpowers/plans/apple-integrated-evidence/browser/computed-notice-borders-post-fix.log
+89ff5e431df3ec89508c018d9f8809c3a056a9bbd13c27c77f8cee6dfd86f68a  docs/superpowers/plans/apple-integrated-evidence/browser/final-verification.log
+0244b4cccd1436b785a6449124d9bd7b4daa41c850cdc941c00653439fb7ba27  docs/superpowers/plans/apple-integrated-evidence/browser/functional-design.log
+cd267b95e5f8181f3d60ca779ca6d70220a0f60792667254567f7f2a0805df60  docs/superpowers/plans/apple-integrated-evidence/browser/image-inventory.log
+260bf35c0ad19f2dede378764e45945ebb7bdd1a89cf2df76735193fc34b9faa  docs/superpowers/plans/apple-integrated-evidence/browser/local-e2e-build.log
+5c643b86bc3336ab6e78af2ce13dc5d1f948720f740e63790cd8ee35c3c9b3a4  docs/superpowers/plans/apple-integrated-evidence/browser/screenshots-final.log
+afbfc2ad691639cfe2852874d9b3969684e0ababc9939677e0f0adfb1c3a7a10  docs/superpowers/plans/apple-integrated-evidence/browser/screenshots-post-fix.log
+f84e7b39bd5c8ece522dca0923de2232dd709aa0fc93fc351925f24f1050a8c1  docs/superpowers/plans/apple-integrated-evidence/browser/screenshots.log
+45646ccd5baf75b12855cb9b6c0361a13d64382740b4faae8099502d3373c8f8  docs/superpowers/plans/apple-integrated-evidence/browser/served-bundle-proof-final.log
+a79bb899994cbe73b36a96d7e9cc5353a2fa752131468efb56be0eae4297b75d  docs/superpowers/plans/apple-integrated-evidence/browser/served-bundle-proof.log
+7abee6f23511adeb7a3ce8be1c98245e2ca1991cfb6c51b70a3334d8c13be5a3  docs/superpowers/plans/apple-integrated-evidence/browser/source-head.log
+1e1a1a09e633ab0aa180d8d0ea531c6bdbc25d23f2df40e48f7ceafb5dd1fb9f  docs/superpowers/plans/apple-integrated-evidence/browser/stack-cleanup-final.log
+5ed6a8e41a908a84f758e7337fa71852e1b3f40cad1848d526144b6ad36943ea  docs/superpowers/plans/apple-integrated-evidence/browser/stack-cleanup.log
+0e108852fd629d16402611ce93c2a87229d1e1723c9bccdb0f70ecb46ef8b75a  docs/superpowers/plans/apple-integrated-evidence/browser/visual-measurements-final.log
+b4ca81e54f9b530db22aeecbf93acceff74177caff4992d9cef72efb4026492f  docs/superpowers/plans/apple-integrated-evidence/browser/visual-measurements-post-fix.log
+ffe4852c2362d0c720d211bf5ead672c255d635dab881d5c81ad6dd3eed89b53  docs/superpowers/plans/apple-integrated-evidence/browser/visual-measurements.log
+17d1bbe53f57aebb79c2e852307ebeee0c8d3a0133b0c178a150a906639fdff0  docs/superpowers/plans/apple-native-evidence/01-red-test.log
+3df30b5f72d3b9f12cf533c2a6f1873773856ceddb47f47caba1980c2893b23c  docs/superpowers/plans/apple-native-evidence/02-contract-green.log
+39edd9c9f5d87f8b4d8947990760844ad0744b6a910fa62c8f244620b91c136f  docs/superpowers/plans/apple-native-evidence/03-format-check.log
+3f8c5ee48905730c5fb2741ead63b16eabbe1a77e3189e3af4a289fbb9f071f2  docs/superpowers/plans/apple-native-evidence/04-lint.log
+73beb054e81371c3d1c9306c3a98e46f5c26b2ea118e938795e9be49facafe6d  docs/superpowers/plans/apple-native-evidence/05-typecheck.log
+02357fc26761f5a5e699db3df6da1958b9bf4c5cad4f4a426bc82843fcc27614  docs/superpowers/plans/apple-native-evidence/06-plutil.log
+dca618f34ae2da59b2be70c6f6bfc52870311def31c5e189d8492eb8b8152ac3  docs/superpowers/plans/apple-native-evidence/07-pnpm-build.log
+e5b45784d0b4157f6aa8594b41d03e3db2278f2a580cc1fcacf835566f10a4e4  docs/superpowers/plans/apple-native-evidence/08-cap-sync.log
+ea60abc12bdb9a74dddbf7ba656df3d2aaeb96be8e985efd11add336e9fb8f25  docs/superpowers/plans/apple-native-evidence/09-ios-status-after-sync.log
+3a1c428e5bdc58b3420ae4d3559a595a848830a4c137bebdf7b29a176b786ad3  docs/superpowers/plans/apple-native-evidence/10-xcode-list.log
+5de67ed217ff123755696e3c1c85f678d42bd07634c0060a1e056949696ab332  docs/superpowers/plans/apple-native-evidence/12-source-membership.log
+0b95addbfe73393a24d3fd3bbc14606388a30213fb4894efff8b3eb8d0b943e5  docs/superpowers/plans/apple-native-evidence/13-build-settings.log
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  docs/superpowers/plans/apple-native-evidence/14-built-entitlements.log
+9e1dbdec0757369a42b19509490c099ea272433ecd985b104f75cb9c14623abd  docs/superpowers/plans/apple-native-evidence/15-final-contract.log
+1d66faad74f5e8709353f7288592866bd3a9095da1174a916e7aa632949971e2  docs/superpowers/plans/apple-native-evidence/16-final-format.log
+3f8c5ee48905730c5fb2741ead63b16eabbe1a77e3189e3af4a289fbb9f071f2  docs/superpowers/plans/apple-native-evidence/17-final-lint.log
+73beb054e81371c3d1c9306c3a98e46f5c26b2ea118e938795e9be49facafe6d  docs/superpowers/plans/apple-native-evidence/18-final-typecheck.log
+b192ca4eca33bd482ba7b4dbe8b9876a1b63a0949b5c7af8af7cb576530783d8  docs/superpowers/plans/apple-native-evidence/19-pipefail-build.log
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  docs/superpowers/plans/apple-native-evidence/20-f3-diff-check.log
+1d66faad74f5e8709353f7288592866bd3a9095da1174a916e7aa632949971e2  docs/superpowers/plans/apple-native-evidence/21-f3-format-check.log
+392744e032ca135eaac9841a1447fc23754ea4e57443aaa6f7a064fd60841844  docs/superpowers/plans/apple-native-evidence/22-f3-contract-test.log
+77246c665f5d05566598f538b03fc5c5a7606acffd80197ae0d8a666ad1c16e6  docs/superpowers/plans/apple-native-evidence/23-f3-privacy-green.log
+3f8c5ee48905730c5fb2741ead63b16eabbe1a77e3189e3af4a289fbb9f071f2  docs/superpowers/plans/apple-native-evidence/24-f3-lint.log
+73beb054e81371c3d1c9306c3a98e46f5c26b2ea118e938795e9be49facafe6d  docs/superpowers/plans/apple-native-evidence/25-f3-typecheck.log
+dd0d233f5d32752f03e1d65c5b040b1578989dc2d3278053dd186a385f40fc1c  docs/superpowers/plans/apple-native-evidence/26-f3-pnpm-build.log
+fb807a2a94c211f7eb20823904deb752af5110d698cb957dc2214bbd898c961e  docs/superpowers/plans/apple-native-evidence/27-f3-cap-sync.log
+d3e4fcc6b4251d827c13f2f533328c85c10a762c0fea39ff75fc25cc06e67bb6  docs/superpowers/plans/apple-native-evidence/28-f3-synced-config.log
+534b3ceb42cffb27d4d04d1207413486e053cf9ea8071d526927522e6c91e892  docs/superpowers/plans/apple-native-evidence/30-f3-mutation-cap-sync.log
+b2f5682a13fbd527d8b660caa82f5ce5d634893ff650b9064e0cd71702f68d85  docs/superpowers/plans/apple-native-evidence/31-f3-reviewer-probe-debug.log
+8fbb628287a98d75563f632618a5d296cf7497f33168d123ceaa7d4525ff9ca3  docs/superpowers/plans/apple-native-evidence/32-f3-mutation-privacy-red.log
+ec1ce55bd7afc239b6fdb6dd81ec34fd6d6485a484743d1b120b4471b6a924a9  docs/superpowers/plans/apple-native-evidence/33-f3-restore-cap-sync.log
+29aa64f0f87be0db8359f59a967b5553ea2ad1642d038b2cc1ab7049b960515e  docs/superpowers/plans/apple-native-evidence/34-f3-mutation-privacy-green.log
+6601534ec0764f347ffcda6c8272eeeddc2d6110aa9883215be88f8a9f52d41e  docs/superpowers/plans/apple-native-evidence/35-f3-built-config-privacy-green.log
+fe3ab84a7601a67a40e4f56868c26e0720948922a5f805f6b2ec0ce47eb7f820  docs/superpowers/plans/apple-native-evidence/36-f3-reviewer-probe-none.log
+8bb10f7524cd5903db598b4dea20d36b39037a12d4c4ca451529d9ed8610d27e  docs/superpowers/plans/apple-native-evidence/37-f3-xcode-gates.log
+6376e0b7e37b01c0c4588fed3a6a73f862ad3ab6cf098f00b664a629b0d52c48  docs/superpowers/plans/apple-native-evidence/39-f3-tdd-red.log
+2962d642b71a90e0e05bb401ebc64630cf191c2079e7aa72d7bfbfcba4476759  docs/superpowers/plans/apple-native-evidence/40-f3-final-status-tests.log
+3f8c5ee48905730c5fb2741ead63b16eabbe1a77e3189e3af4a289fbb9f071f2  docs/superpowers/plans/apple-native-evidence/41-f3-final-lint.log
+73beb054e81371c3d1c9306c3a98e46f5c26b2ea118e938795e9be49facafe6d  docs/superpowers/plans/apple-native-evidence/42-f3-final-typecheck.log
+3617923d3a0f9bdc4c1352772b7d5b0c4d2357a2fe19915d1b321c949b26440d  docs/superpowers/plans/apple-native-evidence/43-f3-final-mutation-red.log
+dd1ac140e48dddc9e3c2d81239a34c3118d10492eb5598d416c94e553652a72a  docs/superpowers/plans/apple-native-evidence/44-f3-final-head-tests.log
+3f8c5ee48905730c5fb2741ead63b16eabbe1a77e3189e3af4a289fbb9f071f2  docs/superpowers/plans/apple-native-evidence/45-f3-final-head-lint.log
+73beb054e81371c3d1c9306c3a98e46f5c26b2ea118e938795e9be49facafe6d  docs/superpowers/plans/apple-native-evidence/46-f3-final-head-typecheck.log
+cd93318dcfe624d6c48f5f126c091ff66a63a634f3a502dd1e77400cc989dcaa  docs/superpowers/plans/apple-native-evidence/mutation-entitlement-green.log
+7c9b23e32a5d3265c74bf801a9df183a66f24cc00f79d0842996fc253ed083b2  docs/superpowers/plans/apple-native-evidence/mutation-entitlement-red.log
+849c7a642129678df2cb2f706f8c4f61e77ce8bb122a11b1d2ffe2b8d27ec70e  docs/superpowers/plans/apple-native-evidence/mutation-logging-green.log
+029ce5f3d009e3e60042f598de7ff5de06b166477320d57e9860a92714e5e82c  docs/superpowers/plans/apple-native-evidence/mutation-logging-red.log
+0ab29ff7d70bc593d68e032f2df161e82fd8becf7f4aee34221087d14bfe438f  docs/superpowers/plans/apple-native-evidence/mutation-profile-green.log
+14c077833bbe7df0add9e99cb4ea0d05fbe532e18bcfa80c5250298bd3bb6d82  docs/superpowers/plans/apple-native-evidence/mutation-profile-red.log
+f5010c53c7ee06edf2d5245998189c4cb14892a01ea3d9fea86bf9e46f4b60ac  docs/superpowers/plans/apple-native-evidence/mutation-registration-green.log
+16fbedfcf4fe49b36e01e2a182c431d855fa99d80caca32d8f5ebea23b227d2c  docs/superpowers/plans/apple-native-evidence/mutation-registration-red.log
+a3634d53ccb2103e423d6d963733c398c3a2d70851cbf5f667443d7d1849c084  docs/superpowers/plans/apple-native-evidence/mutation-release-green.log
+992bf767845e08451475eebfce4d6b066aea60e25ae05470945f4da3c4a6867f  docs/superpowers/plans/apple-native-evidence/mutation-release-red.log
+b079af3b99f17a4dff41291f142db4c93bebce48c16cca12083ecf82526ad155  docs/superpowers/plans/apple-native-evidence/mutation-state-green.log
+1e75aa4517308bd23566c877028fd1d7eaf94a2ee5e9584f54d5550c58b399dc  docs/superpowers/plans/apple-native-evidence/mutation-state-red.log
+1e19c185df2999498bf2f158a6778b2375c0706038d7464efb035528caef5ffe  docs/superpowers/plans/apple-server-evidence/attempts-red.log
+b0898f4d08cbcee1a1830bce1cb9185914c0b7b7c7a4fa4667a9327754b49c13  docs/superpowers/plans/apple-server-evidence/coverage.log
+bab4e87c0e1318df3e2878ead7809570183b7b7d5c215aab639a6618b143fab4  docs/superpowers/plans/apple-server-evidence/f1-commit.log
+6a85ab22f53ba70aff326bcdea65856377c076ba225d0862f97e9a852f42cd69  docs/superpowers/plans/apple-server-evidence/f1-coverage.log
+1d66faad74f5e8709353f7288592866bd3a9095da1174a916e7aa632949971e2  docs/superpowers/plans/apple-server-evidence/f1-format.log
+bb53e6c309c9c6b15a2c5d8ef924d4125bb90d1c69c03ac072f62b8700cc451c  docs/superpowers/plans/apple-server-evidence/f1-lint.log
+6977148c1ebefb4603c3b6eb88c5983c10541e0165c64fb0462d0b4c0ff0c661  docs/superpowers/plans/apple-server-evidence/f1-reviewer-green.log
+93e03d6be190efca6910ab54614e83816a69b1cb7272a2e96875ab32cb09d242  docs/superpowers/plans/apple-server-evidence/f1-reviewer-red.log
+24a6999f5b51eb4b598bde4ad10dee43b219b11cc428f42ae2dec0ed3471bbdb  docs/superpowers/plans/apple-server-evidence/f1-tests-green.log
+01c7c18c286c1d6855285ce35c97c31408da0718971c12bfc1ff5a842983794e  docs/superpowers/plans/apple-server-evidence/f1-tests-red.log
+73beb054e81371c3d1c9306c3a98e46f5c26b2ea118e938795e9be49facafe6d  docs/superpowers/plans/apple-server-evidence/f1-typecheck.log
+1d66faad74f5e8709353f7288592866bd3a9095da1174a916e7aa632949971e2  docs/superpowers/plans/apple-server-evidence/format.log
+3343f02a3b5b3e1f71736026a5d578dea364b8e86595e11fd4cb18202351ae5b  docs/superpowers/plans/apple-server-evidence/hook-reject.log
+7aa3bb54eecd537a79dc12f1604e5d0a2ce331dd0228cc5b3ba735fe6251bb8d  docs/superpowers/plans/apple-server-evidence/http-boundary-commit.log
+1d66faad74f5e8709353f7288592866bd3a9095da1174a916e7aa632949971e2  docs/superpowers/plans/apple-server-evidence/http-boundary-format.log
+8b4837389fa71a0eb0594e3474d2e350bf6f87c7703ac918396b148d0f868b0d  docs/superpowers/plans/apple-server-evidence/http-boundary-green.log
+bb53e6c309c9c6b15a2c5d8ef924d4125bb90d1c69c03ac072f62b8700cc451c  docs/superpowers/plans/apple-server-evidence/http-boundary-lint.log
+7dcf0ed61b07b4466a72279ab49440c80cb599c185d517301e2d8c3263c26f09  docs/superpowers/plans/apple-server-evidence/http-boundary-restored.log
+73beb054e81371c3d1c9306c3a98e46f5c26b2ea118e938795e9be49facafe6d  docs/superpowers/plans/apple-server-evidence/http-boundary-typecheck.log
+bb53e6c309c9c6b15a2c5d8ef924d4125bb90d1c69c03ac072f62b8700cc451c  docs/superpowers/plans/apple-server-evidence/lint.log
+92ac5c99f0ad805f67ff7b54f34441b3632b57f767612ed9ad46f2d8172388be  docs/superpowers/plans/apple-server-evidence/lock-order-green.log
+20d99252a98356127d372f774040a86c90d2f9b45afa3eed01dd22d7eea11122  docs/superpowers/plans/apple-server-evidence/lock-order-red.log
+fc52f0575d20c7a0a7685d93f58ed8a9cfd1a637371868fcb59b0a0b8ae50ddc  docs/superpowers/plans/apple-server-evidence/mutations/begin-shape.log
+c2e856f108d00f1399ba5fa98f735818b192e4eb3eac8c7c8dee3f8f04edf57e  docs/superpowers/plans/apple-server-evidence/mutations/binding.log
+e3bbb5da353893cc37825415af0e3f399d55a2b1d900da30cf493f69830bb6da  docs/superpowers/plans/apple-server-evidence/mutations/callback-cancel-erasure.log
+a0b08cf1ecb484cb66e69a7891703cda3755d2f281ea7da44de32eaa859f2024  docs/superpowers/plans/apple-server-evidence/mutations/callback-mount.log
+bd2233cde7cffee101c86de2c245704ef75096d177052f439ad100ca31b5d3c3  docs/superpowers/plans/apple-server-evidence/mutations/callback-provider-intent.log
+82df60ea47329f1584ce8e72f9d0cb697bb1aa3bd7ae4f74c55a5d973cad83ad  docs/superpowers/plans/apple-server-evidence/mutations/default-dark.log
+7c95fdeb74fcac8338880127d23b548fe4e2ecd7e169532621121dfbec736731  docs/superpowers/plans/apple-server-evidence/mutations/disabled-route-response.log
+ee95e5c9016d9ab63763cd2323c3e431840412f13844ebcee3c559825a1a8efe  docs/superpowers/plans/apple-server-evidence/mutations/email-required.log
+2d0143972cd4ad15c524824358aa4e5701f6060a4ebefc56213c0ace03090cb4  docs/superpowers/plans/apple-server-evidence/mutations/exact-session.log
+5749df79d5f9f9a556a4d0b03be7470d7b48a5df6f8d4b08c900264156a2de29  docs/superpowers/plans/apple-server-evidence/mutations/exchange-subject.log
+56ec8ca943ed44ccba26868c6921b78025a97976918cf7670be89ba655d5e9c1  docs/superpowers/plans/apple-server-evidence/mutations/existing-proof-owner.log
+7e64bfe7961b3772f2b1405f37f99c07c55bb59789dbdf5e94ceb6e49b342f42  docs/superpowers/plans/apple-server-evidence/mutations/expiry-authority.log
+dd93e65caf8ce70f1ae627b6854e34e67a8dc092408c16c3e7e22c97dc50d728  docs/superpowers/plans/apple-server-evidence/mutations/failure-claimed-snapshot.log
+b3c589f19f903191439a9b1535ad22dfeb0a3ef2b3b562fb908e1861f25c587e  docs/superpowers/plans/apple-server-evidence/mutations/failure-cleanup-error-cookie.log
+306cfbb27e11888bf2833175e84cc764e84cdcc40ff5d67205bae9cfa1acf432  docs/superpowers/plans/apple-server-evidence/mutations/failure-id-only-cleanup.log
+d04821de1d7a6be54be71f5defb77c3c466874d6be00208d3702c5124b7e337a  docs/superpowers/plans/apple-server-evidence/mutations/failure-stale-cookie.log
+918fe3a2fa12d2c10fed0720015aeb72f3226724f83b283ea1efdf81fbec5a28  docs/superpowers/plans/apple-server-evidence/mutations/flag-literal.log
+846a5f4bf31bf919f42235615a478eb3355b0589d472c5a38c20b4936a99eafb  docs/superpowers/plans/apple-server-evidence/mutations/form-post-producer.log
+e7702ea3e6e4e09281005b770d2c9728cf79424244e0448e25dd5c0577152f7f  docs/superpowers/plans/apple-server-evidence/mutations/grant-atomicity.log
+447b66202c3387cb7784d82997ce95d4f39bc629cc9f0c7f6dc2d1d17b6aa8bd  docs/superpowers/plans/apple-server-evidence/mutations/http-start-limit.log
+d42d2103ddeea66a551c495cef58ef7f5945cd51e8cd7e20276a6e08c1b9f686  docs/superpowers/plans/apple-server-evidence/mutations/legacy-native-start-charge.log
+f2a3a6825ebc7b76ecd41ee25459fdbf059fec362681400e523dda1d89c998e5  docs/superpowers/plans/apple-server-evidence/mutations/legacy-open-admission.log
+fc280f26c08bc04e970f81f87751d91aeedfcd59d65b8138d6db4e31c9f07a67  docs/superpowers/plans/apple-server-evidence/mutations/legacy-web-start-charge.log
+0d3405b3c9c02e3f49e45e34bc571b8292da9b8d8e97c4c5d957b20c20c0f16e  docs/superpowers/plans/apple-server-evidence/mutations/link-profile.log
+7268fda8c98a46abf000ba5751e2d4c0c30d74a652f6d98708d304cca8e443de  docs/superpowers/plans/apple-server-evidence/mutations/lost-response-grant.log
+b93bfa648ce085b75db9a787f39be1a6ccca2932bf7e05b7ef00e07798a14b23  docs/superpowers/plans/apple-server-evidence/mutations/native-cancel-erasure.log
+52f3cb1a7f073558e9b741019ca883057995bd3adc343f1a5d3d49106618ece2  docs/superpowers/plans/apple-server-evidence/mutations/native-code-required.log
+26538875cde33ea6fd13b4ef449e963fc77054639fa0401ef7549f9a96da36b7  docs/superpowers/plans/apple-server-evidence/mutations/native-failure-cleanup.log
+dc83d307c8b26a850a7d8962eb322b06eb5319af559c93a6118ff0608b17294a  docs/superpowers/plans/apple-server-evidence/mutations/native-input-bounds.log
+608932e5005aa77df7cf1b972f046768f1d53a63f1e66a13bc2ac9e4275e261a  docs/superpowers/plans/apple-server-evidence/mutations/native-nonce-rotation.log
+1cf2a141833b06166fcc42659dea6323864d2c223e810033a7fdd42a69e9dfda  docs/superpowers/plans/apple-server-evidence/mutations/old-callback-stage.log
+5567f4aa3c9e5eaf03a8e422b0bc562b473938424db6bde6e00eb54b16b7ae2a  docs/superpowers/plans/apple-server-evidence/mutations/physical-cleanup.log
+edfa071c1e7bfb97d6fc75a633562c2db3e5b69efc591a407d57737e7f020647  docs/superpowers/plans/apple-server-evidence/mutations/provider-state.log
+e67b21e90eefe6c0486431c8343d78ed9f5adaa8f9bba8575d8beb098006157b  docs/superpowers/plans/apple-server-evidence/mutations/reauth-freshness.log
+8dcde67271c34f282fbdbc3a59c03db53a645fb05b60078c3c4f8b5b58ce6299  docs/superpowers/plans/apple-server-evidence/mutations/resident-cap.log
+6db5d4b8002235fe9b7578309b57d80ff0f2120e2c1c550caf25e7bc4c9ae0ee  docs/superpowers/plans/apple-server-evidence/mutations/retained-grant.log
+fca234e9e37e705d8996c0282d0e1dc9a8ee95eb10f8186c3aeb54d45c18bb73  docs/superpowers/plans/apple-server-evidence/mutations/returning-subject-first.log
+b0c38ac11dd9b0f7a40c5f749daef635a2686a3235f7132eea172d4803021321  docs/superpowers/plans/apple-server-evidence/mutations/session-before-attempt-lock.log
+9d513d4a143c17630867811ec0649fb8c2122771c0345d243f69048a7ee1b164  docs/superpowers/plans/apple-server-evidence/mutations/signed-audience-both-guards.log
+7a042b1124bf1528626e534c3fc076d7dc5dd3b6502a3b5a971b16d543e1eea4  docs/superpowers/plans/apple-server-evidence/mutations/signed-issuer-expiry.log
+b08c8ab93f7b97b5f952da616324e141381afe39980f97e9ad4345cb3db4e088  docs/superpowers/plans/apple-server-evidence/mutations/signed-nonce-audience.log
+244455c5fe9f4cde45ba5690529c9c2008a5d0e48b8113d25ac3a5e5c08af9e6  docs/superpowers/plans/apple-server-evidence/mutations/signup-conflict.log
+3a871a7a559ab545a3ea77dae89067e0ec20e55ef321ae73da376d9354296bc9  docs/superpowers/plans/apple-server-evidence/mutations/startup-sweep.log
+e1744997fa535f844fd4017694a77925b991a962cb1e954a49d5a708e11429ef  docs/superpowers/plans/apple-server-evidence/mutations/sweep-interval.log
+3792f2d5d2c81aa75c882c92306dd45c4b073501d1c9908d78739149db2fe837  docs/superpowers/plans/apple-server-evidence/mutations/sweep-shutdown.log
+80a84c0a1bd0d645af54a5a4bdce7d8fc4538248ed0df1feff676e4fb181c4a8  docs/superpowers/plans/apple-server-evidence/mutations/valid-boot-key.log
+c0fb95b2124bf4cbfe9a14c11685fb68ab98257933663a3a4e3ffcbbf0a71e8d  docs/superpowers/plans/apple-server-evidence/mutations/web-token-projection.log
+c811eb9ecf4e807f8e5c7459abb6215465f3093739acde9942a1acc85e66f3e0  docs/superpowers/plans/apple-server-evidence/provider-nowait.log
+e8f2c54d1767ce6270110f289fef4997f8e0c2a9e53b92bb1534f3a32e20f47a  docs/superpowers/plans/apple-server-evidence/provider-red.log
+73beb054e81371c3d1c9306c3a98e46f5c26b2ea118e938795e9be49facafe6d  docs/superpowers/plans/apple-server-evidence/typecheck.log
+4719e2e16bd1c1290a02a656a9db9b70f7be8199ee0ab41e76c4be82fba65c60  docs/superpowers/research/2026-09-13-apple-db-discard/held-first.log
+0d1ec037301c73bd711e15066bfe4aa8856ef7bfbfeb99ee08990b46f3a10c34  docs/superpowers/research/2026-09-13-apple-db-discard/held-mutant.log
+709b00bfb414b1623fb02dfdaf6d89660482ff968a868d7e955eb6bb5fff2300  docs/superpowers/research/2026-09-13-apple-db-discard/held.log
+6ede2562e754bd43a191e0d2f6aebb59292d479d4b5ae66888c84fa6ff2316a5  docs/superpowers/research/2026-09-13-apple-db-discard/measure.log
+18961276f53161b87cd44f2b5ce50e70f75f660397df04ac44de58ac3d33ca93  docs/superpowers/research/2026-09-13-apple-db-discard/original-deadlock-replay.log
+9c49f72a26dac04b21116554c78a850c501af3d1be56938efe9bc4996553cd81  docs/superpowers/research/2026-09-13-apple-db-measurement/concurrency-fixed.log
+550b61e7d68adfca885cf32f2f1a20b4ed4ac4a247d92cbbcaa9dc330743c2b6  docs/superpowers/research/2026-09-13-apple-db-measurement/concurrency.log
+575b43cb3305737f9c7a0ca48fe0d92410b5e7e354a7d1bc56c5a26b50916656  docs/superpowers/research/2026-09-13-apple-db-measurement/extra.log
+25bfd53cd70507f624c677e4d3ba99c13a4fb63404c43757127aa56bbdec8066  docs/superpowers/research/2026-09-13-apple-db-measurement/fixed-measure.log
+493b7693cf14564105994151f223954a43c64924b69d9cbd75f30184f97bce0c  docs/superpowers/research/2026-09-13-apple-db-measurement/measure.log
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  docs/superpowers/research/2026-09-13-apple-db-measurement/migration-lock.log
+d55526f6ea547f61b661be944a82a004a4a47809e8d2da87e8e6b2d0a57084f0  docs/superpowers/research/2026-09-13-apple-db-measurement/old-boot.log
+b2f5682a13fbd527d8b660caa82f5ce5d634893ff650b9064e0cd71702f68d85  docs/superpowers/research/2026-09-13-apple-harden/bridge.log
+185aceade3b04a425519abd3c1af6d5b3de14b099913ce384a10936b8f5b0c39  docs/superpowers/research/2026-09-13-apple-harden/client-stale-cancel.log
+4843c30acb6989e4b139e37c3354985abf475d8a36e63295d9fc0948445171e6  docs/superpowers/research/2026-09-13-apple-harden/client.log
+26cde9e984f45ed7e7edd1d151350f9379261839cd2bdbbd4dd8c96c6e455422  docs/superpowers/research/2026-09-13-apple-harden/code-lens/build.log
+acd2f24b511f248abf79e00ff6ab7f321afff82b6364e01cb7070ac4a89bffa8  docs/superpowers/research/2026-09-13-apple-harden/pkce.log
+ddc86b0661fa964308389729729151d92f9ea8907977a4ef73f87fc1996e6f86  docs/superpowers/research/2026-09-13-apple-harden/server.log
+```
