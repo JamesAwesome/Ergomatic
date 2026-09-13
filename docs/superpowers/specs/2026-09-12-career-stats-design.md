@@ -670,8 +670,9 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
     canvas), `← BACK` 44 px min
     height and width, each filter chip 44 × 58 px, each date input 44 px
     tall, tab items 44 px + safe-area padding, Sign out 44 px. Chart marks
-    are not tap targets in PR 1; PR 2's hover/tooltip layer owns them, with
-    a hit target larger than the mark (dataviz).
+    are not tap targets in PR 1 or PR 2; the hover/tooltip layer that would
+    own them (with a hit target larger than the mark, dataviz) is PR 3 or
+    never (§11).
   - The dataviz palette validator's lightness-band and chroma-floor checks
     fail for every house token because the palette is deliberately muted;
     reported, not acted on (A7).
@@ -1052,8 +1053,9 @@ behaviour (RF26).
   §8.2 fixture carries ≥ 1 `stored`-tier row. The verdict names the scale
   that decided it.
 - **PR 2 — the remaining charts: METRES PER WEEK, the SEASON group
-  (cumulative curve, AVG M/DAY, CURRENT and LONGEST STREAK), TEST TREND,
-  and the hover/tooltip layer — plus James's two 2026-09-12 notes: the
+  (cumulative curve, AVG M/DAY, CURRENT and LONGEST STREAK), TEST TREND
+  (the hover/tooltip layer once listed here is PR 3 or never, §11) — plus
+  James's two 2026-09-12 notes: the
   hero's tappable affordance and the range line under the filter bar
   (§5.1).** The charts were designed and approved at Gate 0 (ruling 11; §5
   items 3, 5, 6), so they carry no design gate of their own unless the
