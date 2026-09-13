@@ -110,6 +110,29 @@ describe("signed provider proof", () => {
       ).rejects.toThrow("invalid_proof");
     },
   );
+  it("rejects a correctly shaped token signed by an untrusted key", async () => {
+    const p = await provider();
+    const attacker = await generateKeyPair("RS256");
+    const forged = await new SignJWT({ sub: "apple-sub", nonce: "bound-nonce" })
+      .setIssuer("https://appleid.apple.com")
+      .setAudience("native.app")
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .setProtectedHeader({ alg: "RS256", kid: "test" })
+      .sign(attacker.privateKey);
+    await expect(
+      p.verify(
+        {
+          provider: "apple",
+          surface: "native",
+          nonce: "bound-nonce",
+          state: "bound-state",
+          bindingHash: "hash",
+        },
+        { idToken: forged, authorizationCode: "code", state: "bound-state" },
+      ),
+    ).rejects.toThrow("invalid_proof");
+  });
   it("rejects exchanged subject mismatch", async () => {
     const p = await provider({ sub: "another" });
     await expect(
