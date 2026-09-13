@@ -15,6 +15,9 @@ const PAD_R = 12;
 const PAD_T = 14;
 const PAD_B = 18;
 const PLOT_BOTTOM = H - PAD_B;
+// `43,012 TODAY` is 12 glyphs of 9 px Plex Mono at 0.06 em ≈ 70 px, plus the
+// 8 px gap the label leaves beside its dot.
+const LABEL_ROOM = 78;
 
 export const NO_ROWS_THIS_SEASON = "NO ROWS THIS SEASON YET";
 export const STREAK_UNIT = "WEEKS · ERGOMATIC";
@@ -104,7 +107,10 @@ export function SeasonChart({ summary }: { summary: SeasonSummary }) {
     y,
   );
   const tx = x(todayX);
-  const labelRight = tx < W * 0.6;
+  // The same overrun rule TestTrendGroup uses: the label sits to the right of
+  // the dot unless it would leave the viewBox. A share of the width (60 %)
+  // flipped labels that still fitted, for two months of every season.
+  const labelRight = tx + LABEL_ROOM <= W;
   return (
     <svg
       className="stats-chart"

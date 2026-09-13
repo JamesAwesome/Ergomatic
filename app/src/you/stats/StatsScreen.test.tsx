@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  fireEvent,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { GATE0_ROWS, GATE0_TESTS } from "../../../domain/stats/gate0Seed.js";
 
@@ -565,6 +571,84 @@ describe("/you/stats — PR 2: the range line, the groups in order, SEASON and T
     expect(trend.getByText("2K 1:54.0")).toBeInTheDocument();
     expect(trend.getByRole("img").querySelectorAll("polyline")).toHaveLength(0);
     expect(trend.getByRole("img").querySelectorAll("circle")).toHaveLength(1);
+  });
+
+  // Review item 7a: the season's `<n> TODAY` label flips left by the SAME
+  // overrun rule the trend uses (x + LABEL_ROOM > W), not at 60 % of the
+  // width. 1 DEC 2026 puts today at x ≈ 199 — past 60 % (192) but with room
+  // for the label — so it stays to the RIGHT; 20 APR 2027 (x ≈ 301) flips.
+  // Mutation: anchor "start" unconditionally → the April case reads start.
+  it("the season label stays right of the dot on 1 DEC 2026 (x ≈ 199) and flips left on 20 APR 2027 (x ≈ 301)", async () => {
+    vi.setSystemTime(new Date(2026, 11, 1, 9));
+    await renderScreen(GATE0_ROWS);
+    const label = () =>
+      within(screen.getByRole("region", { name: "SEASON 2027" }))
+        .getByRole("img")
+        .querySelector(".stats-point-label");
+    expect(label()?.textContent).toBe("43,012 TODAY");
+    expect(label()?.getAttribute("text-anchor")).toBe("start");
+    cleanup();
+    vi.setSystemTime(new Date(2027, 3, 20, 9));
+    await renderScreen(GATE0_ROWS);
+    expect(label()?.getAttribute("text-anchor")).toBe("end");
+  });
+
+  // Review item 7b: the OUT OF RANGE caption spans the dashed slots, so
+  // over ONE slot it spills; with a single out-of-range week the caption
+  // is not drawn and the aria label alone says "outside the range". YEAR
+  // on 12 FEB 2026: the eight weeks run 22 DEC … 9 FEB, FROM = 1 JAN sits
+  // in the week of 29 DEC, so only 22 DEC is out. Mutation: draw the
+  // caption for `out.length > 0` → the text renders.
+  it("YEAR on 12 FEB 2026 dashes ONE week (22 DEC) with no OUT OF RANGE caption; the aria label still names it", async () => {
+    vi.setSystemTime(new Date(2026, 1, 12, 9));
+    await renderScreen([
+      ...GATE0_ROWS,
+      { ...GATE0_ROWS[1], id: "extra", date: { y: 2026, m: 2, d: 3 } },
+    ]);
+    fireEvent.click(chip("YEAR"));
+    expect(document.querySelectorAll(".stats-bar-out")).toHaveLength(1);
+    expect(screen.queryByText("OUT OF RANGE")).toBeNull();
+    expect(
+      screen
+        .getByRole("img", { name: /^Metres per week/ })
+        .getAttribute("aria-label"),
+    ).toContain("22 DEC outside the range");
+  });
+
+  // Review item 7c: when the latest 2k and 6k splits sit within ~1.4 s the
+  // two last-point labels overprint (8.6 px/s on the seed's 14 s axis);
+  // the LOWER label (the slower split) drops one line-height so the two
+  // are ≥ 12 px apart. Mutation: nudge removed → 8.6 px apart.
+  it("2K and 6K last labels 1 s apart are pushed ≥ 12 px apart, the slower one moving down", async () => {
+    await renderScreen(GATE0_ROWS, [
+      { ...GATE0_TEST_ROWS[0], id: "t-2k", distance: "2k", splitSeconds: 114 },
+      {
+        ...GATE0_TEST_ROWS[0],
+        id: "t-6k",
+        distance: "6k",
+        splitSeconds: 115,
+        loggedAt: "2026-08-08T16:00:00.000Z",
+      },
+      { ...GATE0_TEST_ROWS[5], id: "t-6k-old" }, // T1, 6k 2:04.8 in Nov 2025
+    ]);
+    const svg = within(
+      await screen.findByRole("region", { name: "TEST TREND" }),
+    ).getByRole("img");
+    const labelY = (series: string) =>
+      Number(
+        svg
+          .querySelector(`[data-series="${series}"] .stats-point-label`)
+          ?.getAttribute("y"),
+      );
+    const dotY = (series: string) => {
+      const dots = svg.querySelectorAll(`[data-series="${series}"] circle`);
+      return Number(dots[dots.length - 1]!.getAttribute("cy"));
+    };
+    expect(labelY("2k")).toBeCloseTo(dotY("2k"), 5); // the faster label stays on its dot
+    expect(labelY("6k")).toBeGreaterThan(dotY("6k")); // the slower one moved DOWN
+    // One line-height apart, within float noise: (x + 12) - x is not
+    // exactly 12 for every x. The literal is independent of LABEL_GAP.
+    expect(labelY("6k") - labelY("2k")).toBeGreaterThan(11.99);
   });
 
   it("the trend's own fetch failing leaves the rest of the page standing and offers Try again", async () => {

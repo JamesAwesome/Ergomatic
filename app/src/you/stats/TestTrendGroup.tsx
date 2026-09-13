@@ -34,6 +34,9 @@ const MAX_MONTH_LABELS = 6;
 const LABEL_ROOM = 58;
 /** The y-domain floor for a single test (`domainFromReadings` needs two). */
 const ONE_POINT_HALF_SPAN = 5;
+// One line-height at the label's 9 px type: closer than this and the two end
+// labels overprint.
+const LABEL_GAP = 12;
 
 export const NO_TEST_LOGGED = "NO 2K OR 6K TEST LOGGED";
 export const FASTER_IS_UP = "FASTER IS UP";
@@ -118,6 +121,23 @@ export function TestTrendChart({ points }: { points: readonly TestPoint[] }) {
     range: [PLOT_BOTTOM, PAD_T],
     invert: true,
   });
+  // Two series ending within a line-height of each other overprint their end
+  // labels, so the LOWER one (the slower split) moves down to clear it.
+  const endY = new Map<TestDistance, number>();
+  for (const k of SERIES) {
+    const last = trend[k][trend[k].length - 1];
+    if (last) endY.set(k, y(last.splitSeconds));
+  }
+  // The lower label's y is set FROM the upper one, so the two land exactly
+  // LABEL_GAP apart rather than a float's width short of it.
+  const labelY = new Map<TestDistance, number>(endY);
+  if (endY.size === 2) {
+    const [a, b] = [...endY.entries()];
+    if (Math.abs(a![1] - b![1]) < LABEL_GAP) {
+      const [upper, lower] = a![1] <= b![1] ? [a!, b!] : [b!, a!];
+      labelY.set(lower[0], upper[1] + LABEL_GAP);
+    }
+  }
   const ticks = chooseTicks(domainY, 4);
   const months = monthStarts(from, to);
   const every = Math.ceil(months.length / MAX_MONTH_LABELS);
@@ -197,7 +217,7 @@ export function TestTrendChart({ points }: { points: readonly TestPoint[] }) {
                     ? x(toDayNumber(last.date)) + 8
                     : x(toDayNumber(last.date)) - 8
                 }
-                y={y(last.splitSeconds)}
+                y={labelY.get(k) ?? y(last.splitSeconds)}
                 textAnchor={
                   x(toDayNumber(last.date)) + LABEL_ROOM <= W ? "start" : "end"
                 }

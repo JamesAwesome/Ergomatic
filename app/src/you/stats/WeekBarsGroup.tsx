@@ -175,7 +175,10 @@ export function WeekBarsChart({ bars }: { bars: readonly WeekBar[] }) {
           </text>
         ) : null,
       )}
-      {out.length > 0 && (
+      {/* The caption is centred across the dashed slots, so over a single one
+          it spills into the tick gutter and the next bar. One dashed week is
+          named by the chart's own accessible label instead. */}
+      {out.length > 1 && (
         <text
           className="stats-tick"
           x={
