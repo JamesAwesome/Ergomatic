@@ -151,13 +151,15 @@ function destinationFor(
 
 async function responseError(
   response: Response,
-): Promise<{ code: AuthErrorCode; email?: string }> {
+): Promise<{ code: AuthErrorCode; email?: string; status: number }> {
+  const status = response.status;
   try {
     const body = (await response.json()) as Partial<AuthError>;
     const code =
       body.error && ERROR_CODES.has(body.error) ? body.error : "signin_failed";
     return {
       code,
+      status,
       ...(code === "access_denied" &&
       typeof body.email === "string" &&
       body.email.trim() &&
@@ -166,7 +168,7 @@ async function responseError(
         : {}),
     };
   } catch {
-    return { code: "signin_failed" };
+    return { code: "signin_failed", status };
   }
 }
 
@@ -174,16 +176,31 @@ class AuthRequestError extends Error {
   constructor(
     readonly code: AuthErrorCode,
     readonly email?: string,
+    readonly status?: number,
   ) {
     super(code);
   }
+}
+
+/** True when the server ANSWERED and refused this binding, which proves the
+ * binding can no longer complete the attempt either. `status` is absent for a
+ * transport failure, and 429 is the one 4xx the server did not act on: both
+ * leave the attempt and its binding intact, so both are worth a retry. */
+function bindingRefused(error: unknown): boolean {
+  return (
+    error instanceof AuthRequestError &&
+    error.status !== undefined &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 429
+  );
 }
 
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await api(path, init);
   if (!response.ok) {
     const error = await responseError(response);
-    throw new AuthRequestError(error.code, error.email);
+    throw new AuthRequestError(error.code, error.email, error.status);
   }
   return (await response.json()) as T;
 }
@@ -204,7 +221,7 @@ async function postNoContent(path: string, body: unknown): Promise<void> {
   });
   if (!response.ok) {
     const error = await responseError(response);
-    throw new AuthRequestError(error.code, error.email);
+    throw new AuthRequestError(error.code, error.email, error.status);
   }
 }
 
@@ -312,8 +329,12 @@ async function cancelActive(
         `/api/auth/${surface}/attempts/${encodeURIComponent(active.step.attemptId)}/cancel`,
         body,
       );
-    } catch {
-      return false;
+    } catch (error) {
+      // A refused binding is spent: it cannot complete the attempt either, and
+      // the server row expires on its own within the same 300s. Retaining it
+      // would leave cancel, both providers and usual-sign-in all failing until
+      // the page reloads. Only an unanswered or server-side failure retries.
+      if (!bindingRefused(error)) return false;
     }
     if (context.operation.current !== active) return false;
     context.operation.current = null;

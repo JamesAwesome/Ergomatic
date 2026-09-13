@@ -877,6 +877,94 @@ describe("useAuthFlow", () => {
     expect(cancellations).toBe(2);
   });
 
+  it("releases a cancellation the server refuses, so an expired binding cannot wedge the flow", async () => {
+    // The web binding cookie and the attempt both live 300s. Hesitate on the
+    // confirmation screen past that and `webBinding` rejects the cancel with
+    // 401 before the server's DELETE is ever reached. A refused binding can
+    // never complete the attempt either, so retaining it locally buys nothing
+    // and blocks every control; only a network-level or 5xx failure is worth
+    // a retry, and those keep their existing retain-and-retry behaviour.
+    window.history.replaceState(null, "", "/?authAttempt=cancel-refused");
+    let cancellations = 0;
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/cancel-refused") {
+        return ok({
+          outcome: "confirm",
+          attemptId: "cancel-refused",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          profile: { email: "relay@apple.test", name: "Rower" },
+        });
+      }
+      if (path === "/api/auth/web/attempts/cancel-refused/cancel") {
+        cancellations += 1;
+        return ok({ error: "invalid_proof" }, 401);
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.view.kind).toBe("confirm"));
+
+    await act(async () => result.current.cancel());
+    expect(result.current.view).toStrictEqual({
+      kind: "cancelled",
+      purpose: "signin",
+      targetProvider: "apple",
+    });
+
+    // The operation is released, so an ordinary retry reaches the server
+    // instead of re-entering cleanup.
+    await act(async () => result.current.startSignIn("apple"));
+    expect(cancellations).toBe(1);
+  });
+
+  it("keeps a rate-limited cancellation for retry rather than releasing it", async () => {
+    // 429 is the one 4xx the server did not act on: the attempt and its
+    // binding both survive, so this must retain like a 5xx.
+    window.history.replaceState(null, "", "/?authAttempt=cancel-limited");
+    let cancellations = 0;
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/cancel-limited") {
+        return ok({
+          outcome: "confirm",
+          attemptId: "cancel-limited",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          profile: { email: "relay@apple.test", name: "Rower" },
+        });
+      }
+      if (path === "/api/auth/web/attempts/cancel-limited/cancel") {
+        cancellations += 1;
+        return cancellations === 1
+          ? ok({ error: "rate_limited" }, 429)
+          : new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.view.kind).toBe("confirm"));
+
+    await act(async () => result.current.cancel());
+    expect(result.current.view).toStrictEqual({
+      kind: "error",
+      purpose: "signin",
+      code: "signin_failed",
+      targetProvider: "apple",
+    });
+
+    await act(async () => result.current.cancel());
+    expect(result.current.view).toStrictEqual({
+      kind: "cancelled",
+      purpose: "signin",
+      targetProvider: "apple",
+    });
+    expect(cancellations).toBe(2);
+  });
+
   it("turns native provider cancellation into a silent provider-aware terminal state", async () => {
     seam.native = true;
     seam.appleAuthorize.mockRejectedValue({ code: "cancelled" });
