@@ -1,3 +1,4 @@
+import type pg from "pg";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { createFrontDoor, frontDoorConfig } from "./auth/frontDoor.js";
 import { createApp } from "./app.js";
@@ -86,6 +87,36 @@ if (!nativeVerifier) {
   );
 }
 
+/**
+ * A boot-time diagnostic read, bounded so it can never be the thing that stops
+ * the server from listening.
+ *
+ * Two measured facts shape this, both from the DBA gate on PR #425. First,
+ * `connectionTimeoutMillis` governs connection ACQUISITION only —
+ * `statement_timeout` and `lock_timeout` are both 0 — so an unbounded read
+ * waits as long as anything holds ACCESS EXCLUSIVE on the table (measured at
+ * 6209 ms against a held lock) and a `try/catch` around it cannot fire,
+ * because blocking is not an error. Second, `SET LOCAL` only binds inside a
+ * transaction, and node-postgres returns an ARRAY of results for a
+ * multi-statement string — so the obvious one-liner
+ * (`pool.query("SET LOCAL …; SELECT …")`) reads `undefined` off `.rows`,
+ * throws, gets swallowed by the caller's catch, and reports a silent zero.
+ * That was measured against a real container, not reasoned about.
+ */
+async function bootQuery<T extends pg.QueryResultRow>(
+  sql: string,
+): Promise<T[]> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    return (await client.query<T>(sql)).rows;
+  } finally {
+    await client.query("ROLLBACK").catch(() => undefined);
+    client.release();
+  }
+}
+
 const accessPolicy = createAccessPolicy(
   process.env.ACCESS_MODE,
   process.env.ALLOWED_EMAILS,
@@ -110,19 +141,19 @@ if (accessPolicy.mode === "restricted") {
     // operator to `select email from users;` on the host, which docs/deploy.md
     // now says.
     try {
-      const rows = await pool.query<{ email: string }>(
+      const rows = await bootQuery<{ email: string }>(
         "SELECT email FROM users",
       );
-      const excluded = rows.rows.filter(
+      const excluded = rows.filter(
         (row) => !accessPolicy.allows(row.email),
       ).length;
       if (excluded > 0)
         console.warn(
-          `WARNING: ${excluded} of ${rows.rowCount ?? 0} existing accounts are NOT in ALLOWED_EMAILS — they are signed out at their next request and cannot sign back in. Their data is retained. List them with: select email from users;`,
+          `WARNING: ${excluded} of ${rows.length} existing accounts are NOT in ALLOWED_EMAILS — they are signed out at their next request and cannot sign back in. Their data is retained. List them with: select email from users;`,
         );
       else
         console.log(
-          `access: restricted, and all ${rows.rowCount ?? 0} existing accounts are admitted`,
+          `access: restricted, and all ${rows.length} existing accounts are admitted`,
         );
     } catch {
       // A boot-time diagnostic must never be the thing that stops the server.
@@ -242,10 +273,31 @@ const frontDoor = frontConfig
 // Google-only screen. A PARTIAL set throws and fails the boot loudly; only
 // the silent case needs this line. docs/deploy.md tells the operator to check
 // the log for it.
-if (!frontDoor)
+if (!frontDoor) {
+  // Same invariant as the allowlist counter above — a config change that
+  // silently orphans accounts says so at boot — applied to the second of the
+  // two places it governs rather than one (RF34). Removing APPLE_* from a
+  // host that already has Apple-only accounts leaves those rowers with no way
+  // in at all: their `google_sub` is NULL, so the legacy door cannot match
+  // them either. The count, never the addresses.
+  let orphaned: number;
+  try {
+    const rows = await bootQuery<{ count: string }>(
+      "SELECT count(*)::text AS count FROM users WHERE apple_sub IS NOT NULL AND google_sub IS NULL",
+    );
+    orphaned = Number(rows[0]?.count ?? 0);
+  } catch {
+    // A boot diagnostic never stops the boot.
+    orphaned = 0;
+  }
   console.warn(
     "WARNING: APPLE_* not set — Apple sign-in is DISABLED and the combined auth routes will 503 (legacy Google sign-in only)",
   );
+  if (orphaned > 0)
+    console.warn(
+      `WARNING: ${orphaned} existing account(s) can ONLY sign in with Apple, which is now disabled — they have no way in. Their data is retained. List them with: select email from users where apple_sub is not null and google_sub is null;`,
+    );
+}
 const httpServer = createApp({
   frontDoor,
   checkDb: () => checkDb(pool),

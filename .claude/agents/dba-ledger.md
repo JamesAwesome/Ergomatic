@@ -415,3 +415,56 @@ Commands and complete SQL/EXPLAIN/held outputs are in `docs/superpowers/research
 ## 2026-09-13 — Session expiry sweep review fix
 
 **PASS after correcting the fixture; no index or migration.** PostgreSQL 18.4 Debian/aarch64, dedicated 2 CPU/1 GiB container, Apple M5 host; all 32 migrations applied; query JIT off/parallel gather 0. The original 6.421 ms fixture omitted `auth_attempts.original_session_id ON DELETE CASCADE` and remains parent-core evidence only. Actual schema, median of 5 warm: household 5 expired/25 sessions +25 links +511 anonymous attempts **0.170 ms**; sensitivity 10k expired/100k sessions +100k links +511 anonymous **29.290 ms**, including one `auth_attempts_link_session_unique` child probe per deleted parent (committed trigger 22.082 ms/10k calls; total WAL 1,124,048 B by LSN). The next 90k-live minute scan was 2.628 ms/1,819 pages. Committed deletion retained all live parents/links and anonymous rows, removed every expired parent's link, and left zero orphans. Held parent DELETE locked both tables/indexes; retained parent/child/anonymous updates succeeded, deleted parent/child updates timed out at 250 ms. A single concurrent-owner 100k probe completed both sweeps with zero expired/orphan rows and no observed deadlock. Full evidence: `docs/superpowers/research/2026-09-13-apple-review-fixes/db-cost/cascade/`. Production and >100k remain unmeasured; no ROADMAP row.
+
+## 2026-09-13 — Apple front door, PR #425 `wave-a-apple` @ `4f9b8d66` (stored-shape PR gate)
+
+**PASS WITH ROWS. The household fixture decided it.** Closes the gate the
+spec-stage entry left FAILing ("neither row count nor physical retention") and
+the access-policy entry explicitly did not complete.
+
+Environment: `postgres:18.4` in Docker, `PostgreSQL 18.4 (Debian) aarch64`,
+`work_mem=4096kB`, `statement_timeout=0`, `lock_timeout=0`, autovacuum on /
+naptime 60 s; `set jit=off; set max_parallel_workers_per_gather=0` per session;
+all 32 `app/drizzle/*.sql` applied in order; medians of 5 after discarding run 1.
+
+**Hot paths, household → 100k → 1M.** `begin()` serialised section
+**0.344 → 13.601 → 221.351 ms**; resident cap `count(*) … purpose='signin'`
+0.086 → 9.136 → 63.092 ms (**Seq Scan at every scale** — no index on
+`purpose`); attempt sweep 0.069 → 5.494 → 151.667 ms. At 1M: `load()` 0.049 ms,
+`save()` 0.195 ms, link delete 0.140 ms (the PARTIAL index is used),
+`resolveSession` 0.126 ms. The new allowlist check is IN PROCESS and adds zero
+queries. `auth_attempts_state_unique` is never queried in SQL.
+
+**Retention.** Structurally bounded: 512 live signin rows + one link row per
+live session + one sweep window. 3 × 20,000 real cycles: heap truncated to
+**0 bytes**, and round 3 added **zero** index bytes — the earlier growth was
+btree recycling lag. Plateau ~13 MB. Autovacuum needs no tuning.
+
+**Migration 0031.** Additive, one drizzle transaction (so CONCURRENTLY is
+unavailable): total **3.312–6.074 ms at 5 users**, 90 ms at 1M, of which the
+unique index build is 0.138–0.267 / 87 ms. `ADD COLUMN apple_sub` is
+metadata-only. Holds `AccessExclusiveLock` on `users` for the transaction; a
+concurrent `resolveSession`-shape read hit a 2 s `lock_timeout`. Older image
+boots against the migrated DB. `users_apple_sub_unique` is NULLS DISTINCT.
+
+**Statement census against the SHIPPED store** (`log_statement='all'`): new
+account 15 data statements / 4 pooled transactions; returning account 12 / 3.
+**No N+1.** Full integration suite green: 28 files, 469 tests, exit 0.
+
+**Three rows proposed.** R1: the cap scans link rows under the global advisory
+lock, trigger ~1.4M rows. R2: a 3 s pool timeout disables sign-in for up to
+60 s after recovery and `healthy()` has no consumer, so `/api/health` stays 200
+— reproduced end to end. R3: the boot diagnostic gated the health port with no
+statement timeout — **fixed in this PR rather than filed**, together with a
+node-postgres defect the fix itself exposed (a multi-statement `SET LOCAL`
+string returns an array, so the bounded query read `undefined` and reported a
+silent zero; corrected to an explicit transaction and verified against a real
+container: timeout fires at 5004 ms, pool survives).
+
+Handed to other agents: plaintext `apple_refresh_token` at rest (antagonist /
+code review) and `original()`'s `FOR UPDATE` with no `OF` clause locking
+`users` (code review).
+
+**Unmeasured:** production host CPU/RAM, real production row counts (these
+tables have never held one), the Apple provider round trip, and whether a real
+Apple refresh token approaches the 8192-char bound.

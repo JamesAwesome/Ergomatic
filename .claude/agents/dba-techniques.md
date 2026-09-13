@@ -112,6 +112,35 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
    And does a competing open PR mint the same migration index?
 
 ## Measured facts that keep paying (2026-09-07 unless dated otherwise)
+- **(2026-09-13, PR #425) A btree over churning random keys looks unbounded for
+  two vacuum cycles and then plateaus.** 20,000 sign-in cycles grew
+  `auth_attempts_state_unique` 5128 → 10136 kB across two rounds and then
+  **exactly zero** on the third: a page deleted by one VACUUM only becomes
+  recyclable at a later one. Heap truncated to 0 bytes. **Never call index
+  growth unbounded from two samples — run a third round with two manual
+  VACUUMs between.**
+- **(2026-09-13) A `FOR UPDATE` on a join with no `OF` clause locks a row in
+  EVERY table in the join.** `sessions INNER JOIN users … FOR UPDATE` takes a
+  row lock on `users`: a concurrent `UPDATE users` on that row hit a 2 s
+  `lock_timeout`; a different row finished in 3.591 ms.
+- **(2026-09-13) A unique CONSTRAINT that no query reads still costs on every
+  write.** `auth_attempts_state_unique` (compared in process, never in SQL) is
+  93 MB at 1M rows and adds +1 WAL record / +104 B per INSERT (527 vs 423 B).
+- **(2026-09-13) `connectionTimeoutMillis` is not a statement timeout.** It
+  governs connection ACQUISITION only; `statement_timeout` and `lock_timeout`
+  default to 0, so a query behind an ACCESS EXCLUSIVE lock waits forever and a
+  `try/catch` cannot fire (measured 6209 ms against a held lock).
+- **(2026-09-13) `SET LOCAL` needs a transaction, and a multi-statement string
+  returns an ARRAY of results.** `pool.query("SET LOCAL statement_timeout=…;
+  SELECT …")` reads `undefined` off `.rows`, throws, and a caller's catch turns
+  it into a silent zero — a bounded diagnostic that never fires. Take a client,
+  BEGIN, SET LOCAL, query. Measured against a real container, both the broken
+  and the working form.
+- **(2026-09-13) A sweep's own error handling can be the outage.** A 3 s pool
+  timeout made `attempts.sweep()` throw, setting `healthy=false`, which refused
+  every sign-in for up to 60 s AFTER the pool recovered. When a boolean gates a
+  user-facing path, ask what ELSE can set it.
+
 
 - **(2026-09-13, corrected session cleanup) Measure FK cascades from the migrated schema, not a hand-built parent table.** The sessions expiry DELETE uses a parent Seq Scan plus indexed child cascades through `auth_attempts_link_session_unique`. With 10k expired/100k sessions and one bound link each, complete median was 29.290 ms (committed trigger 22.082 ms, total WAL 1,124,048 B by LSN); the next 90k-live minute scan was 2.628 ms/1,819 pages. Household 5/25 plus 511 anonymous attempts was 0.170 ms. No new index is justified at this scale. The earlier 6.421 ms/540,000 B were parent-core measurements only. Keep cleanup error boundaries independent; run the harness in its dedicated container if host `psql` is absent.
 
