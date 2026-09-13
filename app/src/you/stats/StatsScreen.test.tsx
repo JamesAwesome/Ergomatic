@@ -460,6 +460,19 @@ describe("/you/stats — PR 2: the range line, the groups in order, SEASON and T
     fireEvent.click(chip("MONTH"));
     expect(rowValue("METRES", 1)).toBe("5,000");
     expect(season.getByText("43,012 TODAY")).toBeInTheDocument();
+    // The x geometry, as INDEPENDENT literals (review item 3): the season
+    // spans May 1 2026 … Apr 30 2027 = 364 days over the 264 px plot
+    // (44 … 308). Today is day 134 → 44 + 134/364·264 = 141.19; the APR
+    // tick is Apr 1 2027, day 335 → 286.97. Probes that survived without
+    // this: the month labels' year swapped, todayX six days late.
+    const svg = season.getByRole("img");
+    expect(
+      Number(svg.querySelector(".stats-today-line")?.getAttribute("x1")),
+    ).toBeCloseTo(141.19, 1);
+    const apr = Array.from(svg.querySelectorAll("text.stats-tick")).find(
+      (el) => el.textContent === "APR",
+    );
+    expect(Number(apr?.getAttribute("x"))).toBeCloseTo(286.97, 1);
   });
 
   it("a CUSTOM range with no rows still renders SEASON and TEST TREND under the NO ROWS line", async () => {
