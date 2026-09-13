@@ -1,7 +1,7 @@
 # Apple sign-in — design review record
 
-The draft design and rendered Gate 0 await James's approval. No product
-implementation is present. The reviews below judged the design, not working
+James approved the design and rendered Gate 0 on 2026-09-12. The reviews
+below judged the design, not working
 Apple authentication; no passing implementation, migration or hardware gate
 is claimed.
 
@@ -10,8 +10,7 @@ is claimed.
 The PM phase-open pass recommended Apple on native and web, shared open
 signup, and authenticated linking in both directions. James explicitly
 chose Apple-first and allowed new rowers to create accounts. The rendered
-design presents the additional shared-policy and linking recommendations
-for his approval. Deletion remains the next slice; external availability
+design's shared-policy and linking recommendations are approved. Deletion remains the next slice; external availability
 waits for that capability.
 
 ## Findings and disposition in the draft
@@ -64,8 +63,8 @@ and the current/proposed comparison.
 **PM technique:** When a second provider creates accounts, check whether an
 existing rower can reach the same account through either door; relay email
 cannot supply that continuity. **PM ledger:** Apple-first scope recommends
-both surfaces and explicit linking; the rendered two-prompt flow needs
-James's approval. Deletion remains a separate implementation slice and the
+both surfaces and explicit linking; James approved the rendered two-prompt
+flow on 2026-09-12. Deletion remains a separate implementation slice and the
 external-release dependency.
 
 **Antagonist techniques:** Trace credentials across every redirect method;

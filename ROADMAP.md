@@ -756,8 +756,8 @@ his Concept2 logbook page, both pairs of numbers and the gap's explanation
 ## Wave A — The front door
 
 **Status: OPEN 2026-09-12 — James chose Apple sign-in first and approved
-new rowers creating accounts.** In design; implementation awaits the rendered
-Gate 0 and spec approval. Draft:
+new rowers creating accounts.** The design and rendered Gate 0 were approved
+on 2026-09-12; implementation planning is underway. Approved spec:
 [Apple sign-in and open accounts](docs/superpowers/specs/2026-09-12-apple-signin-design.md).
 **TRIAD twice — auth AND stored shape. L.**
 · dies 2026-10-10 (set 2026-09-10 under the wave-heading rule above) · a month
@@ -834,14 +834,14 @@ it lands the stranger on this same denial.
       not planned on in either direction.
 - [ ] **An open sign-up policy, replacing deny-by-default.** **James approved
       new rowers creating accounts on 2026-09-12**, while choosing Apple
-      sign-in as the first slice. The draft recommends shared open admission
+      sign-in as the first slice. The approved design uses shared open admission
       for Apple and Google, first-account confirmation in the updated client,
       and explicit provider linking from You; email never joins accounts.
       Legacy Google endpoints keep their successful response contracts for
       installed builds. The denied-user surface stops being a dead end.
       **AUTH AND STORED SHAPE — full antagonist spec pass, DBA spec/plan/PR
       gates, and PM final-PR gate. M.**
-      PR 1 (#409) already made `google_sub` nullable. The Apple draft adds a
+      PR 1 (#409) already made `google_sub` nullable. The Apple design adds a
       unique Apple subject and retains per-client Apple grants for later
       deletion; it does not infer identity from a matching or relay email.
       The larger identity-table alternative is recorded in
@@ -879,17 +879,18 @@ it lands the stranger on this same denial.
       spec answers it in one paragraph with the feature list beside it.
 - [ ] **Apple sign-in** (moved from Phase PROD; the duplicate entry that lived
       under triggered follow-ons is deleted). **FIRST, ruled by James
-      2026-09-12.** Draft covers native and web Apple, shared open signup,
+      2026-09-12; design and rendered Gate 0 APPROVED the same day.** Covers
+      native and web Apple, shared open signup,
       and explicit linking from You so either provider opens the same account.
-      Reuse openid-client/jose server-side; the native draft proposes a small
+      Reuse openid-client/jose server-side; the native design uses a small
       AuthenticationServices bridge because the installed plugin's Apple arm
       persists and logs token-bearing data. **Research correction:** name/the
       user object is first-auth-only; Apple includes email in subsequent ID
       tokens. Provider subject, never email, owns identity. Private relay and
       later deletion's per-client Apple credentials are part of this design.
-      See the linked draft for source evidence and the rendered Gate 0. **L**
-      · dies 2026-10-10 · the first implementation slice is in design and must
-      clear its auth, stored-shape and rendered gates before it can ship.
+      See the approved spec for source evidence and the rendered Gate 0. **L**
+      · dies 2026-10-10 · the first implementation slice must clear its auth
+      and stored-shape implementation gates before it can ship.
 - [ ] **Door 2 can Save mid-entry and ship the clamped partial** (from Phase
       BL). Type "1", tap Save, and 60 s rides the wire. The You editor's
       identical path is announced by its ConfirmLine; door 2 has no confirm.

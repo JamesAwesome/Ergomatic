@@ -7,10 +7,10 @@ iPhone or the web. An existing rower can add the other sign-in method to the
 same account and keep their rowing history. Apple’s private email address
 never becomes a reason to create a link or merge two accounts.
 
-**DRAFT — design review, not approved for implementation.** James opened
-Wave A Apple-first on 2026-09-12 and approved allowing new rowers to create
-accounts. Google remains available. The shared signup policy, explicit
-linking, and screens below are the recommended design for that request.
+**APPROVED — James approved the design and rendered Gate 0 on 2026-09-12.**
+The approval includes new rowers creating accounts, Apple Hide My Email,
+and explicit linking in both directions. Google remains available. The
+implementation follows the shared signup policy and screens below.
 Base inspected: `60ee51b9`; worktree: `.claude/worktrees/wave-a-apple`.
 
 ## Scope and sequence
