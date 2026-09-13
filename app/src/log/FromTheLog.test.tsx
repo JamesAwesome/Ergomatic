@@ -151,6 +151,58 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("FromTheLog — the Concept2 link is read ONCE for the screen", () => {
+  it("issues exactly one GET /api/concept2/link for a ready row, with both Concept2 blocks on screen", async () => {
+    // Phase TD (TD-4). The screen owns ONE `useConcept2Link()` and threads
+    // it to `MachineConfirmedBlock` and `Concept2SendBlock`. Before the
+    // lift each block called the hook itself, so a ready row issued TWO —
+    // and, because the hook registers `pageshow`/`visibilitychange` per
+    // instance, two more on every foreground.
+    //
+    // COUNTED, not merely observed: `toHaveBeenCalledWith` passes at one
+    // call or at five, which is exactly why the duplicate survived from
+    // Phase AV until now. The e2e gate in `e2e/concept2.spec.ts` pins the
+    // same count against the real server; this is its client-side twin.
+    const apiMock = mockApi((path) => {
+      if (path === "/api/concept2/link") {
+        return new Response(
+          JSON.stringify({
+            available: true,
+            linked: true,
+            c2UserId: 2211,
+            c2Username: "jamesawesome",
+            needsReauth: false,
+            logbookBaseUrl: "https://log-dev.concept2.com",
+            autoSend: false,
+            autoVerify: false,
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(
+        JSON.stringify(
+          storedRow({
+            source: "pm5",
+            endedBy: "finished",
+            machineWorkSeconds: 1234.5,
+          }),
+        ),
+        { status: 200 },
+      );
+    });
+
+    await renderFromTheLog();
+    // The row landing is the readiness precondition — both blocks live
+    // inside the ready-row guard, so nothing can be counted before it.
+    await waitFor(() => expect(screen.getByText("Sea Fret")).toBeVisible());
+    await waitFor(() =>
+      expect(
+        apiMock.mock.calls.filter(([p]) => p === "/api/concept2/link"),
+      ).toHaveLength(1),
+    );
+  });
+});
+
 describe("FromTheLog — fetch states", () => {
   it("shows LOADING… and the FROM YOUR LOG eyebrow while the fetch is in flight", async () => {
     mockApi(() => new Promise(() => {})); // never resolves
@@ -190,12 +242,15 @@ describe("FromTheLog — fetch states", () => {
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(screen.getByText("Sea Fret")).toBeVisible());
     // SCOPED to the endpoint this test is about, never a bare total.
-    // Wave E PR2 mounts `Concept2SendBlock` on the ready state, and its
-    // hook reads `GET /api/concept2/link` on every mount — a third call
-    // through the same `api` mock, which a bare `toHaveBeenCalledTimes(2)`
-    // reads as a regression. Scoping keeps what the assertion exists for
-    // (Retry makes exactly ONE more attempt at the log, not two), which a
-    // loosened range would have given up.
+    // This screen also reads `GET /api/concept2/link` — Wave E PR2 added
+    // that call, and Phase TD MOVED it from the two child blocks up to
+    // `FromTheLog` itself. The scoping matters MORE after the move, not
+    // less: the read now fires at parent mount, so it lands on the ERROR
+    // state this test drives as well as on the ready state it retries into,
+    // and a bare `toHaveBeenCalledTimes(2)` would read either as a
+    // regression. Scoping keeps what the assertion exists for (Retry makes
+    // exactly ONE more attempt at the log, not two), which a loosened range
+    // would have given up.
     const logCalls = apiMock.mock.calls.filter(([path]) =>
       String(path).startsWith("/api/logs/log-1"),
     );

@@ -41,8 +41,12 @@ Each wave gets its own design/plan cycle (spec in `docs/superpowers/specs/`,
 plan in `docs/superpowers/plans/`) when it starts.
 
 **Phase TD (below the live slate) is where DEBT goes** — gaps in evidence, a
-capture that cannot be taken, a test that could not be made to bite. It is
-deliberately not scheduled. The rule that put it there (James, 2026-09-08):
+capture that cannot be taken, a test that could not be made to bite. **It is
+a STANDING HOME, not a scheduled phase** (James, 2026-09-12): a slate inside
+it may be opened, dated and closed, but the section itself is never archived
+and `/close-phase` is never run on it, because archiving it would delete this
+convention along with the phase. It first opened a slate on 2026-09-12. The
+rule that put it there (James, 2026-09-08):
 a filed row needs either a TRIGGER, so it resurfaces when it starts to
 matter, or a PHASE, so it can be scheduled as one piece of work. "Small,
 queued" is neither once it passes a couple of hundred rows, and it had.
@@ -2428,6 +2432,26 @@ fixed.
   `.superpowers/` (recurring failure 16's corollary) — the same reason the
   screenshot-flakiness item above is inlined. Rides the next PR touching
   this file, or the next time it fires.
+- **A client test's `console.log` never reaches stdout, so any probe that
+  REPORTS what it saw that way is reporting something nobody read.** Measured
+  2026-09-12 during the Phase TD spike: under
+  `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>`,
+  a one-test probe printed `HELLO_FROM_STDOUT` via `process.stdout.write` and
+  SWALLOWED `HELLO_FROM_TEST` via `console.log`; `--silent=false` does not
+  help, because the client project runs in jsdom and jsdom owns the console.
+  **Why it is a row and not a curiosity:** this repo's investigative probes
+  are client tests that dump a ring buffer and quote it back as evidence, and
+  the Phase TD spike's first report did exactly that — its "verbatim" ring
+  entries could not have come from the command it cited. That is RF16's
+  dangling-citation shape wearing a test runner. An assertion is unaffected;
+  only the human-readable readout is lost, which is precisely the part a
+  reader trusts. **The fix is one sentence in `docs/TESTING.md`** telling
+  probe authors to route readouts through `process.stdout.write` or to commit
+  the output to a file, plus the same note where the two scoped-run footguns
+  already live in `CLAUDE.md`. · dies 2026-10-12 · a row and not a fix now
+  because it is a docs change in two files that this phase's PR has no reason
+  to touch, and nothing is broken until the next probe quotes a ring. **S**
+
 - **The checked-in NFC patch is part of the safety mechanism, not a
   convenience.** `app/patches/@capgo__capacitor-nfc@8.2.5.patch` supplies
   session identity on retained events, single-tag selection, native drain on
@@ -3282,22 +3306,66 @@ that created it — that rule worked. What it lacked was a home: "Small,
 queued" had grown past 240 rows, which is where things go to be forgotten
 rather than found.
 
-**TWO OF THESE SHARE ONE BLOCKER AND SHOULD BE DONE TOGETHER.** The fake
-monitor sends no end-of-workout summary burst, so neither the free-row machine
-tiles nor `VERIFIED ✓` can be photographed. Whoever unblocks that gets both
-captures from one piece of work; doing either alone is most of the cost for
-half the value.
+**OPENED 2026-09-12.** Spec:
+[docs/superpowers/specs/2026-09-12-phase-td-design.md](docs/superpowers/specs/2026-09-12-phase-td-design.md).
+Scope ruled by James 2026-09-12: three rows, one PR. **TD-5 then came back
+out on 2026-09-13, measured** — see its row. What landed is the ungated
+reconciliation and the double link read; the other three are filed below
+with dates.
 
-**None of these is a defect a rower can hit today.** Four are gaps in
-EVIDENCE — a capture that cannot be taken, a test that could not be made to
-bite — and one is a hardening case (the unparsable 409) that has never been
-observed. That is why they are grouped rather than queued, and why the entry
-condition for working on them is a quiet week, not an incident.
+**THIS SECTION USED TO SAY TWO OF THESE SHARE ONE BLOCKER AND SHOULD BE DONE
+TOGETHER. THAT WAS FALSE, and a spike at production defaults measured it**
+(spec §1.3-1.4, probe `1ae217e1` on `td-spike`). The claim was that the fake
+sends no end-of-workout summary burst, so neither the free-row machine tiles
+nor `VERIFIED ✓` could be photographed. The fake sends one fine — but the
+window is narrow, and an earlier revision of this paragraph stated the rule
+wrongly as "one tick was the whole blocker", which was measured on a harness
+that had stubbed out the three knobs that decide it. **Measured rule:** the
+totals are filed iff the 0x0039 arrives after the driver has seen the
+`terminated` frame AND before the hook's hand-off linger closes at 2000 ms.
+Delivering too early is refused `out-of-window`; delivering too late logs
+`terminate-observations` and files NOTHING, which is also why the reconcile
+verdict alone is not a safe oracle. `endSession()` resolving is neither
+bound — it lands three status ticks after the terminate ack. No production
+change is needed; the fix is the capture's timing.
+`VERIFIED ✓` is blocked on something unrelated — the screenshots stack is
+Concept2-DARK by construction, so the only writer of `verified` 403s — and
+unblocking one does nothing for the other.
 
-**Sizes:** S each; M for the capture pair together.
+**None of these is a defect a rower can hit today**, which is why the entry
+condition is a quiet week rather than an incident.
+
+· dies 2026-09-26 (set 2026-09-12 by James at the open gate, matching the
+date Wave A PR 1 carried) · **the date governs THIS SLATE of three rows, not
+the section.** A stalled Phase TD must never become the reason the front door
+slipped, and under the wave-heading rule one date on the heading covers all
+three rows rather than writing the same clause three times.
+
+**THE SECTION ITSELF SURVIVES ITS OWN DATE, and that is a ruling, not an
+oversight (James, 2026-09-12).** Line 43 of this file makes Phase TD the
+designated home for every debt row, created because "Small, queued" had
+passed 240 rows. Landing these three empties the section to ZERO rows, and
+`/close-phase` archives a closed phase verbatim — which would delete the
+convention along with the phase. So: **this phase STAYS OPEN as the standing
+debt home and `/close-phase` is explicitly NOT run on it.** When the slate
+empties, the heading keeps the home and the next debt row lands here rather
+than back in the queue this was built to replace.
+
+**Sizes:** S each.
 
 
-- [ ] **"A failing reconciliation does not fail the send" is UNGATED.** The
+- [x] **GATED 2026-09-13 (`03878a0f`) — "a failing reconciliation does not
+      fail the send".** The gate is a `BEFORE UPDATE` trigger in
+      `concept2Send.integration.test.ts` keyed to one row id, which fails
+      `markC2Verified`'s UPDATE and nothing else. **The row's own advice was
+      what blocked four attempts:** "fail at the DB" cannot mean the column,
+      because `recordC2Result` writes the same column on the same table and
+      `logs.get` selects it on the handler's first statement — so the
+      REQUEST breaks rather than the reconciliation, which is the 500 from
+      the fixture those attempts kept producing. Biting mutation recorded:
+      removing the route's try/catch gives `expected 500 to be 200`, and
+      only this test fails. First DDL any server test here has issued.
+      Original filing follows. The
       catch in `routes/concept2.ts`'s reconciliation now warns rather than
       swallowing silently — that was the real defect (RF24's shape: a
       permanently broken mechanism emitting nothing, forever). What has no
@@ -3321,7 +3389,17 @@ condition for working on them is a quiet week, not an incident.
       of the phase's debt rather than waiting for a PR that happens to touch
       this file. **S**
 
-- [ ] **An unparsable Concept2 409 leaves a row permanently stuck as unsent.**
+- [ ] **SPLIT OUT OF THIS PHASE 2026-09-12 (James) — an unparsable Concept2
+      409 leaves a row permanently stuck as unsent.** · dies 2026-10-12 · a
+      row and not a fix now because its only evidence-grounded closure is
+      rower-visible copy needing a Gate 0, which is a different weight class
+      from the rest of this phase. **The research also killed the closure this
+      row proposes** (spec §10): the one captured 409 carries a top-level
+      `"id": 85560` exactly where `client.ts:417` reads it, so that body takes
+      the DUPLICATE arm and never sticks; its message text is the two words
+      `Duplicate Result`, which contain no id to parse. Concept2's API
+      documentation is not committed to this repo in any form, so no vendor
+      sentence defines the 409 body shape at all.
       Filed by #363's review (F7). `postResult` answers a 409 whose body
       carries no numeric `id` as `{kind:"c2_error", status:409}`, and #363
       excludes 409 from the retry band — correctly, because retrying would
@@ -3335,7 +3413,13 @@ condition for working on them is a quiet week, not an incident.
       out of the message text or giving the rower a "Concept2 already has
       this" state. **S**
 
-- [ ] **No committed capture shows `VERIFIED ✓`.** Phase AV ships the mark
+- [ ] **SPLIT OUT OF THIS PHASE 2026-09-12 (James) — no committed capture
+      shows `VERIFIED ✓`.** · dies 2026-11-10 · a row and not a fix now
+      because closing it means routing a READ against a Concept2-dark stack,
+      which is a larger fake than anything else in this phase and is its own
+      piece of work. **It does NOT share a blocker with the free-row capture
+      below** — that was this section's own false premise, corrected above.
+      Phase AV ships the mark
       with client tests and two biting mutations, but the screenshots stack
       cannot photograph it, for a reason already written down at length in
       `e2e/screenshots.spec.ts`'s Wave E PR2 header: this stack is
@@ -3352,7 +3436,23 @@ condition for working on them is a quiet week, not an incident.
       fake than either. Unblocks with the same work that would let this stack
       photograph a sent row at all.
 
-- [ ] **The log detail issues TWO `GET /api/concept2/link` on EVERY view,
+- [x] **FIXED 2026-09-13 (`eff974f0`) — the log detail issued TWO
+      `GET /api/concept2/link` per view.** `FromTheLog` now owns the one
+      `useConcept2Link()` and threads it to both blocks. **It was worse than
+      the count suggested, and better to fix than a refactor:** the hook
+      registers `pageshow`/`visibilitychange` PER INSTANCE, so two instances
+      read twice on every FOREGROUND too — and because they held independent
+      state, a rower who relinked to a different Concept2 account kept a
+      stale `VERIFIED ✓` until the next remount, defeating the account gate
+      `MachineConfirmedBlock` exists for. **Honest about the other
+      direction:** the read now fires at parent mount, so `loading`, `error`
+      and `not-found` issue one where they issued none — both blocks sit
+      inside a ready-row guard, which this row's own "rendered
+      unconditionally" claim had wrong. Gated by an exact-delta assertion
+      run RED against the pre-fix tree first (`Expected: 1 Received: 2`) and
+      a client twin; one mutation reddens both. Original filing follows.
+
+- [ ] **(original filing) The log detail issues TWO `GET /api/concept2/link` on EVERY view,
       including rows with no machine block at all.** Phase AV
       added the verified mark to `MachineConfirmedBlock`, which needs the live
       link for its account gate, and `Concept2SendBlock` on the same screen
@@ -3365,12 +3465,44 @@ condition for working on them is a quiet week, not an incident.
       because it is a refactor that PR did not need. **Scope corrected after
       the branch review (N9): the hook is called at the top of
       `MachineConfirmedBlock`, BEFORE its `machineWorkSeconds === null` early
-      return, and the block is rendered unconditionally — so the second
-      request fires on manual and timer rows too, where the block draws
-      nothing. The first wording said "per view", which is true and reads as
-      "per machine row".**
+      return — so the second request fires on manual and timer rows too,
+      where the block draws nothing. The first wording said "per view", which
+      is true and reads as "per machine row".**
+      **SCOPE CORRECTED AGAIN 2026-09-12 (Phase TD anchor pass): "the block
+      is rendered unconditionally" was FALSE.** Both blocks sit inside the
+      ready-row guard at `FromTheLog.tsx:474`, closing at `:661-662`, and
+      `row` is non-null only in the `ready` state (`:284`). That changes the
+      fix, not just the sentence: lifting the hook to `FromTheLog` fires the
+      read at PARENT mount, so `loading`, `error` and `not-found` go from
+      zero link reads to one. The lift is a reduction on the guarded path and
+      an ADDITION on three others — net better, but not the pure halving the
+      row implied. Spec §1.6.
 
-- [ ] **No committed capture shows the free-row summary's machine tiles.**
+- [ ] **BACK OUT OF THE LANDING PR 2026-09-13 (James) — no committed
+      capture shows the free-row summary's machine tiles.** · dies
+      2026-10-13 · a row and not a fix now because three measured attempts
+      could not land the delivery inside the window, and the next honest
+      step is a browser-side ring dump rather than a fourth timing guess.
+      **What the attempts established, so nobody starts from scratch again:**
+      (1) the fake IS reachable at delivery time — `__pm5FakeControls__`
+      was asserted present in the failing run, so this is not the
+      unreachable-seam problem; (2) delivering straight after the second End
+      tap is too early (spec §1.3, ORDER A — the terminated frame has not
+      arrived); (3) waiting for `Wrapping up` before delivering does not fix
+      it either, and `Wrapping up` cannot be the readiness signal anyway
+      because `ConnectedSurface.tsx:466-472` says it renders on every ended
+      state. **The window itself is measured and is not in doubt** (spec
+      §1.3, probe `1ae217e1`): the totals file iff the 0x0039 lands after
+      the driver has seen the `terminated` frame and before the 2000 ms
+      hand-off linger closes. What is missing is a browser-side observable
+      for "the terminated frame has landed" — the ring has one
+      (`summary-half` reads `(run closed, state=terminated)`), the DOM does
+      not. **The tiles are NOT ungated meanwhile:**
+      `justRowReplay.test.ts:350-355` drives the 2026-08-31 walk's own bytes
+      through the real driver, hook and store and asserts all six. This row
+      buys reviewer visibility, not correctness. Original filing follows.
+
+- [ ] **(original filing) No committed capture shows the free-row summary's machine tiles.**
       They ship in #351 gated from upstream of the producer — the
       2026-08-31 walk's own bytes replayed through the real driver, hook and
       store, then the door mounted over what it wrote

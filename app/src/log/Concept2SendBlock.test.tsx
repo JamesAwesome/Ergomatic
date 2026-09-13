@@ -5,6 +5,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index.js";
 import type { StoredLog } from "./storedSummary";
+import type { Concept2Link, LinkReadFailure } from "../api/useConcept2Link";
 
 afterEach(() => {
   vi.resetModules();
@@ -13,13 +14,25 @@ afterEach(() => {
   vi.doUnmock("../adapters/externalBrowser");
 });
 
-const LINKED = {
+/** TYPED as `Concept2Link` since Phase TD, and the annotation is the point.
+ *  This fixture used to be an untyped object literal, which was fine while
+ *  it reached the block as a JSON body through `normalizeLink`. Handed
+ *  straight in as a prop, the compiler immediately named four fields it had
+ *  never carried — `autoSend`, `autoVerify`, `sendFailedAt`,
+ *  `sendFailedReason` — so a test could have asserted against a link shape
+ *  production can never produce (RF33's shape: make the field required and
+ *  the compiler becomes the gate). */
+const LINKED: Concept2Link = {
   available: true,
   linked: true,
   c2UserId: 2211,
   c2Username: "jamesawesome",
   needsReauth: false,
   logbookBaseUrl: "https://log-dev.concept2.com",
+  autoSend: false,
+  autoVerify: false,
+  sendFailedAt: null,
+  sendFailedReason: null,
 };
 
 /** RF3: a REAL stored row over a seeded library workout (SEA_FRET), never
@@ -127,38 +140,78 @@ function twoAttempts(first: { status: number; body: unknown }) {
   return { api, openReadOnlyUrl };
 }
 
-async function renderBlock(row: StoredLog) {
+/** Phase TD: the block takes the link as PROPS. `FromTheLog` owns the one
+ *  `useConcept2Link()` for the screen and threads it to both Concept2
+ *  blocks, so what used to be controlled through `mockApi({ link })` is
+ *  controlled here directly. `mockApi` still serves the SEND arm, which is
+ *  the only endpoint this component talks to on its own now. */
+async function renderBlock(
+  row: StoredLog,
+  over: {
+    link?: Concept2Link | null;
+    failed?: LinkReadFailure | null;
+    reload?: () => Promise<void>;
+  } = {},
+) {
   vi.resetModules();
   const { default: Concept2SendBlock } = await import("./Concept2SendBlock");
-  return render(<Concept2SendBlock row={row} />);
+  return render(
+    <Concept2SendBlock
+      row={row}
+      link={over.link === undefined ? LINKED : over.link}
+      failed={over.failed ?? null}
+      reload={over.reload ?? (() => Promise.resolve())}
+    />,
+  );
 }
 
 describe("Concept2SendBlock absence (board: not linked -> nothing on the row)", () => {
+  // Phase TD: these four used to assert the block's OWN link fetch as the
+  // positive observable, because absence has no DOM signal. The block no
+  // longer fetches, so the observable is now the prop it was handed — the
+  // assertion that the decision is a DECISION and not a crash is kept, and
+  // `FromTheLog.test.tsx` gained the test that the screen issues the read.
   it("renders nothing when no account is linked", async () => {
-    const { api } = mockApi({ link: { available: true, linked: false } });
-    await renderBlock(eligibleRow());
-    // The positive observable is the hook's own request; there is no DOM
-    // signal by construction. M29 is what proves this can go red.
-    await waitFor(() => expect(api).toHaveBeenCalledWith("/api/concept2/link"));
+    mockApi({});
+    const { container } = await renderBlock(eligibleRow(), {
+      link: { ...LINKED, linked: false },
+    });
     expect(screen.queryByText("CONCEPT2")).toBeNull();
+    // Nothing at all, not merely no heading — a block that rendered an
+    // empty shell would pass the query above.
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("renders nothing when the surface is unavailable", async () => {
-    const { api } = mockApi({ link: { available: false } });
-    await renderBlock(eligibleRow());
-    await waitFor(() => expect(api).toHaveBeenCalledWith("/api/concept2/link"));
+    mockApi({});
+    const { container } = await renderBlock(eligibleRow(), {
+      link: { ...LINKED, available: false },
+    });
     expect(screen.queryByText("CONCEPT2")).toBeNull();
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders nothing when the link read fails, and offers no retry here", async () => {
+  it("renders nothing when the link has not been read yet", async () => {
+    // A null link is "not read yet, or unreadable" — the block waits rather
+    // than guessing. Before Phase TD this state was unreachable from here
+    // because the hook always resolved to something; as a prop it is a
+    // first-class case and gets its own row.
+    mockApi({});
+    const { container } = await renderBlock(eligibleRow(), { link: null });
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("renders nothing when the link read failed, and offers no retry here", async () => {
     // Deliberately NOT the card's 1i treatment. The You card is the sole
     // discovery surface and owns the retry; a log row that cannot find out
     // whether an account is linked says nothing rather than growing a
     // second Concept2 error panel on a screen about a rowing session.
-    const { api } = mockApi({ linkStatus: 502 });
-    await renderBlock(eligibleRow());
-    await waitFor(() => expect(api).toHaveBeenCalledWith("/api/concept2/link"));
+    mockApi({});
+    const { container } = await renderBlock(eligibleRow(), {
+      failed: { status: 502 },
+    });
     expect(screen.queryByText("CONCEPT2")).toBeNull();
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("renders nothing for every non-qualifying row, with an account linked", async () => {
@@ -176,11 +229,10 @@ describe("Concept2SendBlock absence (board: not linked -> nothing on the row)", 
     ];
     const seen: (string | null)[] = [];
     for (const shape of shapes) {
-      const { api } = mockApi({});
+      mockApi({});
+      // A LINKED account throughout: the row's own shape is what refuses it
+      // here, and handing a linked link is what keeps that the only variable.
       await renderBlock(eligibleRow(shape));
-      await waitFor(() =>
-        expect(api).toHaveBeenCalledWith("/api/concept2/link"),
-      );
       seen.push(screen.queryByText("CONCEPT2")?.textContent ?? null);
       cleanup();
     }
@@ -319,8 +371,10 @@ describe("Concept2SendBlock stored sent state (spec anchor F8)", () => {
     // is mechanical, so the button's ABSENCE is the only difference — which
     // is why the id and the button are asserted separately rather than
     // through one combined string.
-    mockApi({ link: { ...LINKED, logbookBaseUrl: null } });
-    await renderBlock(eligibleRow({ c2ResultId: 339, c2UserId: 2211 }));
+    mockApi({});
+    await renderBlock(eligibleRow({ c2ResultId: 339, c2UserId: 2211 }), {
+      link: { ...LINKED, logbookBaseUrl: null },
+    });
     expect(await screen.findByText("Accepted by Concept2.")).toBeTruthy();
     expect(screen.getByText("RESULT 339")).toBeTruthy();
     expect(
@@ -548,13 +602,14 @@ describe("Concept2SendBlock refusals (amendment 2d/2e/2f/2h/2i)", () => {
     // domain. The sentence, the REASON and `Send again` still tell the rower
     // what to do; only the shortcut is missing.
     mockApi({
-      link: { ...LINKED, logbookBaseUrl: null },
       send: {
         status: 422,
         body: { error: "no_weight_class", reason: "no_weight" },
       },
     });
-    await renderBlock(eligibleRow());
+    await renderBlock(eligibleRow(), {
+      link: { ...LINKED, logbookBaseUrl: null },
+    });
     await userEvent.click(
       await screen.findByRole("button", { name: "Send to Concept2" }),
     );

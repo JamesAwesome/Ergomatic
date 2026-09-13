@@ -373,11 +373,18 @@ export interface FakeBurst {
   /** ms after this boundary's own `atMs` that 0x003F goes out — default
    *  307.8, the keystone's own measured offset. */
   verificationAtMsOffset?: number;
-  /** 0x003A's raw bytes, 19 of them (`uuids.ts`'s own doc comment) —
-   *  nothing decodes this characteristic (`driver.ts`'s `noteSummaryHalf`
-   *  logs it for observability only, design spec §2's own review I5), so
-   *  the default is the keystone's own captured bytes (seq 517) rather
-   *  than an invented plausible payload. */
+  /** 0x003A's raw bytes, 19 of them (`uuids.ts`'s own doc comment). The
+   *  default is the keystone's own captured bytes (seq 517) rather than an
+   *  invented plausible payload.
+   *
+   *  CORRECTED (Phase TD, 2026-09-13): this comment used to say "nothing
+   *  decodes this characteristic". That stopped being true at Phase LP.
+   *  `parseAdditionalSummary` feeds `run.additionalSummary`, and through it
+   *  the CALORIES and CAL / HOUR tiles on both summary surfaces — so these
+   *  bytes are load-bearing, not observability. The identical stale claim
+   *  sat on `KEYSTONE_ADDITIONAL_SUMMARY_BYTES` below and is corrected with
+   *  it; fixing one and leaving the other is the partial reconciliation
+   *  CLAUDE.md forbids. */
   additionalSummaryBytes?: Uint8Array;
   /** 0x003F's raw bytes — default the keystone's own captured bytes
    *  (seq 518): `27 d8 f3 6e e1 52 55 5b f8 14 01 00 94 00 00 00 00 00
@@ -946,9 +953,16 @@ const DEFAULT_SUMMARY_AVERAGES: Omit<
 const DEFAULT_SUMMARY_BURST_OFFSET_MS = 269.6;
 const DEFAULT_VERIFICATION_BURST_OFFSET_MS = 307.8;
 
-/** 0x003A's raw bytes, captured verbatim (keystone seq 517) — nothing in
- *  this codebase decodes this characteristic (`FakeBurst`'s own doc
- *  comment), so a real, observed payload stands in for an invented one. */
+/** 0x003A's raw bytes, captured verbatim (keystone seq 517), so a real,
+ *  observed payload stands in for an invented one.
+ *
+ *  CORRECTED (Phase TD, 2026-09-13): this said "nothing in this codebase
+ *  decodes this characteristic". False since Phase LP —
+ *  `parseAdditionalSummary` reads it and two machine tiles render from it.
+ *  Note the STAMP these bytes carry: `78 35 1c 09` decodes to 2026-08-23
+ *  09:28, so a summary delivered beside them only folds in if the 0x0039
+ *  carries the same stamp (`driver.ts`'s `stampsEqual`). That is why a
+ *  bare `deliverSummary` cannot populate the calorie tiles. */
 const KEYSTONE_ADDITIONAL_SUMMARY_BYTES = Uint8Array.from([
   0x78, 0x35, 0x1c, 0x09, 0x01, 0xfa, 0x00, 0x02, 0x1c, 0x00, 0x83, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0xef, 0x02,

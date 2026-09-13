@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { openReadOnlyUrl } from "../adapters/externalBrowser";
-import { useConcept2Link } from "../api/useConcept2Link";
+import type { Concept2Link, LinkReadFailure } from "../api/useConcept2Link";
 import {
   c2ProfileUrl,
   c2ResultUrl,
@@ -25,8 +25,20 @@ import type { StoredLog } from "./storedSummary";
  * comment on that component): its inputs are stored facts about this row's
  * relationship to a THIRD PARTY, not derived readings of the session.
  */
-export default function Concept2SendBlock({ row }: { row: StoredLog }) {
-  const { link, failed, reload } = useConcept2Link();
+export default function Concept2SendBlock({
+  row,
+  link,
+  failed,
+  reload,
+}: {
+  row: StoredLog;
+  link: Concept2Link | null;
+  failed: LinkReadFailure | null;
+  /** Shared with `MachineConfirmedBlock` since Phase TD: one hook instance
+   *  for the screen, so a reauth re-read here also re-evaluates the
+   *  verification mark above rather than leaving it stale. */
+  reload: () => Promise<void>;
+}) {
   const [send, setSend] = useState<SendState>({ kind: "idle" });
 
   async function post(): Promise<void> {
