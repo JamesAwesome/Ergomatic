@@ -2426,6 +2426,26 @@ fixed.
   `.superpowers/` (recurring failure 16's corollary) — the same reason the
   screenshot-flakiness item above is inlined. Rides the next PR touching
   this file, or the next time it fires.
+- **A client test's `console.log` never reaches stdout, so any probe that
+  REPORTS what it saw that way is reporting something nobody read.** Measured
+  2026-09-12 during the Phase TD spike: under
+  `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>`,
+  a one-test probe printed `HELLO_FROM_STDOUT` via `process.stdout.write` and
+  SWALLOWED `HELLO_FROM_TEST` via `console.log`; `--silent=false` does not
+  help, because the client project runs in jsdom and jsdom owns the console.
+  **Why it is a row and not a curiosity:** this repo's investigative probes
+  are client tests that dump a ring buffer and quote it back as evidence, and
+  the Phase TD spike's first report did exactly that — its "verbatim" ring
+  entries could not have come from the command it cited. That is RF16's
+  dangling-citation shape wearing a test runner. An assertion is unaffected;
+  only the human-readable readout is lost, which is precisely the part a
+  reader trusts. **The fix is one sentence in `docs/TESTING.md`** telling
+  probe authors to route readouts through `process.stdout.write` or to commit
+  the output to a file, plus the same note where the two scoped-run footguns
+  already live in `CLAUDE.md`. · dies 2026-10-12 · a row and not a fix now
+  because it is a docs change in two files that this phase's PR has no reason
+  to touch, and nothing is broken until the next probe quotes a ring. **S**
+
 - **The checked-in NFC patch is part of the safety mechanism, not a
   convenience.** `app/patches/@capgo__capacitor-nfc@8.2.5.patch` supplies
   session identity on retained events, single-tag selection, native drain on
