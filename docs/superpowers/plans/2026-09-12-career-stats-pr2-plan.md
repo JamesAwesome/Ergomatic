@@ -497,7 +497,7 @@ export async function seedGate0Tests(page: Page, ids: Record<string, string>, in
 9. While CUSTOM's pair is unusable the range line names the range still APPLIED (the same one the totals show); ruling 21's "the inputs' values" describes the valid case.
 10. **RESOLVED in §8.5:** fixture (b) does not move under Sunday start either (measured); the spec now names the pins that do — the weekly series, the `mondayOf` pin and the three `streakOf` pins — and says (b) gates the transposition.
 11. `DELETE /api/logs/:id` answers 200 with a body, not 204 — a PLAN error (the first draft of `seedGate0Tests` checked for 204); the spec never claimed 204 (`grep -n 204` over it → nothing), so there was nothing to fix there.
-12. A CUSTOM range with no rows still renders SEASON and TEST TREND under the `NO ROWS BETWEEN` line — they never filter (invariant 19; A5's note).
+12. A CUSTOM range with no rows still renders SEASON and TEST TREND under the `NO ROWS · <range>` line (the review folded the ISO `NO ROWS BETWEEN` caption into the range line) — they never filter (invariant 19; A5's note).
 13. §8.5 still says the e2e asserts `7 OF 9` after the delete; ruling 19 struck that line and PR 1's e2e already does not — left as it stands (a stale figure in a PR 1 sentence, one read settles it).
 14. **Copy for James at the PR:** `NO METRES IN THESE EIGHT WEEKS` (harden lens 1's untested case — two or more rows in range, no metres in the window; lens 2 renamed it from "NOTHING", which misnamed a null-metres session) beside `OUT OF RANGE`, `Couldn't load your tests.` and `FASTER IS UP`.
 15. `seed.mjs`'s `streaks()` computed LONGEST over all history, against ruling 22; season-scoped in Task 9 with `compute.mjs` proving nothing on the boards moves.

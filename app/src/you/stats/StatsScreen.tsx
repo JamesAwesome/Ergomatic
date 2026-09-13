@@ -22,7 +22,7 @@ import {
   type TestHistoryState,
 } from "../../api/useTestHistory";
 import BackLink from "../../shell/BackLink";
-import { fmtDate, fmtRangeLine, parseDate } from "./format";
+import { fmtDate, fmtRange, fmtRangeLine, parseDate } from "./format";
 import SeasonGroup from "./SeasonGroup";
 import StatsFilterBar, { type CustomProblem } from "./StatsFilterBar";
 import TestTrendGroup from "./TestTrendGroup";
@@ -143,8 +143,15 @@ function Body({
   const summary = summarize(rows, range);
   // §14 ruling 21: the ONE prose line — the days the totals cover. While a
   // CUSTOM pair is unusable it names the range still applied, like the
-  // totals under it.
-  const rangeLine = fmtRangeLine(range, earliestDate(rows));
+  // totals under it. With no row in the range the same line carries the
+  // empty state in the same spelling (`NO ROWS · 20 TO 31 JUL 2026`) —
+  // one line, never a second caption in ISO (PR 2 review, item 2). A
+  // bounded range always has both ends here: ALL is never empty while
+  // the page renders at all (ruling 16).
+  const rangeLine =
+    inRange.length === 0 && range.from !== null && range.to !== null
+      ? `NO ROWS · ${fmtRange(range.from, range.to)}`
+      : fmtRangeLine(range, earliestDate(rows));
   return (
     <>
       <StatsFilterBar
@@ -158,12 +165,7 @@ function Body({
       {rangeLine !== null && (
         <p className="stats-caption stats-range">{rangeLine}</p>
       )}
-      {inRange.length === 0 ? (
-        <p className="stats-caption">
-          NO ROWS BETWEEN {range.from ? fmtDate(range.from) : "THE START"} AND{" "}
-          {range.to ? fmtDate(range.to) : "TODAY"}
-        </p>
-      ) : (
+      {inRange.length > 0 && (
         <>
           <TotalsGroup summary={summary} />
           <WeekBarsGroup

@@ -103,7 +103,11 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("a CUSTOM range with no rows reads NO ROWS BETWEEN <from> AND <to> with the filter bar still shown", async () => {
+  // Review item 2: an empty range is ONE line in the range line's own
+  // spelling — never a second caption in ISO beside `20 TO 31 JUL 2026`.
+  // Mutation: render the old `NO ROWS BETWEEN 2026-07-20 AND …` caption
+  // again → two `.stats-caption`s above the groups and an ISO date on the page.
+  it("a CUSTOM range with no rows reads one line, NO ROWS · 20 TO 31 JUL 2026, with the filter bar still shown and no ISO date anywhere", async () => {
     await renderScreen(GATE0_ROWS);
     fireEvent.click(chip("CUSTOM"));
     fireEvent.change(screen.getByLabelText("FROM"), {
@@ -112,9 +116,22 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
     fireEvent.change(screen.getByLabelText("TO"), {
       target: { value: "2026-07-31" },
     });
+    expect(document.querySelector(".stats-range")?.textContent).toBe(
+      "NO ROWS · 20 TO 31 JUL 2026",
+    );
     expect(
-      screen.getByText("NO ROWS BETWEEN 2026-07-20 AND 2026-07-31"),
-    ).toBeInTheDocument();
+      document.querySelectorAll(".stats-caption.stats-range"),
+    ).toHaveLength(1);
+    expect(screen.queryByText(/NO ROWS BETWEEN/)).toBeNull();
+    expect(screen.queryByText(/2026-07-20/)).toBeNull();
+    // The only captions left are the range line and the trend's own
+    // (no tests were handed to this render).
+    expect(
+      Array.from(
+        document.querySelectorAll(".stats-caption"),
+        (c) => c.textContent,
+      ),
+    ).toStrictEqual(["NO ROWS · 20 TO 31 JUL 2026", "NO 2K OR 6K TEST LOGGED"]);
     expect(chip("CUSTOM")).toBeInTheDocument();
   });
 
@@ -445,13 +462,13 @@ describe("/you/stats — PR 2: the range line, the groups in order, SEASON and T
     expect(season.getByText("43,012 TODAY")).toBeInTheDocument();
   });
 
-  it("a CUSTOM range with no rows still renders SEASON and TEST TREND under the NO ROWS BETWEEN line", async () => {
+  it("a CUSTOM range with no rows still renders SEASON and TEST TREND under the NO ROWS line", async () => {
     await renderScreen(GATE0_ROWS, GATE0_TEST_ROWS);
     fireEvent.click(chip("CUSTOM"));
     fireEvent.change(screen.getByLabelText("FROM"), {
       target: { value: "2026-09-12" },
     });
-    expect(screen.getByText(/^NO ROWS BETWEEN/)).toBeInTheDocument();
+    expect(screen.getByText("NO ROWS · 12 SEP 2026")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "TOTALS" })).toBeNull();
     expect(
       screen.getByRole("region", { name: "SEASON 2027" }),

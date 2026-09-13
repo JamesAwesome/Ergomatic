@@ -633,9 +633,12 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
     omits those rows.
   - **No test history**: `NO 2K OR 6K TEST LOGGED` under the TEST TREND
     caption (A6c).
-  - **A CUSTOM range with no rows**: `NO ROWS BETWEEN <from> AND <to>` — not
-    drawn at Gate 0; the plan renders it in the TOTALS group's place with the
-    filter bar still shown (the rower needs the bar to leave the range).
+  - **A CUSTOM range with no rows**: the range line itself carries it, in
+    its own spelling — `NO ROWS · 20 TO 31 JUL 2026` (one line; the PR 2
+    review struck a second ISO caption, `NO ROWS BETWEEN 2026-07-20 AND
+    2026-07-31`, that had stacked under it) — not drawn at Gate 0; the
+    groups it filters are absent and the filter bar stays (the rower needs
+    the bar to leave the range).
 - **Gate 0 — APPROVED 2026-09-12 (James), exit criterion 4 met.** What was
   shown: the You hero in three candidate heights (H1 / H2 / H3, portrait and
   landscape) beside the current You screen, the whole subpage at 390×844 and
