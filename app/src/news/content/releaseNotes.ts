@@ -5,6 +5,40 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.46.0: git log v0.45.0..main --oneline — FORTY merges besides this
+    // notes PR itself, each accounted for (RF15; no --merges, which returns
+    // empty on this squash-merged repo). Three days of mostly agent-facing
+    // work; TWO reach a rower:
+    //   #402 a reopened free row shows the rate it showed live — item 1.
+    //   #385 the app stops saying programming failed for a workout the erg
+    //     is already holding — item 2. The PR called nothing "visible"
+    //     because no screen or number changed; the wrong banner it removes
+    //     was seen at the erg (RC-13), so the rower gets a note.
+    //   #387 a finished piece keeps the last diagnostic it produced. A walk
+    //     record, not a screen. No note.
+    //   #400 Phase DE PR 3 drops the pain/effort compat layer: a stale
+    //     pre-v0.39.0 build now fails a write it used to degrade. Nobody on
+    //     the household list runs one. No note.
+    //   #409 Wave A PR 1: users.google_sub nullable. Migration only; sign-in
+    //     unchanged. No note.
+    //   #396 deterministic seed ids; prod rows untouched. No note.
+    //   #403 #408 #412 #413 #414 #415 #416 Phase MD and its riders: internal
+    //     seams, test infrastructure, a closed phase. Tester impact none in
+    //     every body. No note.
+    //   #411 Phase PS PR 0: a spec and the DBA agent. No note.
+    //   #379 #383 #384 #389 #390 #391 #392 #393 #394 #395 #397 #398 #399
+    //     #401 #404 #405 #406 #407 #410 and the six direct Phase RR commits
+    //     (8285654d, 8ed55c61, 714f2061, d20e581d, 9ec2b127, 48dd3950,
+    //     1b0bf804): docs, skills, ROADMAP, screenshots process, agent
+    //     ledgers. No note.
+    version: "v0.46.0",
+    date: "2026-09-12",
+    items: [
+      "A free row you reopen from History shows the same RATE it showed you live. The stored row carried no note of being a free row, so the reopened screen guessed wrong and showed a dash where the monitor's own average belonged.",
+      "The app no longer tells you programming failed for a workout the erg has already taken. A hiccup on the phone side after the erg confirmed the workout used to be reported as the erg refusing it.",
+    ],
+  },
+  {
     // v0.45.0: git log v0.44.0..main --oneline — SIX merges besides this
     // notes PR itself, each accounted for (RF15; no --merges, which returns
     // empty on this squash-merged repo). Two phases in one range, which is
