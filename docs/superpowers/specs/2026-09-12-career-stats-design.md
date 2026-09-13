@@ -275,7 +275,10 @@ are absent (hard delete, `data.ts:1583`).
 - **Metres per week** (PR 2) = Σ `workMeters` over `rows(R, ALL)` grouped by
   the Monday-start week of the row's date, drawn as eight bars ending at the
   week containing the range's LAST day (today for every preset; TO for
-  CUSTOM). Gate 0 pins the ALL series for the seed: `0 · 0 · 10,000 · 0 · 0 ·
+  CUSTOM — and a CUSTOM `to` after today is clamped to today by
+  `customRange`, the ONE owner of that clamp, so the totals, the range
+  line and the bars all read the clamped range; `metresPerWeek` keeps its
+  own clamp as defence, pinned). Gate 0 pins the ALL series for the seed: `0 · 0 · 10,000 · 0 · 0 ·
   13,000 · 3,000 · 2,000` for the weeks of 2026-07-20 … 2026-09-07 with
   today = 2026-09-12 (`compute.mjs`). The calendar's current week is drawn in
   `--ink` and labelled `THIS WK`; every other week in `--ink-4` (§14 ruling
@@ -297,7 +300,8 @@ constructs a `Date` from a string (§3, §8.3).
   literals: `2026-04-30 → season 2026`, `2026-05-01 → season 2027`.
 - **Presets:** ALL (no bound) · SEASON (current season to today) · YEAR
   (Jan 1 to today) · MONTH (1st to today) · 30 DAYS (today − 29 … today)
-  · CUSTOM (from, to; both inclusive; from ≤ to). "Today" is the device's
+  · CUSTOM (from, to; both inclusive; from ≤ to; a `to` after today is
+  clamped to today — §3.2). "Today" is the device's
   date, converted by the adapter like every row date.
 - **Week** starts Monday. Week of d = the Monday ≤ d (ISO). Pinned:
   `2026-09-13` (Sunday) → week of `2026-09-07`; `2026-09-14` → itself.
@@ -1005,8 +1009,9 @@ behaviour (RF26).
   `Stats`, tap the LEGEND and assert `/you/stats`; assert ALL `56,752` and
   MACHINE `36,752`, `718`, `1,731`, `176` (no prose lines to assert since
   ruling 19); delete R13 (a `pm5` row, 2,000
-  m) through the UI, reload, assert LIFETIME `54,752`, MACHINE `34,752` and
-  `7 OF 9`. Mutation: make the ALL column filter `source === "pm5"` → the
+  m) through the UI, reload, assert LIFETIME `54,752` and MACHINE `34,752`
+  (the `7 OF 9` line was struck by rulings 18/19 and is not asserted).
+  Mutation: make the ALL column filter `source === "pm5"` → the
   ALL literal fails while MACHINE passes (the case that proves the two
   columns are computed independently). This run is bounded below the fake's
   first frame by construction — nothing here connects a monitor (RF41).
