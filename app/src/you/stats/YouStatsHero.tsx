@@ -68,7 +68,6 @@ function HeroBody({
         <>
           <StackedBar buckets={buckets} />
           <TypeLegend buckets={buckets} withTime={false} />
-          <p className="stats-caption">WORK TIME BY TYPE · ALL ROWS</p>
         </>
       )}
     </>

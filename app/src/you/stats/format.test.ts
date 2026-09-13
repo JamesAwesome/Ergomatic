@@ -6,15 +6,9 @@ import { fmtDate, fmtMeters, fmtPercent, fmtSeconds, seamLine } from "./format";
 // plural arm lives here with independent literals.
 describe("stats formatters", () => {
   it("seamLine is singular at one row and plural above", () => {
-    expect(seamLine(1)).toBe(
-      "1 ROW PREDATES WORK-ONLY TOTALS · NOT IN AVG WATTS",
-    );
-    expect(seamLine(2)).toBe(
-      "2 ROWS PREDATE WORK-ONLY TOTALS · NOT IN AVG WATTS",
-    );
-    expect(seamLine(13)).toBe(
-      "13 ROWS PREDATE WORK-ONLY TOTALS · NOT IN AVG WATTS",
-    );
+    expect(seamLine(1)).toBe("1 ROW PREDATES WORK-ONLY TOTALS");
+    expect(seamLine(2)).toBe("2 ROWS PREDATE WORK-ONLY TOTALS");
+    expect(seamLine(13)).toBe("13 ROWS PREDATE WORK-ONLY TOTALS");
   });
 
   it("metres take thousands separators, seconds the house clock, shares a whole percent, dates ISO", () => {

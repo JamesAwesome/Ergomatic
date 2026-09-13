@@ -3,8 +3,6 @@ import StackedBar from "./StackedBar";
 import TypeLegend from "./TypeLegend";
 import { NO_WORK_TIME_TO_DRAW } from "./YouStatsHero";
 
-export const TIME_BY_TYPE_CAPTION =
-  "WORK TIME · NO TYPE IS ERGOMATIC'S OWN BUCKET FOR FREE ROWS AND UNTYPED ROWS · NOT A FIFTH TYPE";
 export const TWO_ROWS_MAKE_A_CHART = "TWO ROWS MAKE A CHART";
 
 /** TIME BY TYPE (spec §5 item 4): the hero's bar again, with a legend of
@@ -21,9 +19,6 @@ export default function TimeByTypeGroup({
       <h2 id="stats-tbt-h" className="stats-group-title">
         TIME BY TYPE
       </h2>
-      <p className="stats-caption stats-caption-quiet">
-        {TIME_BY_TYPE_CAPTION}
-      </p>
       {rowsInRange < 2 ? (
         <p className="stats-caption">{TWO_ROWS_MAKE_A_CHART}</p>
       ) : buckets.length === 0 ? (

@@ -12021,9 +12021,6 @@ section:not(.news-pinned) .news-row:last-of-type {
 .stats-legend-chip .stats-legend-key {
   color: var(--ink);
 }
-.stats-caption-quiet {
-  color: var(--ink-4);
-}
 .stats-group {
   margin-top: 24px;
 }
@@ -12142,7 +12139,6 @@ section:not(.news-pinned) .news-row:last-of-type {
   vertical-align: middle;
   border-top: 1px solid var(--rule-2);
 }
-.stats-table th.stats-note,
 .stats-table td.stats-note {
   text-align: right;
   font-size: 10px;
@@ -12153,19 +12149,6 @@ section:not(.news-pinned) .news-row:last-of-type {
   padding: 4px 0 8px;
   border-top: none;
   line-height: 1.5;
-}
-/* A3's row caption (`cap()`): one full-width line under its figure. */
-.stats-table td.stats-row-caption {
-  height: auto;
-  padding: 0 0 8px;
-  text-align: left;
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-  line-height: 1.5;
-  white-space: normal;
-  border-top: none;
 }
 .stats-legend {
   list-style: none;

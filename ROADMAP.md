@@ -578,7 +578,7 @@ contributes only the season's calendar (May 1 to Apr 30, named by end year)
 and vocabulary** — spec §7 invariant 12, gated by a key-set test on the
 projection type and a case-insensitive text scan over the stats code
 (§8.4). The RC-5 seam is accepted and named on the surface (`k ROWS PREDATE
-WORK-ONLY TOTALS · NOT IN AVG WATTS`), never corrected.
+WORK-ONLY TOTALS`, ruling 18 struck the suffix), never corrected.
 
 - [ ] **PR 0 — the spec, this section, and the DBA agent**
       (`.claude/agents/dba.md` + `dba-techniques.md` + `dba-ledger.md`;
@@ -606,21 +606,21 @@ WORK-ONLY TOTALS · NOT IN AVG WATTS`), never corrected.
       primitive under `src/charts/` (the hero needs both — Gate 0 ruling
       11), the You HERO as its OWN component `src/you/stats/YouStatsHero.tsx`
       (Gate 0's H3: LIFETIME / SEASON figures over one AN · AT · O2 · TR ·
-      NO TYPE bar with a whole-percent chip legend, 163 px portrait as
-      shipped (`you.png` rows 120→282), ALL column,
+      NO TYPE bar with a whole-percent chip legend and no caption (ruling
+      18), 140 px portrait as shipped (`you.png` rows 120→259), ALL column,
       work metres; `You.tsx` passes it nothing) which IS the door — one
       focusable control named `Stats`, tapping anywhere opens `/you/stats`,
       and `.you-doors` gains NO STATS row (ruling 10) — `/you/stats` with the
       filter bar (ALL · SEASON · YEAR · MONTH · 30 DAYS · CUSTOM), the whole
       TOTALS group — METRES / TIME / SESSIONS in both columns, then REST
-      METRES / CALORIES (Σ stored `totalCalories`, `n OF m ROWS CARRY IT ·
-      MONITOR'S OWN COUNT`) / AVG WATTS (`logbookWatts` of the RANGE's
-      Σseconds ÷ Σmetres over machine, work-pair and steps rows only —
-      ruling 6 — never a mean of per-row watts; captioned `AT THE RANGE'S
-      AVERAGE PACE · WORK-ONLY ROWS`) under MACHINE, with `n OF m CARRY THE
-      MONITOR'S OWN TOTALS` full-width under the header row and the seam
-      line in both numbers (`1 ROW PREDATES …` / `k ROWS PREDATE …`, ruling
-      15) — the subpage's TIME BY TYPE group (free once the hero exists,
+      METRES / CALORIES (Σ stored `totalCalories`) / AVG WATTS
+      (`logbookWatts` of the RANGE's Σseconds ÷ Σmetres over machine,
+      work-pair and steps rows only — ruling 6 — never a mean of per-row
+      watts) under MACHINE, with exactly two lines of prose on the page
+      (ruling 18): the seam line under the heading (`1 ROW PREDATES …` /
+      `k ROWS PREDATE …`, rulings 15/17, k > 0 only) and the `n OF m MACHINE
+      ROWS CARRY THE MONITOR'S OWN TOTALS` footnote under the card (m > 0
+      only) — the subpage's TIME BY TYPE group (free once the hero exists,
       ruling 11), and the empty states: 0 rows with the filter bar hidden,
       1 row, and the MACHINE column's `NO MONITOR ROWS YET` with its REST /
       CALORIES / AVG WATTS rows hidden when no `pm5` row is in range (ruling
@@ -711,7 +711,8 @@ surface and its parity-photograph row under Wave E. RC-16's doubled
 
 **Ruled by James, 2026-09-12 (spec §14), applied in the spec:** MACHINE is
 BY DOOR — every `source = 'pm5'` row, link-lost ones included, with `n OF m
-CARRY THE MONITOR'S OWN TOTALS` under the column; rest is the stored RC-1
+MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS` as the card's one footnote
+(ruling 18 stripped every other caption); rest is the stored RC-1
 pair (`machineSummary.totalRestMeters` stays provenance, unread); the
 avg-m/day divisor counts today (May 1 → 1); the test trend SHOWS points
 whose log was deleted; CALORIES & WATTS are rows of TOTALS, not a group;

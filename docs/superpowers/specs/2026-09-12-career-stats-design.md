@@ -172,7 +172,7 @@ load-bearing as the line quoted):**
 | Concept | Concept2 has it | Ergomatic asserts | Who is wrong when it matters |
 | --- | --- | --- | --- |
 | Season (May 1 – Apr 30, named by end year) | Yes (PRIMARY) | Mirrors it exactly | Nobody: a calendar convention, not a number |
-| Lifetime metres | Yes | Σ over our rows only, work-only | Us, if a rower expects their C2 catch-up or pre-Ergomatic metres — the surface says ERGOMATIC ROWS ONLY |
+| Lifetime metres | Yes | Σ over our rows only, work-only | Us, if a rower expects their C2 catch-up or pre-Ergomatic metres — the `ERGOMATIC ROWS ONLY` subtitle was struck by ruling 18, so nothing on the surface says so |
 | Avg metres/day this season | Yes (Honor Board) | Same formula, divisor pinned in §3.3 | Us, by at most one day of divisor if the INFERENCE is wrong |
 | Weekly streak | **No.** Concept2 has no streak | Ergomatic-invented, labelled `ERGOMATIC` on the surface | Us; it asserts nothing on Concept2's behalf |
 | Type buckets (AN · AT · O2 · TR) | No — C2 has no intensity axis | Erg Book's own axis; a free row is NO TYPE, not a fifth peer (`just-row-design.md:802-806`) | Nobody: purely ours |
@@ -237,9 +237,10 @@ are absent (hard delete, `data.ts:1583`).
   OWN TOTALS`, n = rows in tier `machine`, m = |rows(R, MACHINE)|.
 - **Rest metres** (MACHINE only) = Σ `restMeters` non-null — the stored RC-1
   pair, what the TOTAL line shows (§14 ruling 2).
-- **Calories** (MACHINE only) = Σ `calories` non-null, shown with
-  `n OF m ROWS CARRY IT` where m = |rows(R, MACHINE)|. The row's caption is
-  `MONITOR'S OWN COUNT`: nothing establishes that the PM5's `totalCalories`
+- **Calories** (MACHINE only) = Σ `calories` non-null; `caloriesRows` (n
+  of m = |rows(R, MACHINE)|) is computed but, since ruling 18, NOT printed —
+  the `n OF m ROWS CARRY IT · MONITOR'S OWN COUNT` caption was struck. The
+  definition stands: nothing establishes that the PM5's `totalCalories`
   is work-only (`oracleCorpusReplay.test.ts:916-920` proves only that it
   equals Σ split calories), so the WORK METRES caption does not govern it.
 - **Avg watts** (MACHINE only) = `logbookWatts(Σ workSeconds, Σ workMeters)`
@@ -460,23 +461,24 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
 `A6c-NoMonitorRows.dc.html`, `A7-Contrast.dc.html`).
 
 - **You root** (`src/You.tsx`): under the identity card, the **hero** — Gate
-  0's H3 TIME BY TYPE (§14 ruling 9), **163 px tall in portrait as
+  0's H3 TIME BY TYPE (§14 ruling 9), **140 px tall in portrait as
   shipped** — measured ONCE, hairline to hairline on
   `docs/screenshots/you.png`: the two full-width `--rule-2` (`#ded8c9`)
-  pixel rows are 120 and 282 (a PNG IDAT scan counting rows where ≥ 90 %
+  pixel rows are 120 and 259 (a PNG IDAT scan counting rows where ≥ 90 %
   of pixels between x = 24 and x = 366 are that colour; PR #417's fix
-  round), so 282 − 120 + 1 = 163. The canvas candidates measured H1 201 /
-  H2 142 / H3 181 (`hero-heights.json`); the shipped chip legend wraps
-  tighter than the canvas draft, which is the whole difference. Full
-  content width. Top to bottom (A2-H3): one row carrying `LIFETIME ·
+  round, re-measured after ruling 18 struck the caption), so
+  259 − 120 + 1 = 140. The canvas candidates measured H1 201 / H2 142 /
+  H3 181 (`hero-heights.json`); the shipped chip legend wraps tighter and
+  carries no caption, which is the whole difference. Full content width. Top to bottom (A2-H3): one row carrying `LIFETIME ·
   56,752 M` and `SEASON 2027 · 43,012 M` (house mono label style, ALL column,
   work metres, tabular numerals; the two spans sit space-between and wrap
   when the width forces it); one 24 px stacked bar in the §3.2 order with
   2 px surface gaps; the legend as swatch CHIPS — one per non-empty
   bucket, `AN 6%` … `NO TYPE 15%`, A2-H3's own markup (`build.mjs`
   `stackSvg(…, { compact: true })`), wrapping when the width forces it;
-  the artboard wins over any run-of-text reading of this line; the
-  caption `WORK TIME BY TYPE · ALL ROWS`. **It replaces the
+  the artboard wins over any run-of-text reading of this line; NO caption
+  under the legend (ruling 18 struck `WORK TIME BY TYPE · ALL ROWS`). **It
+  replaces the
   two-line headline the design first carried** (ruling 9). **The hero IS the
   door (§14 ruling 10):** tapping anywhere on it opens `/you/stats`. It is
   ONE focusable control — a `Link` whose accessible name is `Stats`, ≥ 44 px
@@ -504,28 +506,27 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
   (1) `← BACK` (`.back-link`, 44 px) and the title `Stats`; the **filter
   bar** — six 44 px chips `ALL · SEASON · YEAR · MONTH · 30 DAYS · CUSTOM`
   (58 px wide each at the 350 px content width), roving-tabindex radiogroup
-  copied from `PaceRefInput` (RF8), ALL selected on first open; under it the
-  caption `RANGE APPLIES TO TOTALS · METRES PER WEEK · TIME BY TYPE. SEASON
-  IS ALWAYS THIS SEASON. TEST TREND IS ALWAYS EVERY TEST.` CUSTOM reveals
+  copied from `PaceRefInput` (RF8), ALL selected on first open; NO caption
+  under it (ruling 18 struck `RANGE APPLIES TO …`). CUSTOM reveals
   two `<input type="date">` at 16 px (44 px tall), seeded FROM = today − 29,
   TO = today, applied on change, and while FROM > TO the previous range
   stays and the inputs read `FROM MUST NOT FOLLOW TO` (A5b).
-  (2) **TOTALS**, captioned `ERGOMATIC ROWS ONLY · WORK METRES · REST SHOWN
-  SEPARATELY` (governs METRES and TIME, RF34); when any row in range is tier
-  `stored` the caption gains the **seam line**, `1 ROW PREDATES WORK-ONLY
-  TOTALS · NOT IN AVG WATTS` in the singular and `k ROWS PREDATE WORK-ONLY
-  TOTALS · NOT IN AVG WATTS` for k ≥ 2 (§14 ruling 15) — the seam named on
-  the surface, as ruled, and the watts exclusion (ruling 6) said where the
-  excluded rows are counted. Then the header row `ALL ROWS | MACHINE`, and
-  **directly under the header row, FULL WIDTH — not under the MACHINE
-  column** — `n OF m CARRY THE MONITOR'S OWN TOTALS` (ruling 15; A3 reads
-  `8 OF 10 CARRY THE MONITOR'S OWN TOTALS`). Rows METRES / TIME / SESSIONS
-  in both columns; then REST METRES / CALORIES / AVG WATTS under MACHINE
-  only (§14 ruling 5: calories and watts are rows of this group, never a
-  group of their own — the "lifetime + monthly" ruling is met by the ALL and
-  MONTH presets). The CALORIES row carries `n OF m ROWS CARRY IT · MONITOR'S
-  OWN COUNT` (not claimed work-only, §3.2); the AVG WATTS row carries `AT
-  THE RANGE'S AVERAGE PACE · WORK-ONLY ROWS` (ruling 6).
+  (2) **TOTALS** — **exactly two lines of prose on the whole page (ruling
+  18):** directly under the heading, ONLY when k > 0, the **seam line**
+  `1 ROW PREDATES WORK-ONLY TOTALS` in the singular and `k ROWS PREDATE
+  WORK-ONLY TOTALS` for k ≥ 2 (rulings 15, 17, 18 — no `· NOT IN AVG
+  WATTS` suffix); and under the card, ONLY when m > 0, the footnote
+  `n OF m MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS` (A3 reads `8 OF 10`).
+  The card itself is the header row `ALL ROWS | MACHINE`, rows METRES /
+  TIME / SESSIONS in both columns, then REST METRES / CALORIES / AVG WATTS
+  under MACHINE only (§14 ruling 5: calories and watts are rows of this
+  group, never a group of their own — the "lifetime + monthly" ruling is
+  met by the ALL and MONTH presets). STRUCK by ruling 18: the `ERGOMATIC
+  ROWS ONLY · WORK METRES · REST SHOWN SEPARATELY` subtitle, the in-card
+  `n OF m CARRY …` header line, the CALORIES `n OF m ROWS CARRY IT ·
+  MONITOR'S OWN COUNT` line and the AVG WATTS `AT THE RANGE'S AVERAGE PACE
+  · WORK-ONLY ROWS` line — the exclusions those captions named (§3.2,
+  ruling 6) still hold in the numbers, unlabelled.
   (3) **METRES PER WEEK** (PR 2) — eight bars ≤ 24 px wide on a `linearScale`
   y-axis with `chooseTicks` gridlines, captioned `EIGHT WEEKS ENDING AT THE
   RANGE'S LAST DAY · WEEKS BEGIN MONDAY · THIS WEEK IN INK`; the current week
@@ -534,8 +535,8 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
   by date (`27 JUL · 10 AUG · 24 AUG · THIS WK`).
   (4) **TIME BY TYPE** (PR 1 — the hero already needs the computation and
   the bar, so the group ships at no extra cost, §9) — the same stacked bar
-  as the hero, captioned `WORK TIME · NO TYPE IS ERGOMATIC'S OWN BUCKET FOR
-  FREE ROWS AND UNTYPED ROWS · NOT A FIFTH TYPE`, with a legend of one row
+  as the hero, with NO caption (ruling 18 struck `WORK TIME · NO TYPE IS
+  ERGOMATIC'S OWN BUCKET …`), and a legend of one row
   per non-empty bucket: swatch, name, time, whole-percent share (A3: `AN
   13:43 6% · AT 1:03:39 27% · O2 1:44:04 43% · TR 23:07 10% · NO TYPE
   35:06 15%`).
@@ -606,7 +607,7 @@ its measured outputs). Artboards are cited by id (`A2-H3-You.dc.html`,
     the rowed FILL carries the state at 17.11:1). Two candidates for
     previous-week bars were measured and REJECTED: the handoff's `#c9c3b2`
     (`--rule-3`) at 1.73:1 and `--ink-5` at 2.75:1 (§14 ruling 12).
-  - **Hit targets (A7):** the hero ≥ 44 px (163 px shipped, 181 px on the
+  - **Hit targets (A7):** the hero ≥ 44 px (140 px shipped, 181 px on the
     canvas), `← BACK` 44 px min
     height and width, each filter chip 44 × 58 px, each date input 44 px
     tall, tab items 44 px + safe-area padding, Sign out 44 px. Chart marks
@@ -804,11 +805,11 @@ behaviour (RF26).
   figures to assert are `compute.mjs`'s printout, verbatim:
   - ALL / lifetime: **56,752 m · 3:59:39 · 13 sessions**; SEASON 2027:
     **43,012 m** (9 rows); 30 DAYS: 18,000 m; MONTH: 5,000 m.
-  - MACHINE (10 rows): **36,752 m · 2:34:31 · 10**; `8 OF 10 CARRY THE
-    MONITOR'S OWN TOTALS`; REST METRES **718**; CALORIES **1,731** with `8 OF
-    10 ROWS CARRY IT`; AVG WATTS **176** (Σs 7679.1 / Σm 30,512 over the nine
-    non-`stored` rows); seam line **`1 ROW PREDATES WORK-ONLY TOTALS · NOT IN
-    AVG WATTS`** (k = 1, R1).
+  - MACHINE (10 rows): **36,752 m · 2:34:31 · 10**; the footnote `8 OF 10
+    MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS`; REST METRES **718**;
+    CALORIES **1,731** (8 of 10 carry one — computed, not printed, ruling
+    18); AVG WATTS **176** (Σs 7679.1 / Σm 30,512 over the nine non-`stored`
+    rows); seam line **`1 ROW PREDATES WORK-ONLY TOTALS`** (k = 1, R1).
   - TIME BY TYPE (ALL): AN 822.6 s (5.7%) · AT 3819.4 s (26.6%) · O2 6244.0 s
     (43.4%) · TR 1387.3 s (9.6%) · NO TYPE 2106.0 s (14.6%), Σ 14379.3 s; the
     rendered legend reads `AN 6%`, `AT 27%`, `O2 43%`, `TR 10%`, `NO TYPE
@@ -846,7 +847,8 @@ behaviour (RF26).
   reads `56,752` and SEASON `43,012` (RF7 — hand-recomputed above and in
   `compute.mjs`), Tab to the hero and assert it is focused with name
   `Stats`, tap the LEGEND and assert `/you/stats`; assert ALL `56,752` and
-  MACHINE `36,752`, `8 OF 10 CARRY THE MONITOR'S OWN TOTALS`, `718`,
+  MACHINE `36,752`, `8 OF 10 MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS`,
+  `718`,
   `1,731`, `176`, and the singular seam line; delete R13 (a `pm5` row, 2,000
   m) through the UI, reload, assert LIFETIME `54,752`, MACHINE `34,752` and
   `7 OF 9`. Mutation: make the ALL column filter `source === "pm5"` → the
@@ -1030,7 +1032,9 @@ the record.
 1. **MACHINE = by door.** Every `source = 'pm5'` row is MACHINE, including a
    `pm5` row closed `link-lost` that has no machine totals and no work pair
    (`storedSummary.ts:496-520`) and so sits in tier `stored`. The column
-   carries `n OF m CARRY THE MONITOR'S OWN TOTALS` (§3.2, §5).
+   carries `n OF m CARRY THE MONITOR'S OWN TOTALS` (§3.2, §5) — since
+   ruling 18, as the one footnote under the card, `n OF m MACHINE ROWS
+   CARRY THE MONITOR'S OWN TOTALS`.
 2. **Rest metres = the stored RC-1 pair** (`restMeters`/`restSeconds`),
    what the TOTAL line shows. `machineSummary.totalRestMeters`
    (`storedSummary.ts:270`) stays provenance, unread here (§3.1).
@@ -1062,8 +1066,8 @@ the record.
    name is invisible to every future dispatch. Applied in PR 0.
 9. **The You hero is H3 TIME BY TYPE:** one stacked bar in the order AN ·
    AT · O2 · TR · NO TYPE with the whole-percent legend drawn as swatch
-   chips (A2-H3), under the LIFETIME and THIS SEASON figures; 163 px in
-   portrait as shipped (hairline to hairline in `you.png`, rows 120→282;
+   chips (A2-H3), under the LIFETIME and THIS SEASON figures; 140 px in
+   portrait as shipped (hairline to hairline in `you.png`, rows 120→259;
    the canvas draft measured 181, `hero-heights.json`). It REPLACES the
    two-line headline the design first carried (§5).
 10. **The hero IS the door.** Tapping anywhere on it opens `/you/stats`;
@@ -1091,6 +1095,9 @@ the record.
 15. **Copy:** `1 ROW PREDATES WORK-ONLY TOTALS` is the singular of the seam
     line, and the `n OF m CARRY THE MONITOR'S OWN TOTALS` line renders FULL
     WIDTH under the TOTALS header row, not under the MACHINE column (§5).
+    (Superseded in placement by ruling 18: the line is now the footnote
+    under the card, worded `n OF m MACHINE ROWS CARRY …`; the seam line
+    lost its `· NOT IN AVG WATTS` suffix.)
 16. **Zero monitor rows hide the MACHINE-only rows:** with no `pm5` row in
     range the REST METRES / CALORIES / AVG WATTS rows are hidden and the
     MACHINE column keeps its own empty line reading `NO MONITOR ROWS YET`;
@@ -1104,6 +1111,17 @@ the record.
     counted in every ALL figure and never in k. Implemented in
     `aggregate.ts`'s `storedTierRows`; gated by a `source: "timer"` fixture
     (§3.2).
+18. **Strip the captions (2026-09-12, on sight of `you-stats.png`: "the
+    sheer amount of prose under that stats bar is insane").** The Stats
+    page keeps EXACTLY two lines of prose — the seam line under the TOTALS
+    heading (k > 0 only, no `· NOT IN AVG WATTS` suffix) and one footnote
+    under the TOTALS card, `n OF m MACHINE ROWS CARRY THE MONITOR'S OWN
+    TOTALS` (m > 0 only). Struck: the range caption under the filter bar,
+    the TOTALS subtitle, the in-card `n OF m` header line, the CALORIES and
+    AVG WATTS row captions, the TIME BY TYPE caption, and the hero's `WORK
+    TIME BY TYPE · ALL ROWS`. The A3/A2-H3 artboards now OVER-DRAW those
+    captions (`docs/design/career-stats/README.md`); the captures are the
+    current state.
 
 ## 15. Gate record (PR 0, at `93b91d66`)
 

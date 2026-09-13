@@ -81,7 +81,8 @@ describe("YouStatsHero — Gate 0's H3 hero, and the door (spec §5, invariant 1
       "TR 10%",
       "NO TYPE 15%",
     ]);
-    expect(hero).toHaveTextContent("WORK TIME BY TYPE · ALL ROWS");
+    // Ruling 18: no caption under the legend.
+    expect(hero).not.toHaveTextContent("WORK TIME BY TYPE");
   });
 
   it("is exactly ONE focusable control named Stats, and a click on the legend text — the deepest descendant — opens /you/stats", async () => {

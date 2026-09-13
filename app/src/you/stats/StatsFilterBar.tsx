@@ -10,8 +10,6 @@ const LABEL: Record<Preset, string> = {
   custom: "CUSTOM",
 };
 
-export const RANGE_CAPTION =
-  "RANGE APPLIES TO TOTALS · METRES PER WEEK · TIME BY TYPE. SEASON IS ALWAYS THIS SEASON. TEST TREND IS ALWAYS EVERY TEST.";
 export const FROM_AFTER_TO = "FROM MUST NOT FOLLOW TO";
 /** A cleared FROM or TO. Copy pending James at PR review (Gate 0 drew only
  *  the FROM > TO error). */
@@ -49,7 +47,6 @@ export default function StatsFilterBar({
         className="stats-chips"
         optionClassName="stats-chip"
       />
-      <p className="stats-caption">{RANGE_CAPTION}</p>
       {preset === "custom" && (
         <div className="stats-custom">
           <label className="stats-date">

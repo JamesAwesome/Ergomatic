@@ -2691,7 +2691,9 @@ test("you-stats", async ({ page }) => {
   await seedGate0Stats(page);
   await page.clock.install({ time: new Date("2026-09-12T09:00:00") });
   await page.goto("/you/stats");
-  await page.getByText("8 OF 10 CARRY THE MONITOR'S OWN TOTALS").waitFor();
+  await page
+    .getByText("8 OF 10 MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS")
+    .waitFor();
   // /you/stats is a plain-flow route with the fixed `.tabbar` on screen
   // (not in HIDDEN_TABBAR_PREFIXES); a fullPage capture re-paints that bar
   // in every stitched segment (reason 1 above) — the first capture drew it

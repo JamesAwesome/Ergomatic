@@ -1,14 +1,14 @@
 import type { StatsSummary } from "../../../domain/stats/aggregate.js";
 import { fmtMeters, fmtSeconds, seamLine } from "./format";
 
-export const TOTALS_CAPTION =
-  "ERGOMATIC ROWS ONLY · WORK METRES · REST SHOWN SEPARATELY";
 export const NO_MONITOR_ROWS = "NO MONITOR ROWS YET";
 
-/** TOTALS (spec §5 item 2, §14 rulings 5/6/15/16): METRES / TIME /
+/** TOTALS (spec §5 item 2, §14 rulings 5/6/15/16/18): METRES / TIME /
  *  SESSIONS in both columns, then REST METRES / CALORIES / AVG WATTS under
- *  MACHINE only — HIDDEN, with both `n OF m` lines, when no `pm5` row is in
- *  range; the MACHINE column itself never collapses. */
+ *  MACHINE only — HIDDEN, with the n OF m footnote, when no `pm5` row is
+ *  in range; the MACHINE column itself never collapses. Ruling 18 struck
+ *  every other caption: exactly the seam line (k > 0, under the heading)
+ *  and the footnote (m > 0, under the card) survive. */
 export default function TotalsGroup({ summary }: { summary: StatsSummary }) {
   const { all, machine } = summary;
   const hasMachine = machine.sessions > 0;
@@ -18,7 +18,6 @@ export default function TotalsGroup({ summary }: { summary: StatsSummary }) {
       <h2 id="stats-totals-h" className="stats-group-title">
         TOTALS
       </h2>
-      <p className="stats-caption">{TOTALS_CAPTION}</p>
       {summary.storedTierRows > 0 && (
         <p className="stats-caption">{seamLine(summary.storedTierRows)}</p>
       )}
@@ -33,14 +32,6 @@ export default function TotalsGroup({ summary }: { summary: StatsSummary }) {
               <th scope="col">ALL ROWS</th>
               <th scope="col">MACHINE</th>
             </tr>
-            {hasMachine && (
-              <tr>
-                <th colSpan={3} scope="colgroup" className="stats-note">
-                  {machine.ownTotals} OF {machine.sessions} CARRY THE MONITOR'S
-                  OWN TOTALS
-                </th>
-              </tr>
-            )}
           </thead>
           <tbody>
             <tr>
@@ -77,14 +68,6 @@ export default function TotalsGroup({ summary }: { summary: StatsSummary }) {
                   <td />
                   <td>{fmtMeters(machine.calories)}</td>
                 </tr>
-                {/* A3's `cap()`: the row's caption is a full-width line UNDER the
-                    figure, not text inside the 112 px label cell. */}
-                <tr className="stats-caption-row">
-                  <td colSpan={3} className="stats-row-caption">
-                    {machine.caloriesRows} OF {machine.sessions} ROWS CARRY IT ·
-                    MONITOR'S OWN COUNT
-                  </td>
-                </tr>
                 <tr>
                   <th scope="row">AVG WATTS</th>
                   <td />
@@ -94,16 +77,19 @@ export default function TotalsGroup({ summary }: { summary: StatsSummary }) {
                       : String(machine.avgWatts)}
                   </td>
                 </tr>
-                <tr className="stats-caption-row">
-                  <td colSpan={3} className="stats-row-caption">
-                    AT THE RANGE'S AVERAGE PACE · WORK-ONLY ROWS
-                  </td>
-                </tr>
               </>
             )}
           </tbody>
         </table>
       </div>
+      {/* Ruling 18 (2026-09-12): the ONE footnote the card keeps — n OF m,
+          only when a MACHINE row is in range (m > 0). */}
+      {hasMachine && (
+        <p className="stats-caption">
+          {machine.ownTotals} OF {machine.sessions} MACHINE ROWS CARRY THE
+          MONITOR'S OWN TOTALS
+        </p>
+      )}
     </section>
   );
 }
