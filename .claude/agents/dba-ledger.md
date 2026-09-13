@@ -325,3 +325,50 @@ swamped it) — use `explain (analyze, wal)` with `full_page_writes` off.
 **Not measured:** prod host shape; concurrency; serialisation to a phone
 over a real link (psql timings include a local socket only); whether Phase
 PS aggregates these four numbers at all.
+
+## 2026-09-12 — Wave A Apple-auth spec pass
+
+**FAIL on the draft.** Provider columns held, but grant/attempt columns,
+predicates, indexes, atomic completion, cleanup and rollback were underdefined.
+Anonymous attempts grow with public requests rather than users; TTL bounded
+authority but neither row count nor physical retention. Required exact named
+constraints, atomic create/link consumption, no network I/O under DB locks,
+admission and resident-row bounds, and separate validity/deletion lifetimes.
+No prescribed SQL existed, so latency, locks, WAL and index size were unmeasured.
+The author folded these contracts into the corrected spec; the implementation
+plan owes measurement of auth tables, not unrelated session-log volume.
+
+Evidence: `docs/superpowers/specs/2026-09-12-apple-signin-review.md`; corrected
+spec and rendered Gate 0 approved by James on 2026-09-12. No rerun PASS claimed.
+
+## 2026-09-13 — Wave A Apple sign-in plan measurement
+
+**PASS on corrected `299a31d3`; original `82fb92cb` FAILED held-lock concurrency.**
+Source fingerprints and every command are in
+`docs/superpowers/research/2026-09-13-apple-db-measurement/report.md`; original
+and corrected source snapshots, raw JSON plans, scripts and an archive manifest
+live beside it. Follow that directory's README for the pinned replay inputs.
+
+PostgreSQL 18.4 Debian/aarch64 on Apple M5, 10 logical CPUs, 16 GiB RAM;
+work_mem 4 MB, shared_buffers 128 MB, JIT on, parallel gather 0. WAL comparisons
+used full-page images off and restored them on; the capped-row trial kept the
+default. Synthetic scales: 5/1k/100k/1M users, sessions, grants and links, each
+with 511 live anonymous attempts. Household plus the anonymous cap decides the
+cost ruling; production traffic/hardware remain unmeasured.
+
+The actual query capture found admission COUNT also scans links (0.040 to
+36.958 ms). Identity queries use their unique/PK indexes at scale. Original
+claim versus same-session link replacement deadlocked with 40P01 after
+1018.197 ms; session-first `bound()` made the identical held-order probe's two
+operations fulfill in 12.431 ms. Held session revocation rejects; a concurrent
+subject winner retains its exact ID/profile; slot 512 makes a competing begin
+reject `rate_limited` with exactly 512 rows.
+
+Migration 0031 users-lock bracket: 80.556–80.928 ms at 1M users. The prior
+server booted against the migrated schema and an Apple-only row with health200,
+which does not remove the activation-dependent authentication floor. No competing
+open PRs were observed. At the deciding scale, begin+cancel was 2.122 ms and
+returning begin→claim→accept 4.747 ms; no additional index was recommended.
+The full 512 pending-confirmation cap with 8192-character synthetic refresh
+tokens occupied 5,177,344 B total relation. No ROADMAP row proposed. This is the
+plan gate; the final PR still owes measurement against its shipped source.

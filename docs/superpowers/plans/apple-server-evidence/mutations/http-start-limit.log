@@ -1,0 +1,41 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |integration| server/auth/frontDoorRoutes.integration.test.ts (19 tests | 3 failed) 4333ms
+     × anonymous start request 121 is rejected after 120 shared admissions (new) 543ms
+     × anonymous start request 121 is rejected after 120 shared admissions (legacy-native) 711ms
+     × anonymous start request 121 is rejected after 120 shared admissions (legacy-web) 680ms
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 16 passed (19)
+   Start at  00:42:15
+   Duration  5.18s (transform 203ms, setup 0ms, import 768ms, tests 4.33s, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project integration server/auth/frontDoorRoutes.integration.test.ts
+NOTE: another Ergomatic test run is live (pid 80824, /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/ps-pr2/app, started Sun Sep 13 00:41:40 2026 ).
+      Free 1470 MB, swap 3777.19M / 5120.00M, worker cap 4. Consider a scoped run.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > anonymous start request 121 is rejected after 120 shared admissions (new)
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > anonymous start request 121 is rejected after 120 shared admissions (legacy-native)
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > anonymous start request 121 is rejected after 120 shared admissions (legacy-web)
+AssertionError: request 121: expected 200 to be 429 // Object.is equality
+
+- Expected
++ Received
+
+- 429
++ 200
+
+ ❯ server/auth/frontDoorRoutes.integration.test.ts:153:44
+    151|         .post("/api/auth/native/attempts")
+    152|         .send({ purpose: "signin", provider: "apple" });
+    153|       expect(denied.status, "request 121").toBe(429);
+       |                                            ^
+    154|       expect(denied.body).toStrictEqual({ error: "rate_limited" });
+    155|       const web = await request(app)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+

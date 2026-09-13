@@ -1,0 +1,45 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |unit| server/auth/providers.test.ts (9 tests | 1 failed) 111ms
+     × rejects wrong state before exchange 4ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  00:23:33
+   Duration  210ms (transform 19ms, setup 0ms, import 37ms, tests 111ms, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project unit server/auth/providers.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| server/auth/providers.test.ts > signed provider proof > rejects wrong state before exchange
+AssertionError: promise resolved "{ sub: 'apple-sub', …(4) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "email": "private@privaterelay.appleid.com",
++   "emailVerified": true,
++   "grant": {
++     "clientId": "native.app",
++     "refreshToken": "retained-only-server",
++   },
++   "name": "Rower",
++   "sub": "apple-sub",
+  }
+
+ ❯ server/auth/providers.test.ts:168:6
+    166|         { idToken: await token(), authorizationCode: "code", state: "w…
+    167|       ),
+    168|     ).rejects.toThrow("invalid_proof");
+       |      ^
+    169|   });
+    170|   it("requests Apple form_post without PKCE and Google nonce with PKCE…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

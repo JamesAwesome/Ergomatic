@@ -1,0 +1,777 @@
+import {
+  boolean,
+  check,
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  real,
+  text,
+  timestamp,
+  uuid,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Wave A PR 1 (2026-09-12, spec 2026-09-12-lift-identity-design.md):
+  // NULLABLE since migration 0030 — a rower who signs in without Google has
+  // nothing to be stored here. The UNIQUE stays and admits any number of
+  // NULLs (Postgres NULLS DISTINCT, recorded `nullsNotDistinct: false` in the
+  // snapshot). No production code writes a NULL yet; the policy PR that does
+  // becomes the rollback floor (docs/RELEASING.md § Rollback constraints).
+  googleSub: text("google_sub").unique(),
+  appleSub: text("apple_sub").unique("users_apple_sub_unique"),
+  email: text("email").notNull(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tokenHash: text("token_hash").notNull().unique(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("sessions_user_id_idx").on(t.userId)],
+);
+
+// --- Phase 4: domain tables ---------------------------------------------
+
+export const workoutTypeEnum = pgEnum("workout_type", ["AN", "O2", "AT", "TR"]);
+export const workoutSourceEnum = pgEnum("workout_source", ["starter", "user"]);
+// UNDER = FASTER than target (under the target NUMBER), OVER = SLOWER
+// (post-workout-summary spec, ruling option B, James 2026-08-17): stored
+// members are unchanged from the pre-existing enum, this only documents the
+// direction the button labels now read for a reader landing on this file
+// cold. Mirrored at the options array (LogSession.tsx's HELD_OPTIONS) and
+// both HeldResult copies (server/stores/logs.ts, src/api/useRecentLogs.ts).
+export const heldResultEnum = pgEnum("held_result", ["held", "under", "over"]);
+// Post-workout-summary spec (2026-08-17), §3 "Stored shapes": the reflection
+// card's thumbs-up/down question, stored now even though nothing reads it
+// yet (generation's own thumbs consumption is explicitly OUT for this
+// phase — spec §4).
+export const thumbsEnum = pgEnum("thumbs", ["up", "down"]);
+export const testDistanceEnum = pgEnum("test_distance", ["2k", "6k"]);
+// Phase LL Task 4 (design spec §4, TRIAD — a stored shape): the server-side
+// mirror of `MonitorRun.endedBy` (`src/monitor/monitorRun.ts`'s own
+// `CloseReason` union). `"interrupted"` rides along even though its own
+// writer (F6, Today's row) predates this task — the client-side field
+// already widened to include it, and posting it through unchanged is what
+// makes the widened union additive rather than a second, competing shape.
+// Wave F PR 1 (lifecycle design spec §1, "The migration, owned"): a real
+// Postgres pgEnum TYPE, so the sixth value needs its own migration
+// (`ALTER TYPE ... ADD VALUE`), not just a type-level edit — this array,
+// `server/stores/logs.ts`'s hand-copied `EndedBy` union, and
+// `server/routes/data.ts`'s `ENDED_BY_VALUES` are three independent
+// mirrors of the same value set with no shared source, so widening one
+// without the other two typechecks clean and fails only at runtime on a
+// phone. All three move together in the same commit.
+export const endedByEnum = pgEnum("ended_by", [
+  "finished",
+  "rower",
+  "link-lost",
+  "program-failed",
+  "program-dropped",
+  "interrupted",
+]);
+// Phase BL PR A (baseline-onboarding spec 2026-08-22 rev 2, "The stored
+// shape"): per-NUMBER provenance for the two baseline splits — one row
+// holds two numbers with independent origins (a questionnaire estimates
+// both; a 2K test measures only k2), so a single row-level column would
+// lie to the very consumer the ruling exists for. Stored, never shown in
+// UI. `manual` = typed in the You editor; `estimated` = the questionnaire
+// table (PR C); `derived` = the ±7s counterpart derivation
+// (domain/deriveBaseline.ts) accepted as an offer; `tested` = a rowed
+// test's measured result accepted from the post-test prompt (PR B).
+export const baselineSourceEnum = pgEnum("baseline_source", [
+  "manual",
+  "estimated",
+  "derived",
+  "tested",
+]);
+
+export const baselines = pgTable("baselines", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  k2Seconds: real("k2_seconds"),
+  k6Seconds: real("k6_seconds"),
+  // NOT NULL with a 'manual' default, deliberately no nullable "unknown"
+  // fourth state: every pre-0013 row was written by the You editor (the
+  // only writer that ever existed), so 'manual' is the truthful backfill,
+  // and an old client's plain write IS a manual entry.
+  k2Source: baselineSourceEnum("k2_source").notNull().default("manual"),
+  k6Source: baselineSourceEnum("k6_source").notNull().default("manual"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const workouts = pgTable(
+  "workouts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Nullable: NULL marks a global starter-library row, seeded once at
+    // boot and shared read-only across every user (Task 9's global-library
+    // amendment). A non-null value is an ordinary personal row.
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order"),
+    title: text("title").notNull(),
+    type: workoutTypeEnum("type").notNull(),
+    effort: integer("effort").notNull(), // renamed from `pain` by 0024 (Phase DE PR 2)
+    source: workoutSourceEnum("source").notNull(),
+    steps: jsonb("steps").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("workouts_user_id_idx").on(t.userId),
+    check("workouts_effort_check", sql`${t.effort} between 1 and 5`),
+  ],
+);
+
+// Just Row unconnected spec (2026-09-02, §Mechanism stored shape (c),
+// TRIAD — a stored shape): WHICH DOOR a session log came through. A real
+// Postgres pgEnum TYPE, so widening it is an `ALTER TYPE ... ADD VALUE`
+// migration, never a type-level edit (the `endedByEnum` lesson above).
+// Door PR A (spec `docs/superpowers/specs/2026-09-02-door-partial-design.md`
+// §2.4, migration 0022) added a fourth member, `no-reading`. ELEVEN
+// mirrors of this value set move together — see `domain/types.ts`'s
+// `LogSource` doc comment for the full named list and which ones the
+// compiler checks; this array is NOT one of them (a `pgEnum` widening is
+// DB-level, invisible to `tsc`).
+export const logSourceEnum = pgEnum("log_source", [
+  "pm5",
+  "timer",
+  "manual",
+  "no-reading",
+]);
+
+export const sessionLogs = pgTable(
+  "session_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workoutId: uuid("workout_id").references(() => workouts.id, {
+      onDelete: "set null",
+    }),
+    workoutTitle: text("workout_title").notNull(),
+    // Phase JR PR 1: NULLABLE. `null` means "no intensity was prescribed" —
+    // a free row (Just Row) prescribes none. Stays plain `text`, never the
+    // `workoutTypeEnum` above (that types `workouts.type`); this column
+    // holds OUR intensity axis only and carries no index, CHECK or FK.
+    // R-A ordered: the null-tolerant read side ships in this same PR, the
+    // same shape migration 0009 used for `held`/`pain` (now `effort`, 0024).
+    workoutType: text("workout_type"),
+    loggedAt: timestamp("logged_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    baselineK2: real("baseline_k2"),
+    baselineK6: real("baseline_k6"),
+    // Post-workout-summary spec (2026-08-17), §3 "Stored shapes": nullable
+    // now (`DROP NOT NULL`, migration 0009) — the redesigned reflection card
+    // makes every answer optional (James's ruling), so a rower who skips the
+    // HELD question entirely must be storable, not just one who skips EFFORT
+    // (which was already impossible before this migration: both were
+    // required together). R-A ordered this: the null-tolerant READ side
+    // (`RecentLog.held`, src/api/useRecentLogs.ts) shipped and tagged
+    // (v0.10.1) before this column could ever hold a null, so no installed
+    // client white-screens on one.
+    held: heldResultEnum("held"),
+    // Same ruling as `held` above — nullable, `DROP NOT NULL`. The
+    // `session_logs_effort_check` CHECK below (renamed by 0024) is left untouched: Postgres
+    // passes a CHECK constraint on NULL by definition (NULL is neither TRUE
+    // nor FALSE, and a CHECK only ever REJECTS an explicit FALSE), so an
+    // absent effort value satisfies `effort between 1 and 5` unchanged — no
+    // migration edit needed for the constraint itself.
+    effort: integer("effort"), // renamed from `pain` by 0024 (Phase DE PR 2)
+    notes: text("notes"),
+    steps: jsonb("steps").notNull(),
+    // Phase 7C Task 3 (spec §5/§6): session-scoped provenance for a
+    // monitor-sourced log ("PM5 432331249 Row"), nullable — a phone-timer
+    // log has no device to name, and existing rows read back null (nothing
+    // backfills). Its own column, not folded into `steps` jsonb: the
+    // adversarial review's B4 finding is that §5 and §6 disagreed on this
+    // ("inside the existing steps JSON" vs. "no migration") — a session-
+    // level string has nowhere to live inside a per-step array, so a real
+    // migration is unavoidable.
+    deviceName: text("device_name"),
+    // Just Row unconnected spec (2026-09-02, §Mechanism stored shape (c),
+    // TRIAD): the door this row came through — `pm5` (connected), `timer`
+    // (the phone's clock: a Timer-closed SessionRun, or the time-only Just
+    // Row), `manual` (`Log it after`). NOT NULL, no default: every writer
+    // states it, and the one writer that cannot — an installed build that
+    // predates the column — has the ROUTE derive it (`server/logSource.ts`,
+    // a dated sunset). Migration 0020 adds it nullable, BACKFILLS every
+    // existing row with the read side's old inference (`deviceName` ⇒ pm5,
+    // else any stopwatch step ⇒ timer, else manual), then sets NOT NULL —
+    // so a row that rendered PM5 / TIMER / LOGGED BY HAND before reads the
+    // same word from a column instead of a guess. Its own column, not a
+    // `steps` key, for the same reason `deviceName` above is: a row-level
+    // fact has nowhere honest to live inside a per-step array.
+    source: logSourceEnum("source").notNull(),
+    // Post-workout-summary spec (2026-08-17), §3: nullable column, additive.
+    // Absent/skipped reflection stores null; nothing consumes this yet
+    // (generation's own thumbs consumption is explicitly OUT this phase).
+    thumbs: thumbsEnum("thumbs"),
+    // From-the-log spec (2026-08-18), §2 "Stored shapes" — migration 0010,
+    // five additive/nullable columns, no defaults, no backfill: every
+    // existing row reads every one of these back as null (spec exit
+    // criterion 6). The three hero numbers below are written at save time,
+    // only when the summary showed that hero — history renders the EXACT
+    // numbers the rower saw, never a recomputed near-number (ruling 2).
+    //
+    // `double precision`, never `real` (float4): a probe run against real
+    // Postgres shows `'2.7182818284'::real` truncating to `2.7182817`
+    // while `::double precision` round-trips exactly (verified directly,
+    // 2026-08-18 — the antagonist's own B8 finding on the spec) — a
+    // triad-governed stored number does not get to lose precision the
+    // summary itself never lost.
+    avgSplitSeconds: doublePrecision("avg_split_seconds"),
+    // The R-B number: a plain integer, a whole-meter total (fix round 3,
+    // re-review: "the machine's" is no longer accurate for tier B, whose
+    // total is OUR quotient over our own summed actuals, not a single
+    // machine-reported field).
+    // **CORRECTED (RC-5 hero-truth spec, Task 3 fix round 2, finding
+    // I2): this column's MEANING is save-time-dependent, not fixed.**
+    // Originally (R-B, pre-RC-5): work + rest + warm-up, fused. As of
+    // RC-5 (this same phase), `LogSession.tsx` posts the tier-appropriate
+    // WORK-ONLY number instead (`model.heroes.distanceMeters` —
+    // `summaryModel.ts`'s tier A/B split) for every save going forward;
+    // a row saved BEFORE RC-5 shipped still carries the OLD fused value,
+    // read back unchanged (`storedSummary.ts`'s own FALLBACK/declined-
+    // TIER-B2 branches — no migration backfills old rows). `avgSplitSeconds`
+    // above and `timeSeconds` below carry the identical
+    // save-time-dependent split.
+    distanceMeters: integer("distance_meters"),
+    timeSeconds: doublePrecision("time_seconds"),
+    // Plan linkage pair, written ONLY on an advancing save whose
+    // plan_state upsert returns a non-null planKey — server-derived from
+    // that row in the same transaction, never posted by the client (see
+    // stores/logs.ts's create()). Reset and Switch never rewrite these:
+    // they are a record of what happened, not a foreign key into current
+    // plan state (spec §2), so (plan_key, plan_index) is deliberately
+    // NON-UNIQUE after a Reset — the newest row per index wins at read
+    // time (§2), not enforced here.
+    planKey: text("plan_key"),
+    planIndex: integer("plan_index"),
+    // Series capture spec (2026-08-19), §3 "Server home": the run's 1 Hz
+    // trace, migration 0011 — one nullable jsonb column, no default,
+    // additive-only. A column, not a table: one lifecycle (the log's own),
+    // DELETE cascades free, and nothing streams or paginates samples this
+    // phase (YAGNI, recorded in the spec). Every existing row reads this
+    // back as null; nothing backfills. Untyped jsonb (no `.$type<>()`
+    // binding), same convention as `steps` above — `stores/logs.ts`'s
+    // `LogSeries` is the shape callers actually validate against, not a
+    // Drizzle-level type. Deliberately excluded from `LOG_LIST_COLUMNS`
+    // (`stores/logs.ts`) the same way `steps` already is: the list
+    // projection's own drift pin (`storeContracts.ts`) now reads
+    // "list = get - steps - series".
+    series: jsonb("series"),
+    // Phase LL Task 4 (design spec §4, TRIAD): migration 0012, one
+    // additive-optional enum column, no default, no backfill — every
+    // existing row reads this back as null (exit criterion 5's own "legacy
+    // rows read back unchanged", extended to the server row: a row written
+    // before this task simply has no `ended_by` at all). Nullable so a
+    // rower who saved before a close reason existed, or a pre-this-task
+    // client, is unaffected — this is the mirror of `MonitorRun.endedBy?`
+    // (`src/monitor/monitorRun.ts`), never a second source of truth for
+    // it: the CLIENT decides the value at close time (spec §4's own honest
+    // limit — a server row exists only if the rower saves), and this
+    // column only ever stores what `routes/data.ts`'s POST validated.
+    endedBy: endedByEnum("ended_by"),
+    // Storage-spine design spec §3 (RC-1, TRIAD — a stored shape): the
+    // session's work and rest, stored SEPARATELY from the three fused
+    // hero columns above — migration 0015, four additive-optional,
+    // nullable columns, no default, no backfill. Every existing row reads
+    // all four back as null, forever (spec §3's own "old records keep
+    // fused-only quantities forever, said above the fold"). Mirrors
+    // `MonitorRun.workSeconds`/`workMeters`/`restSeconds`/`restMeters`
+    // (`src/monitor/monitorRun.ts`) — the CLIENT computes these once, at
+    // natural close, from `IntervalActual` sums; this column only ever
+    // stores what `routes/data.ts`'s POST validated, same posture
+    // `endedBy` above already has.
+    //
+    // **CORRECTED at the final whole-branch review (BLOCKER-1) — this
+    // comment used to claim every wire source here "is a whole-number
+    // field," which is false and was never sourced from the field that
+    // actually decides it.** `elapsedSeconds` (0x0037's own Split/Interval
+    // Time, `domain/monitor/pm5/parse.ts`'s `splitIntervalTimeSeconds:
+    // readU24LE(bytes, 6) / 10`) is TENTHS-of-a-second precision on the
+    // wire, not whole seconds — a real natural finish's `workSeconds` is
+    // routinely fractional (session-2's own real capture sums to
+    // 398.4s). `workSeconds` is therefore `doublePrecision`, the same
+    // type and the same B8-truncation reasoning the hero block above
+    // already uses (`avgSplitSeconds`'s own comment) — a `real` column
+    // would risk the identical float4 truncation on a value this
+    // precise. `restSeconds` (0x0037's own Interval Rest Time, offset 12,
+    // `intervalRestTimeSeconds: readU16LE(bytes, 12)`, no `/10`) reads
+    // WHOLE seconds on every committed capture — genuinely a
+    // whole-number wire field, unlike its sibling — but is
+    // `doublePrecision` too, for symmetry with `workSeconds` (the pair is
+    // computed and read together) and because a whole number loses
+    // nothing by living in a wider column; nothing here assumes the wire
+    // could someday send it fractional. `workMeters`/`restMeters` stay
+    // `integer`: `distanceMeters` (0x0037 offset 9, `splitIntervalDistanceMeters:
+    // readU24LE(bytes, 9)`, no scale) and `intervalRestDistanceMeters`
+    // (offset 14, `readU16LE(bytes, 14)`, no scale) are both genuinely
+    // whole-metre u24/u16 wire fields — `distanceMeters` above is this
+    // table's own precedent for an `integer` hero column, and it still
+    // applies to these two, just not to the seconds pair beside them.
+    workSeconds: doublePrecision("work_seconds"),
+    workMeters: integer("work_meters"),
+    restSeconds: doublePrecision("rest_seconds"),
+    restMeters: integer("rest_meters"),
+    // RC-2/RC-3 wave design spec §1 ("The server tier (same PR)", TRIAD):
+    // the machine's own end-of-workout summary — migration 0016, three
+    // additive-optional, nullable columns, no default, no backfill. Same
+    // posture as `workSeconds`/`endedBy` above: the CLIENT decides the
+    // value (`src/monitor/monitorRun.ts`'s `MonitorRun.summaryTotals`/
+    // `summaryDetail`/`verificationBytes`, captured verbatim from
+    // `parseEndOfWorkoutSummary`'s 0x0039 decode), this column only ever
+    // stores what `routes/data.ts`'s POST validated, and every existing
+    // row reads all three back as null, forever.
+    //
+    // `machineWorkSeconds` is `doublePrecision`, same B8-truncation
+    // reasoning as `workSeconds` above (0x0039's own elapsed field is the
+    // identical tenths-precision Split/Interval Time source). Wire
+    // decimeters; a `real` column risks losing precision on a value this
+    // exact.
+    machineWorkSeconds: doublePrecision("machine_work_seconds"),
+    // `machineWorkMeters` is `integer`: 0x0039's own distance field is
+    // decimeters on the wire, and the client rounds to whole meters before
+    // posting (`Math.round` — the validator names the rounding, same
+    // "sanity, not truth" trust boundary as every numeric field here).
+    machineWorkMeters: integer("machine_work_meters"),
+    // `machineSummary` is untyped jsonb (no `.$type<>()` binding), same
+    // convention as `series` above — migration 0011 is the precedent this
+    // column follows: monitor-observed, display-verbatim, never `WHERE`'d
+    // yet. Carries `verificationBytes` (the 0x003F payload, optional) and
+    // the nine `MachineSummaryDetail` fields verbatim
+    // (`src/monitor/monitorRun.ts`) — `routes/data.ts`'s own validator is
+    // the shape authority (object, size-capped, `verificationBytes`
+    // band-checked when present), not this column's type.
+    machineSummary: jsonb("machine_summary"),
+    // Wave E PR1 (2026-08-31-concept2-logbook-design.md §Stored shapes):
+    // all four additive-optional, no default, no backfill — every
+    // existing row reads them back null. c2ResultId: C2's own result id,
+    // written when C2 acknowledges the row — a 2xx, or a 409 whose body
+    // names the colliding id (RF25's durable-recovery write). c2UserId:
+    // WHICH Concept2 account accepted it — the sent state renders only
+    // when this matches the live link's (anchor F8). Both server-written
+    // at upload, never client input.
+    c2ResultId: integer("c2_result_id"),
+    c2UserId: integer("c2_user_id"),
+    // Phase AV (spec 2026-09-07-optional-auto-verify): Concept2's own
+    // `verified`. Written first off the 201 body, by the same call that
+    // writes the two ids above — and SINCE PR 3 also by the reconciliation
+    // (`markC2Verified`), which upgrades it from a later send's declaration
+    // read. Two writers, not one; the "written once per send" phrasing this
+    // comment used to carry is gone.
+    //
+    // THIS IS NOT A MIRROR OF CONCEPT2'S CURRENT STATE, and reading it as
+    // one is the mistake to avoid. **Its meaning WIDENED when the
+    // reconciliation landed (Phase AV PR 3):** it was "what Concept2 said at
+    // receipt"; it is now "the best thing Concept2 has said about this row
+    // the last time we happened to look". That is still not "current" — the
+    // reconciliation fires only on a send, reads one page of 50, and never
+    // walks `links.next`, so a row falls out of view permanently once that
+    // many newer rows exist.
+    // `true` can only become more true, so it is safe to render. `false` and
+    // `null` are NOT distinguishable to the reader and must never be — both
+    // render as no mark. `null` means we did not learn (the 409-duplicate
+    // branch, which tells us Concept2 HAS the row and nothing about its
+    // state); `false` means Concept2 had not verified it the last time we
+    // looked, and the rower may have verified by hand since. The
+    // reconciliation NARROWS that window on every send but never closes it —
+    // it reads one page of 50 and only when a send happens.
+    //
+    // So the surface may state the POSITIVE and may never state the
+    // negative. There is no "not verified" anywhere in the design.
+    //
+    // NOTHING CLEARS THIS, exactly as nothing clears the two ids above. The
+    // mark is kept honest by a RENDER GATE instead — it shows only while the
+    // row's `c2UserId` still matches the live link (`sentResultId`), so it
+    // cannot outlive the account that earned it.
+    verified: boolean("verified"),
+    // completedAt: the client's MonitorRun.completedAt — C2's `date` is
+    // the END of the workout and logged_at is save-time, minutes-to-hours
+    // later (anchor K3). tz: the client's IANA zone.
+    //
+    // WHO WRITES THEM, as of Wave E PR2 (this comment used to say "posted
+    // at save from PR2 on", which was a requirement addressed to a future
+    // PR; it is now a description of the code). The producer is
+    // `src/session/completionStamp.ts`'s `completionStamp()`, spread into
+    // the save body at BOTH monitor doors — `session/LogSession.tsx` and
+    // `justrow/JustRowLog.tsx` — so every row saved by this build or later
+    // carries both fields. An unrecognised zone DEGRADES to null on
+    // `POST /api/logs` (routes/data.ts) rather than refusing the save: a
+    // Concept2 field can never cost a rower their row.
+    //
+    // Rows saved BEFORE that build read both back null, permanently — the
+    // close instant was never recorded, so no backfill is possible.
+    // `completed_at IS NULL` is what distinguishes them in the database.
+    // For those rows the upload route derives the date from logged_at and
+    // PERSISTS the upload request's own zone onto this column on first use
+    // (plan deviation 2 — the payload's date must be stable across retries
+    // because C2's dedup key is second-granular), which is the only way
+    // this column is ever written server-side.
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    tz: text("tz"),
+  },
+  (t) => [
+    index("session_logs_user_id_idx").on(t.userId),
+    // LEFT ALONE by the post-workout-summary migration (0009): NULL passes
+    // a Postgres CHECK constraint by rule (see the `effort` column's own
+    // comment above) — the constraint doesn't need to change for `effort` to
+    // become nullable, only the column's `NOT NULL` does.
+    check("session_logs_effort_check", sql`${t.effort} between 1 and 5`),
+  ],
+);
+
+export const planState = pgTable(
+  "plan_state",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    planKey: text("plan_key", { enum: ["sprint", "head"] }),
+    doneN: integer("done_n").notNull().default(0),
+  },
+  (t) => [
+    check(
+      "plan_state_plan_key_check",
+      sql`${t.planKey} is null or ${t.planKey} in ('sprint', 'head')`,
+    ),
+  ],
+);
+
+export const preferences = pgTable("preferences", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  timeCapMinutes: integer("time_cap_minutes").notNull().default(60),
+  // Phase 9's warmup-setting design (2026-08-09, §2) added a `warmup`
+  // column here, replacing the two columns above (warmup_minutes/
+  // warmup_override). Phase WU (2026-08-21) removed the setting, and the
+  // owed follow-up this comment used to promise — dropping the column —
+  // is door PR A (spec §4 rider 1, migration 0022): the field is deleted
+  // from this table on purpose, in the same commit as the migration's
+  // `DROP COLUMN`, so the ORM's own `db.select().from(preferences)`
+  // (which selects every declared column, `getTableColumns` —
+  // `node_modules/drizzle-orm/pg-core/query-builders/select.js`) never
+  // asks Postgres for a column the migration just removed.
+  countdownSeconds: integer("countdown_seconds").notNull().default(10),
+  paceToleranceSeconds: real("pace_tolerance_seconds").notNull().default(1),
+  accentColor: text("accent_color").notNull().default("#b5341f"),
+  // Phase 6I: START HERE's own dismissal, server-side so it was
+  // recoverable from You (PUT IT BACK ON TODAY) rather than a
+  // client-local flag. James's 2026-08-23 ruling removed the teaching
+  // surfaces (Today's START HERE block, You › Learning the app, News's
+  // dismissed-only pin) — the client no longer reads or writes this
+  // column, and the pinned News articles carry the teaching alone. LEFT
+  // IN PLACE ON PURPOSE, dormant not load-bearing — the API stays
+  // additive-only between tags, and the server route still
+  // accepts/returns the field. Unlike `warmup` above (DROPPED in
+  // migration 0022, once its own rollback exposure was mapped — see
+  // `docs/RELEASING.md`'s rollback table for what a drop actually
+  // costs), no rider has queued this column's removal.
+  startHereDismissed: boolean("start_here_dismissed").notNull().default(false),
+  // Phase RW PR C (spec §3): "this rower chose to go on without a
+  // baseline." The doors card on Today renders iff the pair is unset AND
+  // this is false. Written by the card's skip line and cleared by Today's
+  // return row, the workout detail's caption link, and
+  // `DELETE /api/baselines` (so a rower who resets meets the doors again).
+  // Nothing else reads it. Per-user, never per-device: this column is the
+  // only home, there is no localStorage mirror.
+  baselinesSkipped: boolean("baselines_skipped").notNull().default(false),
+});
+
+export const testHistory = pgTable(
+  "test_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    distance: testDistanceEnum("distance").notNull(),
+    splitSeconds: real("split_seconds").notNull(),
+    deltaSeconds: real("delta_seconds"),
+    loggedAt: timestamp("logged_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // Phase BL PR B (baseline-onboarding spec rev 2, "Recording
+    // (decoupled)"): the saved session log this test result was measured
+    // in — the IDEMPOTENCY KEY for POST /api/test-history's client-fired
+    // record call. UNIQUE (Postgres NULLS DISTINCT, so the legacy keyless
+    // rows — every row written before migration 0014, plus anything the
+    // zero-sender isTestResult path might ever append — coexist freely);
+    // a double-fire's second insert conflicts here instead of writing a
+    // delta-0 duplicate. ON DELETE SET NULL, not CASCADE: test history is
+    // its own record of what the rower measured, and deleting the log row
+    // (which un-counts plan progress) must not silently rewrite the test
+    // trend 8B will render. Nullable and additive — no backfill; a
+    // pre-0014 row simply has no link.
+    sessionLogId: uuid("session_log_id")
+      .references(() => sessionLogs.id, { onDelete: "set null" })
+      .unique(),
+  },
+  (t) => [index("test_history_user_id_idx").on(t.userId)],
+);
+
+// --- Phase 6H: News read state ------------------------------------------
+
+// No FK to content: articles are bundled in the client, so a slug unknown
+// to the current bundle is simply ignored at display time (a rollback
+// keeps its reads). Composite PK makes markRead an idempotent no-op insert.
+export const articleReads = pgTable(
+  "article_reads",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.slug] })],
+);
+
+// --- Wave E PR1 / PR1.75a: Concept2 stored shapes ------------------------
+
+// Wave E PR1.75a (2026-09-02-concept2-pr175-app-bind-design.md §1-§3, TRIAD):
+// which surface MINTED an attempt, derived server-side from which credential
+// `requireUser` resolved (bearer -> native, cookie -> web) — never a
+// client-asserted value, so there is nothing for an attacker to choose.
+export const linkSurfaceEnum = pgEnum("link_surface", ["native", "web"]);
+
+// One row per linked user. Tokens are plain columns behind the same trust
+// boundary every credential this app holds already lives behind (spec:
+// at-rest encryption with the key in the same process env is a lock taped
+// to its own key — attacked at the anchor; held). Tokens are never
+// serialized to any client response — `routes/concept2.ts` returns
+// {available, linked, c2UserId, c2Username, logbookBaseUrl, needsReauth},
+// the account's numeric id and name but never a token (PR2's sent-state/
+// View-on-Concept2 needs).
+export const concept2Links = pgTable("concept2_links", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // PR1.75a D1 (APPROVED, James 2026-09-02): one Concept2 account can be
+  // linked to at most ONE Ergomatic user per database. A detective control
+  // against RFC 9700 §4.5 code injection (the common case: the victim is
+  // already linked) and against two Ergomatic accounts writing one
+  // logbook. Cost, named in the design: a shared household Concept2 login
+  // can never sit behind two Ergomatic accounts. `upsertLink` maps the
+  // violation to `Concept2LinkConflictError`; both completion routes answer
+  // 409.
+  c2UserId: integer("c2_user_id").notNull().unique(),
+  // Wave E PR2 (Gate 0 amendment 1c, ruling ii): the linked account's
+  // Concept2 username, captured at exchange from the same `GET
+  // /api/users/me` response `c2_user_id` comes from. NULLABLE and no
+  // backfill: Concept2 documents `username` as optional (PR1.75a plan
+  // observation 3 measured it PRESENT on log-dev, 2026-09-02, but the
+  // field is read as optional and the card falls back to `account #<id>`).
+  // Exists because the You card's identity line is the account-injection
+  // residual's detect-identity treatment (ROADMAP's C2 row), and a numeric
+  // id is not an identity a rower recognises.
+  c2Username: text("c2_username"),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  // Set (never deleteLink) by any AUTOMATIC path when C2's token endpoint
+  // answers 400/401 on a refresh: C2 documents those statuses for OUR
+  // malformed request and OUR client credentials too (their 400 example
+  // says `Check the "client_secret" parameter`), so an automatic delete
+  // would destroy links on a server bug or a rotated C2_CLIENT_SECRET.
+  // With this flag a misclassified status costs a re-consent prompt,
+  // never the link itself. (Wave E PR2, ruling i: it used to cost the
+  // stored weight class as well. There is no stored class any more — it is
+  // read FROM CONCEPT2 at send time, the rower's own most recent
+  // declaration first and the profile's weight+gender only as a fallback
+  // (this comment used to name the profile alone, which is the wrong
+  // producer) — so re-consent is the whole cost now.)
+  // Cleared by the callback's upsert on successful relink. Measured
+  // grounds: docs/monitor/c2-crossconnect-2026-09/refresh-probe-2026-08-31.md.
+  needsReauthAt: timestamp("needs_reauth_at", { withTimezone: true }),
+  // Wave E auto-send (spec 2026-09-05-concept2-auto-send-design §3.1). The
+  // rower's SENDING MODE: false = MANUAL (today's per-row Send), true =
+  // AUTOMATIC (a finished monitor row is sent the moment it saves). `NOT NULL
+  // DEFAULT false` is ruling 3 — a fresh link lands in MANUAL — and is also
+  // what makes every existing link MANUAL with no backfill. Reset to false by
+  // `upsertLink` when the conflict path lands a DIFFERENT `c2_user_id` (an
+  // account switch must not carry AUTOMATIC onto another Concept2 account);
+  // a reconnect of the same account keeps it.
+  autoSend: boolean("auto_send").notNull().default(false),
+  // Phase AV (spec 2026-09-07-optional-auto-verify, Gate 0 approved
+  // 2026-09-07). OPT-IN, and `DEFAULT false` is the whole product ruling
+  // rather than a convention: PR #336 sent the monitor's verification code
+  // unconditionally, Concept2 marked the row verified at receipt, and James
+  // ruled that a parity REGRESSION — Concept2's own app leaves verifying to
+  // the rower, so doing it for them removes the act this phase exists to
+  // respect. On means the rower asked for it.
+  //
+  // WHY IT LIVES HERE AND NOT IN `preferences`: it inherits `auto_send`'s
+  // account-switch reset in the same `CASE` (`stores/concept2.ts`), because
+  // verifying rows on a Concept2 account the rower did not choose is worse
+  // than merely sending them there — a verified row cannot be un-verified
+  // through any path this app offers (the code is honoured at CREATE and
+  // ignored on update, measured). A `preferences` column has no account to
+  // reset against. The cost, named rather than waved off: a rower who moves
+  // to a new Concept2 account and expects the setting to follow is overridden
+  // silently.
+  //
+  // The reset is SILENT here in a way `auto_send`'s is not — when auto-send
+  // resets, the You screen shows MANUAL and rows stop uploading within a
+  // session; when this resets, nothing the rower looks at changes and rows
+  // quietly stop being verified. That is why the phase ships the mark too.
+  autoVerify: boolean("auto_verify").notNull().default(false),
+  // The sticky "sends are failing" flag (rulings 6, 7). Set by the send
+  // route ONLY when an eligible send fails with `no_weight_class`; the reason
+  // column carries the route's SUB-reason — `no_weight` | `unreadable_weight`
+  // | `implausible_weight` | `no_gender`, `WeightClassFailure` in
+  // `server/concept2/mapping.ts`, which the store's `setSendFailed` is typed
+  // to — the key the rower-facing sentence is chosen by.
+  // Cleared on every outcome that leaves the row at Concept2 (200 post, 200
+  // already-sent short-circuit, 409 duplicate) and on every relink. `c2_error`
+  // never sets it: transient, and its rows keep their Send button.
+  sendFailedAt: timestamp("send_failed_at", { withTimezone: true }),
+  sendFailedReason: text("send_failed_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Single-use, 15-minute link attempts. The nonce (`state`) CORRELATES a
+// completion request to its mint attempt; the completing PRINCIPAL is
+// authenticated separately on both completion routes (a cookie session on
+// the web callback, a bearer on `POST /exchange`) and must equal `user_id`
+// BEFORE the row is consumed and BEFORE any Concept2 call — PR1.75a,
+// design §5/§6. `surface` says which route may complete the row; the
+// `(nonce, user_id, surface)` predicate lives IN `consumeAttemptFor`'s
+// DELETE statement (stores/concept2.ts), so a wrong principal or wrong
+// surface consumes nothing by construction.
+//
+// UNIQUE(user_id): one live attempt per user, ENFORCED — mint is one
+// `INSERT ... ON CONFLICT (user_id) DO UPDATE` (design §2). PROVEN by
+// `concept2.integration.test.ts`'s deterministic race test ("createAttempt
+// genuinely BLOCKS on an uncommitted conflicting row") that two concurrent
+// mints serialize on this index and exactly one row survives. The old
+// delete-then-insert image does NOT yield two rows on this schema: measured
+// against real Postgres (Task 2 fix round 2), it dies with
+// `concept2_auth_attempts_user_id_unique` propagating unmapped — "two rows"
+// was the PRE-0021 behaviour, before that index existed.
+//
+// Migration 0021 rollback, both halves (design §2): (1) `surface` carries
+// DEFAULT 'web' for ROLLBACK, not for writes — the PR1.5 image's
+// `createAttempt` inserts no `surface`, and a plain NOT NULL would make
+// every mint 500 after a rollback; new code always writes it explicitly.
+// (2) The surviving UNIQUE(user_id) turns the rollback image's concurrent
+// double-mint (delete-then-insert) into a unique violation (500) rather
+// than two rows — accepted: a rare self-race, strictly smaller blast radius
+// than the unbounded attempts the index prevents.
+export const concept2AuthAttempts = pgTable("concept2_auth_attempts", {
+  nonce: text("nonce").primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" })
+    .unique(),
+  surface: linkSurfaceEnum("surface").notNull().default("web"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const appleGrants = pgTable(
+  "apple_grants",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    clientId: text("client_id").notNull(),
+    refreshToken: text("refresh_token").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "apple_grants_pkey", columns: [t.userId, t.clientId] }),
+  ],
+);
+
+export const authAttempts = pgTable(
+  "auth_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bindingHash: text("binding_hash").notNull(),
+    surface: text("surface").notNull(),
+    purpose: text("purpose").notNull(),
+    targetProvider: text("target_provider").notNull(),
+    existingProvider: text("existing_provider"),
+    stage: text("stage").notNull(),
+    version: integer("version").notNull(),
+    state: text("state").notNull().unique("auth_attempts_state_unique"),
+    nonce: text("nonce").notNull(),
+    originalSessionId: uuid("original_session_id").references(
+      () => sessions.id,
+      { onDelete: "cascade" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    reauthenticatedAt: timestamp("reauthenticated_at", { withTimezone: true }),
+    verifiedSubject: text("verified_subject"),
+    verifiedEmail: text("verified_email"),
+    verifiedName: text("verified_name"),
+    appleClientId: text("apple_client_id"),
+    appleRefreshToken: text("apple_refresh_token"),
+  },
+  (t) => [
+    check("auth_attempts_surface_check", sql`${t.surface} in ('native','web')`),
+    check(
+      "auth_attempts_purpose_check",
+      sql`${t.purpose} in ('signin','link')`,
+    ),
+    check(
+      "auth_attempts_provider_check",
+      sql`${t.targetProvider} in ('apple','google') and (${t.existingProvider} is null or ${t.existingProvider} in ('apple','google'))`,
+    ),
+    check(
+      "auth_attempts_stage_check",
+      sql`${t.stage} in ('authorize','exchanging','confirm','reauth_authorize','reauth_exchanging','target_authorize','target_exchanging','link_ready')`,
+    ),
+    check(
+      "auth_attempts_session_check",
+      sql`(${t.purpose}='signin' and ${t.originalSessionId} is null and ${t.existingProvider} is null) or (${t.purpose}='link' and ${t.originalSessionId} is not null and ${t.existingProvider} is not null and ${t.existingProvider}<>${t.targetProvider})`,
+    ),
+    check("auth_attempts_expiry_check", sql`${t.expiresAt}>${t.createdAt}`),
+    check("auth_attempts_version_check", sql`${t.version}>0`),
+    uniqueIndex("auth_attempts_link_session_unique")
+      .on(t.originalSessionId)
+      .where(sql`${t.originalSessionId} is not null`),
+    index("auth_attempts_expires_at_idx").on(t.expiresAt),
+  ],
+);

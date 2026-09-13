@@ -183,6 +183,25 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
   request" claim about any route under `requireUser` is about the route's
   own query only — say which.
 
+- **Expiry and secret deletion have different lifetimes.** An expiry predicate
+  denies authority immediately; only a named DELETE trigger removes the row. A
+  sweep on later traffic has no idle-time retention bound. State both lifetimes
+  and their owners. (Wave A Apple-auth spec, 2026-09-12.)
+
+- **Measure the populations an auth query scans.** The anonymous cap does not
+  bound live link attempts. With 511 anonymous attempts and 5/1k/100k/1M links,
+  admission COUNT took 0.040/0.064/2.597/36.958 ms in PostgreSQL 18.4; those
+  links are sensitivity fixtures, not a traffic claim. A reverse lock order
+  needed only one session and attempt: claim→session versus replacement
+  session→attempt reproduced 40P01. The same held-order probe passed after
+  session-first locking. Include parent FK-cascade order in the analysis.
+  (2026-09-13 Apple plan; commands/raw plans in the archived report.)
+- **Bracket lock ownership, not startup time.** Timestamp around acquisition
+  and transaction completion. Migration 0031's users lock bracket was
+  80.556–80.928 ms at 1M synthetic users on the measured laptop. Old-server
+  health200 after migration proves boot/schema compatibility, not access for
+  Apple-only rowers. (2026-09-13 Apple plan.)
+
 ## Where the dated record lives
 
 `dba-ledger.md`, one section per engagement with its environment table and

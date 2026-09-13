@@ -1,0 +1,31 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |unit| server/auth/frontDoor.test.ts (7 tests | 1 failed) 26ms
+     × sweeps before readiness, fails new starts closed, recovers on minute sweep, clears timer 7ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  00:24:18
+   Duration  510ms (transform 148ms, setup 0ms, import 425ms, tests 26ms, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project unit server/auth/frontDoor.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| server/auth/frontDoor.test.ts > front-door boot and options > sweeps before readiness, fails new starts closed, recovers on minute sweep, clears timer
+AssertionError: expected "warn" to be called with arguments: [ Array(1) ]
+
+Number of calls: 0
+
+ ❯ server/auth/frontDoor.test.ts:92:18
+     90|       }),
+     91|     ).rejects.toThrow("unavailable");
+     92|     expect(warn).toHaveBeenCalledWith(
+       |                  ^
+     93|       '{"event":"auth_attempt_cleanup_failed"}',
+     94|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

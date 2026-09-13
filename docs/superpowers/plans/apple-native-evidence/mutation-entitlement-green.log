@@ -1,0 +1,9 @@
+
+ RUN  v4.1.11 /private/tmp/ergomatic-apple-native-paste/app
+
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  00:01:01
+   Duration  72ms (transform 9ms, setup 0ms, import 14ms, tests 2ms, environment 0ms)
+

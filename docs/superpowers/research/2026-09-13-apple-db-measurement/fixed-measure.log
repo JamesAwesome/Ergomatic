@@ -1,0 +1,34 @@
+[
+  {
+    db: 'apple_dba_locks_fixed',
+    n: '2',
+    timings: {
+      link_begin: [Object],
+      reauth_claim: [Object],
+      reauth_accept: [Object],
+      target_claim: [Object],
+      target_accept: [Object],
+      finalize: [Object]
+    },
+    addedQuery: {
+      sql: 'SELECT id,user_id AS "userId" FROM sessions WHERE id=$1 AND expires_at>now() FOR UPDATE',
+      plan: [Array]
+    }
+  },
+  {
+    db: 'postgres',
+    n: '1000001',
+    timings: {
+      link_begin: [Object],
+      reauth_claim: [Object],
+      reauth_accept: [Object],
+      target_claim: [Object],
+      target_accept: [Object],
+      finalize: [Object]
+    },
+    addedQuery: {
+      sql: 'SELECT id,user_id AS "userId" FROM sessions WHERE id=$1 AND expires_at>now() FOR UPDATE',
+      plan: [Array]
+    }
+  }
+]

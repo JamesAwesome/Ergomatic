@@ -1,0 +1,28 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |integration| server/auth/frontDoorRoutes.integration.test.ts (16 tests | 1 failed) 1831ms
+     × native Google signup, fresh Google proof and Apple target finalize one account 36ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 passed (16)
+   Start at  00:24:22
+   Duration  2.45s (transform 172ms, setup 0ms, import 556ms, tests 1.83s, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project integration server/auth/frontDoorRoutes.integration.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > native Google signup, fresh Google proof and Apple target finalize one account
+AssertionError: expected 'lvgKBfSFI8WFA8hwtoMrT5vrDOgPDuVcVWTYx…' not to be 'lvgKBfSFI8WFA8hwtoMrT5vrDOgPDuVcVWTYx…' // Object.is equality
+ ❯ server/auth/frontDoorRoutes.integration.test.ts:294:30
+    292|     ).body;
+    293|     expect(target.stage).toBe("target");
+    294|     expect(target.nonce).not.toBe(b.nonce);
+       |                              ^
+    295|     const token = await jwt(target.nonce, "native.app");
+    296|     codes.set("target", token);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

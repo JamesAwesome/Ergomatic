@@ -1,0 +1,28 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |unit| server/auth/frontDoor.test.ts (7 tests | 1 failed) 37ms
+     × sweeps before readiness, fails new starts closed, recovers on minute sweep, clears timer 11ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  00:24:19
+   Duration  509ms (transform 128ms, setup 0ms, import 394ms, tests 37ms, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project unit server/auth/frontDoor.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| server/auth/frontDoor.test.ts > front-door boot and options > sweeps before readiness, fails new starts closed, recovers on minute sweep, clears timer
+AssertionError: expected "vi.fn()" to be called 2 times, but got 1 times
+ ❯ server/auth/frontDoor.test.ts:98:19
+     96|     expect(query).toHaveBeenCalledTimes(1);
+     97|     await vi.advanceTimersByTimeAsync(1);
+     98|     expect(query).toHaveBeenCalledTimes(2);
+       |                   ^
+     99|     expect(front.attempts.healthy()).toBe(true);
+    100|     front.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

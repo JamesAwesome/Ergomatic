@@ -1,0 +1,2 @@
+    CODE_SIGN_ENTITLEMENTS = App/App.entitlements
+    IPHONEOS_DEPLOYMENT_TARGET = 15.0

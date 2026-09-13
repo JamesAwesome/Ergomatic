@@ -1,0 +1,26 @@
+
+ RUN  v4.1.11 /private/tmp/ergomatic-apple-native-paste/app
+
+ ❯ |unit| scripts/apple-auth-contract.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| scripts/apple-auth-contract.test.ts [ scripts/apple-auth-contract.test.ts ]
+Error: ENOENT: no such file or directory, open '/private/tmp/ergomatic-apple-native-paste/app/ios/App/App/AppleAuthPlugin.swift'
+ ❯ read scripts/apple-auth-contract.test.ts:8:3
+      6| const here = dirname(fileURLToPath(import.meta.url));
+      7| const read = (path: string) =>
+      8|   readFileSync(resolve(here, "..", path), "utf8");
+       |   ^
+      9|
+     10| const swift = read("ios/App/App/AppleAuthPlugin.swift");
+ ❯ scripts/apple-auth-contract.test.ts:10:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  23:47:04
+   Duration  90ms (transform 11ms, setup 0ms, import 0ms, tests 0ms, environment 0ms)
+

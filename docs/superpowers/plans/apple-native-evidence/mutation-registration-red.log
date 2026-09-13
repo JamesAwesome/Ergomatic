@@ -1,0 +1,55 @@
+
+ RUN  v4.1.11 /private/tmp/ergomatic-apple-native-paste/app
+
+ ❯ |unit| scripts/apple-auth-contract.test.ts (6 tests | 1 failed) 5ms
+     × registers the same plugin and promise method in Swift and TypeScript 4ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  00:01:00
+   Duration  81ms (transform 9ms, setup 0ms, import 13ms, tests 5ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| scripts/apple-auth-contract.test.ts > AppleAuth native contract > registers the same plugin and promise method in Swift and TypeScript
+AssertionError: expected 'import Capacitor\nimport UIKit\n\n///…' to contain 'bridge?.registerPluginInstance(AppleA…'
+
+- Expected
++ Received
+
+- bridge?.registerPluginInstance(AppleAuthPlugin())
++ import Capacitor
++ import UIKit
++
++ /// Wave E PR1.75b: the vendor recipe for a local Capacitor plugin
++ /// (capacitorjs.com/docs/ios/custom-code) -- a `CAPBridgeViewController`
++ /// subclass that registers the instance in `capacitorDidLoad()`. Reached
++ /// because `Base.lproj/Main.storyboard`'s only view controller now names this
++ /// class instead of `CAPBridgeViewController` itself.
++ ///
++ /// `capacitorDidLoad()` is the documented seam: it is `open` and its own doc
++ /// comment says "This is called before the webview has been added to the view
++ /// hierarchy" (CAPBridgeViewController.swift:158-165), and it runs AFTER the
++ /// bridge is constructed (`:48-53`), so `bridge` is non-nil here and
++ /// `registerPluginInstance` can export the plugin's JS shim before the page
++ /// loads (CapacitorBridge.swift:348-365 ends in `JSExport.exportJS`).
++ class MyViewController: CAPBridgeViewController {
++     override func capacitorDidLoad() {
++         super.capacitorDidLoad()
++         bridge?.registerPluginInstance(WebAuthPlugin())
++         bridge?.registerPluginInstance(WebAuthPlugin())
++     }
++ }
++
+
+ ❯ scripts/apple-auth-contract.test.ts:47:24
+     45|     );
+     46|     expect(wrapper).toContain('registerPlugin<AppleAuthPlugin>("AppleA…
+     47|     expect(controller).toContain(
+       |                        ^
+     48|       "bridge?.registerPluginInstance(AppleAuthPlugin())",
+     49|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

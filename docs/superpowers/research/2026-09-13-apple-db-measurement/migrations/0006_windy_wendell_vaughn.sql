@@ -1,0 +1,1 @@
+ALTER TABLE "preferences" ADD COLUMN "start_here_dismissed" boolean DEFAULT false NOT NULL;

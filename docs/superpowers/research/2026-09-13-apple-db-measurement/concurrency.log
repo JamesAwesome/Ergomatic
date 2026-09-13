@@ -1,0 +1,25 @@
+{
+  "deadlock": {
+    "waits": [
+      {
+        "pid": 114,
+        "application_name": "",
+        "wait_event_type": "Lock",
+        "wait_event": "transactionid",
+        "query": "DELETE FROM auth_attempts WHERE original_session_id=$1"
+      }
+    ],
+    "result": [
+      {
+        "ok": false,
+        "code": "40P01",
+        "message": "deadlock detected"
+      },
+      {
+        "ok": true,
+        "id": "03c90dfe-004b-4467-94ad-1301c5a14c30"
+      }
+    ],
+    "elapsedMs": 1018.196917
+  }
+}

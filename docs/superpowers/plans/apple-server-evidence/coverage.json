@@ -1,0 +1,114 @@
+[
+  {
+    "file": "server/app.ts",
+    "statements": "96.77",
+    "branches": "88.88",
+    "functions": "100",
+    "lines": "96.66"
+  },
+  {
+    "file": "server/auth/allowlist.ts",
+    "statements": "100",
+    "branches": "100",
+    "functions": "100",
+    "lines": "100"
+  },
+  {
+    "file": "server/auth/attempts.ts",
+    "statements": "91.61",
+    "branches": "89.84",
+    "functions": "100",
+    "lines": "95.1"
+  },
+  {
+    "file": "server/auth/cookies.ts",
+    "statements": "100",
+    "branches": "100",
+    "functions": "100",
+    "lines": "100"
+  },
+  {
+    "file": "server/auth/frontDoor.ts",
+    "statements": "100",
+    "branches": "100",
+    "functions": "100",
+    "lines": "100"
+  },
+  {
+    "file": "server/auth/frontDoorErrors.ts",
+    "statements": "88.88",
+    "branches": "90.9",
+    "functions": "100",
+    "lines": "88.88"
+  },
+  {
+    "file": "server/auth/frontDoorRoutes.ts",
+    "statements": "87.34",
+    "branches": "82.75",
+    "functions": "95.23",
+    "lines": "88.07"
+  },
+  {
+    "file": "server/auth/google.ts",
+    "statements": "100",
+    "branches": "100",
+    "functions": "100",
+    "lines": "100"
+  },
+  {
+    "file": "server/auth/middleware.ts",
+    "statements": "100",
+    "branches": "100",
+    "functions": "100",
+    "lines": "100"
+  },
+  {
+    "file": "server/auth/nativeVerify.ts",
+    "statements": "0",
+    "branches": "0",
+    "functions": "0",
+    "lines": "0"
+  },
+  {
+    "file": "server/auth/providers.ts",
+    "statements": "93.65",
+    "branches": "93.9",
+    "functions": "100",
+    "lines": "96.55"
+  },
+  {
+    "file": "server/auth/routes.ts",
+    "statements": "95.94",
+    "branches": "90",
+    "functions": "100",
+    "lines": "95.89"
+  },
+  {
+    "file": "server/auth/sessions.ts",
+    "statements": "100",
+    "branches": "100",
+    "functions": "100",
+    "lines": "100"
+  },
+  {
+    "file": "server/auth/signin.ts",
+    "statements": "100",
+    "branches": "100",
+    "functions": "100",
+    "lines": "100"
+  },
+  {
+    "file": "server/auth/testSignin.ts",
+    "statements": "100",
+    "branches": "93.75",
+    "functions": "100",
+    "lines": "100"
+  },
+  {
+    "file": "server/auth/users.ts",
+    "statements": "100",
+    "branches": "100",
+    "functions": "100",
+    "lines": "100"
+  }
+]

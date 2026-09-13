@@ -1,0 +1,41 @@
+$ bash scripts/test-run.sh --project integration server/auth/attempts.integration.test.ts -t 'lock-order cycle'
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+stderr | server/auth/attempts.integration.test.ts > front-door transactions against Postgres
+startPostgres: first container timed out waiting for its port to bind; retrying once (the timed-out container is orphaned and will be reaped by Ryuk).
+ ❯ |integration| server/auth/attempts.integration.test.ts (12 tests | 1 failed | 11 skipped) 18439ms
+     × claim and same-session replacement wait without a lock-order cycle 1041ms
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration| server/auth/attempts.integration.test.ts > front-door transactions against Postgres > claim and same-session replacement wait without a lock-order cycle
+AssertionError: expected [ 'fulfilled', 'rejected' ] to strictly equal [ 'fulfilled', 'fulfilled' ]
+
+- Expected
++ Received
+
+  [
+    "fulfilled",
+-   "fulfilled",
++   "rejected",
+  ]
+
+ ❯ server/auth/attempts.integration.test.ts:303:52
+    301|     await claimPool.end();
+    302|     expect(waiting).toBe(true);
+    303|     expect(results.map((result) => result.status)).toStrictEqual([
+       |                                                    ^
+    304|       "fulfilled",
+    305|       "fulfilled",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 skipped (12)
+   Start at  00:05:22
+   Duration  18.86s (transform 38ms, setup 0ms, import 369ms, tests 18.44s, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.

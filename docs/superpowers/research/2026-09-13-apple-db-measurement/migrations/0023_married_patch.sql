@@ -1,0 +1,80 @@
+-- Wave E PR2 (Gate 0 amendment `docs/design/handoffs/2026-08-31-concept2-connect/
+-- amendment-2026-09-03.html`, rulings i + ii — TRIAD: a stored shape AND what a
+-- number MEANS on a third party's permanent record). One deploy, three changes:
+--   * ADD `concept2_links.c2_username` (text, NULLABLE, no backfill). The
+--     linked account's Concept2 username, captured at exchange from the same
+--     `GET /api/users/me` response `c2_user_id` already comes from. Concept2
+--     documents `username` as optional, so the column is nullable and the You
+--     card falls back to `account #<id>`. Exists because the card's identity
+--     line is the account-injection residual's detect-identity treatment: a
+--     numeric id is not an identity a rower recognises.
+--   * DROP `concept2_links.weight_class` and
+--     `concept2_auth_attempts.weight_class`, and the now-unused `weight_class`
+--     enum TYPE. Ruling (i), James 2026-09-03: "I don't want that set in our
+--     app. I want it to be set on Concept2's side." The class Concept2 requires
+--     on every rower result is now READ from Concept2 at send time — the
+--     rower's own most recent declaration first, our derivation from their
+--     profile weight + gender second, a refusal third — and never stored.
+--
+-- The three ship in ONE migration because they are one deploy: a server that
+-- has stopped asking for a class must not still be inserting one, and a NOT
+-- NULL column with no default cannot survive a writer that stopped writing it.
+--
+-- NOT OLD-IMAGE-COMPATIBLE, and this is stated rather than left to the 0021
+-- precedent. 0021 carries an explicit rollback affordance (`surface` NOT NULL
+-- DEFAULT 'web', with an integration test asserting a rollback-image insert
+-- still succeeds). 0023 gets no equivalent, because its equivalent would go
+-- RED: an old image's `INSERT` into either table names `weight_class`, and
+-- after this drop that errors. The deploy is safe for ONE stated reason —
+-- no writer exists, i.e. `C2_LINK_ENABLED` is not "1" on the instance that
+-- runs this, so no route can reach either table (`compose.yml` passes the
+-- variable through as `${C2_LINK_ENABLED:-}` and `server/index.ts` treats
+-- anything but `"1"` as off). That predicate is the DECIDING one: a row
+-- count answers "does this destroy anything", while a WRITER is what makes
+-- a NOT NULL drop dangerous.
+--
+-- THREE CHECKS ARE OWED ON THE DEPLOY HOST BEFORE THIS SHIPS, and none of
+-- them has been taken there. The implementing agent has no credentials for
+-- that host; what it measured on 2026-09-03 was `printenv C2_LINK_ENABLED`
+-- inside the four per-worktree e2e api containers on a DEV LAPTOP (all
+-- unset or empty), which says nothing about production. Migration 0021's
+-- own header records the equivalent check being run by hand by James before
+-- ITS merge; do the same here:
+--
+--   docker exec ergomatic-api printenv C2_LINK_ENABLED || echo "UNSET (pass)"
+--   docker exec ergomatic-postgres psql -U ergomatic -d ergomatic \
+--     -c "select count(*) from concept2_links;" \
+--     -c "select count(*) from concept2_auth_attempts;"
+--
+-- The container names are unqualified because production leaves ERGO_STACK
+-- unset: `compose.yml` builds them as `${ERGO_STACK:-ergomatic}-api` and
+-- `-postgres`, and only per-worktree local stacks carry a prefix
+-- (`docs/deploy.md` says the same about `ergomatic-postgres`). The `|| echo`
+-- is there because `printenv` exits non-zero when the variable is ABSENT,
+-- which is the passing case and would otherwise read as a failed command.
+--
+-- Expected: an EMPTY line (or "UNSET"), and zero, and zero. Any other answer
+-- is a STOP. Note what "pass" actually looks like here, because an earlier
+-- version of this block got it wrong: inside the container the variable is
+-- ALWAYS defined — `compose.yml` passes `C2_LINK_ENABLED: ${C2_LINK_ENABLED:-}`,
+-- which sets it to the empty string when the host has nothing — so `printenv`
+-- exits 0 and prints an empty line, and the `|| echo "UNSET (pass)"` arm never
+-- fires on production. Empty is OFF: the gate is
+-- `linkEnabledFlag === "1"` (`server/concept2/availability.ts`), so empty and
+-- absent are the same non-answer, the same way `C2_BASE_URL` treats them.
+--
+-- MEASURED ON THE DEPLOY HOST BY JAMES, 2026-09-03 — the two row counts, run
+-- as written above, both returned `0` (output pasted into the session, one
+-- `count | 0 | (1 row)` block per query). So this drop touches NO rows: there
+-- is no stored `weight_class` anywhere in production to lose, and no rower
+-- holds a live grant whose class the migration discards. The `printenv` half
+-- came back on the same day: an EMPTY LINE with no "UNSET" arm, i.e. the
+-- variable is set-but-empty, which `computeAvailable` reads as OFF. ALL THREE
+-- CHECKS PASS: the flag is off in production, and the drop touches no rows.
+-- A `1` is a live writer whose INSERT this drop breaks; a non-zero link
+-- count is a real rower holding a live grant whose class we are about to
+-- drop, which is a design question nobody has asked.
+ALTER TABLE "concept2_links" ADD COLUMN "c2_username" text;--> statement-breakpoint
+ALTER TABLE "concept2_auth_attempts" DROP COLUMN "weight_class";--> statement-breakpoint
+ALTER TABLE "concept2_links" DROP COLUMN "weight_class";--> statement-breakpoint
+DROP TYPE "public"."weight_class";

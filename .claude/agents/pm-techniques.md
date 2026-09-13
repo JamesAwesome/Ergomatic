@@ -137,6 +137,11 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   Lesson: a written hypothesis in a roadmap is load-bearing — an investigator
   will follow it and stop. Mark speculation as speculation, or measure first.
 
+- **A second login provider owes account continuity.** Check that an existing
+  rower can reach the same history through either door. Relay email cannot join
+  those accounts; explicit linking and its extra proof must be visible in the
+  rendered design. (Wave A Apple-first, approved 2026-09-12.)
+
 ## Where the dated record lives
 
 The per-engagement record — one section per engagement, in date order, 6413

@@ -1,0 +1,47 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |unit| server/auth/providers.test.ts (9 tests | 1 failed) 76ms
+     × rejects exchanged subject mismatch 7ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  00:23:32
+   Duration  211ms (transform 25ms, setup 0ms, import 50ms, tests 76ms, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project unit server/auth/providers.test.ts
+NOTE: another Ergomatic test run is live (pid 57092, /Users/james/projects/github/jamesawesome/Ergomatic-worktrees/phase-td/app, started Sun Sep 13 00:22:25 2026 ).
+      Free 210 MB, swap 3070.25M / 4096.00M, worker cap 4. Consider a scoped run.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| server/auth/providers.test.ts > signed provider proof > rejects exchanged subject mismatch
+AssertionError: promise resolved "{ sub: 'another', …(4) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "email": "private@privaterelay.appleid.com",
++   "emailVerified": true,
++   "grant": {
++     "clientId": "native.app",
++     "refreshToken": "retained-only-server",
++   },
++   "name": "Rower",
++   "sub": "another",
+  }
+
+ ❯ server/auth/providers.test.ts:153:6
+    151|         },
+    152|       ),
+    153|     ).rejects.toThrow("invalid_proof");
+       |      ^
+    154|   });
+    155|   it("rejects wrong state before exchange", async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

@@ -1,0 +1,123 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -list -project App.xcodeproj
+
+Resolve Package Graph
+
+Fetching from https://github.com/facebook/facebook-ios-sdk.git (cached)
+
+Fetching from https://github.com/Alamofire/Alamofire.git (cached)
+
+Fetching from https://github.com/evgenyneu/keychain-swift.git (cached)
+
+Fetching from https://github.com/google/GoogleSignIn-iOS.git (cached)
+
+Fetching from https://github.com/ionic-team/capacitor-swift-pm.git (cached)
+
+Fetching from https://github.com/google/gtm-session-fetcher.git (cached)
+
+Fetching from https://github.com/openid/AppAuth-iOS.git (cached)
+
+Fetching from https://github.com/google/app-check.git (cached)
+
+Fetching from https://github.com/google/GTMAppAuth.git (cached)
+
+Fetching from https://github.com/google/interop-ios-for-google-sdks.git (cached)
+
+Fetching from https://github.com/google/GoogleUtilities.git (cached)
+
+Fetching from https://github.com/google/promises.git (cached)
+
+Creating working copy of package ‘keychain-swift’
+
+Checking out 21.0.0 of package ‘keychain-swift’
+
+Creating working copy of package ‘Alamofire’
+
+Checking out 5.12.2 of package ‘Alamofire’
+
+Creating working copy of package ‘promises’
+
+Checking out 2.4.1 of package ‘promises’
+
+Creating working copy of package ‘GTMAppAuth’
+
+Checking out 5.0.0 of package ‘GTMAppAuth’
+
+Creating working copy of package ‘facebook-ios-sdk’
+
+Checking out 18.1.1 of package ‘facebook-ios-sdk’
+
+Creating working copy of package ‘GoogleSignIn-iOS’
+
+Checking out 9.2.0 of package ‘GoogleSignIn-iOS’
+
+Creating working copy of package ‘app-check’
+
+Checking out 11.3.1 of package ‘app-check’
+
+Creating working copy of package ‘AppAuth-iOS’
+
+Checking out 2.1.0 of package ‘AppAuth-iOS’
+
+Creating working copy of package ‘interop-ios-for-google-sdks’
+
+Checking out 101.0.0 of package ‘interop-ios-for-google-sdks’
+
+Creating working copy of package ‘capacitor-swift-pm’
+
+Checking out 8.5.1 of package ‘capacitor-swift-pm’
+
+Creating working copy of package ‘gtm-session-fetcher’
+
+Checking out 3.5.0 of package ‘gtm-session-fetcher’
+
+Creating working copy of package ‘GoogleUtilities’
+
+Checking out 8.1.3 of package ‘GoogleUtilities’
+
+
+Resolved source packages:
+  CapacitorHaptics: /tmp/ergomatic-apple-native-paste/app/node_modules/.pnpm/@capacitor+haptics@8.0.2_@capacitor+core@8.5.1/node_modules/@capacitor/haptics @ local
+  CapacitorCommunityBluetoothLe: /tmp/ergomatic-apple-native-paste/app/node_modules/.pnpm/@capacitor-community+bluetooth-le@8.3.0_@capacitor+core@8.5.1/node_modules/@capacitor-community/bluetooth-le @ local
+  AppAuth: https://github.com/openid/AppAuth-iOS.git @ 2.1.0
+  CapacitorApp: /tmp/ergomatic-apple-native-paste/app/node_modules/.pnpm/@capacitor+app@8.1.1_@capacitor+core@8.5.1/node_modules/@capacitor/app @ local
+  GoogleSignIn: https://github.com/google/GoogleSignIn-iOS.git @ 9.2.0
+  CapApp-SPM: /tmp/ergomatic-apple-native-paste/app/ios/App/CapApp-SPM @ local
+  AparajitaCapacitorSecureStorage: /tmp/ergomatic-apple-native-paste/app/node_modules/.pnpm/@aparajita+capacitor-secure-storage@8.0.0/node_modules/@aparajita/capacitor-secure-storage @ local
+  AppCheck: https://github.com/google/app-check.git @ 11.3.1
+  InteropForGoogle: https://github.com/google/interop-ios-for-google-sdks.git @ 101.0.0
+  CapacitorCommunityKeepAwake: /tmp/ergomatic-apple-native-paste/app/node_modules/.pnpm/@capacitor-community+keep-awake@8.0.1_@capacitor+core@8.5.1/node_modules/@capacitor-community/keep-awake @ local
+  KeychainSwift: https://github.com/evgenyneu/keychain-swift.git @ 21.0.0
+  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 3.5.0
+  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 8.1.3
+  Facebook: https://github.com/facebook/facebook-ios-sdk.git @ 18.1.1
+  capacitor-swift-pm: https://github.com/ionic-team/capacitor-swift-pm.git @ 8.5.1
+  GTMAppAuth: https://github.com/google/GTMAppAuth.git @ 5.0.0
+  CapgoCapacitorSocialLogin: /tmp/ergomatic-apple-native-paste/app/node_modules/.pnpm/@capgo+capacitor-social-login@8.5.5_@capacitor+core@8.5.1/node_modules/@capgo/capacitor-social-login @ local
+  CapacitorKeyboard: /tmp/ergomatic-apple-native-paste/app/node_modules/.pnpm/@capacitor+keyboard@8.0.5_@capacitor+core@8.5.1/node_modules/@capacitor/keyboard @ local
+  CapgoCapacitorNfc: /tmp/ergomatic-apple-native-paste/app/node_modules/.pnpm/@capgo+capacitor-nfc@8.2.5_patch_hash=6a377bd76c16c5eabbe0ca8fb1486b73efbd42a33ac311ae6_45409c4abcbb4e3a24717ae67f593c43/node_modules/@capgo/capacitor-nfc @ local
+  Alamofire: https://github.com/Alamofire/Alamofire.git @ 5.12.2
+  Promises: https://github.com/google/promises.git @ 2.4.1
+
+Information about project "App":
+    Targets:
+        App
+
+    Build Configurations:
+        Debug
+        Release
+
+    If no build configuration is specified and -scheme is not passed then "Release" is used.
+
+    Schemes:
+        AparajitaCapacitorSecureStorage
+        App
+        CapacitorApp
+        CapacitorCommunityBluetoothLe
+        CapacitorCommunityKeepAwake
+        CapacitorHaptics
+        CapacitorKeyboard
+        CapApp-SPM
+        CapgoCapacitorNfc
+        CapgoCapacitorSocialLogin
+

@@ -1,0 +1,11 @@
+import fs from 'node:fs';import pg from 'pg';import {createAttempts} from './fixed/app/server/auth/attempts.ts';
+const out:any=[];for(const db of ['apple_dba_locks_fixed','postgres']){
+ const pool=new pg.Pool({connectionString:'postgres://postgres:dev@localhost:5434/'+db});const n=(await pool.query('select count(*) from users')).rows[0].count;let uid,sid;
+ if(db==='postgres'){uid=(await pool.query("select id from users where google_sub='g3'")).rows[0].id;sid=(await pool.query('select id from sessions where user_id=$1 limit 1',[uid])).rows[0].id;}else{uid=(await pool.query("insert into users(google_sub,email,name) values('bench','bench@example.test','Bench') returning id")).rows[0].id;sid=(await pool.query("insert into sessions(user_id,token_hash,expires_at) values($1,'bench',now()+interval '1 day') returning id",[uid])).rows[0].id;}
+ const a=createAttempts(pool),times:any={};async function time(name:string,fn:()=>Promise<any>){const s=performance.now();const r=await fn();(times[name]??=[]).push(performance.now()-s);return r;}
+ for(let i=0;i<6;i++){
+ await pool.query('update users set apple_sub=null where id=$1',[uid]);const g=(await pool.query('select google_sub from users where id=$1',[uid])).rows[0].google_sub;
+ const x=await time('link_begin',()=>a.begin({surface:'native',purpose:'link',targetProvider:'apple',originalSessionId:sid}));let c=await time('reauth_claim',()=>a.claim(x.attempt));let p=await time('reauth_accept',()=>a.accept(c,{sub:g,email:'r@example.test',emailVerified:true,name:'Rower'}));c=await time('target_claim',()=>a.claim(p.attempt));p=await time('target_accept',()=>a.accept(c,{sub:'fixed'+db,email:'r@example.test',emailVerified:true,name:'Rower',grant:{clientId:'native',refreshToken:'r'.repeat(512)}}));await time('finalize',()=>a.finalize(p.attempt,sid));
+ }
+ const sql='SELECT id,user_id AS "userId" FROM sessions WHERE id=$1 AND expires_at>now() FOR UPDATE';await pool.query('BEGIN');const ex=(await pool.query('EXPLAIN(ANALYZE,BUFFERS,WAL,FORMAT JSON) '+sql,[sid])).rows[0]['QUERY PLAN'];await pool.query('ROLLBACK');out.push({db,n,timings:Object.fromEntries(Object.entries(times).map(([k,v]:any)=>[k,{medianMs:v.slice(1).sort((a:number,b:number)=>a-b)[2],runs:v}])),addedQuery:{sql,plan:ex}});await pool.end();
+}fs.writeFileSync('/tmp/apple-dba-plan/fixed-measure.json',JSON.stringify(out,null,2));console.log(out);

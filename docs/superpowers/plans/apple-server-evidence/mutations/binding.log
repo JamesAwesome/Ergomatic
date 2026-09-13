@@ -1,0 +1,56 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |integration| server/auth/attempts.integration.test.ts (13 tests | 1 failed) 1611ms
+     × claims once, binding failures do not consume, cancellation cannot resurrect 8ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 passed (13)
+   Start at  00:23:34
+   Duration  2.12s (transform 47ms, setup 0ms, import 442ms, tests 1.61s, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project integration server/auth/attempts.integration.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration| server/auth/attempts.integration.test.ts > front-door transactions against Postgres > claims once, binding failures do not consume, cancellation cannot resurrect
+AssertionError: promise resolved "{ …(19) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "appleClientId": null,
++   "appleRefreshToken": null,
++   "bindingHash": "b3850b575d6e4541bf99805e9d3fb0dbcd9356beebb2eddba51451a36d987019",
++   "createdAt": 2026-09-13T04:23:36.576Z,
++   "existingProvider": null,
++   "expiresAt": 2026-09-13T04:28:36.576Z,
++   "id": "891fff82-2066-4007-b0f3-96407c66a0d9",
++   "nonce": "Ys5ToLzCREyBCaMtJlXwrMIG1wDLxZcCEf9yfYZDOGA",
++   "originalSessionId": null,
++   "purpose": "signin",
++   "reauthenticatedAt": null,
++   "stage": "authorize",
++   "state": "cqoTFaFAQ-jCiywrZI5xzZrg2jVS_92q31vfcb_pcyg",
++   "surface": "native",
++   "targetProvider": "apple",
++   "verifiedEmail": null,
++   "verifiedName": null,
++   "verifiedSubject": null,
++   "version": 1,
+  }
+
+ ❯ server/auth/attempts.integration.test.ts:68:62
+     66|   it("claims once, binding failures do not consume, cancellation canno…
+     67|     const b = await signin();
+     68|     await expect(store.read(b.attempt.id, "wrong", "native")).rejects.…
+       |                                                              ^
+     69|       "invalid_proof",
+     70|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

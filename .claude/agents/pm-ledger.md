@@ -6731,3 +6731,17 @@ pin landed in #345 at `derivedHeartRate.replay.test.ts:113`); and the
 candidates, six of them outside this phase, had existed only in the session
 that produced them, which made the phase's own provenance a dangling citation
 (RF16) and the walk a second backlog.
+
+## 2026-09-12 — Wave A Apple-first opening
+
+Recommend native and web Apple login, shared open signup and explicit linking
+in both directions so an existing rower reaches the same account and history.
+Relay email cannot supply account continuity. First-account confirmation avoids
+silently creating the wrong account. Fresh proof of the existing provider adds
+friction and belongs in the rendered approval, including cancellation/recovery.
+James approved new account creation, the corrected spec and rendered two-proof
+linking flow on 2026-09-12. Deletion remains the next implementation slice and
+an external-availability dependency; Apple-first code stays dark until then.
+
+Evidence: `docs/superpowers/specs/2026-09-12-apple-signin-review.md` and its
+approved design/captures. No implementation or release verdict is claimed.

@@ -1,0 +1,44 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |unit| server/auth/providers.test.ts (9 tests | 1 failed) 72ms
+     × verifies signed native identity and exchanged subject, retaining only refresh grant 15ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  00:23:33
+   Duration  173ms (transform 19ms, setup 0ms, import 39ms, tests 72ms, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project unit server/auth/providers.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| server/auth/providers.test.ts > signed provider proof > verifies signed native identity and exchanged subject, retaining only refresh grant
+AssertionError: expected { sub: 'apple-sub', …(4) } to strictly equal { sub: 'apple-sub', …(4) }
+
+- Expected
++ Received
+
+  {
+    "email": "private@privaterelay.appleid.com",
+    "emailVerified": true,
+    "grant": {
+      "clientId": "native.app",
+-     "refreshToken": "retained-only-server",
++     "refreshToken": "corrupt",
+    },
+    "name": "Rower",
+    "sub": "apple-sub",
+  }
+
+ ❯ server/auth/providers.test.ts:75:7
+     73|         },
+     74|       ),
+     75|     ).toStrictEqual({
+       |       ^
+     76|       sub: "apple-sub",
+     77|       email: "private@privaterelay.appleid.com",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

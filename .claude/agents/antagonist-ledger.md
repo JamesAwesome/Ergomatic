@@ -10562,3 +10562,23 @@ counting the corpus a different way than the spec counted it.
   exploration's six test-only exports and 38 `useRef` declarations, both
   exact; the replay exploration's 36 files and its filename-hardcoded path
   surgery, both exact.
+
+## Wave A Apple sign-in anchor pass, 2026-09-12 (AUTH + stored shape)
+
+- **BROKEN:** Apple's cross-site POST cannot prove possession of the original
+  Lax session; a live database session survives account switching. The corrected
+  spec requires a same-origin exact-session finalization hop before linking.
+- **BROKEN:** global origin middleware and JSON-only parsing reject Apple's
+  URL-encoded POST before the proposed callback. The corrected mount is exact,
+  bounded and before the global origin check.
+- **BROKEN:** one mutable provider field does not distinguish link proofs and
+  pending signup. The corrected attempt has immutable intent, stage/version
+  comparison and fresh nonce/state per authorization stage.
+- **BROKEN:** native Google's restore branch bypasses nonce. Fresh proof uses
+  the interactive branch and server nonce verification.
+- **HELD:** provider subject identity, no email merge, named uniqueness, a
+  custom Apple bridge, per-client grant retention and no unsupported Apple PKCE.
+
+Evidence and disposition: `docs/superpowers/specs/2026-09-12-apple-signin-review.md`.
+The original verdict was BLOCKED; author corrections were folded without claiming
+an unrun PASS. James approved the corrected spec and rendered Gate 0 on 2026-09-12.

@@ -1,0 +1,32 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |unit| server/auth/providers.test.ts (9 tests | 1 failed) 71ms
+     × requests Apple form_post without PKCE and Google nonce with PKCE 4ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  00:23:34
+   Duration  169ms (transform 18ms, setup 0ms, import 37ms, tests 71ms, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project unit server/auth/providers.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| server/auth/providers.test.ts > signed provider proof > requests Apple form_post without PKCE and Google nonce with PKCE
+AssertionError: expected 'query' to be 'form_post' // Object.is equality
+
+Expected: "form_post"
+Received: "query"
+
+ ❯ server/auth/providers.test.ts:184:53
+    182|       await p.authorizationUrl({ ...base, provider: "google" }),
+    183|     );
+    184|     expect(apple.searchParams.get("response_mode")).toBe("form_post");
+       |                                                     ^
+    185|     expect(apple.searchParams.has("code_challenge")).toBe(false);
+    186|     expect(google.searchParams.get("nonce")).toBe("n");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

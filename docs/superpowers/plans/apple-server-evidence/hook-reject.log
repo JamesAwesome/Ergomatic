@@ -1,0 +1,3 @@
+HOOK BLOCKED: Node >=26 required, found 22.
+Fix: nvm use 26   (or: export PATH="$HOME/.local/share/nvm/v26.5.0/bin:$PATH")
+husky - pre-commit script failed (code 1)

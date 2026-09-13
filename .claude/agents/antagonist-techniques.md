@@ -354,6 +354,14 @@ toolkit, not a history.
 - One judgement call site, enforced by a census test, held across seven phases.
 - The view layer deriving everything and storing nothing.
 
+- **A live stored session does not prove the callback browser still holds it.**
+  Apple `form_post` crosses sites while the ordinary session is `SameSite=Lax`.
+  Trace credentials across each redirect method; require same-origin finalization
+  to compare the current session with the original operation's session.
+- **An exact callback route can still be unreachable.** Trace middleware order
+  and parser selection before the handler: a global foreign-origin rejection and
+  JSON-only parsing stop Apple's form POST before any state check can run.
+
 ## Where the dated record lives
 
 The per-engagement record — one section per engagement, in date order,

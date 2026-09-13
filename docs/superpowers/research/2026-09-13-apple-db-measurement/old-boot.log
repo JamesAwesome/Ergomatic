@@ -1,0 +1,6 @@
+migrations up to date
+global starter library seeded (idempotent)
+WARNING: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not fully set — sign-in is DISABLED (auth routes will 503)
+WARNING: GOOGLE_IOS_CLIENT_ID not set — native (iOS) sign-in is DISABLED
+WARNING: ALLOWED_EMAILS is empty — nobody can create an account
+ergomatic api listening on :19884

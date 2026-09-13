@@ -1,0 +1,12 @@
+$ bash scripts/test-run.sh --project integration server/auth/frontDoorRoutes.integration.test.ts
+NOTE: another Ergomatic test run is live (pid 81951, /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/ps-pr2/app, started Sun Sep 13 00:42:31 2026 ).
+      Free 444 MB, swap 3777.19M / 5120.00M, worker cap 4. Consider a scoped run.
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Start at  00:42:37
+   Duration  3.63s (transform 191ms, setup 0ms, import 598ms, tests 2.96s, environment 0ms)
+

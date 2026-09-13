@@ -1,0 +1,35 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |integration| server/auth/frontDoorRoutes.integration.test.ts (16 tests | 1 failed) 2139ms
+     × native malformed proof changes no account or attempt 3 16ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 passed (16)
+   Start at  00:24:27
+   Duration  2.74s (transform 150ms, setup 0ms, import 530ms, tests 2.14s, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project integration server/auth/frontDoorRoutes.integration.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > native malformed proof changes no account or attempt 3
+AssertionError: expected 401 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 401
+
+ ❯ server/auth/frontDoorRoutes.integration.test.ts:459:26
+    457|           ...override,
+    458|         });
+    459|       expect(res.status).toBe(400);
+       |                          ^
+    460|       expect(
+    461|         (await pool.query("SELECT stage FROM auth_attempts")).rows,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

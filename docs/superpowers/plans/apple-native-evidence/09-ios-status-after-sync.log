@@ -1,0 +1,4 @@
+ M ios/App/App.xcodeproj/project.pbxproj
+ M ios/App/App/App.entitlements
+ M ios/App/App/MyViewController.swift
+?? ios/App/App/AppleAuthPlugin.swift

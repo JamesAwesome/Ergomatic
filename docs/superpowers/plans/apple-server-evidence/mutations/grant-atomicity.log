@@ -1,0 +1,100 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |integration| server/auth/attempts.integration.test.ts (13 tests | 3 failed) 1724ms
+     × does not create before confirm and atomically retains grant and session 19ms
+     × links Google to Apple and retains existing-provider refresh grant 30ms
+     × rolls back user/session/consume when grant persistence fails 15ms
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 10 passed (13)
+   Start at  00:23:41
+   Duration  2.13s (transform 44ms, setup 0ms, import 338ms, tests 1.72s, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project integration server/auth/attempts.integration.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration| server/auth/attempts.integration.test.ts > front-door transactions against Postgres > does not create before confirm and atomically retains grant and session
+AssertionError: expected [] to strictly equal [ { refresh_token: 'secret' } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "refresh_token": "secret",
+-   },
+- ]
++ []
+
+ ❯ server/auth/attempts.integration.test.ts:60:7
+     58|     expect(
+     59|       (await pool.query("SELECT refresh_token FROM apple_grants")).row…
+     60|     ).toStrictEqual([{ refresh_token: "secret" }]);
+       |       ^
+     61|     expect((await pool.query("SELECT id FROM auth_attempts")).rowCount…
+     62|     expect(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |integration| server/auth/attempts.integration.test.ts > front-door transactions against Postgres > links Google to Apple and retains existing-provider refresh grant
+AssertionError: expected [] to strictly equal [ …(2) ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "client_id": "native.app",
+-     "refresh_token": "secret",
+-   },
+-   {
+-     "client_id": "web.app",
+-     "refresh_token": "fresh-existing",
+-   },
+- ]
++ []
+
+ ❯ server/auth/attempts.integration.test.ts:217:7
+    215|         )
+    216|       ).rows,
+    217|     ).toStrictEqual([
+       |       ^
+    218|       { client_id: "native.app", refresh_token: "secret" },
+    219|       { client_id: "web.app", refresh_token: "fresh-existing" },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |integration| server/auth/attempts.integration.test.ts > front-door transactions against Postgres > rolls back user/session/consume when grant persistence fails
+AssertionError: promise resolved "{ signedIn: { …(4) } }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "signedIn": {
++     "expiresAt": "2026-11-12T04:23:43.374Z",
++     "outcome": "signed_in",
++     "token": "Bm8WHh4ITeE2Qot2MBurwkn5vbdRV9IjKkBbuxLw9ro",
++     "user": {
++       "email": "relay@privaterelay.appleid.com",
++       "id": "74f306fe-ca69-4019-b2ff-6098621fbf25",
++       "name": "Rower",
++     },
++   },
+  }
+
+ ❯ server/auth/attempts.integration.test.ts:338:6
+    336|     await expect(
+    337|       store.confirm(await store.read(b.attempt.id, b.bindingSecret, "n…
+    338|     ).rejects.toThrow();
+       |      ^
+    339|     await pool.query(
+    340|       "ALTER TABLE apple_grants DROP CONSTRAINT force_grant_failure",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+

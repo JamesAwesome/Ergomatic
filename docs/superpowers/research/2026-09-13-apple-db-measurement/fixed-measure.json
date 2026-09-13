@@ -1,0 +1,326 @@
+[
+  {
+    "db": "apple_dba_locks_fixed",
+    "n": "2",
+    "timings": {
+      "link_begin": {
+        "medianMs": 1.820333000000005,
+        "runs": [
+          4.73904200000004,
+          2.3154160000000275,
+          1.820333000000005,
+          2.4653330000000437,
+          1.7587499999999636,
+          1.7509170000000154
+        ]
+      },
+      "reauth_claim": {
+        "medianMs": 1.8187500000000227,
+        "runs": [
+          3.7844590000000267,
+          2.1840420000000336,
+          3.249500000000012,
+          1.8187500000000227,
+          1.6954999999999814,
+          1.776707999999985
+        ]
+      },
+      "reauth_accept": {
+        "medianMs": 2.737291999999968,
+        "runs": [
+          3.648167000000001,
+          2.6976249999999595,
+          2.737291999999968,
+          2.7450000000000045,
+          3.3297919999999976,
+          2.2627919999999904
+        ]
+      },
+      "target_claim": {
+        "medianMs": 1.8922919999999976,
+        "runs": [
+          3.014415999999983,
+          1.8922919999999976,
+          1.7510000000000332,
+          2.3661670000000186,
+          1.8120000000000118,
+          2.0952909999999747
+        ]
+      },
+      "target_accept": {
+        "medianMs": 1.839749999999981,
+        "runs": [
+          2.9451250000000186,
+          1.8149999999999977,
+          1.839749999999981,
+          1.7468330000000378,
+          2.047125000000051,
+          2.952083000000016
+        ]
+      },
+      "finalize": {
+        "medianMs": 2.5303749999999923,
+        "runs": [
+          6.557791000000009,
+          2.5303749999999923,
+          2.4272920000000227,
+          2.340915999999993,
+          2.906499999999994,
+          2.64795799999996
+        ]
+      }
+    },
+    "addedQuery": {
+      "sql": "SELECT id,user_id AS \"userId\" FROM sessions WHERE id=$1 AND expires_at>now() FOR UPDATE",
+      "plan": [
+        {
+          "Plan": {
+            "Node Type": "LockRows",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 0.15,
+            "Total Cost": 8.18,
+            "Plan Rows": 1,
+            "Plan Width": 38,
+            "Actual Startup Time": 0.002,
+            "Actual Total Time": 0.003,
+            "Actual Rows": 1,
+            "Actual Loops": 1,
+            "Disabled": false,
+            "Shared Hit Blocks": 3,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "WAL Records": 1,
+            "WAL FPI": 0,
+            "WAL Bytes": 54,
+            "WAL Buffers Full": 0,
+            "Plans": [
+              {
+                "Node Type": "Index Scan",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Scan Direction": "Forward",
+                "Index Name": "sessions_pkey",
+                "Relation Name": "sessions",
+                "Alias": "sessions",
+                "Startup Cost": 0.15,
+                "Total Cost": 8.17,
+                "Plan Rows": 1,
+                "Plan Width": 38,
+                "Actual Startup Time": 0.001,
+                "Actual Total Time": 0.001,
+                "Actual Rows": 1,
+                "Actual Loops": 1,
+                "Disabled": false,
+                "Index Cond": "(id = '43357b38-d755-4a17-b25a-06b7fd92cf8e'::uuid)",
+                "Rows Removed by Index Recheck": 0,
+                "Filter": "(expires_at > now())",
+                "Rows Removed by Filter": 0,
+                "Index Searches": 1,
+                "Shared Hit Blocks": 2,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0,
+                "WAL Records": 0,
+                "WAL FPI": 0,
+                "WAL Bytes": 0,
+                "WAL Buffers Full": 0
+              }
+            ]
+          },
+          "Planning": {
+            "Shared Hit Blocks": 0,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          },
+          "Planning Time": 0.009,
+          "Triggers": [],
+          "Execution Time": 0.005
+        }
+      ]
+    }
+  },
+  {
+    "db": "postgres",
+    "n": "1000001",
+    "timings": {
+      "link_begin": {
+        "medianMs": 1.7128329999999892,
+        "runs": [
+          2.434000000000026,
+          1.7327920000000177,
+          1.9104580000000055,
+          1.7128329999999892,
+          1.6548340000000508,
+          1.6411659999999983
+        ]
+      },
+      "reauth_claim": {
+        "medianMs": 1.6704170000000431,
+        "runs": [
+          1.827875000000006,
+          3.2281249999999773,
+          1.5917080000000396,
+          1.6245000000000118,
+          2.9410839999999894,
+          1.6704170000000431
+        ]
+      },
+      "reauth_accept": {
+        "medianMs": 2.1318750000000364,
+        "runs": [
+          2.342917,
+          2.1237919999999804,
+          2.2210419999999544,
+          2.161875000000009,
+          2.1318750000000364,
+          2.085790999999972
+        ]
+      },
+      "target_claim": {
+        "medianMs": 1.6059999999999945,
+        "runs": [
+          1.7302910000000224,
+          1.681332999999995,
+          1.6542910000000006,
+          1.5906669999999963,
+          1.6059999999999945,
+          1.5624579999999924
+        ]
+      },
+      "target_accept": {
+        "medianMs": 1.6533749999999827,
+        "runs": [
+          1.801499999999976,
+          1.6533749999999827,
+          2.116917000000001,
+          1.6428750000000036,
+          1.70474999999999,
+          1.628500000000031
+        ]
+      },
+      "finalize": {
+        "medianMs": 3.625000000000057,
+        "runs": [
+          2.702875000000006,
+          2.381416999999999,
+          2.2318750000000023,
+          3.858415999999977,
+          3.625000000000057,
+          3.7390830000000506
+        ]
+      }
+    },
+    "addedQuery": {
+      "sql": "SELECT id,user_id AS \"userId\" FROM sessions WHERE id=$1 AND expires_at>now() FOR UPDATE",
+      "plan": [
+        {
+          "Plan": {
+            "Node Type": "LockRows",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 0.42,
+            "Total Cost": 8.46,
+            "Plan Rows": 1,
+            "Plan Width": 38,
+            "Actual Startup Time": 0.002,
+            "Actual Total Time": 0.003,
+            "Actual Rows": 1,
+            "Actual Loops": 1,
+            "Disabled": false,
+            "Shared Hit Blocks": 5,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "WAL Records": 1,
+            "WAL FPI": 0,
+            "WAL Bytes": 54,
+            "WAL Buffers Full": 0,
+            "Plans": [
+              {
+                "Node Type": "Index Scan",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Scan Direction": "Forward",
+                "Index Name": "sessions_pkey",
+                "Relation Name": "sessions",
+                "Alias": "sessions",
+                "Startup Cost": 0.42,
+                "Total Cost": 8.45,
+                "Plan Rows": 1,
+                "Plan Width": 38,
+                "Actual Startup Time": 0.001,
+                "Actual Total Time": 0.002,
+                "Actual Rows": 1,
+                "Actual Loops": 1,
+                "Disabled": false,
+                "Index Cond": "(id = 'c0828e03-8173-0bef-d1f7-a025057c74fb'::uuid)",
+                "Rows Removed by Index Recheck": 0,
+                "Filter": "(expires_at > now())",
+                "Rows Removed by Filter": 0,
+                "Index Searches": 1,
+                "Shared Hit Blocks": 4,
+                "Shared Read Blocks": 0,
+                "Shared Dirtied Blocks": 0,
+                "Shared Written Blocks": 0,
+                "Local Hit Blocks": 0,
+                "Local Read Blocks": 0,
+                "Local Dirtied Blocks": 0,
+                "Local Written Blocks": 0,
+                "Temp Read Blocks": 0,
+                "Temp Written Blocks": 0,
+                "WAL Records": 0,
+                "WAL FPI": 0,
+                "WAL Bytes": 0,
+                "WAL Buffers Full": 0
+              }
+            ]
+          },
+          "Planning": {
+            "Shared Hit Blocks": 0,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          },
+          "Planning Time": 0.007,
+          "Triggers": [],
+          "Execution Time": 0.005
+        }
+      ]
+    }
+  }
+]

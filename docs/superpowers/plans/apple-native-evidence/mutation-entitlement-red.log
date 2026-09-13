@@ -1,0 +1,47 @@
+
+ RUN  v4.1.11 /private/tmp/ergomatic-apple-native-paste/app
+
+ ❯ |unit| scripts/apple-auth-contract.test.ts (6 tests | 1 failed) 4ms
+     × puts the Swift file in the App target and enables the Apple entitlement 2ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  00:01:01
+   Duration  77ms (transform 11ms, setup 0ms, import 15ms, tests 4ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| scripts/apple-auth-contract.test.ts > AppleAuth native contract > puts the Swift file in the App target and enables the Apple entitlement
+AssertionError: expected '<?xml version="1.0" encoding="UTF-8"?…' to match /<ke…/key>\s*<array>\s*<string>Default<\
+
+- Expected:
+/<key>com\.apple\.developer\.applesignin<\/key>\s*<array>\s*<string>Default<\/string>/
+
++ Received:
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+  <key>com.apple.developer.applesignin</key>
+  <array>
+    <string>Primary</string>
+  </array>
+  <key>com.apple.developer.nfc.readersession.formats</key>
+  <array>
+    <string>TAG</string>
+  </array>
+</dict>
+</plist>
+"
+
+ ❯ scripts/apple-auth-contract.test.ts:137:26
+    135|       "<key>com.apple.developer.applesignin</key>",
+    136|     );
+    137|     expect(entitlements).toMatch(
+       |                          ^
+    138|       /<key>com\.apple\.developer\.applesignin<\/key>\s*<array>\s*<str…
+    139|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

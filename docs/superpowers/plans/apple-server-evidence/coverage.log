@@ -1,0 +1,33 @@
+$ bash scripts/test-run.sh --coverage --project unit --project integration server/auth server/app.test.ts '--coverage.include=server/auth/**' --coverage.include=server/app.ts
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+      Coverage enabled with v8
+
+
+ Test Files  16 passed (16)
+      Tests  129 passed (129)
+   Start at  00:27:02
+   Duration  4.38s (transform 397ms, setup 0ms, import 3.87s, tests 10.10s, environment 1ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   93.35 |     90.5 |   99.12 |   94.69 |                   
+ server            |   96.77 |    88.88 |     100 |   96.66 |                   
+  app.ts           |   96.77 |    88.88 |     100 |   96.66 | 158               
+ server/auth       |   93.17 |    90.57 |   99.09 |   94.58 |                   
+  attempts.ts      |   91.61 |    89.84 |     100 |    95.1 | ...73,347,378,456 
+  ...DoorErrors.ts |   88.88 |     90.9 |     100 |   88.88 | 25                
+  ...DoorRoutes.ts |   87.34 |    82.75 |   95.23 |   88.07 | ...47-349,356-357 
+  providers.ts     |   93.65 |     93.9 |     100 |   96.55 | 110,125           
+  routes.ts        |   95.94 |       90 |     100 |   95.89 | 80-82             
+  testSignin.ts    |     100 |    93.75 |     100 |     100 | 35                
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 93.35% ( 590/632 )
+Branches     : 90.5% ( 429/474 )
+Functions    : 99.12% ( 113/114 )
+Lines        : 94.69% ( 571/603 )
+================================================================================

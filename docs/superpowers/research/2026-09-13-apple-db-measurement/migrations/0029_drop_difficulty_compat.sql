@@ -1,0 +1,33 @@
+-- Phase DE PR 3 (docs/superpowers/specs/2026-09-05-difficulty-out-effort-in-design.md
+-- §5, TRIAD — stored shape). HAND-WRITTEN, same reason as 0024: this repo's
+-- drizzle-kit refuses a non-TTY interactive prompt, and dropping a column
+-- that still has generated-code references (the compat write PR 1 added)
+-- is exactly the kind of change `db:generate` cannot resolve unattended
+-- until the code is deleted first — done in this PR, in the same commit.
+--
+-- One tag cycle after PR 2 (v0.39.0, 2026-09-05), the trigger is a
+-- calendar date James set directly (spec §5: "We have like five users
+-- let's just schedule the work for Saturday"), not a measurement — the
+-- cohort is five household TestFlight testers, all of whom update, so a
+-- log-based "is anyone still on the old build" gate was both overkill and
+-- unsatisfiable (`docker logs` only covers the CURRENT container, and
+-- every merge to main redeploys it).
+--
+-- Three drops, no data moved:
+--   * workouts.difficulty (NOT NULL enum, PR 1's derived-write compat
+--     column) — no new build has read, shown or accepted this since PR 1
+--     shipped as #309.
+--   * the difficulty enum TYPE itself, now that no column references it.
+--   * preferences.difficulties (jsonb, default all three) — the per-user
+--     difficulty filter setting, unused since PR 1 deleted the filter
+--     from every client.
+--
+-- ROLLBACK: NOT rollback-safe, same class as 0024. A pre-0029 image
+-- expects both dropped columns to exist; deploy.sh's health-gated
+-- auto-rollback (scripts/deploy.sh, the ERR trap) fires AFTER the new
+-- container has migrated and would restore exactly that image, so the tag
+-- carrying this migration is a FORWARD-FIX-ONLY floor row in
+-- docs/RELEASING.md § Rollback constraints, added in this PR.
+ALTER TABLE "workouts" DROP COLUMN "difficulty";--> statement-breakpoint
+DROP TYPE "public"."difficulty";--> statement-breakpoint
+ALTER TABLE "preferences" DROP COLUMN "difficulties";

@@ -1,0 +1,10 @@
+$ bash scripts/test-run.sh --project integration server/auth/attempts.integration.test.ts -t 'lock-order cycle'
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 11 skipped (12)
+   Start at  00:05:41
+   Duration  2.25s (transform 40ms, setup 0ms, import 419ms, tests 1.77s, environment 0ms)
+

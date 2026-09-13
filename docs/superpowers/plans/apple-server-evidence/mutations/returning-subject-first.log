@@ -1,0 +1,30 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |integration| server/auth/attempts.integration.test.ts (13 tests | 1 failed) 1906ms
+     × resolves returning subject before requiring email and never merges email 33ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 passed (13)
+   Start at  00:23:53
+   Duration  2.39s (transform 59ms, setup 0ms, import 407ms, tests 1.91s, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project integration server/auth/attempts.integration.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration| server/auth/attempts.integration.test.ts > front-door transactions against Postgres > resolves returning subject before requiring email and never merges email
+Error: email_required
+ ❯ server/auth/attempts.ts:373:19
+    371|           if (false && user) return finishSignin(tx, a, user);
+    372|           if (!identity.emailVerified || !identity.email)
+    373|             throw new AuthFailure("email_required");
+       |                   ^
+    374|         } else if (
+    375|           !a.reauthenticatedAt ||
+ ❯ transaction server/auth/attempts.ts:92:22
+ ❯ server/auth/attempts.integration.test.ts:83:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

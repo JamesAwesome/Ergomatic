@@ -1,0 +1,69 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |integration| server/auth/attempts.integration.test.ts (13 tests | 2 failed) 2567ms
+     × requires both proofs and exact current session; keeps existing profile 68ms
+     × links Google to Apple and retains existing-provider refresh grant 62ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 11 passed (13)
+   Start at  00:23:59
+   Duration  3.15s (transform 78ms, setup 0ms, import 508ms, tests 2.57s, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project integration server/auth/attempts.integration.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration| server/auth/attempts.integration.test.ts > front-door transactions against Postgres > requires both proofs and exact current session; keeps existing profile
+AssertionError: expected [ { email: 'corrupt', …(2) } ] to strictly equal [ { email: 'original@test', …(2) } ]
+
+- Expected
++ Received
+
+  [
+    {
+      "apple_sub": "apple",
+-     "email": "original@test",
+-     "name": "Original",
++     "email": "corrupt",
++     "name": "corrupt",
+    },
+  ]
+
+ ❯ server/auth/attempts.integration.test.ts:168:7
+    166|     expect(
+    167|       (await pool.query("SELECT email,name,apple_sub FROM users")).row…
+    168|     ).toStrictEqual([
+       |       ^
+    169|       { email: "original@test", name: "Original", apple_sub: "apple" },
+    170|     ]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |integration| server/auth/attempts.integration.test.ts > front-door transactions against Postgres > links Google to Apple and retains existing-provider refresh grant
+AssertionError: expected [ { google_sub: 'new-google', …(2) } ] to strictly equal [ { google_sub: 'new-google', …(2) } ]
+
+- Expected
++ Received
+
+  [
+    {
+-     "email": "relay@privaterelay.appleid.com",
++     "email": "corrupt",
+      "google_sub": "new-google",
+-     "name": "Rower",
++     "name": "corrupt",
+    },
+  ]
+
+ ❯ server/auth/attempts.integration.test.ts:204:7
+    202|     expect(
+    203|       (await pool.query("SELECT google_sub,email,name FROM users")).ro…
+    204|     ).toStrictEqual([
+       |       ^
+    205|       {
+    206|         google_sub: "new-google",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+

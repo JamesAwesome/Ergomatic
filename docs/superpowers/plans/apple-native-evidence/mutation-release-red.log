@@ -1,0 +1,26 @@
+
+ RUN  v4.1.11 /private/tmp/ergomatic-apple-native-paste/app
+
+ ❯ |unit| scripts/apple-auth-contract.test.ts (6 tests | 1 failed) 3ms
+     × holds one controller/delegate/call until one terminal callback clears them 1ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  00:00:59
+   Duration  73ms (transform 11ms, setup 0ms, import 15ms, tests 3ms, environment 0ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| scripts/apple-auth-contract.test.ts > AppleAuth native contract > holds one controller/delegate/call until one terminal callback clears them
+AssertionError: Target cannot be null or undefined.
+ ❯ scripts/apple-auth-contract.test.ts:92:50
+     90|     );
+     91|     expect(swift.match(/activeController = nil/g)).toHaveLength(1);
+     92|     expect(swift.match(/activeDelegate = nil/g)).toHaveLength(1);
+       |                                                  ^
+     93|     expect(swift.match(/activeCall = nil/g)).toHaveLength(1);
+     94|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
