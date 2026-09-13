@@ -200,6 +200,18 @@ const frontConfig = await frontDoorConfig(process.env, siteUrl);
 const frontDoor = frontConfig
   ? await createFrontDoor(pool, sessionStore, frontConfig, accessPolicy)
   : null;
+// Every other optional integration says so at boot (Google above, the iOS
+// client above that, Concept2's bootLines below). Apple said nothing, which
+// made an all-five-blank or misspelled `APPLE_*` set indistinguishable from a
+// healthy deploy: `frontDoorConfig` returns null, the front-door routes 503,
+// `/api/health` still answers 200, and the app quietly serves the legacy
+// Google-only screen. A PARTIAL set throws and fails the boot loudly; only
+// the silent case needs this line. docs/deploy.md tells the operator to check
+// the log for it.
+if (!frontDoor)
+  console.warn(
+    "WARNING: APPLE_* not set — Apple sign-in is DISABLED and the combined auth routes will 503 (legacy Google sign-in only)",
+  );
 const httpServer = createApp({
   frontDoor,
   checkDb: () => checkDb(pool),

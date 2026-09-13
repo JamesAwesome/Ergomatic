@@ -126,10 +126,24 @@ main {
   padding: 6px 20px 20px;
 }
 
+/* SAFE AREA, and it is not optional (Phase SB, James's capture of `← BACK`
+   under the clock, 2026-09-06 — see the status-backdrop note further down).
+   These two are bare <main> elements, so they take `main`'s flat
+   `6px 20px 20px` and NOT `.screen`'s inset padding, which is what every
+   other route in the app uses. With `viewport-fit=cover` that put the 44px
+   `← BACK` / `← CANCEL` button at y=6 in portrait, under the status bar and
+   beneath `.status-backdrop`'s blur strip, and ran the header under the
+   notch and the rounded corners in landscape. The approved Gate 0 renders
+   (docs/design/apple-signin/renders/) show the inset; the implementation
+   dropped it. No gate here can see this: the Playwright captures are desktop
+   Chromium, where every env(safe-area-inset-*) resolves to 0. */
 .signin {
   display: flex;
   min-height: 90vh;
   flex-direction: column;
+  padding: calc(6px + env(safe-area-inset-top, 0px))
+    calc(20px + env(safe-area-inset-right, 0px)) 20px
+    calc(20px + env(safe-area-inset-left, 0px));
   justify-content: center;
   gap: 12px;
 }
@@ -196,6 +210,10 @@ main {
   max-width: 520px;
   min-height: 100dvh;
   flex-direction: column;
+  /* Same inset as `.signin` above, and for the same reason. */
+  padding: calc(6px + env(safe-area-inset-top, 0px))
+    calc(20px + env(safe-area-inset-right, 0px)) 20px
+    calc(20px + env(safe-area-inset-left, 0px));
 }
 
 .auth-flow-header {
