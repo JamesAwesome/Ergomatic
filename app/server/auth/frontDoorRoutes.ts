@@ -253,13 +253,11 @@ export function createFrontDoorRoutes(deps: {
     }
   });
   router.post("/api/auth/native/attempts/:id/proof", async (req, res) => {
-    let claimedOperation = false;
-    let owned: Attempt | undefined;
-    let secret: string | undefined;
+    let claimed: Attempt | undefined;
     try {
       const body = record(req.body);
-      secret = requestBinding(req, "native");
-      owned = await attempts.read(id(req), secret, "native");
+      const secret = requestBinding(req, "native");
+      const owned = await attempts.read(id(req), secret, "native");
       const state = requiredText(body.state, 128);
       if (state !== owned.state) throw new AuthFailure("invalid_proof");
       const proof: ProviderProof = {
@@ -274,15 +272,13 @@ export function createFrontDoorRoutes(deps: {
       };
       if (attemptProvider(owned) === "apple" && !proof.authorizationCode)
         throw new AuthFailure("invalid_request");
-      const claimed = await attempts.claim(owned);
-      claimedOperation = true;
+      claimed = await attempts.claim(owned);
       const identity = await providers.verify(context(claimed), proof);
       res.json(
         await result(res, await attempts.accept(claimed, identity), "native"),
       );
     } catch (error) {
-      if (claimedOperation && owned && secret)
-        await attempts.cancel(owned.id, secret, "native");
+      if (claimed) await discard(claimed);
       failure(res, error);
     }
   });
@@ -293,6 +289,14 @@ export function createFrontDoorRoutes(deps: {
       failure(res, error);
     }
   });
+  // A cleanup failure must not clear the browser's still-live binding cookie.
+  async function discard(a: Attempt): Promise<boolean> {
+    try {
+      return await attempts.discard(a);
+    } catch {
+      return false;
+    }
+  }
   async function callback(req: Request, res: Response, provider: AuthProvider) {
     let owned: Attempt | undefined;
     let binding: { id: string; bindingSecret: string } | undefined;
@@ -316,7 +320,7 @@ export function createFrontDoorRoutes(deps: {
           body.error !== "access_denied"
         )
           throw new AuthFailure("invalid_proof");
-        await attempts.cancel(a.id, binding.bindingSecret, "web");
+        if (!(await discard(a))) throw new AuthFailure("attempt_expired");
         res.append("Set-Cookie", cookie("", 0));
         res.redirect(
           303,
@@ -341,6 +345,7 @@ export function createFrontDoorRoutes(deps: {
         }
       }
       const claimed = await attempts.claim(a);
+      owned = claimed;
       const verified = await providers.verify(context(claimed), proof);
       const r = await attempts.accept(claimed, verified);
       if (r.signedIn) {
@@ -352,10 +357,8 @@ export function createFrontDoorRoutes(deps: {
         res.redirect(303, `/?authAttempt=${a.id}`);
       }
     } catch (error) {
-      if (owned && binding) {
-        await attempts.cancel(owned.id, binding.bindingSecret, "web");
+      if (owned && (await discard(owned)))
         res.append("Set-Cookie", cookie("", 0));
-      }
       const code = error instanceof AuthFailure ? error.code : "signin_failed";
       res.redirect(
         303,

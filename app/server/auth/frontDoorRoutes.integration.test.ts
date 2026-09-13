@@ -1,5 +1,14 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import request from "supertest";
+import type { Response as ExpressResponse } from "express";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
@@ -22,6 +31,13 @@ describe("supported auth producers through Express and signed tokens", () => {
   let rsa: Awaited<ReturnType<typeof generateKeyPair>>;
   let attempts: ReturnType<typeof createAttempts>;
   const codes = new Map<string, string>();
+  function signal() {
+    let resolve!: () => void;
+    const promise = new Promise<void>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  }
   let exchangeOutsideLock = false;
   beforeAll(async () => {
     container = await startPostgres();
@@ -113,6 +129,7 @@ describe("supported auth producers through Express and signed tokens", () => {
     await container?.stop();
   });
   beforeEach(async () => {
+    vi.restoreAllMocks();
     await pool.query("TRUNCATE users,auth_attempts CASCADE");
     codes.clear();
     exchangeOutsideLock = false;
@@ -528,6 +545,285 @@ describe("supported auth producers through Express and signed tokens", () => {
         (await pool.query("SELECT stage FROM auth_attempts")).rows,
       ).toStrictEqual([{ stage: "authorize" }]);
       expect((await pool.query("SELECT id FROM users")).rowCount).toBe(0);
+    },
+  );
+  it("native owned failed exchange erases its claimed snapshot", async () => {
+    const begin = await request(app)
+      .post("/api/auth/native/attempts")
+      .send({ purpose: "signin", provider: "apple" });
+    const b = begin.body;
+    const failed = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/proof`)
+      .send({
+        bindingSecret: b.bindingSecret,
+        state: b.state,
+        idToken: "invalid",
+        authorizationCode: "code",
+      });
+    expect(failed.status).toBe(401);
+    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
+  });
+  it("failed cleanup preserves the live attempt cookie", async () => {
+    const begin = await request(app)
+      .post("/api/auth/web/attempts")
+      .send({ purpose: "signin", provider: "apple" });
+    const b = begin.body;
+    const binding = begin.headers["set-cookie"][0].split(";")[0];
+    vi.spyOn(attempts, "discard").mockRejectedValue(
+      new Error("database unavailable"),
+    );
+    const failed = await request(app)
+      .post("/api/auth/apple/callback")
+      .set("Cookie", binding)
+      .type("form")
+      .send({ state: b.state, error: "access_denied" });
+    expect(failed.status).toBe(303);
+    expect(failed.headers["set-cookie"]).toBeUndefined();
+    expect(
+      (await pool.query("SELECT stage FROM auth_attempts")).rows,
+    ).toStrictEqual([{ stage: "authorize" }]);
+  });
+  it("finalize can commit identity and grant before its HTTP response is lost", async () => {
+    const google = {
+      sub: "legacy",
+      email: "original@test",
+      emailVerified: true,
+      name: "Original",
+    };
+    const signed = await attempts.legacyGoogle(google);
+    const sessionId = (await pool.query("SELECT id FROM sessions")).rows[0]
+      .id as string;
+    const b = await attempts.begin({
+      surface: "native",
+      purpose: "link",
+      targetProvider: "apple",
+      originalSessionId: sessionId,
+    });
+    const target = await attempts.accept(
+      await attempts.claim(b.attempt),
+      google,
+    );
+    await attempts.accept(await attempts.claim(target.attempt!), {
+      sub: "added-apple",
+      email: "relay@test",
+      emailVerified: true,
+      name: "Added",
+      grant: { clientId: "native.app", refreshToken: "retained-grant" },
+    });
+    // Suppress delivery only after the real route has awaited its real commit.
+    const json = app.response.json;
+    const delivery = vi
+      .spyOn(app.response, "json")
+      .mockImplementation(function (this: ExpressResponse, body: unknown) {
+        if ((body as { outcome?: string }).outcome === "linked") {
+          this.destroy();
+          return this;
+        }
+        return json.call(this, body);
+      });
+    const failure = await request(app)
+      .post(`/api/auth/native/attempts/${b.attempt.id}/finalize`)
+      .auth(signed.token!, { type: "bearer" })
+      .send({ bindingSecret: b.bindingSecret })
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    delivery.mockRestore();
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toMatch(/socket hang up|aborted/);
+    const methods = await request(app)
+      .get("/api/auth/methods")
+      .auth(signed.token!, { type: "bearer" });
+    expect(methods.body).toStrictEqual({ apple: true, google: true });
+    expect(
+      (await pool.query("SELECT refresh_token FROM apple_grants")).rows,
+    ).toStrictEqual([{ refresh_token: "retained-grant" }]);
+    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
+  });
+  it.each([
+    ["signin", "success"],
+    ["signin", "cancel"],
+    ["signin", "provider-error"],
+    ["signin", "malformed"],
+    ["link", "success"],
+    ["link", "cancel"],
+    ["link", "provider-error"],
+    ["link", "malformed"],
+  ] as const)(
+    "stale %s callback (%s) cannot erase the winning stage or clear its cookie",
+    async (purpose, loserKind) => {
+      let sessionToken = "";
+      if (purpose === "link") {
+        const start = (
+          await request(app)
+            .post("/api/auth/native/attempts")
+            .send({ purpose: "signin", provider: "apple" })
+        ).body;
+        const token = await jwt(start.nonce, "native.app");
+        codes.set("setup", token);
+        await request(app)
+          .post(`/api/auth/native/attempts/${start.attemptId}/proof`)
+          .send({
+            bindingSecret: start.bindingSecret,
+            state: start.state,
+            idToken: token,
+            authorizationCode: "setup",
+          });
+        sessionToken = (
+          await request(app)
+            .post(`/api/auth/native/attempts/${start.attemptId}/confirm`)
+            .send({ bindingSecret: start.bindingSecret })
+        ).body.token;
+      }
+      const beginRequest = request(app)
+        .post("/api/auth/web/attempts")
+        .send({ purpose, provider: purpose === "signin" ? "apple" : "google" });
+      if (sessionToken)
+        beginRequest.set("Cookie", `erg_session=${sessionToken}`);
+      const begin = await beginRequest;
+      expect(begin.status).toBe(200);
+      const b = begin.body;
+      const binding = begin.headers["set-cookie"][0].split(";")[0];
+      const token = await jwt(b.nonce, "web.app");
+      codes.set("winner", token);
+      const valid = { state: b.state, code: "winner", id_token: token };
+      const loserBody =
+        loserKind === "cancel"
+          ? { state: b.state, error: "access_denied" }
+          : loserKind === "provider-error"
+            ? { state: b.state, error: "provider_failed" }
+            : loserKind === "malformed"
+              ? { ...valid, code: "" }
+              : valid;
+      const firstRead = signal();
+      const bothRead = signal();
+      const releaseLoser = signal();
+      const read = attempts.read.bind(attempts);
+      let reads = 0;
+      const heldRead = vi
+        .spyOn(attempts, "read")
+        .mockImplementation(async (...args) => {
+          const snapshot = await read(...args);
+          reads++;
+          if (reads === 1) {
+            firstRead.resolve();
+            await bothRead.promise;
+          } else if (reads === 2) {
+            bothRead.resolve();
+            await releaseLoser.promise;
+          }
+          return snapshot;
+        });
+      const post = (body: typeof loserBody) =>
+        request(app)
+          .post("/api/auth/apple/callback")
+          .set("Origin", "https://appleid.apple.com")
+          .set("Cookie", binding)
+          .type("form")
+          .send(body)
+          .then((response) => response);
+      const winner = post(valid);
+      await firstRead.promise;
+      const loser = post(loserBody);
+      const won = await winner;
+      const snapshot = (
+        await pool.query(
+          "SELECT stage,version,apple_refresh_token IS NOT NULL AS grant FROM auth_attempts",
+        )
+      ).rows;
+      releaseLoser.resolve();
+      const lost = await loser;
+      heldRead.mockRestore();
+      expect(won.headers.location).toBe(`/?authAttempt=${b.attemptId}`);
+      expect(snapshot).toStrictEqual([
+        {
+          stage: purpose === "signin" ? "confirm" : "target_authorize",
+          version: 3,
+          grant: true,
+        },
+      ]);
+      expect(
+        (
+          await pool.query(
+            "SELECT stage,version,apple_refresh_token IS NOT NULL AS grant FROM auth_attempts",
+          )
+        ).rows,
+      ).toStrictEqual(snapshot);
+      expect(lost.headers["set-cookie"]).toBeUndefined();
+      expect(lost.headers.location).toContain("authError=");
+      const resume = await request(app)
+        .get(`/api/auth/web/attempts/${b.attemptId}`)
+        .set("Cookie", binding);
+      expect(resume.status).toBe(200);
+      if (purpose === "signin") {
+        const confirmed = await request(app)
+          .post(`/api/auth/web/attempts/${b.attemptId}/confirm`)
+          .set("Cookie", binding)
+          .set("Origin", "https://erg.test")
+          .send({});
+        sessionToken = (confirmed.headers["set-cookie"] as unknown as string[])
+          .find((value) => value.startsWith("erg_session="))!
+          .split(";")[0]
+          .split("=")[1];
+      } else {
+        codes.set(
+          "target",
+          await googleJwt(resume.body.nonce, "added-google", "google.web"),
+        );
+        await request(app)
+          .get("/api/auth/google/callback")
+          .set("Cookie", binding)
+          .query({ state: resume.body.state, code: "target" });
+        await request(app)
+          .post(`/api/auth/web/attempts/${b.attemptId}/finalize`)
+          .set("Cookie", binding)
+          .set("Origin", "https://erg.test")
+          .auth(sessionToken, { type: "bearer" })
+          .send({});
+      }
+      const methods = await request(app)
+        .get("/api/auth/methods")
+        .auth(sessionToken, { type: "bearer" });
+      expect(methods.status).toBe(200);
+      expect(methods.body).toStrictEqual({
+        apple: true,
+        google: purpose === "link",
+      });
+      expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(
+        0,
+      );
+    },
+  );
+  it.each(["cancel", "provider-error", "malformed", "exchange"])(
+    "owned callback %s erases only its failed operation and cookie",
+    async (kind) => {
+      const begin = await request(app)
+        .post("/api/auth/web/attempts")
+        .send({ purpose: "signin", provider: "apple" });
+      const b = begin.body;
+      const binding = begin.headers["set-cookie"][0].split(";")[0];
+      const body =
+        kind === "cancel"
+          ? { state: b.state, error: "access_denied" }
+          : kind === "provider-error"
+            ? { state: b.state, error: "provider_failed" }
+            : {
+                state: b.state,
+                code: kind === "malformed" ? "" : "code",
+                id_token: "invalid",
+              };
+      const failed = await request(app)
+        .post("/api/auth/apple/callback")
+        .set("Cookie", binding)
+        .type("form")
+        .send(body);
+      expect(failed.status).toBe(303);
+      expect(failed.headers["set-cookie"][0]).toContain("Max-Age=0");
+      expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(
+        0,
+      );
+      expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(0);
     },
   );
   it("wrong callback provider cannot consume valid operation; old callback cannot cancel confirmation", async () => {
