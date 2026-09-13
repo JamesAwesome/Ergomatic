@@ -8,7 +8,7 @@ toolkit, not a history.
 
 ## Falsified claims, and how
 
-- **A native logger unit test can prove the sink while missing the bridge that selects it.** For a Console override, drive `console.*` inside the loaded production WKWebView and capture process stdout; in the same host, send a forbidden synthetic result through native `toJs` and JavaScript `fromNative`. Read the no-callback error branch too: it can call patched `console.warn` even when generic logging is disabled.
+- **A native logger unit test can prove the sink while missing the bridge that selects it.** For a Console override, drive `console.*` inside the loaded production WKWebView and capture process stdout; in the same host, send a forbidden synthetic result through native `toJs` and JavaScript `fromNative`. Read the no-callback error branch too: it can call patched `console.warn` even when generic logging is disabled. A prebuilt framework’s `#if DEBUG` was evaluated when that framework was built; changing the app configuration cannot change it. Inspect the exact platform slice and built app plist before using that getter as an app-build oracle.
 
 - **"The paused derivation depends on seeing zero stroke rates."** Believed
   because a long comment discussed `spm === 0` at length. False: that passage is

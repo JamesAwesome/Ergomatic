@@ -1,0 +1,93 @@
+{
+  "notice_text_on_surface": {
+    "foreground_rgb": [
+      27,
+      26,
+      23
+    ],
+    "background_rgb": [
+      255,
+      253,
+      247
+    ],
+    "contrast": 17.11
+  },
+  "error_border_on_surface": {
+    "foreground_rgb": [
+      181,
+      52,
+      31
+    ],
+    "background_rgb": [
+      255,
+      253,
+      247
+    ],
+    "contrast": 5.94
+  },
+  "google_label_on_accent": {
+    "foreground_rgb": [
+      255,
+      253,
+      247
+    ],
+    "background_rgb": [
+      181,
+      52,
+      31
+    ],
+    "contrast": 5.94
+  },
+  "apple_label_on_black": {
+    "foreground_rgb": [
+      255,
+      255,
+      255
+    ],
+    "background_rgb": [
+      0,
+      0,
+      0
+    ],
+    "contrast": 21.0
+  },
+  "disabled_provider_name_on_page": {
+    "foreground_rgb": [
+      160,
+      154,
+      140
+    ],
+    "background_rgb": [
+      244,
+      241,
+      232
+    ],
+    "contrast": 2.48
+  },
+  "disabled_add_action_on_page": {
+    "foreground_rgb": [
+      63,
+      60,
+      53
+    ],
+    "background_rgb": [
+      244,
+      241,
+      232
+    ],
+    "contrast": 9.74
+  },
+  "connected_label_on_page": {
+    "foreground_rgb": [
+      73,
+      98,
+      79
+    ],
+    "background_rgb": [
+      244,
+      241,
+      232
+    ],
+    "contrast": 5.92
+  }
+}

@@ -1,0 +1,106 @@
+[
+  {
+    "viewport": {
+      "label": "portrait",
+      "width": 390,
+      "height": 844
+    },
+    "file": "unavailable-add-portrait-390x844.png",
+    "metrics": {
+      "disabled": true,
+      "row": {
+        "box": {
+          "x": 20,
+          "y": 237,
+          "width": 350,
+          "height": 54,
+          "top": 237,
+          "right": 370,
+          "bottom": 291,
+          "left": 20
+        },
+        "color": "rgb(160, 154, 140)",
+        "cursor": "not-allowed",
+        "fontSize": "16px"
+      },
+      "provider": {
+        "color": "rgb(160, 154, 140)",
+        "cursor": "not-allowed"
+      },
+      "action": {
+        "color": "rgb(160, 154, 140)",
+        "cursor": "not-allowed"
+      },
+      "document": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "clientHeight": 844,
+        "scrollHeight": 844
+      }
+    },
+    "axe": [
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "help": "Page should contain a level-one heading",
+        "nodes": [
+          [
+            "html"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "viewport": {
+      "label": "landscape",
+      "width": 844,
+      "height": 390
+    },
+    "file": "unavailable-add-landscape-844x390.png",
+    "metrics": {
+      "disabled": true,
+      "row": {
+        "box": {
+          "x": 202,
+          "y": 224,
+          "width": 440,
+          "height": 54,
+          "top": 224,
+          "right": 642,
+          "bottom": 278,
+          "left": 202
+        },
+        "color": "rgb(160, 154, 140)",
+        "cursor": "not-allowed",
+        "fontSize": "16px"
+      },
+      "provider": {
+        "color": "rgb(160, 154, 140)",
+        "cursor": "not-allowed"
+      },
+      "action": {
+        "color": "rgb(160, 154, 140)",
+        "cursor": "not-allowed"
+      },
+      "document": {
+        "clientWidth": 844,
+        "scrollWidth": 844,
+        "clientHeight": 390,
+        "scrollHeight": 528
+      }
+    },
+    "axe": [
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "help": "Page should contain a level-one heading",
+        "nodes": [
+          [
+            "html"
+          ]
+        ]
+      }
+    ]
+  }
+]

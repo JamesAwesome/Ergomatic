@@ -1,0 +1,8 @@
+d059b910eabab6efa36be73d68ceaf96a817360c9b398f7399e393c37933657a  .superpowers/sdd/2026-09-13-apple-review-fixes/browser/captures/access-denied-landscape-844x390.png
+ab395359ab383d69e98a847fc1cb0c4aaa7505af437a84a2d49dde04cc921eef  .superpowers/sdd/2026-09-13-apple-review-fixes/browser/captures/access-denied-portrait-390x844.png
+615179db39b2ae6f48410aeb85cadb8a80b74f0c0b3327460b45b2171ed30e35  .superpowers/sdd/2026-09-13-apple-review-fixes/browser/captures/failed-cancel-notice-landscape-844x390.png
+f5092eba930f8ec5da21e87d7304e0d677f4abdd7de04690daf94fb6cfcc3b5f  .superpowers/sdd/2026-09-13-apple-review-fixes/browser/captures/failed-cancel-notice-portrait-390x844.png
+02b66af9c07877db007719d93f279b961324e5e954a86f377622016233b32310  .superpowers/sdd/2026-09-13-apple-review-fixes/browser/captures/failed-cancel-recovery-landscape-844x390.png
+184e1aa600ff02e0a85500aeb9a098a1c73d57735363159efca5e3870ca6cb83  .superpowers/sdd/2026-09-13-apple-review-fixes/browser/captures/failed-cancel-recovery-portrait-390x844.png
+e0301b1508c80c858fa134c8ae8ad3351a61a1c3545f5d225cf94111ded25397  .superpowers/sdd/2026-09-13-apple-review-fixes/browser/captures/unavailable-add-landscape-844x390.png
+75396bfbeb4095e57102652659b4e59012a04316d99bc8ac2db165ce4b0fcb2f  .superpowers/sdd/2026-09-13-apple-review-fixes/browser/captures/unavailable-add-portrait-390x844.png

@@ -6812,3 +6812,7 @@ an external-availability dependency; Apple-first code stays dark until then.
 
 Evidence: `docs/superpowers/specs/2026-09-12-apple-signin-review.md` and its
 approved design/captures. No implementation or release verdict is claimed.
+
+## 2026-09-13 — Wave A Apple AUTH correction final gate
+
+- **Corrected function ACCEPTED at `c7fce223`; merge NOT READY; public/TestFlight release NOT READY.** The approved two-provider continuity, first-account confirmation, no-email-join, shared saved-email admission, both-proof linking, invitation denial, cancellation recovery, independent cleanup, and native diagnostic boundaries survive the fixes. Final local validation passed 8,895 tests in 351 files with one existing skip, 98.23/96.52/99.01/98.96 coverage, all static/build/dist gates, and the final browser recheck; scoped spec and quality reviews pass. The original whole-PR code-lens review remains incomplete after its platform block, so the scoped PASS cannot establish merge readiness. A merge auto-deploys the configured staging front door: confirm restricted mode and tester allowlist first. External TestFlight still waits for account deletion, real native/web Apple continuity, and physical-device log collection. No new ROADMAP filing.

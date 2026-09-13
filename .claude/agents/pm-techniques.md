@@ -51,6 +51,8 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 
 ## Patterns that recur (check for these every time)
 
+- **A scoped correction review can accept the named fixes, but it cannot discharge an incomplete whole-PR review.** Report corrected-function acceptance, merge readiness, and release readiness separately; otherwise strong local evidence silently turns a bounded PASS into approval of code the reviewer never covered. (Wave A Apple AUTH correction, 2026-09-13.)
+
 - **Filing as deferral.** 2026-08-13 audit: 24 unchecked items across 8 phases,
   5 phases not started, 13 triggered follow-ons, and two new phases filed in two
   days with zero checkboxes between them. Filing is fine; filing as the ONLY

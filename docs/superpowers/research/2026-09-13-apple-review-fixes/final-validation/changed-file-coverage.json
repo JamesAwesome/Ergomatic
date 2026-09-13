@@ -1,0 +1,252 @@
+[
+  {
+    "file": "app/ios/App/App/ErgomaticConsolePlugin.swift",
+    "excluded_reason": "Outside Vitest HTML instrumentation: native TS/Swift, CSS, or shared types."
+  },
+  {
+    "file": "app/ios/App/App/MyViewController.swift",
+    "excluded_reason": "Outside Vitest HTML instrumentation: native TS/Swift, CSS, or shared types."
+  },
+  {
+    "file": "app/server/auth/frontDoor.ts",
+    "metrics": {
+      "Statements": {
+        "percentage": "100%",
+        "fraction": "30/30"
+      },
+      "Branches": {
+        "percentage": "100%",
+        "fraction": "19/19"
+      },
+      "Functions": {
+        "percentage": "100%",
+        "fraction": "9/9"
+      },
+      "Lines": {
+        "percentage": "100%",
+        "fraction": "28/28"
+      }
+    },
+    "uncovered_lines": [],
+    "branch_mark_lines": []
+  },
+  {
+    "file": "app/server/auth/frontDoorRoutes.ts",
+    "metrics": {
+      "Statements": {
+        "percentage": "90.68%",
+        "fraction": "146/161"
+      },
+      "Branches": {
+        "percentage": "90.47%",
+        "fraction": "114/126"
+      },
+      "Functions": {
+        "percentage": "100%",
+        "fraction": "22/22"
+      },
+      "Lines": {
+        "percentage": "91.44%",
+        "fraction": "139/152"
+      }
+    },
+    "uncovered_lines": [
+      48,
+      58,
+      125,
+      171,
+      190,
+      195,
+      198,
+      199,
+      259,
+      296,
+      359,
+      360,
+      361
+    ],
+    "branch_mark_lines": [
+      43,
+      53,
+      64,
+      70,
+      122,
+      182,
+      191,
+      197,
+      235,
+      348,
+      358,
+      369
+    ]
+  },
+  {
+    "file": "app/shared/auth.ts",
+    "excluded_reason": "Outside Vitest HTML instrumentation: native TS/Swift, CSS, or shared types."
+  },
+  {
+    "file": "app/src/SignIn.tsx",
+    "metrics": {
+      "Statements": {
+        "percentage": "96.87%",
+        "fraction": "31/32"
+      },
+      "Branches": {
+        "percentage": "100%",
+        "fraction": "41/41"
+      },
+      "Functions": {
+        "percentage": "93.33%",
+        "fraction": "14/15"
+      },
+      "Lines": {
+        "percentage": "96.87%",
+        "fraction": "31/32"
+      }
+    },
+    "uncovered_lines": [
+      54
+    ],
+    "branch_mark_lines": []
+  },
+  {
+    "file": "app/src/adapters/authFlow.ts",
+    "metrics": {
+      "Statements": {
+        "percentage": "88.92%",
+        "fraction": "313/352"
+      },
+      "Branches": {
+        "percentage": "85.31%",
+        "fraction": "273/320"
+      },
+      "Functions": {
+        "percentage": "100%",
+        "fraction": "38/38"
+      },
+      "Lines": {
+        "percentage": "95.73%",
+        "fraction": "292/305"
+      }
+    },
+    "uncovered_lines": [
+      236,
+      344,
+      421,
+      654,
+      682,
+      683,
+      684,
+      685,
+      693,
+      744,
+      791,
+      799,
+      832
+    ],
+    "branch_mark_lines": [
+      158,
+      219,
+      222,
+      226,
+      230,
+      235,
+      247,
+      251,
+      253,
+      296,
+      318,
+      340,
+      352,
+      353,
+      403,
+      417,
+      425,
+      434,
+      442,
+      450,
+      455,
+      461,
+      465,
+      591,
+      602,
+      615,
+      621,
+      632,
+      644,
+      650,
+      681,
+      758,
+      761,
+      789,
+      790,
+      831,
+      839,
+      845,
+      847
+    ]
+  },
+  {
+    "file": "app/src/index.css",
+    "excluded_reason": "Outside Vitest HTML instrumentation: native TS/Swift, CSS, or shared types."
+  },
+  {
+    "file": "app/src/native/signin.ts",
+    "excluded_reason": "Outside Vitest HTML instrumentation: native TS/Swift, CSS, or shared types."
+  },
+  {
+    "file": "app/src/shell/AppRoutes.tsx",
+    "metrics": {
+      "Statements": {
+        "percentage": "95.45%",
+        "fraction": "21/22"
+      },
+      "Branches": {
+        "percentage": "89.65%",
+        "fraction": "26/29"
+      },
+      "Functions": {
+        "percentage": "87.5%",
+        "fraction": "7/8"
+      },
+      "Lines": {
+        "percentage": "100%",
+        "fraction": "18/18"
+      }
+    },
+    "uncovered_lines": [],
+    "branch_mark_lines": [
+      47,
+      50,
+      276
+    ]
+  },
+  {
+    "file": "app/src/you/SignInMethods.tsx",
+    "metrics": {
+      "Statements": {
+        "percentage": "97.14%",
+        "fraction": "34/35"
+      },
+      "Branches": {
+        "percentage": "96.61%",
+        "fraction": "57/59"
+      },
+      "Functions": {
+        "percentage": "100%",
+        "fraction": "7/7"
+      },
+      "Lines": {
+        "percentage": "96.87%",
+        "fraction": "31/32"
+      }
+    },
+    "uncovered_lines": [
+      52
+    ],
+    "branch_mark_lines": [
+      24,
+      44
+    ]
+  }
+]

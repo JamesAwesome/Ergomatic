@@ -1,0 +1,1280 @@
+[
+  {
+    "state": "access-denied",
+    "file": "access-denied-portrait-390x844.png",
+    "metrics": {
+      "url": "http://127.0.0.1:8358/?keep=1#return",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "document": {
+        "htmlClientWidth": 390,
+        "htmlScrollWidth": 390,
+        "htmlClientHeight": 844,
+        "htmlScrollHeight": 844,
+        "bodyScrollWidth": 390,
+        "bodyScrollHeight": 760
+      },
+      "body": [
+        {
+          "selector": "body",
+          "text": "ErgomaticRowing workout tracker & planner.relay@privaterelay.appleid.com isn't invited to this Ergomatic. Ask James to add you.Continue with AppleContinue with Google",
+          "disabled": null,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 759.59375,
+            "right": 390,
+            "bottom": 759.59375
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgb(244, 241, 232)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "main": [
+        {
+          "selector": "main",
+          "text": "ErgomaticRowing workout tracker & planner.relay@privaterelay.appleid.com isn't invited to this Ergomatic. Ask James to add you.Continue with AppleContinue with Google",
+          "disabled": null,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 759.59375,
+            "right": 390,
+            "bottom": 759.59375
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "alerts": [
+        {
+          "selector": "[role=\"alert\"]",
+          "text": "relay@privaterelay.appleid.com isn't invited to this Ergomatic. Ask James to add you.",
+          "disabled": null,
+          "box": {
+            "x": 20,
+            "y": 351.5625,
+            "width": 350,
+            "height": 60,
+            "right": 370,
+            "bottom": 411.5625
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgb(255, 253, 247)",
+            "borderTopColor": "rgb(181, 52, 31)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "statuses": [],
+      "providerButtons": [
+        {
+          "selector": ".auth-provider-button",
+          "text": "Continue with Apple",
+          "disabled": false,
+          "box": {
+            "x": 20,
+            "y": 439.5625,
+            "width": 350,
+            "height": 52,
+            "right": 370,
+            "bottom": 491.5625
+          },
+          "style": {
+            "color": "rgb(255, 255, 255)",
+            "backgroundColor": "rgb(0, 0, 0)",
+            "borderTopColor": "rgb(0, 0, 0)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        },
+        {
+          "selector": ".auth-provider-button",
+          "text": "Continue with Google",
+          "disabled": false,
+          "box": {
+            "x": 20,
+            "y": 503.5625,
+            "width": 350,
+            "height": 52,
+            "right": 370,
+            "bottom": 555.5625
+          },
+          "style": {
+            "color": "rgb(255, 253, 247)",
+            "backgroundColor": "rgb(181, 52, 31)",
+            "borderTopColor": "rgb(181, 52, 31)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "methodRows": [],
+      "methodActions": [],
+      "connectedLabels": []
+    },
+    "axe": []
+  },
+  {
+    "state": "unavailable-add",
+    "file": "unavailable-add-portrait-390x844.png",
+    "metrics": {
+      "url": "http://127.0.0.1:8358/you",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "document": {
+        "htmlClientWidth": 390,
+        "htmlScrollWidth": 390,
+        "htmlClientHeight": 844,
+        "htmlScrollHeight": 844,
+        "bodyScrollWidth": 390,
+        "bodyScrollHeight": 844
+      },
+      "body": [
+        {
+          "selector": "body",
+          "text": "ALApple Link Testerapple-capture-portrait-1789321168076@e2e.testSign outLIFETIME · 0 MSEASON 2027 · 0 MNO ROWS YET · YOUR FIRST SAVED ROW STARTS THE COUNT›SIGN-IN METHODSAppleAdd Apple ›GoogleCONNECTEDBASELINESNOT SET›SETTINGS›DIAGNOSTICS›TODAYNEWSLIBRARYPLANYOU",
+          "disabled": null,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 844,
+            "right": 390,
+            "bottom": 844
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgb(244, 241, 232)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "main": [
+        {
+          "selector": "main",
+          "text": "ALApple Link Testerapple-capture-portrait-1789321168076@e2e.testSign outLIFETIME · 0 MSEASON 2027 · 0 MNO ROWS YET · YOUR FIRST SAVED ROW STARTS THE COUNT›SIGN-IN METHODSAppleAdd Apple ›GoogleCONNECTEDBASELINESNOT SET›SETTINGS›DIAGNOSTICS›",
+          "disabled": null,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 800,
+            "right": 390,
+            "bottom": 800
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "alerts": [],
+      "statuses": [],
+      "providerButtons": [],
+      "methodRows": [
+        {
+          "selector": ".auth-method-row",
+          "text": "AppleAdd Apple ›",
+          "disabled": true,
+          "box": {
+            "x": 20,
+            "y": 237,
+            "width": 350,
+            "height": 54,
+            "right": 370,
+            "bottom": 291
+          },
+          "style": {
+            "color": "rgb(160, 154, 140)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(160, 154, 140)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        },
+        {
+          "selector": ".auth-method-row",
+          "text": "GoogleCONNECTED",
+          "disabled": null,
+          "box": {
+            "x": 20,
+            "y": 291,
+            "width": 350,
+            "height": 54,
+            "right": 370,
+            "bottom": 345
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "methodActions": [
+        {
+          "selector": ".auth-method-action",
+          "text": "Add Apple ›",
+          "disabled": null,
+          "box": {
+            "x": 285.109375,
+            "y": 255,
+            "width": 82.890625,
+            "height": 17,
+            "right": 368,
+            "bottom": 272
+          },
+          "style": {
+            "color": "rgb(63, 60, 53)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(63, 60, 53)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "connectedLabels": [
+        {
+          "selector": ".auth-method-connected",
+          "text": "CONNECTED",
+          "disabled": null,
+          "box": {
+            "x": 305,
+            "y": 311,
+            "width": 63,
+            "height": 13,
+            "right": 368,
+            "bottom": 324
+          },
+          "style": {
+            "color": "rgb(73, 98, 79)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(73, 98, 79)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "\"IBM Plex Mono\", ui-monospace, monospace",
+            "fontSize": "10px",
+            "fontWeight": "500",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ]
+    },
+    "axe": [
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "help": "Page should contain a level-one heading",
+        "nodes": [
+          [
+            "html"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "state": "failed-cancel-notice",
+    "file": "failed-cancel-notice-portrait-390x844.png",
+    "metrics": {
+      "url": "http://127.0.0.1:8358/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "document": {
+        "htmlClientWidth": 390,
+        "htmlScrollWidth": 390,
+        "htmlClientHeight": 844,
+        "htmlScrollHeight": 844,
+        "bodyScrollWidth": 390,
+        "bodyScrollHeight": 760
+      },
+      "body": [
+        {
+          "selector": "body",
+          "text": "ErgomaticRowing workout tracker & planner.That sign-in didn’t work. Give it another try.Continue with AppleContinue with Google",
+          "disabled": null,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 759.59375,
+            "right": 390,
+            "bottom": 759.59375
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgb(244, 241, 232)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "main": [
+        {
+          "selector": "main",
+          "text": "ErgomaticRowing workout tracker & planner.That sign-in didn’t work. Give it another try.Continue with AppleContinue with Google",
+          "disabled": null,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 759.59375,
+            "right": 390,
+            "bottom": 759.59375
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "alerts": [
+        {
+          "selector": "[role=\"alert\"]",
+          "text": "That sign-in didn’t work. Give it another try.",
+          "disabled": null,
+          "box": {
+            "x": 20,
+            "y": 360.0625,
+            "width": 350,
+            "height": 43,
+            "right": 370,
+            "bottom": 403.0625
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgb(255, 253, 247)",
+            "borderTopColor": "rgb(181, 52, 31)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "statuses": [],
+      "providerButtons": [
+        {
+          "selector": ".auth-provider-button",
+          "text": "Continue with Apple",
+          "disabled": false,
+          "box": {
+            "x": 20,
+            "y": 431.0625,
+            "width": 350,
+            "height": 52,
+            "right": 370,
+            "bottom": 483.0625
+          },
+          "style": {
+            "color": "rgb(255, 255, 255)",
+            "backgroundColor": "rgb(0, 0, 0)",
+            "borderTopColor": "rgb(0, 0, 0)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        },
+        {
+          "selector": ".auth-provider-button",
+          "text": "Continue with Google",
+          "disabled": false,
+          "box": {
+            "x": 20,
+            "y": 495.0625,
+            "width": 350,
+            "height": 52,
+            "right": 370,
+            "bottom": 547.0625
+          },
+          "style": {
+            "color": "rgb(255, 253, 247)",
+            "backgroundColor": "rgb(181, 52, 31)",
+            "borderTopColor": "rgb(181, 52, 31)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "methodRows": [],
+      "methodActions": [],
+      "connectedLabels": []
+    },
+    "axe": []
+  },
+  {
+    "state": "failed-cancel-recovery",
+    "file": "failed-cancel-recovery-portrait-390x844.png",
+    "metrics": {
+      "url": "http://127.0.0.1:8358/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "document": {
+        "htmlClientWidth": 390,
+        "htmlScrollWidth": 390,
+        "htmlClientHeight": 844,
+        "htmlScrollHeight": 844,
+        "bodyScrollWidth": 390,
+        "bodyScrollHeight": 760
+      },
+      "body": [
+        {
+          "selector": "body",
+          "text": "ErgomaticRowing workout tracker & planner.Continue with AppleContinue with Google",
+          "disabled": null,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 759.59375,
+            "right": 390,
+            "bottom": 759.59375
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgb(244, 241, 232)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "main": [
+        {
+          "selector": "main",
+          "text": "ErgomaticRowing workout tracker & planner.Continue with AppleContinue with Google",
+          "disabled": null,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 759.59375,
+            "right": 390,
+            "bottom": 759.59375
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "alerts": [],
+      "statuses": [],
+      "providerButtons": [
+        {
+          "selector": ".auth-provider-button",
+          "text": "Continue with Apple",
+          "disabled": false,
+          "box": {
+            "x": 20,
+            "y": 387.5625,
+            "width": 350,
+            "height": 52,
+            "right": 370,
+            "bottom": 439.5625
+          },
+          "style": {
+            "color": "rgb(255, 255, 255)",
+            "backgroundColor": "rgb(0, 0, 0)",
+            "borderTopColor": "rgb(0, 0, 0)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        },
+        {
+          "selector": ".auth-provider-button",
+          "text": "Continue with Google",
+          "disabled": false,
+          "box": {
+            "x": 20,
+            "y": 451.5625,
+            "width": 350,
+            "height": 52,
+            "right": 370,
+            "bottom": 503.5625
+          },
+          "style": {
+            "color": "rgb(255, 253, 247)",
+            "backgroundColor": "rgb(181, 52, 31)",
+            "borderTopColor": "rgb(181, 52, 31)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "methodRows": [],
+      "methodActions": [],
+      "connectedLabels": []
+    },
+    "axe": []
+  },
+  {
+    "state": "access-denied",
+    "file": "access-denied-landscape-844x390.png",
+    "metrics": {
+      "url": "http://127.0.0.1:8358/?keep=1#return",
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "document": {
+        "htmlClientWidth": 844,
+        "htmlScrollWidth": 844,
+        "htmlClientHeight": 390,
+        "htmlScrollHeight": 392,
+        "bodyScrollWidth": 844,
+        "bodyScrollHeight": 392
+      },
+      "body": [
+        {
+          "selector": "body",
+          "text": "ErgomaticRowing workout tracker & planner.relay@privaterelay.appleid.com isn't invited to this Ergomatic. Ask James to add you.Continue with AppleContinue with Google",
+          "disabled": null,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 844,
+            "height": 391.53125,
+            "right": 844,
+            "bottom": 391.53125
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgb(244, 241, 232)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "main": [
+        {
+          "selector": "main",
+          "text": "ErgomaticRowing workout tracker & planner.relay@privaterelay.appleid.com isn't invited to this Ergomatic. Ask James to add you.Continue with AppleContinue with Google",
+          "disabled": null,
+          "box": {
+            "x": 182,
+            "y": 0,
+            "width": 480,
+            "height": 391.53125,
+            "right": 662,
+            "bottom": 391.53125
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "alerts": [
+        {
+          "selector": "[role=\"alert\"]",
+          "text": "relay@privaterelay.appleid.com isn't invited to this Ergomatic. Ask James to add you.",
+          "disabled": null,
+          "box": {
+            "x": 202,
+            "y": 167.53125,
+            "width": 440,
+            "height": 60,
+            "right": 642,
+            "bottom": 227.53125
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgb(255, 253, 247)",
+            "borderTopColor": "rgb(181, 52, 31)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "statuses": [],
+      "providerButtons": [
+        {
+          "selector": ".auth-provider-button",
+          "text": "Continue with Apple",
+          "disabled": false,
+          "box": {
+            "x": 202,
+            "y": 255.53125,
+            "width": 440,
+            "height": 52,
+            "right": 642,
+            "bottom": 307.53125
+          },
+          "style": {
+            "color": "rgb(255, 255, 255)",
+            "backgroundColor": "rgb(0, 0, 0)",
+            "borderTopColor": "rgb(0, 0, 0)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        },
+        {
+          "selector": ".auth-provider-button",
+          "text": "Continue with Google",
+          "disabled": false,
+          "box": {
+            "x": 202,
+            "y": 319.53125,
+            "width": 440,
+            "height": 52,
+            "right": 642,
+            "bottom": 371.53125
+          },
+          "style": {
+            "color": "rgb(255, 253, 247)",
+            "backgroundColor": "rgb(181, 52, 31)",
+            "borderTopColor": "rgb(181, 52, 31)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "methodRows": [],
+      "methodActions": [],
+      "connectedLabels": []
+    },
+    "axe": []
+  },
+  {
+    "state": "unavailable-add",
+    "file": "unavailable-add-landscape-844x390.png",
+    "metrics": {
+      "url": "http://127.0.0.1:8358/you",
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "document": {
+        "htmlClientWidth": 844,
+        "htmlScrollWidth": 844,
+        "htmlClientHeight": 390,
+        "htmlScrollHeight": 528,
+        "bodyScrollWidth": 844,
+        "bodyScrollHeight": 528
+      },
+      "body": [
+        {
+          "selector": "body",
+          "text": "ALApple Link Testerapple-capture-landscape-1789321169553@e2e.testSign outLIFETIME · 0 MSEASON 2027 · 0 MNO ROWS YET · YOUR FIRST SAVED ROW STARTS THE COUNT›SIGN-IN METHODSAppleAdd Apple ›GoogleCONNECTEDBASELINESNOT SET›SETTINGS›DIAGNOSTICS›TODAYNEWSLIBRARYPLANYOU",
+          "disabled": null,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 844,
+            "height": 528,
+            "right": 844,
+            "bottom": 528
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgb(244, 241, 232)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "main": [
+        {
+          "selector": "main",
+          "text": "ALApple Link Testerapple-capture-landscape-1789321169553@e2e.testSign outLIFETIME · 0 MSEASON 2027 · 0 MNO ROWS YET · YOUR FIRST SAVED ROW STARTS THE COUNT›SIGN-IN METHODSAppleAdd Apple ›GoogleCONNECTEDBASELINESNOT SET›SETTINGS›DIAGNOSTICS›",
+          "disabled": null,
+          "box": {
+            "x": 182,
+            "y": 0,
+            "width": 480,
+            "height": 484,
+            "right": 662,
+            "bottom": 484
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "alerts": [],
+      "statuses": [],
+      "providerButtons": [],
+      "methodRows": [
+        {
+          "selector": ".auth-method-row",
+          "text": "AppleAdd Apple ›",
+          "disabled": true,
+          "box": {
+            "x": 202,
+            "y": 224,
+            "width": 440,
+            "height": 54,
+            "right": 642,
+            "bottom": 278
+          },
+          "style": {
+            "color": "rgb(160, 154, 140)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(160, 154, 140)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        },
+        {
+          "selector": ".auth-method-row",
+          "text": "GoogleCONNECTED",
+          "disabled": null,
+          "box": {
+            "x": 202,
+            "y": 278,
+            "width": 440,
+            "height": 54,
+            "right": 642,
+            "bottom": 332
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "methodActions": [
+        {
+          "selector": ".auth-method-action",
+          "text": "Add Apple ›",
+          "disabled": null,
+          "box": {
+            "x": 557.109375,
+            "y": 242,
+            "width": 82.890625,
+            "height": 17,
+            "right": 640,
+            "bottom": 259
+          },
+          "style": {
+            "color": "rgb(63, 60, 53)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(63, 60, 53)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "connectedLabels": [
+        {
+          "selector": ".auth-method-connected",
+          "text": "CONNECTED",
+          "disabled": null,
+          "box": {
+            "x": 577,
+            "y": 298,
+            "width": 63,
+            "height": 13,
+            "right": 640,
+            "bottom": 311
+          },
+          "style": {
+            "color": "rgb(73, 98, 79)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(73, 98, 79)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "\"IBM Plex Mono\", ui-monospace, monospace",
+            "fontSize": "10px",
+            "fontWeight": "500",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ]
+    },
+    "axe": [
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "help": "Page should contain a level-one heading",
+        "nodes": [
+          [
+            "html"
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "state": "failed-cancel-notice",
+    "file": "failed-cancel-notice-landscape-844x390.png",
+    "metrics": {
+      "url": "http://127.0.0.1:8358/",
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "document": {
+        "htmlClientWidth": 844,
+        "htmlScrollWidth": 844,
+        "htmlClientHeight": 390,
+        "htmlScrollHeight": 390,
+        "bodyScrollWidth": 844,
+        "bodyScrollHeight": 375
+      },
+      "body": [
+        {
+          "selector": "body",
+          "text": "ErgomaticRowing workout tracker & planner.That sign-in didn’t work. Give it another try.Continue with AppleContinue with Google",
+          "disabled": null,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 844,
+            "height": 374.53125,
+            "right": 844,
+            "bottom": 374.53125
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgb(244, 241, 232)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "main": [
+        {
+          "selector": "main",
+          "text": "ErgomaticRowing workout tracker & planner.That sign-in didn’t work. Give it another try.Continue with AppleContinue with Google",
+          "disabled": null,
+          "box": {
+            "x": 182,
+            "y": 0,
+            "width": 480,
+            "height": 374.53125,
+            "right": 662,
+            "bottom": 374.53125
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "alerts": [
+        {
+          "selector": "[role=\"alert\"]",
+          "text": "That sign-in didn’t work. Give it another try.",
+          "disabled": null,
+          "box": {
+            "x": 202,
+            "y": 167.53125,
+            "width": 440,
+            "height": 43,
+            "right": 642,
+            "bottom": 210.53125
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgb(255, 253, 247)",
+            "borderTopColor": "rgb(181, 52, 31)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "statuses": [],
+      "providerButtons": [
+        {
+          "selector": ".auth-provider-button",
+          "text": "Continue with Apple",
+          "disabled": false,
+          "box": {
+            "x": 202,
+            "y": 238.53125,
+            "width": 440,
+            "height": 52,
+            "right": 642,
+            "bottom": 290.53125
+          },
+          "style": {
+            "color": "rgb(255, 255, 255)",
+            "backgroundColor": "rgb(0, 0, 0)",
+            "borderTopColor": "rgb(0, 0, 0)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        },
+        {
+          "selector": ".auth-provider-button",
+          "text": "Continue with Google",
+          "disabled": false,
+          "box": {
+            "x": 202,
+            "y": 302.53125,
+            "width": 440,
+            "height": 52,
+            "right": 642,
+            "bottom": 354.53125
+          },
+          "style": {
+            "color": "rgb(255, 253, 247)",
+            "backgroundColor": "rgb(181, 52, 31)",
+            "borderTopColor": "rgb(181, 52, 31)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "methodRows": [],
+      "methodActions": [],
+      "connectedLabels": []
+    },
+    "axe": []
+  },
+  {
+    "state": "failed-cancel-recovery",
+    "file": "failed-cancel-recovery-landscape-844x390.png",
+    "metrics": {
+      "url": "http://127.0.0.1:8358/",
+      "viewport": {
+        "width": 844,
+        "height": 390
+      },
+      "document": {
+        "htmlClientWidth": 844,
+        "htmlScrollWidth": 844,
+        "htmlClientHeight": 390,
+        "htmlScrollHeight": 390,
+        "bodyScrollWidth": 844,
+        "bodyScrollHeight": 351
+      },
+      "body": [
+        {
+          "selector": "body",
+          "text": "ErgomaticRowing workout tracker & planner.Continue with AppleContinue with Google",
+          "disabled": null,
+          "box": {
+            "x": 0,
+            "y": 0,
+            "width": 844,
+            "height": 351,
+            "right": 844,
+            "bottom": 351
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgb(244, 241, 232)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "main": [
+        {
+          "selector": "main",
+          "text": "ErgomaticRowing workout tracker & planner.Continue with AppleContinue with Google",
+          "disabled": null,
+          "box": {
+            "x": 182,
+            "y": 0,
+            "width": 480,
+            "height": 351,
+            "right": 662,
+            "bottom": 351
+          },
+          "style": {
+            "color": "rgb(27, 26, 23)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "borderTopColor": "rgb(27, 26, 23)",
+            "borderTopWidth": "0px",
+            "borderTopStyle": "none",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "400",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "alerts": [],
+      "statuses": [],
+      "providerButtons": [
+        {
+          "selector": ".auth-provider-button",
+          "text": "Continue with Apple",
+          "disabled": false,
+          "box": {
+            "x": 202,
+            "y": 183.265625,
+            "width": 440,
+            "height": 52,
+            "right": 642,
+            "bottom": 235.265625
+          },
+          "style": {
+            "color": "rgb(255, 255, 255)",
+            "backgroundColor": "rgb(0, 0, 0)",
+            "borderTopColor": "rgb(0, 0, 0)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        },
+        {
+          "selector": ".auth-provider-button",
+          "text": "Continue with Google",
+          "disabled": false,
+          "box": {
+            "x": 202,
+            "y": 247.265625,
+            "width": 440,
+            "height": 52,
+            "right": 642,
+            "bottom": 299.265625
+          },
+          "style": {
+            "color": "rgb(255, 253, 247)",
+            "backgroundColor": "rgb(181, 52, 31)",
+            "borderTopColor": "rgb(181, 52, 31)",
+            "borderTopWidth": "1px",
+            "borderTopStyle": "solid",
+            "fontFamily": "Archivo, system-ui, sans-serif",
+            "fontSize": "16px",
+            "fontWeight": "600",
+            "lineHeight": "normal",
+            "opacity": "1"
+          }
+        }
+      ],
+      "methodRows": [],
+      "methodActions": [],
+      "connectedLabels": []
+    },
+    "axe": []
+  }
+]
