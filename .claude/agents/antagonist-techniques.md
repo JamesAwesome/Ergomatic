@@ -369,6 +369,19 @@ toolkit, not a history.
     whole reference fixture — while `inRange` itself is pinned. And ask which
     pins a convention bug CANNOT move: the metres/week series moves under
     Sunday-start; the 3/3 streak does not.
+43. **`role="img"` PRUNES the text inside an SVG — the `aria-label` is the
+    only thing assistive tech hears.** Diff the label against the MARKS: a
+    sibling `<text>` is not a word in the label, so a label built from raw
+    values told a screen reader `0` for a week the chart drew as OUT OF
+    RANGE (PS PR 2 plan, `WeekBarsChart`). `StackedBar`'s `aria-hidden` +
+    real-text legend is the safe shape; rulings 18/19 had removed the text
+    carrier and nobody re-asked what the SVG said.
+44. **Apply a convention mutation at EVERY call site before declaring a
+    fixture unmoved.** Sunday-start "broke" PS's fixture (b) until
+    `streakOf`'s own `thisWeek` was mutated too — then (b) read `{3, 4}` both
+    ways and three of the four `streakOf` pins moved instead. A half-applied
+    mutant is RF35's mirror: the gate you credit is the one the mutation
+    never reached.
 
 ## Things attacked and found sound
 

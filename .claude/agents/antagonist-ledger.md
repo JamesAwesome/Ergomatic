@@ -6,6 +6,65 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## Phase PS PR 2 plan, /harden lens 1, 2026-09-12 (the charts — DELTA against the PS vetted ground)
+
+Plan: `docs/superpowers/plans/2026-09-12-career-stats-pr2-plan.md` at
+`4df5d610`. Delta pass: the mechanisms PR 2 invents (the week bars, the
+season card, the trend, the range line) against the anchor's ground; every
+finding folded into the plan the same day.
+
+- **BROKEN — the week bars' `aria-label` reported an out-of-range week as
+  `0`.** `role="img"` prunes an SVG's `<text>` (ARIA 1.2 presentational
+  children), so the label built from `values.map(fmtMeters)` was the ONLY
+  thing assistive tech heard, and it said `0` for a slot the chart draws as
+  a dashed OUT OF RANGE outline. Rulings 18/19 had struck the caption that
+  once carried the words. `StackedBar.tsx` (`aria-hidden` + a real-text
+  legend) is the safe shape already in the tree. Fix: `weekBarsLabel`
+  builds from the bars' MEANING (`outside the range`, `this week <n>`), with
+  a client test on the 30 DAYS case and the raw-values mutation; the season
+  label now says `<n> today`, avg/day and both streaks; the trend label
+  says the latest 2k and 6k splits (its `<p>` legend carries only the
+  series names).
+- **BROKEN — `testTrend`'s comment named an authority the store lacks.**
+  "The adapter's append order breaks ties" — `stores/testHistory.ts`
+  `list()` orders by `desc(loggedAt)` alone; the wire has no tiebreaker.
+  Reworded: same-day ties are UNORDERED and unreachable in production
+  (`sessionLogId` UNIQUE + `defaultNow()`); no store change (the DBA skip
+  stands).
+- **HELD — every domain literal**, re-derived from an independent
+  `days_from_civil` port: the eight-week series, the week starts, the
+  current/out-of-range flags, the season's 9 / 43,012 / 135 / 319, the
+  cumulatives, `{3, 3}`, fixtures (a)/(b)/(c), the ruling-22 pins, and
+  mutant (e)'s `{5, 5}`. Deviation 10 survived once the Sunday-start mutant
+  was applied at EVERY `mondayOf` call site — fixture (b) reads `{3, 4}`
+  both ways, and three of the four `streakOf` pins move instead.
+  `niceMax` ↔ `chooseTicks([0, max], max / step + 1)` agree by
+  construction; `fmtDuration`'s `Math.round` absorbs `125.00000000000001`;
+  `DELETE /api/logs/:id` → 200 `{ unCounted }`; `POST /api/test-history`
+  → 201 `{ id }`; the raw-SQL backdate bypasses no producer (the row is
+  created by the route, only its instant is moved); `SET NULL` is driven by
+  the supported DELETE; `SCANNED_DIRS` covers `src/you/stats/` as a
+  directory, so the three new groups are scanned; an out-of-range week is
+  empty by construction (its rows are outside the range that summed it).
+- **UNTESTED → pinned:** fixture (a)'s May 1 row keys to Monday Apr 27,
+  BEFORE `season.start` — its streak is now asserted (`{3, 3}`) and a
+  straddling run (May 1 + May 6 + May 20 joining R5) pins `{3, 4}` where a
+  key clamped to May 1 reads `{3, 3}` (mutation run); eight all-zero bars
+  with ≥ 2 rows in range (ALL with only old rows) now render `NOTHING IN
+  THESE EIGHT WEEKS` (copy pending James) with a test and the
+  dropped-branch mutation; `fmtRangeLine`'s `{ from, to: null }` arm had
+  no producer (`presetRange`/`customRange` set both ends) and is deleted —
+  a one-sided range reads as ALL.
+- **Bookkeeping:** "three `.stats-card`s" → four (TOTALS, METRES PER WEEK,
+  SEASON, TEST TREND); ticks and legend on the card are `--ink-3` on
+  `--surface` 7.43:1, not the page's 6.69:1; `seed.mjs`'s `streaks()`
+  computed LONGEST over all history against ruling 22 — season-scoped, and
+  `compute.mjs`'s printout does not move (`CURRENT 3 · LONGEST 3`,
+  `contrast.json` byte-identical); `backdateTestHistory` shares
+  `backdateLog`'s pg block through `backdateRow(table, …)`; `axis.ts`
+  already imported `fmtSplit` (the plan's import line said otherwise).
+- Techniques 43-44 proposed and landed.
+
 ## 2026-09-12 — News layout-shift spec (`/harden` lens 1, full pass: invented mechanism + RF27)
 
 Spec: `docs/superpowers/specs/2026-09-12-news-layout-shift-design.md`. Eight
