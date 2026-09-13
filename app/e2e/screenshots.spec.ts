@@ -7731,6 +7731,7 @@ async function captureAppleMethods(
   });
   await page.goto("/you");
   await expect(page.getByRole("button", { name: "Add Apple" })).toBeVisible();
+  await expect(page.getByText(/^LIFETIME · /)).toBeVisible();
   if (openLink) {
     await page.getByRole("button", { name: "Add Apple" }).click();
     await expect(
@@ -7783,6 +7784,7 @@ async function captureAppleUncertainResult(
   await expect(page.getByRole("alert")).toHaveText(
     "We couldn’t confirm the result. Check your sign-in methods and try again.",
   );
+  await expect(page.getByText(/^LIFETIME · /)).toBeVisible();
   await page.screenshot({ path: path.join(SCREENSHOTS_DIR, fileName) });
 }
 

@@ -17,8 +17,8 @@ let package = Package(
         .package(name: "CapacitorCommunityKeepAwake", path: "../../../node_modules/.pnpm/@capacitor-community+keep-awake@8.0.1_@capacitor+core@8.5.1/node_modules/@capacitor-community/keep-awake"),
         .package(name: "CapacitorApp", path: "../../../node_modules/.pnpm/@capacitor+app@8.1.1_@capacitor+core@8.5.1/node_modules/@capacitor/app"),
         .package(name: "CapacitorHaptics", path: "../../../node_modules/.pnpm/@capacitor+haptics@8.0.2_@capacitor+core@8.5.1/node_modules/@capacitor/haptics"),
-        .package(name: "CapgoCapacitorNfc", path: "../../../node_modules/.pnpm/@capgo+capacitor-nfc@8.2.5_patch_hash=6a377bd76c16c5eabbe0ca8fb1486b73efbd42a33ac311ae6_45409c4abcbb4e3a24717ae67f593c43/node_modules/@capgo/capacitor-nfc"),
         .package(name: "CapacitorKeyboard", path: "../../../node_modules/.pnpm/@capacitor+keyboard@8.0.5_@capacitor+core@8.5.1/node_modules/@capacitor/keyboard"),
+        .package(name: "CapgoCapacitorNfc", path: "../../../node_modules/.pnpm/@capgo+capacitor-nfc@8.2.5_patch_hash=6a377bd76c16c5eabbe0ca8fb1486b73efbd42a33ac311ae6_45409c4abcbb4e3a24717ae67f593c43/node_modules/@capgo/capacitor-nfc"),
         .package(name: "CapgoCapacitorSocialLogin", path: "../../../node_modules/.pnpm/@capgo+capacitor-social-login@8.5.5_@capacitor+core@8.5.1/node_modules/@capgo/capacitor-social-login")
     ],
     targets: [
@@ -32,8 +32,8 @@ let package = Package(
                 .product(name: "CapacitorCommunityKeepAwake", package: "CapacitorCommunityKeepAwake"),
                 .product(name: "CapacitorApp", package: "CapacitorApp"),
                 .product(name: "CapacitorHaptics", package: "CapacitorHaptics"),
-                .product(name: "CapgoCapacitorNfc", package: "CapgoCapacitorNfc"),
                 .product(name: "CapacitorKeyboard", package: "CapacitorKeyboard"),
+                .product(name: "CapgoCapacitorNfc", package: "CapgoCapacitorNfc"),
                 .product(name: "CapgoCapacitorSocialLogin", package: "CapgoCapacitorSocialLogin")
             ]
         )
