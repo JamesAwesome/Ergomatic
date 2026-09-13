@@ -606,7 +606,8 @@ WORK-ONLY TOTALS · NOT IN AVG WATTS`), never corrected.
       primitive under `src/charts/` (the hero needs both — Gate 0 ruling
       11), the You HERO as its OWN component `src/you/stats/YouStatsHero.tsx`
       (Gate 0's H3: LIFETIME / SEASON figures over one AN · AT · O2 · TR ·
-      NO TYPE bar with a whole-percent legend, 181 px portrait, ALL column,
+      NO TYPE bar with a whole-percent chip legend, 163 px portrait as
+      shipped (`you.png` rows 120→282), ALL column,
       work metres; `You.tsx` passes it nothing) which IS the door — one
       focusable control named `Stats`, tapping anywhere opens `/you/stats`,
       and `.you-doors` gains NO STATS row (ruling 10) — `/you/stats` with the
@@ -2846,6 +2847,7 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- [ ] **`scripts/ci-changes.sh` skips the code jobs on `docs/monitor/sessions/` changes that tests read by name.** `app/src/test/captures.ts:21` resolves that directory and `captures.test.ts` reads two named capture files at runtime, so a rename, re-gzip or deletion there is "documentation" to the script and the `app` job never runs the test it broke — the same class PS PR 1 patched for `seed.mjs`. What would fix it now: add the prefix to `CODE_UNDER_DOCS_RE` with a case in `ci-changes.test.sh` — not done because the capture corpus is append-only today and widening the regex inside a TRIAD PR mixes two risk models. **S** · dies 2026-10-12 · pre-existing, one-line fix, but it belongs in the PR that next touches the captures.
 - **Move the PM5 NFC fixture loader (`loadPm5NfcFixture`, `FIXTURE_PM5_NAME`
   and the capture they read) out of `src/monitor/nfc/fixtures` so
   `domain/monitor/nfc.test.ts` needs no ESLint exemption.** Phase PS PR 1's

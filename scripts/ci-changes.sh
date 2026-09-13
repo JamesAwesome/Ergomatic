@@ -24,9 +24,15 @@
 set -uo pipefail
 
 DOCS_ONLY_RE='^(docs/|\.claude/|\.codex/|\.agents/|[^/]*\.md$)'
-# One file under docs/ is CODE: docs/design/career-stats/seed.mjs is a
-# runtime import of app/domain/stats/gate0Seed.test.ts (Phase PS PR 1), so
-# a change to it must run the code jobs. Checked before the docs regex.
+# Some files under docs/ are read by TESTS at runtime, so a change to them
+# must run the code jobs. Known today (the list is NOT exhaustive — grep the
+# test tree for reads under docs/ before trusting it): docs/design/career-
+# stats/seed.mjs, a runtime import of app/domain/stats/gate0Seed.test.ts
+# (Phase PS PR 1, handled below); and docs/monitor/sessions/, which
+# app/src/test/captures.ts resolves and captures.test.ts reads by file name
+# (NOT handled here — a ROADMAP register row, dies 2026-10-12, owns widening
+# this regex in the PR that next touches the captures). Checked before the
+# docs regex.
 CODE_UNDER_DOCS_RE='^docs/design/career-stats/seed\.mjs$'
 
 run_everything() {
