@@ -17,3 +17,21 @@ export function fmtMeters(meters: number): string {
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
+
+/** The house month abbreviations, `JAN` … `DEC`, indexed 0-11. The ONE
+ *  copy: `LogRow.tsx`, `session/logDraft.ts` and `you/stats/format.ts`
+ *  import it (PR 2 review, item 4 — three byte-identical tables before). */
+export const MONTH_ABBREV = [
+  "JAN",
+  "FEB",
+  "MAR",
+  "APR",
+  "MAY",
+  "JUN",
+  "JUL",
+  "AUG",
+  "SEP",
+  "OCT",
+  "NOV",
+  "DEC",
+] as const;

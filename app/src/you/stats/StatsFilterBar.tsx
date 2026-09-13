@@ -11,8 +11,8 @@ const LABEL: Record<Preset, string> = {
 };
 
 export const FROM_AFTER_TO = "FROM MUST NOT FOLLOW TO";
-/** A cleared FROM or TO. Copy pending James at PR review (Gate 0 drew only
- *  the FROM > TO error). */
+/** A cleared FROM or TO. Copy pending James's ruling in #424's hand-back
+ *  (Gate 0 drew only the FROM > TO error). */
 export const ENTER_BOTH_DATES = "ENTER BOTH DATES";
 export type CustomProblem = null | "empty" | "order";
 
@@ -27,12 +27,16 @@ export default function StatsFilterBar({
   custom,
   onCustom,
   customProblem,
+  maxDate,
 }: {
   preset: Preset;
   onPreset: (p: Preset) => void;
   custom: { from: string; to: string };
   onCustom: (next: { from: string; to: string }) => void;
   customProblem: CustomProblem;
+  /** Today as `YYYY-MM-DD` — a picker HINT on both inputs (the domain
+   *  clamps a future TO itself; this is not the gate). */
+  maxDate: string;
 }) {
   const customInvalid = customProblem !== null;
   return (
@@ -54,6 +58,7 @@ export default function StatsFilterBar({
             <input
               type="date"
               value={custom.from}
+              max={maxDate}
               aria-invalid={customInvalid || undefined}
               onChange={(e) => onCustom({ ...custom, from: e.target.value })}
             />
@@ -63,6 +68,7 @@ export default function StatsFilterBar({
             <input
               type="date"
               value={custom.to}
+              max={maxDate}
               aria-invalid={customInvalid || undefined}
               onChange={(e) => onCustom({ ...custom, to: e.target.value })}
             />

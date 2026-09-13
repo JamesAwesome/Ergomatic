@@ -5,6 +5,73 @@ engagement. **Not read up front** — the bounded, always-read half is
 `pm-techniques.md`, and an entry is proposed to both. Grep this file for the
 detail behind a ruling, or for the history of a phase you are about to judge.
 
+## 2026-09-13 — Phase PS close gate + PR 2 final gate (#424): PASS WITH CONDITIONS (6), phase does NOT close
+
+Verdict on `9e5ac4bc`, base `60ee51b9`. **Function PASSED**; all six conditions
+are record, presentation or process.
+
+**RF7 reproduced on both captures.** TIME BY TYPE sums to 14,379 s = 3:59:39,
+digit-identical to ALL ROWS TIME; AVG M/DAY 43,012 ÷ 135 (May 1 → Sep 12
+inclusive) = 318.6 → 319; streaks 3/3 match the bar series; watts 176 vs a naive
+174, ruling 6's exclusion visible in the number as at PR 1. Criterion 2's grep
+returns empty, exit 1.
+
+**THE PHASE DOES NOT CLOSE.** Criterion 6 — James's logbook eyeball on build 977
+— is the phase's ONLY external oracle (RF11) and is unrun. Every other PS figure
+is a sum of our own numbers, so closing on green gates is verifying against
+ourselves by definition. PR 2 merges; the phase stays open on that one line. The
+PR-1 recommendation (tag with PR 1, do not wait for PR 2) is what made the oracle
+runnable a day before the close gate — recorded as a call that came out right.
+
+**Conditions.** (1) CI `in_progress` at head and 2 commits behind main
+(`080c3e22`, `6858f89c`); main's own head run also `in_progress` (RF28/RF39).
+(2) Criterion 5's TEST TREND clause unmet as written — `ONE_POINT_HALF_SPAN`
+draws a chart at one point, no `TWO ROWS MAKE A CHART` exists in
+`TestTrendGroup.tsx`; the shipped behaviour is better, the TEXT is wrong, and the
+deviation is in neither the body's four-item list nor the ROADMAP. (3) Copy
+census short by `NO 2K OR 6K TEST LOGGED` and long by `Couldn't load your
+tests.` (see techniques). (4) `TestTrendGroup.tsx:42` ships "Copy pending James
+at PR review" — reconcile in this PR (RF14, #412 precedent). (5) ROADMAP PR 0 and
+PR 1 still `- [ ]` though both landed 2026-09-12, Status still says "PR 2 is
+next". (6) Fold 205 words to the bullets, 278 with the hand-back; bullets
+24/45/45/49/16/7.
+
+**All six discharged at `b79261b6`** (the ROADMAP ticks were already `- [x]`
+on the branch; the Status line and criterion 5 were rewritten, the copy census
+corrected in the body, and every pending string now points at #424's hand-back).
+
+**Hand-back verified.** `grep -o "dies 20[0-9-]*"` returns 5 dates; the
+line-wrapped row at ROADMAP:726-727 (`dies` / `2027-09-12`) is invisible to it,
+and main carries a SECOND wrapped one at 3336 (`dies 2026-10-13`) the branch has
+not seen. Overdue is still genuinely none — earliest live 2026-09-19 — but the
+method was blind twice over. **The wrapped-row hole is now measured on two
+separate lines; the grep needs `-A1` or it is not a check.**
+
+**Tester states are honest** for three rows and no monitor: `NO MONITOR ROWS YET`
+with rest/cal/watts hidden, SEASON degrading `NO ROWS THIS SEASON YET` → `TWO
+ROWS MAKE A CHART` → curve, trend `NO 2K OR 6K TEST LOGGED`. One observation, no
+row: `you.png` shows BASELINES `6K 2:02.0` one tap from a trend ending `6K
+2:01.4` — legitimate (Phase BL's prompt owns reconciliation) but unexplained on
+either surface.
+
+**Split judged right in hindsight.** PR 0 kept a new standing agent out of a
+TRIAD diff and satisfied RF17; PR 1 alone was the narrow grouping exception
+(#140's shape); PR 2 is non-TRIAD UI on vetted ground. Nothing shipped that
+should have waited; the hover layer correctly waits with no row (undone work, not
+dead code — RF29 does not bite).
+
+**Release: cut `v0.47.0` after merge**, notes PR first. It carries PR 2 AND
+#423's stale-`VERIFIED ✓` fix, which is tester-visible and unreleased. Not gated
+on criterion 6, which runs against 977.
+
+**Agent configs:** no change. `dba` went spec pass → PR 1 verdict → PR 2 skip
+said aloud inside one day and needs no revision; condition 2 is an RF24 instance,
+not a new recurring failure.
+
+**Could not establish:** whether LONGEST STREAK = 3 is right for the whole season
+(the frame shows eight weeks; 15,012 of the season's metres fall outside them —
+only the domain pin covers it), and whether WKWebView paints the `:active` fill.
+
 ## 2026-09-12 — Phase MD close gate (four PRs, two explorations): PASS WITH CONDITIONS
 
 Verdict: PASS WITH CONDITIONS. Every written exit criterion met and verified

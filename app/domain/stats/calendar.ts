@@ -114,8 +114,16 @@ export function presetRange(
 export function customRange(
   from: CalendarDate,
   to: CalendarDate,
+  today: CalendarDate,
 ): DateRange | null {
-  return compareDates(from, to) > 0 ? null : { from, to };
+  // The ONE owner of the future-TO clamp (PR 2 review, item 1): no row is
+  // dated after today, so a typed `to` past today admits nothing and would
+  // only re-anchor the bars and mislabel the range line. Clamped here,
+  // every reader — totals, the range line, the empty line, the bars —
+  // sees the same range; `metresPerWeek` keeps its own clamp as defence.
+  // A FROM after the clamped TO is the order problem, not a future range.
+  const end = compareDates(to, today) > 0 ? today : to;
+  return compareDates(from, end) > 0 ? null : { from, to: end };
 }
 
 /** `YYYY-MM-DD` — what `<input type="date">` speaks and what the seed
@@ -129,4 +137,46 @@ export function parseDate(value: string): CalendarDate | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!m) return null;
   return { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) };
+}
+
+/** 0 = Sunday … 6 = Saturday. 1970-01-01 (day 0) was a Thursday (4). */
+export function dayOfWeek(date: CalendarDate): number {
+  return (((toDayNumber(date) + 4) % 7) + 7) % 7;
+}
+
+/** The Monday ≤ d — a week starts Monday (spec §3.3, invariant 6). Pinned:
+ *  `2026-09-13` (Sunday) → `2026-09-07`; `2026-09-14` → itself. */
+export function mondayOf(date: CalendarDate): CalendarDate {
+  return addDays(date, -((dayOfWeek(date) + 6) % 7));
+}
+
+export function firstOfMonth({ y, m }: CalendarDate): CalendarDate {
+  return { y, m, d: 1 };
+}
+
+/** The last day of d's month: the day before the next month's first. */
+export function lastOfMonth({ y, m }: CalendarDate): CalendarDate {
+  return addDays(
+    m === 12 ? { y: y + 1, m: 1, d: 1 } : { y, m: m + 1, d: 1 },
+    -1,
+  );
+}
+
+/** Every month's first day from `from`'s month through `to`'s month,
+ *  inclusive, ascending — the x-axis label candidates of a date chart. */
+export function monthStarts(
+  from: CalendarDate,
+  to: CalendarDate,
+): CalendarDate[] {
+  const out: CalendarDate[] = [];
+  let cur = firstOfMonth(from);
+  const last = firstOfMonth(to);
+  while (compareDates(cur, last) <= 0) {
+    out.push(cur);
+    cur =
+      cur.m === 12
+        ? { y: cur.y + 1, m: 1, d: 1 }
+        : { y: cur.y, m: cur.m + 1, d: 1 };
+  }
+  return out;
 }

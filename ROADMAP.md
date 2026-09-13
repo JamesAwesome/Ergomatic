@@ -550,7 +550,14 @@ phase" is not a reason to leave a wrong number on a screen.
 
 **Status: OPEN 2026-09-12 — spec approved by James the same day; the three
 phase-open gates (antagonist anchor, PM slate, DBA spec pass) ran at
-`93b91d66` and are applied in PR 0 (spec §15).** **TRIAD on PR 1** (a
+`93b91d66` and are applied in PR 0 (spec §15). PR 0 LANDED #411 and PR 1
+LANDED #417 the same day; v0.46.0 (build 977) RELEASED 2026-09-12 carrying
+PR 1, so exit criterion 6 — James's eyeball check against his Concept2
+logbook — is now RUNNABLE on that build (its `dies` stamp is on the Exit
+paragraph below). PR 2 (the charts, plus James's two 2026-09-12 notes as
+rulings 20-23 behind a Gate 0 addendum, spec §5.1) is #424: the phase is
+CODE-COMPLETE when it merges and stays OPEN on criterion 6 alone, the only
+check that is not our own arithmetic (RF11).** **TRIAD on PR 1** (a
 number's meaning: every figure is a SUM over stored rows whose metres
 already mean two things — fused before RC-5, work-only after, no marker).
 **M.** · dies 2026-10-12 · a month from
@@ -672,11 +679,47 @@ line naming it was struck by ruling 19), never corrected.
       seconds over date from the existing `GET /api/test-history`, faster
       is up — the ONE figure that keeps a point whose log row was deleted,
       because `test_history.session_log_id` is `ON DELETE SET NULL` on
-      purpose; its caption says so), and the hover/tooltip layer.** Gates:
-      antagonist DELTA pass on the streak/avg-per-day/metres-per-week
-      definitions only (watts and time by type ship in PR 1); DBA SKIP said
-      aloud unless a query changes; no per-PR PM gate (non-triad UI); no
-      second design gate unless the rendered thing changes.
+      purpose; no caption — rulings 18/19 — and no surface says so, which is
+      James's open question in #424's hand-back); the hover/tooltip layer
+      once listed here
+      is PR 3 or never (spec §11, James 2026-09-12) — plus
+      James's two notes of 2026-09-12, asked after build 977 was on his
+      phone and RULED the same day on the addendum boards (spec §5.1, §14
+      rulings 20-21): (a) "experiment with how to indicate that the row is
+      clickable" — RULING 20: B1, a trailing `›` chevron aligned with the
+      door rows' chevrons in their own `--ink-3` mono style (6.69:1), the
+      hero still 140 px, plus the proposed faint `--surface-sunken`
+      pressed fill on `:active` (1.06:1 against the page — touch feedback,
+      not a mark; every text and mark on it clears its floor); the
+      accessible name stays exactly `Stats` by explicit `aria-label`;
+      (b) "the date range for a season visible when you click on it — for
+      consistency maybe all date ranges" — RULING 21: variant A on EVERY
+      preset, one mono-caps line under the filter bar naming the days the
+      totals cover: `ALL TIME · SINCE 8 NOV 2025` (first row's date),
+      `1 MAY TO 12 SEP 2026`, `1 JAN TO 12 SEP 2026`, `1 TO 12 SEP 2026`,
+      `14 AUG TO 12 SEP 2026`, CUSTOM the inputs' values in the same
+      shape — the one prose line rulings 18-19 allow back, hidden with the
+      filter bar at zero rows; RULING 23 (2026-09-13, PR 2 review): a
+      one-day range is ONE date, `1 OCT 2026`, never `1 TO 1 OCT 2026`.**
+      Gates: the Gate 0 addendum (RULED,
+      both notes); antagonist
+      DELTA pass on the streak/avg-per-day/metres-per-week definitions
+      only (watts and time by type ship in PR 1; the notes are copy and
+      layout) — **RUN 2026-09-12: six mechanism breaks, folded into the
+      spec the same day** (the §8.3 streak pin contradicted its own rule;
+      the streak keys on ROWS not metres and `seed.mjs`'s `streaks()` is
+      not its reference; the SEASON card is ONE unfiltered row set,
+      invariant 19, with a `NO ROWS THIS SEASON YET` state; the trend's x
+      is `test_history.loggedAt` at append, so the e2e backdates test rows,
+      and its axis is a new `TickKind "split"` at `chooseTicks`'s own steps;
+      bar labels on the current and tallest bars only, with dashed
+      out-of-range weeks; the SEASON range line must match `to = today`) —
+      plus the boundary fixtures the pass named (a row on today and on
+      2026-05-01, a 4-week streak so current ≠ longest, the seed with R13
+      dropped) and a statement of which pins a Sunday-start mutation moves;
+      DBA SKIP said aloud unless a query changes; no per-PR PM gate
+      (non-triad UI); no second design gate on the charts unless the
+      rendered thing changes.
 
 **Rows this phase files (dated; the hand-back list at PR 2):**
 
@@ -751,7 +794,9 @@ the MACHINE-only rows and zero rows hide the filter bar.
 and the e2e literal both green, mutations named), at 0 rows the honest empty
 state, and with no `pm5` row the MACHINE column's; the chart groups render
 at ≥ 2 points and read `TWO ROWS MAKE A CHART` below — TIME BY TYPE at PR
-1, the rest at PR 2, each verified at the PR that ships it; the e2e figures
+1, METRES PER WEEK and SEASON at PR 2, each verified at the PR that ships
+it, with TEST TREND the stated exception (one test is a result, so it
+draws one dot; its empty state is `NO 2K OR 6K TEST LOGGED`); the e2e figures
 for the Gate 0 seed are `compute.mjs`'s, clock pinned; the hero is one
 control named `Stats` and `.you-doors` has no STATS row; the DBA verdict
 with the §9 protocol's numbers at
@@ -760,7 +805,10 @@ with the §9 protocol's numbers at
 app/domain/stats app/src/you/stats app/src/api/useStatsRows.ts` empty,
 pasted; **James's eyeball check** — LIFETIME and THIS SEASON on You beside
 his Concept2 logbook page, both pairs of numbers and the gap's explanation
-(rest metres, rows never sent, fused rows) in the phase's close record.
+(rest metres, rows never sent, fused rows) in the phase's close record —
+RUNNABLE since v0.46.0 (build 977, 2026-09-12) · dies 2026-10-12 · the
+phase's only external oracle (RF11) and it needs his eyes and his logbook,
+not a desk session; dated on the way past (campsite rule, PR 2 prep).
 **No hardware walk** — nothing here reaches the wire.
 
 ## Wave A — The front door

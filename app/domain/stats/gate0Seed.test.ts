@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { pathToFileURL } from "node:url";
-import { GATE0_ROWS, GATE0_TODAY, parseSeedDate } from "./gate0Seed.js";
+import {
+  GATE0_ROWS,
+  GATE0_TESTS,
+  GATE0_TODAY,
+  parseSeedDate,
+} from "./gate0Seed.js";
 
 // Spec §8.5: a transcription of the seed asserts its per-row figures equal
 // `seed.mjs`'s. Loaded by URL at runtime (plain ESM, no types) so the
@@ -12,6 +17,13 @@ const SEED_URL = pathToFileURL(
 
 interface SeedModule {
   today: string;
+  tests: {
+    id: string;
+    date: string;
+    kind: string;
+    splitSeconds: number;
+    log: string | null;
+  }[];
   rows: {
     id: string;
     date: string;
@@ -52,6 +64,29 @@ describe("gate0Seed — the transcription equals docs/design/career-stats/seed.m
         workSeconds: r.workSeconds,
         restMeters: r.restMeters,
         calories: r.calories,
+      })),
+    );
+  });
+});
+
+describe("gate0Seed — the six test rows equal seed.mjs's `tests`", () => {
+  it("carries every test's id, date, kind, split and linked log, in order", async () => {
+    const seed = (await import(/* @vite-ignore */ SEED_URL)) as SeedModule;
+    expect(
+      GATE0_TESTS.map((t) => ({
+        id: t.id,
+        date: t.date,
+        kind: t.distance,
+        splitSeconds: t.splitSeconds,
+        log: t.log,
+      })),
+    ).toStrictEqual(
+      seed.tests.map((t) => ({
+        id: t.id,
+        date: parseSeedDate(t.date),
+        kind: t.kind,
+        splitSeconds: t.splitSeconds,
+        log: t.log,
       })),
     );
   });

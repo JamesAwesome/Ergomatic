@@ -9,17 +9,19 @@ import TypeLegend from "./TypeLegend";
 export const NO_ROWS_YET =
   "NO ROWS YET · YOUR FIRST SAVED ROW STARTS THE COUNT";
 /** Rows exist but none carries work SECONDS (every one on the steps tier
- *  with metres only), so the bar has nothing to draw. Copy pending James
- *  at PR review (a Gate 0 addition — the seed never reaches this state). */
+ *  with metres only), so the bar has nothing to draw. Copy pending James's
+ *  ruling in #424's hand-back (a Gate 0 addition — the seed never reaches
+ *  this state). */
 export const NO_WORK_TIME_TO_DRAW = "NO WORK TIME TO DRAW YET";
 const FIGURES_ID = "you-stats-figures";
 
 /**
- * Gate 0's H3 hero (career-stats spec §5, §14 rulings 9-10): LIFETIME and
- * SEASON work metres (ALL column) over one WORK TIME BY TYPE bar — and it
- * IS the door: ONE focusable control named `Stats`, ≥ 44 px, no nested
+ * Gate 0's H3 hero (career-stats spec §5, §14 rulings 9-10, 20): LIFETIME
+ * and SEASON work metres (ALL column) over one WORK TIME BY TYPE bar, a
+ * trailing chevron on the doors' column (ruling 20, B1) — and it IS the
+ * door: ONE focusable control named `Stats`, ≥ 44 px, no nested
  * interactive element; tapping anywhere opens `/you/stats` (invariant
- * 16). Fetches and computes on its own; `You.tsx` passes it nothing, so
+ * 16); pressed, it takes the `--surface-sunken` fill (`index.css`). Fetches and computes on its own; `You.tsx` passes it nothing, so
  * this file is inside the §8.4 structural scan and `You.tsx` need not
  * be.
  */
@@ -35,11 +37,18 @@ export default function YouStatsHero() {
       // the DESCRIPTION, so a screen reader still hears LIFETIME and SEASON.
       aria-describedby={state.state === "ready" ? FIGURES_ID : undefined}
     >
-      {state.state === "loading" && <p className="stats-caption">LOADING…</p>}
-      {state.state === "error" && (
-        <p className="stats-caption">COULDN'T LOAD STATS · TAP TO OPEN</p>
-      )}
-      {state.state === "ready" && <HeroBody {...state} />}
+      <div className="you-stats-body">
+        {state.state === "loading" && <p className="stats-caption">LOADING…</p>}
+        {state.state === "error" && (
+          <p className="stats-caption">COULDN'T LOAD STATS · TAP TO OPEN</p>
+        )}
+        {state.state === "ready" && <HeroBody {...state} />}
+      </div>
+      {/* §14 ruling 20 (B1): the doors' own chevron, decoration — the
+          accessible name is the aria-label above and nothing else. */}
+      <span aria-hidden="true" className="you-stats-chevron">
+        &rsaquo;
+      </span>
     </Link>
   );
 }

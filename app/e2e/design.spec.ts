@@ -4002,6 +4002,48 @@ test.describe("you screen", () => {
     await assertNoA11yViolations(page);
   });
 
+  // Phase PS PR 2 (§14 ruling 20, B1): the hero's chevron is the doors'
+  // --ink-3 (6.69:1 on --page). Mutation: `.you-stats-chevron { color:
+  // var(--ink-5) }` → rgb(160, 154, 140).
+  test("the stats hero's chevron paints --ink-3 like the door rows' chevrons", async ({
+    page,
+  }) => {
+    const chevron = page.locator(".you-stats-chevron");
+    await expect(chevron).toHaveText("›");
+    expect(await chevron.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(87, 84, 76)", // --ink-3
+    );
+  });
+
+  // Phase PS PR 2 (§14 ruling 20): the house's FIRST `:active` rule — the
+  // pressed fill. Chromium: a held mouse.down is `:active`. WKWebView tap
+  // behaviour for `:active` is UNTESTED until a device look (no touchstart
+  // listener exists in src/). Mutation: delete `.you-stats-hero:active` →
+  // `Received: "rgba(0, 0, 0, 0)"`.
+  test("the stats hero paints --surface-sunken while pressed", async ({
+    page,
+  }) => {
+    const hero = page.locator(".you-stats-hero");
+    await expect(hero).toBeVisible();
+    const box = (await hero.boundingBox())!;
+    const sunken = await page.evaluate(() => {
+      const probe = document.createElement("div");
+      probe.style.background = "var(--surface-sunken)";
+      document.body.append(probe);
+      const rgb = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return rgb;
+    });
+    expect(sunken).toBe("rgb(239, 234, 222)"); // #efeade, tokens.css
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    const pressed = await hero.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    await page.mouse.up();
+    expect(pressed).toBe(sunken);
+  });
+
   test("body background and a baseline field's value ink match the token palette", async ({
     page,
   }) => {
@@ -12915,12 +12957,15 @@ test.describe("/you/stats", () => {
   test("the TOTALS card, the selected chip and the figure cells paint from the token palette", async ({
     page,
   }) => {
+    // PR 2: METRES PER WEEK and SEASON are cards too; TOTALS is the first.
     const cardBg = await page
       .locator(".stats-card")
+      .first()
       .evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(cardBg).toBe("rgb(255, 253, 247)"); // --surface
     const cardBorder = await page
       .locator(".stats-card")
+      .first()
       .evaluate((el) => getComputedStyle(el).borderTopColor);
     expect(cardBorder).toBe("rgb(222, 216, 201)"); // --rule-2
     const chip = page.locator('.stats-chip[aria-checked="true"]');
@@ -12935,5 +12980,28 @@ test.describe("/you/stats", () => {
       .first()
       .evaluate((el) => getComputedStyle(el).color);
     expect(cell).toBe("rgb(27, 26, 23)"); // --ink, 17.11:1 on --surface
+  });
+
+  // Phase PS PR 2 (§14 ruling 12): the METRES PER WEEK marks paint from
+  // the palette — this week --ink, every other week --ink-4 (5.29:1). The
+  // two seeded rows are this week's, so the current bar is the one bar
+  // with metres and the other seven are zero baselines (`.stats-bar-zero`,
+  // stroked --ink-4). Mutation: `.stats-bar { fill: var(--rule-3) }` and
+  // `.stats-bar-zero { stroke: var(--rule-3) }` → rgb(201, 195, 178).
+  test("the METRES PER WEEK bars paint this week in --ink and the rest in --ink-4", async ({
+    page,
+  }) => {
+    await page.getByRole("radio", { name: "ALL" }).click();
+    const current = page.locator(".stats-bar-current").first();
+    expect(await current.evaluate((el) => getComputedStyle(el).fill)).toBe(
+      "rgb(27, 26, 23)", // --ink
+    );
+    const zero = page
+      .locator(".stats-bar-zero:not(.stats-bar-current)")
+      .first();
+    expect(await zero.evaluate((el) => getComputedStyle(el).stroke)).toBe(
+      "rgb(111, 106, 95)", // --ink-4
+    );
+    expect(await page.locator(".stats-bar-zero").count()).toBe(7);
   });
 });

@@ -6,7 +6,7 @@
  * figures equal to `domain/stats/gate0Seed.ts` through `rowContribution`.
  */
 import { fmtDate } from "../../domain/stats/calendar.js";
-import { GATE0_ROWS } from "../../domain/stats/gate0Seed.js";
+import { GATE0_ROWS, GATE0_TESTS } from "../../domain/stats/gate0Seed.js";
 
 export const GATE0_TODAY_ISO = "2026-09-12";
 const PM5 = "PM5 432331249";
@@ -93,3 +93,24 @@ export const GATE0_LOG_BODIES: Gate0LogBody[] = GATE0_ROWS.map((r) => {
     body,
   };
 });
+
+/** The seed's six `test_history` rows for the e2e (spec §8.5): `log` is
+ *  the seed row the test was measured in, or null — a point whose log was
+ *  DELETED (§14 ruling 4); the e2e reproduces that by deleting a throwaway
+ *  log after keying the test to it. `date` is what the e2e backdates the
+ *  row's `loggedAt` to: the trend's x is the append instant (§3.3). */
+export interface Gate0TestBody {
+  id: string;
+  date: string;
+  distance: "2k" | "6k";
+  splitSeconds: number;
+  log: string | null;
+}
+
+export const GATE0_TEST_BODIES: Gate0TestBody[] = GATE0_TESTS.map((t) => ({
+  id: t.id,
+  date: fmtDate(t.date),
+  distance: t.distance,
+  splitSeconds: t.splitSeconds,
+  log: t.log,
+}));

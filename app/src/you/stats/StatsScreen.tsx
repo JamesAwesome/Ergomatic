@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  earliestDate,
   rowsInRange,
   summarize,
   timeByType,
@@ -12,23 +13,36 @@ import {
   type DateRange,
   type Preset,
 } from "../../../domain/stats/calendar.js";
+import { seasonSummary } from "../../../domain/stats/season.js";
 import type { DatedStatsRow } from "../../../domain/stats/statsRow.js";
+import { metresPerWeek } from "../../../domain/stats/weekly.js";
 import { useStatsRows } from "../../api/useStatsRows";
+import {
+  useTestHistory,
+  type TestHistoryState,
+} from "../../api/useTestHistory";
 import BackLink from "../../shell/BackLink";
-import { fmtDate, parseDate } from "./format";
+import { fmtDate, fmtRange, fmtRangeLine, parseDate } from "./format";
+import SeasonGroup from "./SeasonGroup";
 import StatsFilterBar, { type CustomProblem } from "./StatsFilterBar";
+import TestTrendGroup from "./TestTrendGroup";
 import TimeByTypeGroup from "./TimeByTypeGroup";
 import TotalsGroup from "./TotalsGroup";
+import WeekBarsGroup from "./WeekBarsGroup";
 import { NO_ROWS_YET } from "./YouStatsHero";
 
 /**
- * `/you/stats` (career-stats spec §5, PR 1's half): the filter bar, TOTALS
- * and TIME BY TYPE, every empty state. Plain `.screen` like
+ * `/you/stats` (career-stats spec §5): the filter bar and its range line,
+ * TOTALS, METRES PER WEEK and TIME BY TYPE (the range's rows), then SEASON
+ * and TEST TREND (never filtered), every empty state. Plain `.screen` like
  * `BaselinesScreen` (it carries inputs). Filter state is screen-local and
- * dies with the screen; the rows are the hook's per-mount fetch (§4.3).
+ * dies with the screen; the rows and the tests are two per-mount fetches
+ * on separate connections (§4.3) — a log deleted between them is exactly
+ * ruling 4's steady state.
  */
 export default function StatsScreen() {
   const state = useStatsRows();
+  const tests = useTestHistory();
   const [preset, setPreset] = useState<Preset>("all");
   const [custom, setCustom] = useState<{ from: string; to: string } | null>(
     null,
@@ -41,7 +55,10 @@ export default function StatsScreen() {
     setCustom(next);
     const from = parseDate(next.from);
     const to = parseDate(next.to);
-    const r = from && to ? customRange(from, to) : null;
+    const r =
+      from && to && state.state === "ready"
+        ? customRange(from, to, state.today)
+        : null;
     if (r) setApplied(r);
   }
 
@@ -79,6 +96,7 @@ export default function StatsScreen() {
           }
           onCustom={handleCustom}
           applied={applied}
+          tests={tests}
         />
       )}
     </main>
@@ -93,6 +111,7 @@ function Body({
   custom,
   onCustom,
   applied,
+  tests,
 }: {
   rows: readonly DatedStatsRow[];
   today: CalendarDate;
@@ -101,6 +120,7 @@ function Body({
   custom: { from: string; to: string };
   onCustom: (c: { from: string; to: string }) => void;
   applied: DateRange | null;
+  tests: TestHistoryState;
 }) {
   const from = parseDate(custom.from);
   const to = parseDate(custom.to);
@@ -111,7 +131,7 @@ function Body({
       ? null
       : from === null || to === null
         ? "empty"
-        : customRange(from, to) === null
+        : customRange(from, to, today) === null
           ? "order"
           : null;
   // The seeded pair IS the 30 DAYS range, so an untouched CUSTOM reads it.
@@ -121,6 +141,17 @@ function Body({
       : presetRange(preset, today);
   const inRange = rowsInRange(rows, range);
   const summary = summarize(rows, range);
+  // §14 ruling 21: the ONE prose line — the days the totals cover. While a
+  // CUSTOM pair is unusable it names the range still applied, like the
+  // totals under it. With no row in the range the same line carries the
+  // empty state in the same spelling (`NO ROWS · 20 TO 31 JUL 2026`) —
+  // one line, never a second caption in ISO (PR 2 review, item 2). A
+  // bounded range always has both ends here: ALL is never empty while
+  // the page renders at all (ruling 16).
+  const rangeLine =
+    inRange.length === 0 && range.from !== null && range.to !== null
+      ? `NO ROWS · ${fmtRange(range.from, range.to)}`
+      : fmtRangeLine(range, earliestDate(rows));
   return (
     <>
       <StatsFilterBar
@@ -129,21 +160,28 @@ function Body({
         custom={custom}
         onCustom={onCustom}
         customProblem={customProblem}
+        maxDate={fmtDate(today)}
       />
-      {inRange.length === 0 ? (
-        <p className="stats-caption">
-          NO ROWS BETWEEN {range.from ? fmtDate(range.from) : "THE START"} AND{" "}
-          {range.to ? fmtDate(range.to) : "TODAY"}
-        </p>
-      ) : (
+      {rangeLine !== null && (
+        <p className="stats-caption stats-range">{rangeLine}</p>
+      )}
+      {inRange.length > 0 && (
         <>
           <TotalsGroup summary={summary} />
+          <WeekBarsGroup
+            bars={metresPerWeek(rows, range, today)}
+            rowsInRange={inRange.length}
+          />
           <TimeByTypeGroup
             buckets={timeByType(rows, range)}
             rowsInRange={inRange.length}
           />
         </>
       )}
+      {/* SEASON and TEST TREND never filter (§5 items 5/6, invariant 19):
+          they render whatever the range holds, an empty CUSTOM included. */}
+      <SeasonGroup summary={seasonSummary(rows, today)} />
+      <TestTrendGroup state={tests} />
     </>
   );
 }

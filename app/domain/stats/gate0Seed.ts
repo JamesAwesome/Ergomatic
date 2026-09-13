@@ -7,6 +7,7 @@
  */
 import { parseDate, type CalendarDate } from "./calendar.js";
 import type { DatedStatsRow } from "./statsRow.js";
+import type { TestPoint } from "./testTrend.js";
 
 export const GATE0_TODAY: CalendarDate = { y: 2026, m: 9, d: 12 };
 
@@ -71,5 +72,31 @@ export const GATE0_ROWS: readonly DatedStatsRow[] = SEED.map(
     restMeters,
     restSeconds: null,
     calories,
+  }),
+);
+
+/** The seed's six `test_history` rows (T1-T6); `log` is the linked seed
+ *  row or null for a deleted log (§14 ruling 4). */
+export interface Gate0Test extends TestPoint {
+  log: string | null;
+}
+
+// prettier-ignore
+const TESTS: [id: string, date: string, distance: TestPoint["distance"], splitSeconds: number, log: string | null][] = [
+  ["T1", "2025-11-22", "6k", 124.8, null],
+  ["T2", "2026-01-17", "2k", 117.6, "R2"],
+  ["T3", "2026-03-28", "6k", 122.9, null],
+  ["T4", "2026-06-02", "2k", 115.3, "R6"],
+  ["T5", "2026-08-08", "6k", 121.4, null],
+  ["T6", "2026-09-11", "2k", 114.0, "R13"],
+];
+
+export const GATE0_TESTS: readonly Gate0Test[] = TESTS.map(
+  ([id, date, distance, splitSeconds, log]) => ({
+    id,
+    date: parseSeedDate(date),
+    distance,
+    splitSeconds,
+    log,
   }),
 );
