@@ -4,6 +4,10 @@ import { createApp, type AppDeps } from "../app.js";
 import { OAUTH_COOKIE, SESSION_COOKIE } from "./cookies.js";
 import type { OAuthProvider } from "./google.js";
 import { makeFakeSessions, makeFakeUsers } from "../testing/fakes.js";
+import { createAccessPolicy } from "./accessPolicy.js";
+import { AuthFailure } from "./frontDoorErrors.js";
+import { Router, type RequestHandler } from "express";
+import type { FrontDoor } from "./frontDoor.js";
 
 const claims = { sub: "s1", email: "a@x.com", emailVerified: true, name: "A" };
 const baseUser = {
@@ -38,7 +42,7 @@ function deps(overrides: Partial<AppDeps> = {}): AppDeps {
     users,
     oauth,
     nativeVerifier: null,
-    allowlist: new Set(["a@x.com"]),
+    accessPolicy: createAccessPolicy("restricted", "a@x.com"),
     siteUrl: "https://ergomatic.example",
     stores: null,
     testAuthSecret: null,
@@ -50,6 +54,21 @@ const cb = (d: AppDeps) =>
   request(createApp(d))
     .get("/api/auth/callback?code=c&state=s")
     .set("Cookie", `${OAUTH_COOKIE}=p`);
+
+function deniedFrontDoor(email: string): FrontDoor {
+  const appleCallback: RequestHandler = (_req, res) => res.status(503).end();
+  const admission: RequestHandler = (_req, _res, next) => next();
+  return {
+    router: Router(),
+    appleCallback,
+    admission,
+    attempts: {
+      legacyGoogle: vi.fn(async () => {
+        throw new AuthFailure("access_denied", email);
+      }),
+    },
+  } as unknown as FrontDoor;
+}
 
 describe("GET /api/auth/signin", () => {
   it("redirects to Google and sets the oauth cookie", async () => {
@@ -81,21 +100,60 @@ describe("GET /api/auth/callback", () => {
     expect(cookies).toContain(`${SESSION_COOKIE}=tok`);
     expect(cookies).toContain(`${OAUTH_COOKIE}=;`);
   });
-  it("signs in an existing user without touching the allowlist, and upserts profile", async () => {
-    const d = deps({ allowlist: new Set() });
+  it("authorizes a returning Google subject by saved email and preserves it while refreshing the name", async () => {
+    const d = deps({
+      accessPolicy: createAccessPolicy("restricted", "a@x.com"),
+      oauth: {
+        authorizationUrl: async () => ({
+          url: "https://google.test",
+          cookiePayload: "p",
+        }),
+        callbackClaims: async () => ({
+          ...claims,
+          email: "changed@provider.test",
+          name: "Changed Name",
+        }),
+      },
+    });
     (d.users.findByGoogleSub as ReturnType<typeof vi.fn>).mockResolvedValue(
       baseUser,
     );
     const res = await cb(d);
     expect(res.status).toBe(302);
     expect(res.headers.location).toBe("/");
-    expect(d.users.updateProfile).toHaveBeenCalledWith("u1", "a@x.com", "A");
+    expect(d.users.updateProfile).toHaveBeenCalledWith("u1", "Changed Name");
+  });
+  it("denies a returning Google subject whose saved email is outside restricted access", async () => {
+    const d = deps({
+      accessPolicy: createAccessPolicy("restricted", "changed@provider.test"),
+    });
+    (d.users.findByGoogleSub as ReturnType<typeof vi.fn>).mockResolvedValue(
+      baseUser,
+    );
+    const res = await cb(d);
+    expect(res.headers.location).toBe("/?denied=a%40x.com");
+    expect(d.users.updateProfile).not.toHaveBeenCalled();
+    expect(d.sessions.createSession).not.toHaveBeenCalled();
+  });
+  it("keeps the legacy web denial redirect when the combined auth flow enforces access", async () => {
+    const res = await cb(
+      deps({ frontDoor: deniedFrontDoor("saved-outside@test") }),
+    );
+    expect(res.headers.location).toBe("/?denied=saved-outside%40test");
   });
   it("denies a non-allowlisted new user, creating nothing", async () => {
-    const d = deps({ allowlist: new Set(["other@x.com"]) });
+    const d = deps({
+      accessPolicy: createAccessPolicy("restricted", "other@x.com"),
+    });
     const res = await cb(d);
     expect(res.headers.location).toBe("/?denied=a%40x.com");
     expect(d.users.createUser).not.toHaveBeenCalled();
+  });
+  it("public mode admits a new Google user with an empty allowlist", async () => {
+    const d = deps({ accessPolicy: createAccessPolicy("public", "") });
+    const res = await cb(d);
+    expect(res.headers.location).toBe("/");
+    expect(d.users.createUser).toHaveBeenCalled();
   });
   it("denies an unverified email before consulting the allowlist", async () => {
     const d = deps();

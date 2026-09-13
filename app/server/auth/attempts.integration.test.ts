@@ -7,6 +7,7 @@ import { startPostgres } from "../testing/postgres.js";
 import { createAttempts } from "./attempts.js";
 import { createSessionStore } from "./sessions.js";
 import { createUserStore } from "./users.js";
+import { createAccessPolicy } from "./accessPolicy.js";
 
 describe("front-door transactions against Postgres", () => {
   let container: StartedPostgreSqlContainer;
@@ -19,8 +20,9 @@ describe("front-door transactions against Postgres", () => {
     const c = createDb(container.getConnectionUri());
     pool = c.pool;
     await migrate(c.db, { migrationsFolder: "drizzle" });
-    store = createAttempts(pool);
-    sessions = createSessionStore(c.db);
+    const publicAccess = createAccessPolicy("public", "");
+    store = createAttempts(pool, publicAccess);
+    sessions = createSessionStore(c.db, publicAccess);
     users = createUserStore(c.db);
     await store.sweep();
   });
@@ -95,6 +97,76 @@ describe("front-door transactions against Postgres", () => {
       await store.read(b3.attempt.id, b3.bindingSecret, "native"),
     );
     expect(second.signedIn?.user.id).not.toBe(first.signedIn?.user.id);
+  });
+  it.each(["apple", "google"] as const)(
+    "applies restricted access to new and returning %s sign-ins using the saved email",
+    async (provider) => {
+      const restricted = createAttempts(
+        pool,
+        createAccessPolicy("restricted", "allowed@test"),
+      );
+      await restricted.sweep();
+      const deniedNew = await restricted.begin({
+        surface: "native",
+        purpose: "signin",
+        targetProvider: provider,
+      });
+      await expect(
+        restricted.accept(await restricted.claim(deniedNew.attempt), {
+          ...apple,
+          sub: `new-${provider}`,
+          email: "outside@test",
+          grant:
+            provider === "apple"
+              ? { clientId: "native.app", refreshToken: "denied-secret" }
+              : undefined,
+        }),
+      ).rejects.toThrow("access_denied");
+
+      const column = provider === "apple" ? "apple_sub" : "google_sub";
+      await pool.query(
+        `INSERT INTO users(${column},email,name) VALUES($1,'saved@test','Saved')`,
+        [`returning-${provider}`],
+      );
+      const deniedReturning = await restricted.begin({
+        surface: "native",
+        purpose: "signin",
+        targetProvider: provider,
+      });
+      await expect(
+        restricted.accept(await restricted.claim(deniedReturning.attempt), {
+          ...apple,
+          sub: `returning-${provider}`,
+          email: "allowed@test",
+          grant:
+            provider === "apple"
+              ? { clientId: "native.app", refreshToken: "denied-secret" }
+              : undefined,
+        }),
+      ).rejects.toThrow("access_denied");
+      expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(0);
+      expect(
+        (await pool.query("SELECT user_id FROM apple_grants")).rowCount,
+      ).toBe(0);
+    },
+  );
+  it("rechecks a pending signup under the current process policy", async () => {
+    const b = await signin();
+    await store.accept(await store.claim(b.attempt), apple);
+    const restricted = createAttempts(
+      pool,
+      createAccessPolicy("restricted", "someone-else@test"),
+    );
+    await expect(
+      restricted.confirm(
+        await restricted.read(b.attempt.id, b.bindingSecret, "native"),
+      ),
+    ).rejects.toThrow("access_denied");
+    expect((await pool.query("SELECT id FROM users")).rowCount).toBe(0);
+    expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(0);
+    expect(
+      (await pool.query("SELECT user_id FROM apple_grants")).rowCount,
+    ).toBe(0);
   });
   it("rejects unverified new identity without a user or grant", async () => {
     const b = await signin();
@@ -276,7 +348,10 @@ describe("front-door transactions against Postgres", () => {
         return result;
       }) as typeof client.query;
     });
-    const claim = createAttempts(claimPool).claim(b.attempt);
+    const claim = createAttempts(
+      claimPool,
+      createAccessPolicy("public", ""),
+    ).claim(b.attempt);
     await ready;
     const replacement = store.begin({
       surface: "native",
@@ -372,6 +447,208 @@ describe("front-door transactions against Postgres", () => {
     blocker.release();
     expect((await running).signedIn?.user.id).toBe(owner.rows[0].id);
     expect((await pool.query("SELECT id FROM users")).rowCount).toBe(1);
+  });
+  it("authorizes the concurrent canonical winner before grant or session commit", async () => {
+    const restricted = createAttempts(
+      pool,
+      createAccessPolicy("restricted", "relay@privaterelay.appleid.com"),
+    );
+    await restricted.sweep();
+    const b = await restricted.begin({
+      surface: "native",
+      purpose: "signin",
+      targetProvider: "apple",
+    });
+    await restricted.accept(await restricted.claim(b.attempt), apple);
+    const blocker = await pool.connect();
+    await blocker.query("BEGIN");
+    await blocker.query(
+      "INSERT INTO users(apple_sub,email,name) VALUES('apple','disallowed@test','Other')",
+    );
+    const running = restricted.confirm(
+      await restricted.read(b.attempt.id, b.bindingSecret, "native"),
+    );
+    let waiting = false;
+    for (let i = 0; i < 100; i++) {
+      const rows = await pool.query<{ waiting: boolean }>(
+        "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event_type='Lock' AND query LIKE 'INSERT INTO users%') AS waiting",
+      );
+      if (rows.rows[0].waiting) {
+        waiting = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(waiting).toBe(true);
+    await blocker.query("COMMIT");
+    blocker.release();
+    await expect(running).rejects.toThrow("access_denied");
+    expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(0);
+    expect(
+      (await pool.query("SELECT user_id FROM apple_grants")).rowCount,
+    ).toBe(0);
+  });
+
+  it("denies every in-flight link transition after the original account loses access without mutation", async () => {
+    const b = await link();
+    const restricted = createAttempts(
+      pool,
+      createAccessPolicy("restricted", "someone-else@test"),
+    );
+    await expect(
+      restricted.read(b.attempt.id, b.bindingSecret, "native"),
+    ).rejects.toThrow("access_denied");
+    await expect(restricted.claim(b.attempt)).rejects.toThrow("access_denied");
+    expect(
+      (await pool.query("SELECT stage,version FROM auth_attempts")).rows,
+    ).toStrictEqual([{ stage: "reauth_authorize", version: 1 }]);
+    expect(
+      (await pool.query("SELECT apple_sub FROM users WHERE id=$1", [b.user.id]))
+        .rows,
+    ).toStrictEqual([{ apple_sub: null }]);
+  });
+
+  it("rechecks original-account access at link begin and provider-proof acceptance", async () => {
+    const b = await link();
+    const restricted = createAttempts(
+      pool,
+      createAccessPolicy("restricted", "someone-else@test"),
+    );
+    await expect(
+      restricted.begin({
+        surface: "native",
+        purpose: "link",
+        targetProvider: "apple",
+        originalSessionId: b.attempt.originalSessionId!,
+      }),
+    ).rejects.toThrow("access_denied");
+    const claimed = await store.claim(b.attempt);
+    await expect(
+      restricted.accept(claimed, {
+        sub: "google",
+        email: "provider@test",
+        emailVerified: true,
+        name: "Provider",
+      }),
+    ).rejects.toThrow("access_denied");
+    expect(
+      (await pool.query("SELECT stage,version FROM auth_attempts")).rows,
+    ).toStrictEqual([{ stage: "reauth_exchanging", version: 2 }]);
+  });
+
+  it("rechecks original-account access at link finalization without attaching or granting", async () => {
+    const b = await link();
+    const target = (
+      await store.accept(await store.claim(b.attempt), {
+        sub: "google",
+        email: "",
+        emailVerified: false,
+        name: "Google",
+      })
+    ).attempt!;
+    const ready = (await store.accept(await store.claim(target), apple))
+      .attempt!;
+    const restricted = createAttempts(
+      pool,
+      createAccessPolicy("restricted", "someone-else@test"),
+    );
+    await expect(
+      restricted.finalize(ready, b.attempt.originalSessionId!),
+    ).rejects.toThrow("access_denied");
+    expect(
+      (await pool.query("SELECT apple_sub FROM users WHERE id=$1", [b.user.id]))
+        .rows,
+    ).toStrictEqual([{ apple_sub: null }]);
+    expect(
+      (await pool.query("SELECT user_id FROM apple_grants")).rowCount,
+    ).toBe(0);
+    expect(
+      (await pool.query("SELECT stage,version FROM auth_attempts")).rows,
+    ).toStrictEqual([{ stage: "link_ready", version: 5 }]);
+  });
+
+  it("links Apple relay identity by the saved account email", async () => {
+    const b = await link();
+    const restricted = createAttempts(
+      pool,
+      createAccessPolicy("restricted", "original@test"),
+    );
+    const owned = await restricted.read(
+      b.attempt.id,
+      b.bindingSecret,
+      "native",
+    );
+    const target = (
+      await restricted.accept(await restricted.claim(owned), {
+        sub: "google",
+        email: "provider-changed@test",
+        emailVerified: true,
+        name: "Changed",
+      })
+    ).attempt!;
+    const ready = (
+      await restricted.accept(await restricted.claim(target), apple)
+    ).attempt!;
+    expect(
+      (await restricted.finalize(ready, b.attempt.originalSessionId!)).linked,
+    ).toBe(true);
+    expect(
+      (
+        await pool.query("SELECT email,apple_sub FROM users WHERE id=$1", [
+          b.user.id,
+        ])
+      ).rows,
+    ).toStrictEqual([{ email: "original@test", apple_sub: "apple" }]);
+  });
+
+  it("legacy Google preserves a returning saved email and denies it when restricted", async () => {
+    await pool.query(
+      "INSERT INTO users(google_sub,email,name) VALUES('legacy','saved@test','Saved')",
+    );
+    const allowed = createAttempts(
+      pool,
+      createAccessPolicy("restricted", "saved@test"),
+    );
+    const signed = await allowed.legacyGoogle({
+      ...apple,
+      sub: "legacy",
+      email: "changed@test",
+      name: "Changed",
+      grant: undefined,
+    });
+    expect(signed.user).toMatchObject({ email: "saved@test", name: "Changed" });
+
+    const denied = createAttempts(
+      pool,
+      createAccessPolicy("restricted", "changed@test"),
+    );
+    await expect(
+      denied.legacyGoogle({
+        ...apple,
+        sub: "legacy",
+        email: "changed@test",
+        grant: undefined,
+      }),
+    ).rejects.toThrow("access_denied");
+    await expect(
+      denied.legacyGoogle({
+        ...apple,
+        sub: "new-legacy",
+        email: "outside@test",
+        grant: undefined,
+      }),
+    ).rejects.toThrow("access_denied");
+    expect(
+      (
+        await pool.query(
+          "SELECT email,name FROM users WHERE google_sub='legacy'",
+        )
+      ).rows,
+    ).toStrictEqual([{ email: "saved@test", name: "Changed" }]);
+    expect(
+      (await pool.query("SELECT id FROM users WHERE google_sub='new-legacy'"))
+        .rowCount,
+    ).toBe(0);
   });
   it("rejects stale existing-provider proof even if target attempt has a later expiry", async () => {
     const b = await link();

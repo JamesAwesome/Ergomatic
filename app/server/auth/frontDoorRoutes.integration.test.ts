@@ -18,6 +18,7 @@ import { startPostgres } from "../testing/postgres.js";
 import { createApp } from "../app.js";
 import { baseDeps } from "../testDeps.js";
 import { createSessionStore } from "./sessions.js";
+import { createAccessPolicy } from "./accessPolicy.js";
 import { createUserStore } from "./users.js";
 import { createAttempts } from "./attempts.js";
 import { createProviders } from "./providers.js";
@@ -44,7 +45,8 @@ describe("supported auth producers through Express and signed tokens", () => {
     const c = createDb(container.getConnectionUri());
     pool = c.pool;
     await migrate(c.db, { migrationsFolder: "drizzle" });
-    const sessions = createSessionStore(c.db);
+    const accessPolicy = createAccessPolicy("public", "");
+    const sessions = createSessionStore(c.db, accessPolicy);
     const users = createUserStore(c.db);
     rsa = await generateKeyPair("RS256");
     const ec = await generateKeyPair("ES256");
@@ -91,7 +93,7 @@ describe("supported auth producers through Express and signed tokens", () => {
       },
     );
     freshApp = async () => {
-      attempts = createAttempts(pool);
+      attempts = createAttempts(pool, accessPolicy);
       await attempts.sweep();
       const routes = createFrontDoorRoutes({
         attempts,

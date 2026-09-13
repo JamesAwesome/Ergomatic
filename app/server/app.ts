@@ -12,6 +12,7 @@ import { createConcept2Router } from "./routes/concept2.js";
 import { createDataRouter, type Stores } from "./routes/data.js";
 import { createStatsRouter } from "./routes/stats.js";
 import type { Concept2Store } from "./stores/concept2.js";
+import type { AccessPolicy } from "./auth/accessPolicy.js";
 
 export interface AppDeps {
   frontDoor?: FrontDoor | null;
@@ -20,7 +21,7 @@ export interface AppDeps {
   users: UserStore;
   oauth: OAuthProvider | null;
   nativeVerifier: NativeTokenVerifier | null;
-  allowlist: Set<string>;
+  accessPolicy: AccessPolicy;
   siteUrl: string;
   // Backing stores for the per-user data API. Null in auth-only tests: the
   // data router is mounted only when present, so those tests stay untouched.

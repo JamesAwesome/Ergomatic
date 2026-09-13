@@ -13,7 +13,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import request from "supertest";
 import type pg from "pg";
 import { createApp } from "../app.js";
-import { baseDeps } from "../testDeps.js";
+import { baseDeps, TEST_ACCESS_POLICY } from "../testDeps.js";
 import { createDb, type Db } from "../db/index.js";
 import { createSessionStore } from "../auth/sessions.js";
 import { createUserStore } from "../auth/users.js";
@@ -210,13 +210,12 @@ describe("the Concept2 send seam: the route writes, the log detail reads (RF24)"
       },
       fetchMock,
     );
-    sessions = createSessionStore(db);
+    sessions = createSessionStore(db, TEST_ACCESS_POLICY);
 
     app = createApp(
       baseDeps({
         sessions,
         users: createUserStore(db),
-        allowlist: SEND_EMAILS,
         nativeVerifier: async (idToken: string) => ({
           sub: idToken,
           email: `${idToken}@c2send.test`,

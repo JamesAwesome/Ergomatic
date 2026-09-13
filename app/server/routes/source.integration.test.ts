@@ -9,7 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createApp } from "../app.js";
-import { baseDeps } from "../testDeps.js";
+import { baseDeps, TEST_ACCESS_POLICY } from "../testDeps.js";
 import { createDb, type Db } from "../db/index.js";
 import { createSessionStore } from "../auth/sessions.js";
 import { createUserStore } from "../auth/users.js";
@@ -74,9 +74,8 @@ describe("POST/GET /api/logs: source is required (v0.35.0 sunset), refused when 
     await migrate(db, { migrationsFolder: "drizzle" });
     app = createApp(
       baseDeps({
-        sessions: createSessionStore(db),
+        sessions: createSessionStore(db, TEST_ACCESS_POLICY),
         users: createUserStore(db),
-        allowlist: new Set(["source@log.test"]),
         nativeVerifier: async () => ({
           sub: "source-sub",
           email: "source@log.test",

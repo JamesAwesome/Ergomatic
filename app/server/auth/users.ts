@@ -27,8 +27,8 @@ export function createUserStore(db: Db) {
       const [row] = await db.insert(users).values(input).returning();
       return row;
     },
-    async updateProfile(id: string, email: string, name: string) {
-      await db.update(users).set({ email, name }).where(eq(users.id, id));
+    async updateProfile(id: string, name: string) {
+      await db.update(users).set({ name }).where(eq(users.id, id));
     },
   };
 }

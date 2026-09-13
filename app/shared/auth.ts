@@ -41,6 +41,7 @@ export interface SignedIn {
 export type AuthErrorCode =
   | "invalid_request"
   | "invalid_proof"
+  | "access_denied"
   | "attempt_expired"
   | "account_changed"
   | "account_conflict"

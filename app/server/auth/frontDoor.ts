@@ -4,17 +4,25 @@ import { createAttempts } from "./attempts.js";
 import { createProviders, type ProviderConfig } from "./providers.js";
 import { createFrontDoorRoutes } from "./frontDoorRoutes.js";
 import type { SessionStore } from "./sessions.js";
+import type { AccessPolicy } from "./accessPolicy.js";
 
 export async function frontDoorConfig(
   env: NodeJS.ProcessEnv,
   siteUrl: string,
 ): Promise<ProviderConfig | null> {
-  if (env.FRONT_DOOR_ENABLED !== "1") return null;
+  const keys = [
+    "APPLE_NATIVE_CLIENT_ID",
+    "APPLE_WEB_CLIENT_ID",
+    "APPLE_TEAM_ID",
+    "APPLE_KEY_ID",
+    "APPLE_PRIVATE_KEY",
+  ] as const;
+  if (keys.every((key) => !env[key]?.trim())) return null;
   function required(key: string) {
     const value = env[key];
     if (!value?.trim() || value.length > 8192)
-      throw new Error(`${key} is required for FRONT_DOOR_ENABLED`);
-    return value;
+      throw new Error(`${key} is required when Apple is configured`);
+    return value.trim();
   }
   const nativeClientId = required("APPLE_NATIVE_CLIENT_ID");
   const webClientId = required("APPLE_WEB_CLIENT_ID");
@@ -25,7 +33,7 @@ export async function frontDoorConfig(
   )
     throw new Error("Apple native/web client IDs must be distinct and bounded");
   if (new URL(siteUrl).protocol !== "https:")
-    throw new Error("FRONT_DOOR_ENABLED requires HTTPS SITE_URL");
+    throw new Error("Apple configuration requires HTTPS SITE_URL");
   return {
     siteUrl,
     apple: {
@@ -46,8 +54,9 @@ export async function createFrontDoor(
   pool: pg.Pool,
   sessions: SessionStore,
   config: ProviderConfig,
+  accessPolicy: AccessPolicy,
 ) {
-  const attempts = createAttempts(pool);
+  const attempts = createAttempts(pool, accessPolicy);
   const providers = createProviders(config);
   async function sweep() {
     try {

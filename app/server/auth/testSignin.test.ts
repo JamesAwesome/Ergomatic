@@ -3,6 +3,7 @@ import request from "supertest";
 import { createApp, type AppDeps } from "../app.js";
 import { SESSION_COOKIE } from "./cookies.js";
 import { makeFakeSessions, makeFakeUsers } from "../testing/fakes.js";
+import { createAccessPolicy } from "./accessPolicy.js";
 
 const baseUser = {
   id: "u1",
@@ -25,7 +26,7 @@ function deps(overrides: Partial<AppDeps> = {}): AppDeps {
     users: makeFakeUsers(),
     oauth: null,
     nativeVerifier: null,
-    allowlist: new Set(),
+    accessPolicy: createAccessPolicy("public", ""),
     siteUrl: "https://ergomatic.example",
     stores: null,
     testAuthSecret: "e2e-secret",

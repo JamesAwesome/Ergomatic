@@ -1,12 +1,16 @@
 import type { AuthErrorCode } from "../../shared/auth.js";
 export class AuthFailure extends Error {
-  constructor(public readonly code: AuthErrorCode) {
+  constructor(
+    public readonly code: AuthErrorCode,
+    public readonly email?: string,
+  ) {
     super(code);
   }
 }
 export const authStatus: Record<AuthErrorCode, number> = {
   invalid_request: 400,
   invalid_proof: 401,
+  access_denied: 403,
   attempt_expired: 410,
   account_changed: 409,
   account_conflict: 409,

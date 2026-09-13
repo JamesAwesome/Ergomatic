@@ -1,4 +1,4 @@
-import { isAllowed } from "./allowlist.js";
+import type { AccessPolicy } from "./accessPolicy.js";
 import type { Claims } from "./google.js";
 import type { SessionStore } from "./sessions.js";
 import type { UserStore } from "./users.js";
@@ -6,7 +6,7 @@ import type { UserStore } from "./users.js";
 export interface SignInDeps {
   sessions: SessionStore;
   users: UserStore;
-  allowlist: Set<string>;
+  accessPolicy: AccessPolicy;
 }
 
 export type SignInResult =
@@ -19,7 +19,7 @@ export type SignInResult =
   | { outcome: "denied"; email: string };
 
 /** The single gate sequence shared by web callback and native sign-in:
- *  email_verified -> existing-sub upsert | allowlist -> create -> sweep -> mint. */
+ *  email_verified -> existing-sub -> policy -> name refresh/create -> mint. */
 export async function signInWithClaims(
   deps: SignInDeps,
   claims: Claims,
@@ -29,9 +29,12 @@ export async function signInWithClaims(
   }
   let user = await deps.users.findByGoogleSub(claims.sub);
   if (user) {
-    await deps.users.updateProfile(user.id, claims.email, claims.name);
+    if (!deps.accessPolicy.allows(user.email)) {
+      return { outcome: "denied", email: user.email };
+    }
+    await deps.users.updateProfile(user.id, claims.name);
   } else {
-    if (!isAllowed(deps.allowlist, claims.email)) {
+    if (!deps.accessPolicy.allows(claims.email)) {
       return { outcome: "denied", email: claims.email };
     }
     user = await deps.users.createUser({

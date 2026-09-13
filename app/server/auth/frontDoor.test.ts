@@ -5,6 +5,7 @@ import { baseDeps } from "../testDeps.js";
 import type pg from "pg";
 import { generateKeyPair, exportPKCS8 } from "jose";
 import { createFrontDoor, frontDoorConfig } from "./frontDoor.js";
+import { createAccessPolicy } from "./accessPolicy.js";
 
 describe("front-door boot and options", () => {
   afterEach(() => {
@@ -20,22 +21,38 @@ describe("front-door boot and options", () => {
       apple: { native: false, web: false },
     });
   });
-  it("requires every Apple configuration value only when exactly enabled", async () => {
+  it("keeps Apple unavailable when all settings are absent or blank", async () => {
     expect(await frontDoorConfig({}, "http://localhost:5173")).toBeNull();
     expect(
       await frontDoorConfig(
-        { FRONT_DOOR_ENABLED: "true" },
+        { FRONT_DOOR_ENABLED: "1" },
         "http://localhost:5173",
       ),
     ).toBeNull();
+    expect(
+      await frontDoorConfig(
+        {
+          APPLE_NATIVE_CLIENT_ID: " ",
+          APPLE_WEB_CLIENT_ID: "",
+          APPLE_TEAM_ID: "\t",
+          APPLE_KEY_ID: "",
+          APPLE_PRIVATE_KEY: "\n",
+        },
+        "http://localhost:5173",
+      ),
+    ).toBeNull();
+  });
+  it("rejects partial Apple configuration without an enable switch", async () => {
     await expect(
-      frontDoorConfig({ FRONT_DOOR_ENABLED: "1" }, "https://erg.test"),
-    ).rejects.toThrow("APPLE_NATIVE_CLIENT_ID");
+      frontDoorConfig(
+        { APPLE_NATIVE_CLIENT_ID: "native.app" },
+        "https://erg.test",
+      ),
+    ).rejects.toThrow("APPLE_WEB_CLIENT_ID");
   });
   it("validates both Apple audiences and PKCS8 key before enabling", async () => {
     const key = await generateKeyPair("ES256", { extractable: true });
     const env = {
-      FRONT_DOOR_ENABLED: "1",
       APPLE_NATIVE_CLIENT_ID: "native.app",
       APPLE_WEB_CLIENT_ID: "web.app",
       APPLE_TEAM_ID: "TEAM",
@@ -70,17 +87,22 @@ describe("front-door boot and options", () => {
       .mockResolvedValue({ rows: [] });
     const pool = { query } as unknown as pg.Pool;
     const key = await generateKeyPair("ES256");
-    const front = await createFrontDoor(pool, baseDeps().sessions, {
-      siteUrl: "https://erg.test",
-      apple: {
-        nativeClientId: "native.app",
-        webClientId: "web.app",
-        teamId: "TEAM",
-        keyId: "KEY",
-        key: key.privateKey,
+    const front = await createFrontDoor(
+      pool,
+      baseDeps().sessions,
+      {
+        siteUrl: "https://erg.test",
+        apple: {
+          nativeClientId: "native.app",
+          webClientId: "web.app",
+          teamId: "TEAM",
+          keyId: "KEY",
+          key: key.privateKey,
+        },
+        google: { nativeClientId: "", webClientId: "", clientSecret: "" },
       },
-      google: { nativeClientId: "", webClientId: "", clientSecret: "" },
-    });
+      createAccessPolicy("public", ""),
+    );
     expect(front.attempts.healthy()).toBe(false);
     await expect(
       front.attempts.begin({

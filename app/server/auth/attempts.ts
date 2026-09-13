@@ -9,6 +9,7 @@ import type {
 import { AuthFailure } from "./frontDoorErrors.js";
 import type { VerifiedIdentity } from "./providers.js";
 import { hashToken, SESSION_TTL_MS } from "./sessions.js";
+import type { AccessPolicy } from "./accessPolicy.js";
 
 export type Surface = "native" | "web";
 export type Stage =
@@ -81,8 +82,12 @@ function consistent(a: Attempt) {
   )
     throw new AuthFailure("attempt_expired");
 }
-export function createAttempts(pool: pg.Pool) {
+export function createAttempts(pool: pg.Pool, accessPolicy: AccessPolicy) {
   let healthy = false;
+  function requireAccess(email: string): void {
+    if (!accessPolicy.allows(email))
+      throw new AuthFailure("access_denied", email);
+  }
   async function transaction<T>(
     work: (tx: pg.PoolClient) => Promise<T>,
   ): Promise<T> {
@@ -130,14 +135,15 @@ export function createAttempts(pool: pg.Pool) {
     tx: pg.Pool | pg.PoolClient,
     id: string,
     lock = false,
-  ): Promise<{ id: string; userId: string }> {
+  ): Promise<{ id: string; userId: string; email: string }> {
     const session = (
-      await tx.query<{ id: string; userId: string }>(
-        `SELECT id,user_id AS "userId" FROM sessions WHERE id=$1 AND expires_at>now()${lock ? " FOR UPDATE" : ""}`,
+      await tx.query<{ id: string; userId: string; email: string }>(
+        `SELECT sessions.id,sessions.user_id AS "userId",users.email FROM sessions INNER JOIN users ON sessions.user_id=users.id WHERE sessions.id=$1 AND sessions.expires_at>now()${lock ? " FOR UPDATE" : ""}`,
         [id],
       )
     ).rows[0];
     if (!session) throw new AuthFailure("account_changed");
+    requireAccess(session.email);
     return session;
   }
   async function bound(tx: pg.PoolClient, expected: Attempt) {
@@ -220,6 +226,7 @@ export function createAttempts(pool: pg.Pool) {
     a: Attempt,
     user: AuthUser,
   ): Promise<AttemptResult> {
+    requireAccess(user.email);
     await grant(tx, user.id, a);
     const signedIn = await mintSession(tx, user);
     await tx.query("DELETE FROM auth_attempts WHERE id=$1", [a.id]);
@@ -371,6 +378,7 @@ export function createAttempts(pool: pg.Pool) {
           if (user) return finishSignin(tx, a, user);
           if (!identity.emailVerified || !identity.email)
             throw new AuthFailure("email_required");
+          requireAccess(identity.email);
         } else if (
           !a.reauthenticatedAt ||
           now.getTime() - a.reauthenticatedAt.getTime() >= ttl
@@ -395,6 +403,7 @@ export function createAttempts(pool: pg.Pool) {
       return transaction(async (tx) => {
         const a = await bound(tx, expected);
         if (a.stage !== "confirm") throw new AuthFailure("attempt_expired");
+        requireAccess(a.verifiedEmail!);
         const column = subjectColumn(a.targetProvider);
         const user = (
           await tx.query<AuthUser>(
@@ -479,10 +488,11 @@ export function createAttempts(pool: pg.Pool) {
       return transaction(async (tx) => {
         const user = (
           await tx.query<AuthUser>(
-            "INSERT INTO users(google_sub,email,name) VALUES($1,$2,$3) ON CONFLICT(google_sub) DO UPDATE SET email=excluded.email,name=excluded.name RETURNING id,email,name",
+            "INSERT INTO users(google_sub,email,name) VALUES($1,$2,$3) ON CONFLICT(google_sub) DO UPDATE SET name=excluded.name RETURNING id,email,name",
             [identity.sub, identity.email, identity.name],
           )
         ).rows[0];
+        requireAccess(user.email);
         return mintSession(tx, user);
       });
     },

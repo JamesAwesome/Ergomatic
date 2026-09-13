@@ -14,6 +14,8 @@ import type { NativeTokenVerifier } from "./nativeVerify.js";
 import { signInWithClaims } from "./signin.js";
 import type { SessionStore } from "./sessions.js";
 import type { UserStore } from "./users.js";
+import type { AccessPolicy } from "./accessPolicy.js";
+import { AuthFailure } from "./frontDoorErrors.js";
 
 export interface AuthDeps {
   frontDoor?: import("./frontDoor.js").FrontDoor | null;
@@ -21,7 +23,7 @@ export interface AuthDeps {
   users: UserStore;
   oauth: OAuthProvider | null;
   nativeVerifier: NativeTokenVerifier | null;
-  allowlist: Set<string>;
+  accessPolicy: AccessPolicy;
   siteUrl: string;
 }
 
@@ -30,7 +32,7 @@ export function createAuthRouter({
   users,
   oauth,
   nativeVerifier,
-  allowlist,
+  accessPolicy,
   siteUrl,
   frontDoor,
 }: AuthDeps): Router {
@@ -39,8 +41,16 @@ export function createAuthRouter({
     claims: import("./google.js").Claims,
   ): Promise<import("./signin.js").SignInResult> {
     if (!frontDoor)
-      return signInWithClaims({ sessions, users, allowlist }, claims);
-    const signed = await frontDoor.attempts.legacyGoogle(claims);
+      return signInWithClaims({ sessions, users, accessPolicy }, claims);
+    let signed;
+    try {
+      signed = await frontDoor.attempts.legacyGoogle(claims);
+    } catch (error) {
+      if (error instanceof AuthFailure && error.code === "access_denied") {
+        return { outcome: "denied", email: error.email ?? claims.email };
+      }
+      throw error;
+    }
     return {
       outcome: "ok",
       user: signed.user,

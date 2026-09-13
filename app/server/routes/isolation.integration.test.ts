@@ -5,7 +5,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import request from "supertest";
 import type pg from "pg";
 import { createApp } from "../app.js";
-import { baseDeps } from "../testDeps.js";
+import { baseDeps, TEST_ACCESS_POLICY } from "../testDeps.js";
 import { createDb, type Db } from "../db/index.js";
 import { createSessionStore } from "../auth/sessions.js";
 import { createUserStore } from "../auth/users.js";
@@ -78,14 +78,8 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
 
     app = createApp(
       baseDeps({
-        sessions: createSessionStore(db),
+        sessions: createSessionStore(db, TEST_ACCESS_POLICY),
         users: createUserStore(db),
-        allowlist: new Set([
-          "a@iso.test",
-          "b@iso.test",
-          "c@iso.test",
-          "d@iso.test",
-        ]),
         // Distinct "Google accounts" distinguished by idToken value — this
         // is the same stub-the-verifier pattern as native.integration.test.ts,
         // just with multiple identities, so every user goes through the

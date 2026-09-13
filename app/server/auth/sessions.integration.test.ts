@@ -7,6 +7,7 @@ import type pg from "pg";
 import { createDb, type Db } from "../db/index.js";
 import { sessions, users } from "../db/schema.js";
 import { SESSION_TTL_MS, createSessionStore, hashToken } from "./sessions.js";
+import { createAccessPolicy } from "./accessPolicy.js";
 
 describe("session lifecycle against real Postgres", () => {
   let container: StartedPostgreSqlContainer;
@@ -19,7 +20,7 @@ describe("session lifecycle against real Postgres", () => {
     container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
     await migrate(db, { migrationsFolder: "drizzle" });
-    store = createSessionStore(db);
+    store = createSessionStore(db, createAccessPolicy("public", ""));
     const [u] = await db
       .insert(users)
       .values({ googleSub: "sub-1", email: "a@x.com", name: "A" })
@@ -82,5 +83,34 @@ describe("session lifecycle against real Postgres", () => {
     const sb = await store.createSession(b.id);
     expect((await store.resolveSession(sa.token))?.user.email).toBe("a@x.com");
     expect((await store.resolveSession(sb.token))?.user.email).toBe("b@y.com");
+  });
+
+  it("denies a stored session before refresh, retains it, and a reloaded policy can read it again", async () => {
+    const { token } = await store.createSession(userId);
+    const oldExpiry = new Date(Date.now() + SESSION_TTL_MS / 2 - 60_000);
+    await db
+      .update(sessions)
+      .set({ expiresAt: oldExpiry })
+      .where(eq(sessions.tokenHash, hashToken(token)));
+
+    const denied = createSessionStore(
+      db,
+      createAccessPolicy("restricted", "someone-else@x.com"),
+    );
+    expect(await denied.resolveSession(token)).toBeNull();
+    const retained = await db
+      .select({ expiresAt: sessions.expiresAt })
+      .from(sessions)
+      .where(eq(sessions.tokenHash, hashToken(token)));
+    expect(retained[0]?.expiresAt).toStrictEqual(oldExpiry);
+    expect(
+      (await db.select().from(users)).some((user) => user.id === userId),
+    ).toBe(true);
+
+    const reallowed = createSessionStore(
+      db,
+      createAccessPolicy("restricted", " A@X.COM "),
+    );
+    expect((await reallowed.resolveSession(token))?.refreshed).toBe(true);
   });
 });

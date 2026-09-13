@@ -45,8 +45,7 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID:-}
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
-      # One default-off switch gates Apple and open account admission together.
-      FRONT_DOOR_ENABLED: ${FRONT_DOOR_ENABLED:-}
+      ACCESS_MODE: ${ACCESS_MODE:-restricted}
       APPLE_NATIVE_CLIENT_ID: ${APPLE_NATIVE_CLIENT_ID:-}
       APPLE_WEB_CLIENT_ID: ${APPLE_WEB_CLIENT_ID:-}
       APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}

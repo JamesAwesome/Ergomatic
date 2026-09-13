@@ -6,6 +6,7 @@ import type pg from "pg";
 import { createDb, type Db } from "../db/index.js";
 import { createUserStore } from "./users.js";
 import { createSessionStore } from "./sessions.js";
+import { createAccessPolicy } from "./accessPolicy.js";
 
 describe("user store against real Postgres", () => {
   let container: StartedPostgreSqlContainer;
@@ -55,9 +56,9 @@ describe("user store against real Postgres", () => {
       email: "c@z.com",
       name: "C",
     });
-    await store.updateProfile(target.id, "c2@z.com", "C2");
+    await store.updateProfile(target.id, "C2");
     const updated = await store.findByGoogleSub("sub-3");
-    expect(updated).toMatchObject({ email: "c2@z.com", name: "C2" });
+    expect(updated).toMatchObject({ email: "c@z.com", name: "C2" });
     const untouched = await store.findByGoogleSub("sub-2");
     expect(untouched).toMatchObject({ email: "b@y.com", name: "B" });
   });
@@ -75,7 +76,10 @@ describe("user store against real Postgres", () => {
       name: "No Google",
     });
     expect(created.googleSub).toBeNull();
-    const sessionStore = createSessionStore(db);
+    const sessionStore = createSessionStore(
+      db,
+      createAccessPolicy("public", ""),
+    );
     const { token } = await sessionStore.createSession(created.id);
     const resolved = await sessionStore.resolveSession(token);
     expect(resolved?.user).toStrictEqual({

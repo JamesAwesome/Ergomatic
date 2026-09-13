@@ -1,7 +1,7 @@
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { createFrontDoor, frontDoorConfig } from "./auth/frontDoor.js";
 import { createApp } from "./app.js";
-import { parseAllowlist } from "./auth/allowlist.js";
+import { createAccessPolicy } from "./auth/accessPolicy.js";
 import { createGoogleProvider, type OAuthProvider } from "./auth/google.js";
 import { createNativeVerifier } from "./auth/nativeVerify.js";
 import { createSessionStore } from "./auth/sessions.js";
@@ -85,8 +85,11 @@ if (!nativeVerifier) {
   );
 }
 
-const allowlist = parseAllowlist(process.env.ALLOWED_EMAILS);
-if (allowlist.size === 0 && process.env.FRONT_DOOR_ENABLED !== "1") {
+const accessPolicy = createAccessPolicy(
+  process.env.ACCESS_MODE,
+  process.env.ALLOWED_EMAILS,
+);
+if (accessPolicy.mode === "restricted" && !process.env.ALLOWED_EMAILS?.trim()) {
   console.warn(
     "WARNING: ALLOWED_EMAILS is empty — nobody can create an account",
   );
@@ -188,10 +191,10 @@ const concept2 = {
 };
 
 const port = Number(process.env.PORT ?? 8080);
-const sessionStore = createSessionStore(db);
+const sessionStore = createSessionStore(db, accessPolicy);
 const frontConfig = await frontDoorConfig(process.env, siteUrl);
 const frontDoor = frontConfig
-  ? await createFrontDoor(pool, sessionStore, frontConfig)
+  ? await createFrontDoor(pool, sessionStore, frontConfig, accessPolicy)
   : null;
 const httpServer = createApp({
   frontDoor,
@@ -200,7 +203,7 @@ const httpServer = createApp({
   users: createUserStore(db),
   oauth,
   nativeVerifier,
-  allowlist,
+  accessPolicy,
   siteUrl,
   stores,
   testAuthSecret,
