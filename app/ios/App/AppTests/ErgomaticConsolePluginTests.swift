@@ -91,14 +91,6 @@ final class ErgomaticConsoleBridgeTests: XCTestCase {
         controller.loadViewIfNeeded()
         let bridge = try XCTUnwrap(controller.bridge)
         let webView = try XCTUnwrap(bridge.webView)
-        #if !DEBUG
-        bridge.registerPluginInstance(
-            ErgomaticConsolePlugin(
-                isDevEnvironment: { false },
-                sink: { Swift.print($0) }
-            )
-        )
-        #endif
         bridge.registerPluginInstance(SyntheticCredentialPlugin())
         webView.reload()
 

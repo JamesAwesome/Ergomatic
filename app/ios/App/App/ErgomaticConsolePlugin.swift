@@ -15,7 +15,16 @@ public final class ErgomaticConsolePlugin: CAPPlugin, CAPBridgedPlugin {
 
     public override convenience init() {
         self.init(
-            isDevEnvironment: { CapacitorBridge.isDevEnvironment },
+            isDevEnvironment: {
+                #if DEBUG
+                return true
+                #else
+                let debugValue = Bundle.main.object(
+                    forInfoDictionaryKey: "CAPACITOR_DEBUG"
+                ) as? String
+                return debugValue == "true"
+                #endif
+            },
             sink: { Swift.print($0) }
         )
     }
