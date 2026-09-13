@@ -57,6 +57,30 @@ array is not frozen; nothing mutates it. No measured trigger.
 WAL/write cost (identical statement + identical parameters — INFERENCE);
 response compression in production.
 
+## 2026-09-12 — Phase PS PR 1 PR gate, the SHIPPED `statsRows()`
+
+**Verdict: PASS.** The shipped query's `.toSQL()` on the merged tree
+`cfc06cb7` is byte-identical to the plan pass's (the unaliased `case when`
+for `totalCalories`, no `ORDER BY`, no `LIMIT`), so the plan-pass numbers
+stand: 1k rows 8.38 ms / 9.5 ms over HTTP / 224,781 B; 10k rows p95
+90.8 ms / 2,248,115 B; 100k rows 943 ms / 22,481,319 B.
+
+- No migration, schema or index change:
+  `git diff origin/main...HEAD -- app/drizzle app/server/db` is empty.
+- 1 + 1 statements per request — the route's own select plus
+  `resolveSession`'s (INFERENCE from source: `app/server/auth/sessions.ts:44`
+  under `requireUser`); constant, no N+1.
+- The user filter and the `jsonb_typeof` poison guard are gated on real
+  Postgres by the new `statsRows` contract case
+  (`server/stores/contracts/storeContracts.ts`, `contracts.real.integration`);
+  the route's integration test runs 1/1 in 1.68 s.
+- The protocol scripts are present under
+  `docs/superpowers/research/2026-09-12-stats-rows/` with the `BENCH_PRE`
+  fix in `bench.sh`.
+- Nit: the research `README.md` carries no results table — the numbers live
+  in the `.txt` outputs beside it.
+- Untested: the prod host, the prod row count, a 1M-row single user, TLS.
+
 ## 2026-09-12 — Phase PS PR 1 plan pass, the prescribed `statsRows()` (plan Task 4 / Task 10)
 
 **Verdict: PASS.** Scale that ruled: the household — 1k rows/user (≈4 years at

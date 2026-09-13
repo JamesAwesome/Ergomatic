@@ -170,6 +170,19 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
   the ORM**: `alter system set log_statement='all'; select pg_reload_conf();`
   then `docker logs <c> | grep 'execute <unnamed>: insert into'`. Reset after.
 
+- **(2026-09-12, PR gate) Print a store's real SQL WITHOUT writing into the
+  checkout**: put the `.toSQL()` script in the scratchpad,
+  `ln -sfn <worktree>/app/node_modules <scratch>/node_modules` (Node resolves
+  from the script's own directory), import the store and `schema.js` by
+  ABSOLUTE path, and run it with `pnpm exec tsx` from `app/`. Byte-identical
+  output means the plan-pass numbers stand and no container is owed.
+- **An authed GET costs TWO statements, not one.** `requireUser` →
+  `resolveSession` (`app/server/auth/sessions.ts:44`) runs a
+  `sessions`⋈`users` select on every request, plus an `update` once past the
+  30-day half-life. Constant per request (no N+1), but a "one query per
+  request" claim about any route under `requireUser` is about the route's
+  own query only — say which.
+
 ## Where the dated record lives
 
 `dba-ledger.md`, one section per engagement with its environment table and
