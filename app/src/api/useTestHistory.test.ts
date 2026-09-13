@@ -76,4 +76,25 @@ describe("useTestHistory", () => {
     await waitFor(() => expect(result.current.state).toBe("ready"));
     expect(apiMock).toHaveBeenCalledTimes(2);
   });
+
+  // A REJECTED fetch (no response at all — offline, DNS, an aborted
+  // request) lands in the same error state as a 500 and its retry works.
+  // Mutation: drop the `.catch` → the hook never leaves `loading`.
+  it("a rejected fetch reads as error with a working retry, like a 500", async () => {
+    const apiMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { useTestHistory } = await import("./useTestHistory");
+    const { result } = renderHook(() => useTestHistory());
+    await waitFor(() => expect(result.current.state).toBe("error"));
+    if (result.current.state !== "error") throw new Error("expected error");
+    const { retry } = result.current;
+    act(() => {
+      retry();
+    });
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    expect(apiMock).toHaveBeenCalledTimes(2);
+  });
 });
