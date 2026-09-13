@@ -1316,4 +1316,40 @@ test.describe("Concept2 auto-send, in a real browser", () => {
     await expect.poll(() => fake.linkReads).toBeGreaterThan(readsBefore);
     expect(fake.sends).toBe(0);
   });
+
+  test("the log detail reads the Concept2 link exactly ONCE, on a ready row", async ({
+    page,
+  }) => {
+    // Phase TD (TD-4). Written and run BEFORE the fix, and seen to read 2 on
+    // the unmodified tree — RF35: a mutation of the FIXED code tests the
+    // fix's shape rather than the defect, and this row's whole defect is a
+    // count nothing in this suite could ever observe.
+    //
+    // TWO STEPS, not one poll. `expect.poll(...).toBe(readsBefore + 1)`
+    // evaluates on entry and can sample BETWEEN the two increments, so on
+    // the unfixed build it would pass by luck about as often as it failed —
+    // the lesson this file already recorded on the send counter above ("the
+    // poll above passes the instant the count reaches 1, so a duplicate
+    // landing afterwards would be invisible to it"). The poll below is the
+    // readiness precondition; the bare `expect` after the send block has
+    // rendered is the gate.
+    //
+    // The EXACT delta is the new thing. Every other `linkReads` assertion in
+    // this file is a `toBeGreaterThan` used to await an async read — a
+    // precondition, not a nicety, per `openConcept2Screen`'s own comment —
+    // and none of them pins a count, which is why a duplicate read has been
+    // invisible here since Phase AV added the second caller.
+    const fake = await signIn(page, "one-link-read");
+    fake.linked();
+    await postMonitorLog(page, "Single Read");
+
+    const readsBefore = fake.linkReads;
+    await openLogDetail(page, "Single Read");
+    await expect.poll(() => fake.linkReads).toBeGreaterThan(readsBefore);
+    // The send block rendering is the work that would surface a duplicate:
+    // it is the SECOND consumer, and it cannot draw until its own read has
+    // resolved. Asserting after it is what makes the count final.
+    await expect(page.locator(".c2-send")).toBeVisible();
+    expect(fake.linkReads).toBe(readsBefore + 1);
+  });
 });
