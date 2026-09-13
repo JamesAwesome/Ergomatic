@@ -42,15 +42,9 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
     expect(rowValue("TIME", 2)).toBe("2:34:31");
     expect(rowValue("SESSIONS", 1)).toBe("13");
     expect(rowValue("SESSIONS", 2)).toBe("10");
-    expect(
-      screen.getByText("8 OF 10 MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS"),
-    ).toBeInTheDocument();
     expect(rowValue("REST METRES", 2)).toBe("718");
     expect(rowValue("CALORIES", 2)).toBe("1,731");
     expect(rowValue("AVG WATTS", 2)).toBe("176");
-    expect(
-      screen.getByText("1 ROW PREDATES WORK-ONLY TOTALS"),
-    ).toBeInTheDocument();
   });
 
   it("the presets select the right rows: SEASON 43,012 · YEAR 50,512 · MONTH 5,000 · 30 DAYS 18,000", async () => {
@@ -118,9 +112,6 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
     expect(screen.queryByRole("row", { name: /^REST METRES/ })).toBeNull();
     expect(screen.queryByRole("row", { name: /^CALORIES/ })).toBeNull();
     expect(screen.queryByRole("row", { name: /^AVG WATTS/ })).toBeNull();
-    // m = 0: no footnote; k = 0 (no pm5 stored row): no seam line.
-    expect(screen.queryByText(/CARRY THE MONITOR'S OWN TOTALS/)).toBeNull();
-    expect(screen.queryByText(/PREDATE/)).toBeNull();
   });
 
   it("TIME BY TYPE: one legend row per non-empty bucket in the independent order, with time and percent; the manual fixture has no AN and no NO TYPE row", async () => {
@@ -230,9 +221,6 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
 
   it("one row in range: TOTALS in full (1 OF 1 · 237 W for R13) and TIME BY TYPE reads TWO ROWS MAKE A CHART", async () => {
     await renderScreen(GATE0_ROWS.filter((r) => r.id === "R13"));
-    expect(
-      screen.getByText("1 OF 1 MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS"),
-    ).toBeInTheDocument();
     expect(rowValue("AVG WATTS", 2)).toBe("237");
     expect(screen.getByText("TWO ROWS MAKE A CHART")).toBeInTheDocument();
   });
@@ -244,9 +232,6 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
   it("R1 alone: MACHINE has one row, 0 OF 1 carry the monitor's own totals, and AVG WATTS is a dash", async () => {
     await renderScreen(GATE0_ROWS.filter((r) => r.id === "R1"));
     expect(rowValue("METRES", 2)).toBe("6,240");
-    expect(
-      screen.getByText("0 OF 1 MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS"),
-    ).toBeInTheDocument();
     expect(rowValue("AVG WATTS", 2)).toBe("—");
   });
 

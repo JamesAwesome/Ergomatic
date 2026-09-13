@@ -577,8 +577,8 @@ API; the MACHINE column keys on `source = 'pm5'` only, and Concept2
 contributes only the season's calendar (May 1 to Apr 30, named by end year)
 and vocabulary** — spec §7 invariant 12, gated by a key-set test on the
 projection type and a case-insensitive text scan over the stats code
-(§8.4). The RC-5 seam is accepted and named on the surface (`k ROWS PREDATE
-WORK-ONLY TOTALS`, ruling 18 struck the suffix), never corrected.
+(§8.4). The RC-5 seam is accepted and counted (`storedTierRows`; the surface
+line naming it was struck by ruling 19), never corrected.
 
 - [ ] **PR 0 — the spec, this section, and the DBA agent**
       (`.claude/agents/dba.md` + `dba-techniques.md` + `dba-ledger.md`;
@@ -616,11 +616,10 @@ WORK-ONLY TOTALS`, ruling 18 struck the suffix), never corrected.
       METRES / CALORIES (Σ stored `totalCalories`) / AVG WATTS
       (`logbookWatts` of the RANGE's Σseconds ÷ Σmetres over machine,
       work-pair and steps rows only — ruling 6 — never a mean of per-row
-      watts) under MACHINE, with exactly two lines of prose on the page
-      (ruling 18): the seam line under the heading (`1 ROW PREDATES …` /
-      `k ROWS PREDATE …`, rulings 15/17, k > 0 only) and the `n OF m MACHINE
-      ROWS CARRY THE MONITOR'S OWN TOTALS` footnote under the card (m > 0
-      only) — the subpage's TIME BY TYPE group (free once the hero exists,
+      watts) under MACHINE, with NO prose on the page (rulings 18 and 19
+      struck every caption, the seam line and the `n OF m` footnote
+      included; the counts stay computed in the aggregate) — the subpage's
+      TIME BY TYPE group (free once the hero exists,
       ruling 11), and the empty states: 0 rows with the filter bar hidden,
       1 row, and the MACHINE column's `NO MONITOR ROWS YET` with its REST /
       CALORIES / AVG WATTS rows hidden when no `pm5` row is in range (ruling
@@ -648,8 +647,8 @@ WORK-ONLY TOTALS`, ruling 18 struck the suffix), never corrected.
       test rows ride PR 2 with the trend — clock and zone pinned to
       2026-09-12) and asserting `compute.mjs`'s
       figures as literals — lifetime 56,752 m / 3:59:39 / 13, season 43,012
-      m, MACHINE 36,752 m, 8 OF 10, rest 718, cal 1,731, 176 W, `1 ROW
-      PREDATES` (RF7); PM final gate.
+      m, MACHINE 36,752 m, rest 718, cal 1,731, 176 W (RF7; the `8 OF 10`
+      and `1 ROW PREDATES` lines were struck by ruling 19); PM final gate.
 - [ ] **PR 2 — the remaining charts, all designed and approved at Gate 0
       (ruling 11): METRES PER WEEK (eight Monday-start bars ending at the
       range's last day, this week in `--ink`, the rest in `--ink-4` — Gate 0
@@ -710,14 +709,15 @@ surface and its parity-photograph row under Wave E. RC-16's doubled
 `avgStrokeRate` warning is irrelevant here (not displayed).
 
 **Ruled by James, 2026-09-12 (spec §14), applied in the spec:** MACHINE is
-BY DOOR — every `source = 'pm5'` row, link-lost ones included, with `n OF m
-MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS` as the card's one footnote
-(ruling 18 stripped every other caption); rest is the stored RC-1
+BY DOOR — every `source = 'pm5'` row, link-lost ones included (the `n OF m`
+line that once said so was struck by ruling 19; rulings 18 and 19 together
+stripped every caption from the page); rest is the stored RC-1
 pair (`machineSummary.totalRestMeters` stays provenance, unread); the
 avg-m/day divisor counts today (May 1 → 1); the test trend SHOWS points
 whose log was deleted; CALORIES & WATTS are rows of TOTALS, not a group;
 AVG WATTS EXCLUDES stored-tier rows (metres, time and sessions still count
-them, and the seam line says so) — and both the exclusion and the seam count
+them; the seam line that said so is gone since ruling 19) — and both the
+exclusion and the seam count
 cover ONLY `source = 'pm5'` rows in that tier (ruling 17, PR 1's fix round:
 a timer or manual row is what the rower typed, work by definition, never in
 k); the phase's ONLY external oracle is James
@@ -730,8 +730,8 @@ TYPE and replaces the two-line headline; the hero IS the door and there is
 no STATS row; every subpage chart is designed now and ships in PR 2 except
 what the hero needs; previous-week bars are `--ink-4`, not the handoff's
 `#c9c3b2`; the stack order is AN · AT · O2 · TR · NO TYPE (the palette
-validator); landscape You scrolls; `1 ROW PREDATES …` is the singular and
-the `n OF m` line is full-width under the header row; zero monitor rows hide
+validator); landscape You scrolls; the seam line and the `n OF m` line
+(ruling 15) are superseded on the surface by ruling 19; zero monitor rows hide
 the MACHINE-only rows and zero rows hide the filter bar.
 
 **Exit:** at PR 1, a rower with ≥ 1 row sees real totals on You and

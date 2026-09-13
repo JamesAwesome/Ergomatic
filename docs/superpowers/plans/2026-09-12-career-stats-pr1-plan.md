@@ -454,7 +454,7 @@ The hero's own doc comment must not contain the word "Concept2" (Task 8's scan r
 
 ### Task 7: `/you/stats` — filter bar, TOTALS, TIME BY TYPE, empty states
 
-> **Superseded in part by §14 ruling 18 (2026-09-12, after this task shipped):** every caption this task prescribes — `RANGE_CAPTION`, `TOTALS_CAPTION`, the in-card `n OF m` header line, the CALORIES / AVG WATTS row captions, `TIME_BY_TYPE_CAPTION`, and Task 6's `WORK TIME BY TYPE · ALL ROWS` — was struck; the page keeps the seam line (no `· NOT IN AVG WATTS`) and one `n OF m MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS` footnote under the card. The steps below are the record of what was built first.
+> **Superseded in part by §14 rulings 18 and 19 (2026-09-12, after this task shipped; 19 then struck the seam line and the `n OF m` footnote too, so the page renders NO caption prose):** every caption this task prescribes — `RANGE_CAPTION`, `TOTALS_CAPTION`, the in-card `n OF m` header line, the CALORIES / AVG WATTS row captions, `TIME_BY_TYPE_CAPTION`, and Task 6's `WORK TIME BY TYPE · ALL ROWS` — was struck; the page keeps the seam line (no `· NOT IN AVG WATTS`) and one `n OF m MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS` footnote under the card. The steps below are the record of what was built first.
 
 **Files:** Create `src/you/stats/StatsFilterBar.tsx`, `TotalsGroup.tsx`, `TimeByTypeGroup.tsx`, `StatsScreen.tsx`, `StatsScreen.test.tsx`; modify `src/shell/AppRoutes.tsx`, `src/index.css`.
 

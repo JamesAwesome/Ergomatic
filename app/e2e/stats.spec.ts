@@ -88,13 +88,9 @@ test("You's hero prints the seed's LIFETIME and SEASON, is the one control named
     page.getByRole("row", { name: new RegExp(`^${label}`) });
   await expect(row("METRES").getByRole("cell").nth(0)).toHaveText("56,752");
   await expect(row("METRES").getByRole("cell").nth(1)).toHaveText("36,752");
-  await expect(
-    page.getByText("8 OF 10 MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS"),
-  ).toBeVisible();
   await expect(row("REST METRES").getByRole("cell").nth(1)).toHaveText("718");
   await expect(row("CALORIES").getByRole("cell").nth(1)).toHaveText("1,731");
   await expect(row("AVG WATTS").getByRole("cell").nth(1)).toHaveText("176");
-  await expect(page.getByText("1 ROW PREDATES WORK-ONLY TOTALS")).toBeVisible();
 
   // Delete R13 (a pm5 row, 2,000 m) through the UI and both columns move
   // (invariant 13) — on TWO legs, because they prove different things
@@ -125,9 +121,6 @@ test("You's hero prints the seed's LIFETIME and SEASON, is the one control named
   await hero.click();
   await expect(page).toHaveURL(/\/you\/stats$/);
   await expect(row("METRES").getByRole("cell").nth(1)).toHaveText("34,752");
-  await expect(
-    page.getByText("7 OF 9 MACHINE ROWS CARRY THE MONITOR'S OWN TOTALS"),
-  ).toBeVisible();
   // Leg 2: the reload — the sentinel is gone, and the figures hold.
   await page.goto("/you");
   expect(await sentinel()).toBeUndefined();

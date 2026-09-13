@@ -1,14 +1,15 @@
 import type { StatsSummary } from "../../../domain/stats/aggregate.js";
-import { fmtMeters, fmtSeconds, seamLine } from "./format";
+import { fmtMeters, fmtSeconds } from "./format";
 
 export const NO_MONITOR_ROWS = "NO MONITOR ROWS YET";
 
-/** TOTALS (spec §5 item 2, §14 rulings 5/6/15/16/18): METRES / TIME /
+/** TOTALS (spec §5 item 2, §14 rulings 5/6/16/19): METRES / TIME /
  *  SESSIONS in both columns, then REST METRES / CALORIES / AVG WATTS under
- *  MACHINE only — HIDDEN, with the n OF m footnote, when no `pm5` row is
- *  in range; the MACHINE column itself never collapses. Ruling 18 struck
- *  every other caption: exactly the seam line (k > 0, under the heading)
- *  and the footnote (m > 0, under the card) survive. */
+ *  MACHINE only — HIDDEN when no `pm5` row is in range; the MACHINE column
+ *  itself never collapses. NO prose: rulings 18 and 19 struck every
+ *  caption, the seam line and the n OF m footnote included. The aggregate
+ *  still computes `storedTierRows`, `ownTotals` and `caloriesRows` (they
+ *  govern the watts exclusion); nothing here renders them. */
 export default function TotalsGroup({ summary }: { summary: StatsSummary }) {
   const { all, machine } = summary;
   const hasMachine = machine.sessions > 0;
@@ -18,9 +19,6 @@ export default function TotalsGroup({ summary }: { summary: StatsSummary }) {
       <h2 id="stats-totals-h" className="stats-group-title">
         TOTALS
       </h2>
-      {summary.storedTierRows > 0 && (
-        <p className="stats-caption">{seamLine(summary.storedTierRows)}</p>
-      )}
       {/* A3's TOTALS card: a `--surface` panel on the page, `112px 1fr 1fr`
           columns (fixed layout, so the ALL ROWS header never wraps and the
           TIME cells never touch). */}
@@ -82,14 +80,6 @@ export default function TotalsGroup({ summary }: { summary: StatsSummary }) {
           </tbody>
         </table>
       </div>
-      {/* Ruling 18 (2026-09-12): the ONE footnote the card keeps — n OF m,
-          only when a MACHINE row is in range (m > 0). */}
-      {hasMachine && (
-        <p className="stats-caption">
-          {machine.ownTotals} OF {machine.sessions} MACHINE ROWS CARRY THE
-          MONITOR'S OWN TOTALS
-        </p>
-      )}
     </section>
   );
 }

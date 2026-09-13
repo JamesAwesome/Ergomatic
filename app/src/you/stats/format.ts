@@ -15,11 +15,3 @@ export function fmtSeconds(seconds: number): string {
 export function fmtPercent(share: number): string {
   return `${Math.round(share * 100)}%`;
 }
-
-/** The seam line (spec §14 rulings 15 and 18): singular at one, plural
- *  above; no `NOT IN AVG WATTS` suffix (ruling 18 struck it). */
-export function seamLine(k: number): string {
-  return k === 1
-    ? "1 ROW PREDATES WORK-ONLY TOTALS"
-    : `${k} ROWS PREDATE WORK-ONLY TOTALS`;
-}

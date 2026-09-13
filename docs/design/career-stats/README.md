@@ -4,12 +4,12 @@
 prints the arithmetic; `contrast.json` and `hero-heights.json` are measured
 outputs. Spec: `docs/superpowers/specs/2026-09-12-career-stats-design.md`.
 
-**The artboards OVER-DRAW captions (§14 ruling 18, 2026-09-12).** After Gate
-0, James struck every caption but two on sight of the shipped
+**The artboards OVER-DRAW captions (§14 rulings 18 and 19, 2026-09-12).**
+After Gate 0, James struck every caption on sight of the shipped
 `docs/screenshots/you-stats.png`: A3/A4 still draw the range caption, the
-TOTALS subtitle, the in-card `n OF m` line, the CALORIES / AVG WATTS row
-captions and the TIME BY TYPE caption, and A2-H3 still draws `WORK TIME BY
-TYPE · ALL ROWS` under the hero legend. The shipped page keeps only the seam
-line under the TOTALS heading and the `n OF m MACHINE ROWS CARRY THE
-MONITOR'S OWN TOTALS` footnote under the card. The committed captures are the
-current state; the artboards were not re-rendered.
+TOTALS subtitle, the in-card `n OF m` line, the seam line, the CALORIES /
+AVG WATTS row captions and the TIME BY TYPE caption, and A2-H3 still draws
+`WORK TIME BY TYPE · ALL ROWS` under the hero legend. The shipped page
+renders NO caption prose (title, filter bar, TOTALS heading + card, TIME BY
+TYPE heading + bar + legend, empty-state lines only). The committed captures
+are the current state; the artboards were not re-rendered.
