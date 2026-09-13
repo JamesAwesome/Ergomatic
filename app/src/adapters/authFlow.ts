@@ -487,11 +487,15 @@ async function authorizeNative(
       });
     } else if (!cleaned) {
       active.authorizationOwner = undefined;
+      const retainedError =
+        error instanceof AuthRequestError && error.code === "access_denied"
+          ? error
+          : new AuthRequestError("signin_failed");
       setFailure(
         context,
         generation,
         step.purpose,
-        new AuthRequestError("signin_failed"),
+        retainedError,
         step.targetProvider,
         true,
       );

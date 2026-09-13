@@ -1192,6 +1192,61 @@ describe("useAuthFlow", () => {
     });
   });
 
+  it("keeps access denial actionable when its cleanup acknowledgement is lost", async () => {
+    seam.native = true;
+    seam.appleAuthorize.mockResolvedValue({
+      idToken: "id",
+      authorizationCode: "code",
+      state: "state",
+    });
+    let cancellations = 0;
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/native/attempts") {
+        return ok({
+          outcome: "authorize",
+          attemptId: "denied-cleanup-retry",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "apple",
+          stage: "signin",
+          nonce: "nonce",
+          state: "state",
+          bindingSecret: "binding",
+        });
+      }
+      if (path === "/api/auth/native/attempts/denied-cleanup-retry/proof") {
+        return ok({ error: "access_denied", email: "saved@example.test" }, 403);
+      }
+      if (path === "/api/auth/native/attempts/denied-cleanup-retry/cancel") {
+        cancellations += 1;
+        if (cancellations === 1) throw new Error("acknowledgement lost");
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+
+    await act(async () => result.current.startSignIn("apple"));
+    expect(result.current.view).toStrictEqual({
+      kind: "error",
+      purpose: "signin",
+      code: "access_denied",
+      email: "saved@example.test",
+      targetProvider: "apple",
+    });
+
+    await act(async () => result.current.cancel());
+    expect(result.current.view).toStrictEqual({
+      kind: "cancelled",
+      purpose: "signin",
+      targetProvider: "apple",
+    });
+    expect(cancellations).toBe(2);
+  });
+
   it("retains the operation when server-error cleanup has no acknowledgement", async () => {
     seam.native = true;
     seam.appleAuthorize.mockResolvedValue({
