@@ -18,6 +18,7 @@ describe("supported auth producers through Express and signed tokens", () => {
   let container: StartedPostgreSqlContainer;
   let pool: pg.Pool;
   let app: ReturnType<typeof createApp>;
+  let freshApp: () => Promise<ReturnType<typeof createApp>>;
   let rsa: Awaited<ReturnType<typeof generateKeyPair>>;
   let attempts: ReturnType<typeof createAttempts>;
   const codes = new Map<string, string>();
@@ -29,8 +30,6 @@ describe("supported auth producers through Express and signed tokens", () => {
     await migrate(c.db, { migrationsFolder: "drizzle" });
     const sessions = createSessionStore(c.db);
     const users = createUserStore(c.db);
-    attempts = createAttempts(pool);
-    await attempts.sweep();
     rsa = await generateKeyPair("RS256");
     const ec = await generateKeyPair("ES256");
     const keys = createLocalJWKSet({
@@ -75,26 +74,39 @@ describe("supported auth producers through Express and signed tokens", () => {
         },
       },
     );
-    const routes = createFrontDoorRoutes({
-      attempts,
-      providers,
-      sessions,
-      siteUrl: "https://erg.test",
-    });
-    app = createApp(
-      baseDeps({
-        siteUrl: "https://erg.test",
+    freshApp = async () => {
+      attempts = createAttempts(pool);
+      await attempts.sweep();
+      const routes = createFrontDoorRoutes({
+        attempts,
+        providers,
         sessions,
-        users,
-        frontDoor: { ...routes, attempts, providers, close: () => {} },
-        nativeVerifier: async () => ({
-          sub: "legacy",
-          email: "outside@allowlist.test",
-          emailVerified: true,
-          name: "Legacy",
+        siteUrl: "https://erg.test",
+      });
+      return createApp(
+        baseDeps({
+          siteUrl: "https://erg.test",
+          sessions,
+          users,
+          frontDoor: { ...routes, attempts, providers, close: () => {} },
+          oauth: {
+            authorizationUrl: async () => ({
+              url: "https://accounts.google.com/authorize",
+              cookiePayload: "legacy-state",
+            }),
+            callbackClaims: async () => {
+              throw new Error("No legacy callback in this fixture");
+            },
+          },
+          nativeVerifier: async () => ({
+            sub: "legacy",
+            email: "outside@allowlist.test",
+            emailVerified: true,
+            name: "Legacy",
+          }),
         }),
-      }),
-    );
+      );
+    };
   });
   afterAll(async () => {
     await pool?.end();
@@ -104,7 +116,62 @@ describe("supported auth producers through Express and signed tokens", () => {
     await pool.query("TRUNCATE users,auth_attempts CASCADE");
     codes.clear();
     exchangeOutsideLock = false;
+    app = await freshApp();
   });
+  it.each(["new", "legacy-native", "legacy-web"])(
+    "anonymous start request 121 is rejected after 120 shared admissions (%s)",
+    async (first) => {
+      // Independent spec literals: never derive these bounds from the limiter.
+      const initial =
+        first === "legacy-native"
+          ? await request(app)
+              .post("/api/auth/native")
+              .send({ idToken: "legacy-proof" })
+          : first === "legacy-web"
+            ? await request(app).get("/api/auth/signin")
+            : await request(app)
+                .post("/api/auth/native/attempts")
+                .send({ purpose: "signin", provider: "apple" });
+      expect(initial.status, "request 1").toBe(
+        first === "legacy-web" ? 302 : 200,
+      );
+      for (let ordinal = 2; ordinal <= 120; ordinal++) {
+        const surface = ordinal % 2 === 0 ? "native" : "web";
+        const admitted = await request(app)
+          .post(`/api/auth/${surface}/attempts`)
+          .send({ purpose: "signin", provider: "apple" });
+        expect(admitted.status, `request ${ordinal}`).toBe(200);
+        expect(admitted.body.outcome).toBe("authorize");
+      }
+      const resident = first === "new" ? 120 : 119;
+      expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(
+        resident,
+      );
+      const denied = await request(app)
+        .post("/api/auth/native/attempts")
+        .send({ purpose: "signin", provider: "apple" });
+      expect(denied.status, "request 121").toBe(429);
+      expect(denied.body).toStrictEqual({ error: "rate_limited" });
+      const web = await request(app)
+        .post("/api/auth/web/attempts")
+        .send({ purpose: "signin", provider: "apple" });
+      const legacyNative = await request(app)
+        .post("/api/auth/native")
+        .send({ idToken: "legacy-proof" });
+      const legacyWeb = await request(app).get("/api/auth/signin");
+      for (const response of [web, legacyNative, legacyWeb]) {
+        expect(response.status).toBe(429);
+        expect(response.body).toStrictEqual({ error: "rate_limited" });
+      }
+      expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(
+        resident,
+      );
+      expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(
+        first === "legacy-native" ? 1 : 0,
+      );
+      expect(exchangeOutsideLock).toBe(false);
+    },
+  );
   async function jwt(nonce: string, audience: string, sub = "apple") {
     return new SignJWT({
       sub,
