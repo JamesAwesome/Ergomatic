@@ -115,17 +115,19 @@
     },
     {
       "name": "Focus ring beside page",
-      "foreground": "#1d4e89",
+      "foreground": "#1b1a17",
       "background": "#f4f1e8",
-      "ratio": 7.43,
-      "role": "focus"
+      "ratio": 15.41,
+      "role": "focus",
+      "note": "Reconciled to what shipped. The implementation uses `outline: 2px solid var(--ink)` (#1b1a17); #1d4e89 was measured here but is not a token in tokens.css and never reached the code. Ink is the HIGHER ratio, so the gate's conclusion is unchanged - only its stated colour was wrong."
     },
     {
       "name": "Focus ring beside surface",
-      "foreground": "#1d4e89",
+      "foreground": "#1b1a17",
       "background": "#fffdf7",
-      "ratio": 8.25,
-      "role": "focus"
+      "ratio": 17.11,
+      "role": "focus",
+      "note": "Reconciled to what shipped. The implementation uses `outline: 2px solid var(--ink)` (#1b1a17); #1d4e89 was measured here but is not a token in tokens.css and never reached the code. Ink is the HIGHER ratio, so the gate's conclusion is unchanged - only its stated colour was wrong."
     },
     {
       "name": "Decorative card rule on page",

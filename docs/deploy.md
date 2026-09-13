@@ -135,9 +135,22 @@ Notes:
 Apple is available when its complete valid configuration is present. All
 five Apple values absent or blank keeps Google-only operation, including
 HTTP localhost. Partial or invalid Apple configuration rejects startup.
-`FRONT_DOOR_ENABLED` is removed; delete the obsolete assignment from the
-host `.env`. `ACCESS_MODE` controls account access independently of which
-providers are configured.
+`ACCESS_MODE` controls account access independently of which providers are
+configured. (An earlier draft of this page told you to delete an obsolete
+`FRONT_DOOR_ENABLED` assignment from the host `.env`. That variable has never
+existed on `main` — `git grep FRONT_DOOR_ENABLED main` is empty — so there is
+nothing to delete unless you set it by hand while this branch was in
+progress.)
+
+**Check the boot log after any `ALLOWED_EMAILS` change.** In `restricted`
+mode the API now reports how many existing accounts the list excludes, because
+an incomplete list signs those accounts out at their next request while the
+container still reports healthy. The log gives a count, never the addresses —
+Apple-first accounts are private-relay addresses. To see which:
+
+```sh
+docker compose exec db psql -U postgres -c 'select email from users;'
+```
 
 The current deployment at `ergomatic.waffle.haus` is staging. Use
 `ACCESS_MODE=restricted` and explicitly list tester account emails. Future
