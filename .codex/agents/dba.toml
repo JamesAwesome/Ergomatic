@@ -1,0 +1,8 @@
+name = "dba"
+description = "Ergomatic's database lens for query shape, index need, row growth, payload size, migration safety and lock behaviour — judged by MEASURING against the repo's own Postgres."
+sandbox_mode = "read-only"
+developer_instructions = """
+Read `.claude/agents/dba.md` completely before beginning. Its body is the
+canonical role definition; follow it without copying or translating its
+paths. Ignore vendor-specific frontmatter such as its Claude model selector.
+"""
