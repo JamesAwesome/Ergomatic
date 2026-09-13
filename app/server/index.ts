@@ -90,13 +90,47 @@ const accessPolicy = createAccessPolicy(
   process.env.ACCESS_MODE,
   process.env.ALLOWED_EMAILS,
 );
-if (
-  accessPolicy.mode === "restricted" &&
-  parseAllowlist(process.env.ALLOWED_EMAILS).size === 0
-) {
-  console.warn(
-    "WARNING: ALLOWED_EMAILS is empty — all account access is blocked",
-  );
+if (accessPolicy.mode === "restricted") {
+  if (parseAllowlist(process.env.ALLOWED_EMAILS).size === 0) {
+    console.warn(
+      "WARNING: ALLOWED_EMAILS is empty — all account access is blocked",
+    );
+  } else {
+    // THE PARTIAL LIST IS THE DANGEROUS ONE, and it used to boot silently.
+    // `resolveSession` now refuses a session whose saved email is not on the
+    // list, so an incomplete list signs those accounts out at their next
+    // protected request — and the docs before this branch explicitly invited a
+    // pruned list ("removing an email does not sign out an existing user"), so
+    // an incomplete list is the EXPECTED host state after an upgrade. The
+    // empty-list warning above cannot see it: 3 of 5 boots clean.
+    //
+    // The count, never the addresses. Apple-first accounts are private-relay
+    // addresses and these logs are read over shoulders and pasted into chat
+    // (James's standing minimal-PII rule). A number is enough to send the
+    // operator to `select email from users;` on the host, which docs/deploy.md
+    // now says.
+    try {
+      const rows = await pool.query<{ email: string }>(
+        "SELECT email FROM users",
+      );
+      const excluded = rows.rows.filter(
+        (row) => !accessPolicy.allows(row.email),
+      ).length;
+      if (excluded > 0)
+        console.warn(
+          `WARNING: ${excluded} of ${rows.rowCount ?? 0} existing accounts are NOT in ALLOWED_EMAILS — they are signed out at their next request and cannot sign back in. Their data is retained. List them with: select email from users;`,
+        );
+      else
+        console.log(
+          `access: restricted, and all ${rows.rowCount ?? 0} existing accounts are admitted`,
+        );
+    } catch {
+      // A boot-time diagnostic must never be the thing that stops the server.
+      console.warn(
+        "WARNING: could not check existing accounts against ALLOWED_EMAILS",
+      );
+    }
+  }
 }
 
 const testAuthSecret = process.env.TEST_AUTH_SECRET || null;

@@ -107,12 +107,31 @@ export function createApp(deps: AppDeps) {
   });
 
   app.get("/api/auth/options", (_req, res) => {
+    // ONE SOURCE OF TRUTH. This used to answer from `deps.frontDoor`,
+    // `deps.nativeVerifier` and `deps.oauth` while ENFORCEMENT in
+    // `frontDoorRoutes` asked `providers.available(provider, surface)` —
+    // two independent answers to one question, agreeing today only by the
+    // coincidence that `frontDoorConfig` validates the same env vars those
+    // three objects are built from. Deriving both from `available()` means a
+    // provider can never be advertised to the client and then refused by the
+    // route, and a third provider joins by adding a member to AuthProvider
+    // rather than by editing this handler. Output is byte-identical under
+    // every configuration reachable today; the legacy arm below still answers
+    // when no front door exists at all.
+    const front = deps.frontDoor;
     res.json({
-      frontDoorEnabled: Boolean(deps.frontDoor),
-      apple: { native: Boolean(deps.frontDoor), web: Boolean(deps.frontDoor) },
+      frontDoorEnabled: Boolean(front),
+      apple: {
+        native: Boolean(front?.providers.available("apple", "native")),
+        web: Boolean(front?.providers.available("apple", "web")),
+      },
       google: {
-        native: Boolean(deps.nativeVerifier),
-        web: Boolean(deps.oauth),
+        native: front
+          ? front.providers.available("google", "native")
+          : Boolean(deps.nativeVerifier),
+        web: front
+          ? front.providers.available("google", "web")
+          : Boolean(deps.oauth),
       },
     });
   });

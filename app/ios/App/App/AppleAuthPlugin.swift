@@ -69,6 +69,9 @@ public final class AppleAuthPlugin: CAPPlugin, CAPBridgedPlugin {
     private var activeDelegate: AppleAuthorizationDelegate?
     private var activeCall: CAPPluginCall?
     private var activeToken: UUID?
+    /// The `state` WE sent, kept so a credential that echoes none can still be
+    /// completed. See `finishActive`.
+    private var activeState: String?
 
     @objc func authorize(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
@@ -117,11 +120,14 @@ public final class AppleAuthPlugin: CAPPlugin, CAPBridgedPlugin {
         activeDelegate = delegate
         activeCall = call
         activeToken = token
+        activeState = state
         controller.performRequests()
     }
 
     private func finishActive(token: UUID, outcome: AppleAuthorizationOutcome) {
-        guard activeToken == token, let call = activeCall else { return }
+        guard activeToken == token, let call = activeCall,
+              let requestedState = activeState
+        else { return }
         clearActive()
 
         switch outcome {
@@ -132,13 +138,29 @@ public final class AppleAuthPlugin: CAPPlugin, CAPBridgedPlugin {
                 !idToken.isEmpty,
                 let codeData = credential.authorizationCode,
                 let authorizationCode = String(data: codeData, encoding: .utf8),
-                !authorizationCode.isEmpty,
-                let state = credential.state,
-                !state.isEmpty
+                !authorizationCode.isEmpty
             else {
                 call.reject("Apple returned incomplete authorization proof", "invalidResponse")
                 return
             }
+
+            // ABSENCE IS NOT FAILURE. `ASAuthorizationAppleIDCredential.state`
+            // is Optional, and Apple documents only "an arbitrary string that
+            // your app provides to the request that generates the credential"
+            // — no guarantee it comes back populated. Treating nil as a hard
+            // reject made every native Apple sign-in fail forever on a code
+            // path that has never run against real Apple, and it bought
+            // nothing: the server compares `proof.state` to the attempt's own
+            // state (`providers.ts`), and `activeToken` above already answers
+            // "is this the credential for the request I just made". So fall
+            // back to what we sent, and reject only a genuine MISMATCH, which
+            // is the case actually worth catching.
+            let echoedState = credential.state.flatMap { $0.isEmpty ? nil : $0 }
+            guard echoedState == nil || echoedState == requestedState else {
+                call.reject("Apple echoed a different authorization state", "invalidResponse")
+                return
+            }
+            let state = echoedState ?? requestedState
 
             var result: JSObject = [
                 "idToken": idToken,
@@ -177,5 +199,9 @@ public final class AppleAuthPlugin: CAPPlugin, CAPBridgedPlugin {
         activeDelegate = nil
         activeCall = nil
         activeToken = nil
+        // Cleared with the rest of the operation, not left to leak into the
+        // next one: `activeState` is per-attempt authority, and a stale value
+        // surviving here is exactly the lifetime shape RF27 exists for.
+        activeState = nil
     }
 }
