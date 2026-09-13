@@ -56,3 +56,12 @@ describe("gate0Seed — the transcription equals docs/design/career-stats/seed.m
     );
   });
 });
+
+describe("parseSeedDate — a malformed seed date fails at import, never a quiet null", () => {
+  it("throws naming the bad string (the guard a mis-typed table row hits)", () => {
+    expect(() => parseSeedDate("2026-9-1")).toThrow(
+      "gate0Seed: bad date 2026-9-1",
+    );
+    expect(parseSeedDate("2026-09-01")).toStrictEqual({ y: 2026, m: 9, d: 1 });
+  });
+});
