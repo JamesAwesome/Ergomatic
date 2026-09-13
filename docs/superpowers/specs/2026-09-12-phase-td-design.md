@@ -58,47 +58,80 @@ The ROADMAP row says the open question is whether the free-row arm DECLINES
   anyway**. A bare 0x0039 produces `summary-observations` on the terminate
   path. (PRIMARY.)
 
-### 1.3 What the spike actually measured
+### 1.3 What the spike measured, at production defaults
 
-A throwaway client-level probe drove the real hook against
-`createFakeTransport`, armed a free row, streamed two rowing frames, called
-`endSession()`, then delivered the summary after a varying number of ticks.
-Committed as `b452bfd8` on the `td-spike` branch, which will never merge.
-Command:
+Two probes were run. **The first is superseded and is recorded here only
+because its error is instructive**; the load-bearing measurement is the
+second, committed as `1ae217e1` on the `td-spike` branch (pushed, so this
+citation resolves — RF16's corollary).
+
+**The first probe (`b452bfd8`) was wrong for three reasons**, found by the
+anchor pass. It set `settleTicks: 0`, `prepareSettleTicks: 0` and a no-op
+`burstLingerSchedule`. At production defaults `driver.terminate()` awaits
+`settleAfterTerminate()`, which waits for `ticksNeeded` NEW arrivals with
+`DEFAULT_SETTLE_TICKS = 3` (`driver.ts:741`, `:6375-6381`, `:7426`), and
+`useMonitorSession.ts:6203` awaits it — measured: resolved after 0/1/2 ticks
+`false`, after 3 ticks `true`. So its "zero ticks" red case is unreachable
+outside jsdom. Worse, the no-op `burstLingerSchedule` never invokes its
+callback, which made the linger window **infinite rather than zero** — so its
+unmount case was green only because the deadline had been disabled.
+**And its ring evidence could not have come from the command it cited:**
+under this runner `console.log` from a client test never reaches stdout,
+while `process.stdout.write` does (PRIMARY — a one-test probe printed
+`HELLO_FROM_STDOUT` and swallowed `HELLO_FROM_TEST`). The second probe routes
+every readout through `process.stdout.write` and commits its verbatim output
+at `app/src/monitor/tdSpike.prodDefaults.output.txt`.
+
+**The measurement (PRIMARY).** Command, from `app/`:
 
 ```
 NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client \
-  --reporter=verbose src/monitor/tdSpike.freeRowEndSummary.test.ts
+  src/monitor/tdSpike.prodDefaults.test.ts
 ```
 
-Ring entries, verbatim (PRIMARY):
+`Test Files 1 passed (1)` / `Tests 8 passed (8)`, exit 0, stable across three
+runs. Six orderings, varying only when the 0x0039 is delivered:
 
-- **Zero ticks after `endSession()`** —
-  `summary-reconciled :: out-of-window — 0x0039 arrived with no open finish
-  grace (the run is still open — no finish has happened); nothing filed`, and
-  `summaryTotals = undefined`.
-- **One tick** — `frame :: state=terminated`, then
-  `summary-reconciled :: terminate-observations`, then
-  `summary-recorded :: totals={"workElapsedSeconds":393.6,"workDistanceMeters":1396}`,
-  then `handoff-released :: burst-heard`.
-- **Four ticks** — identical verdict.
+| Ordering | Result | Ring |
+| --- | --- | --- |
+| A — before `endSession()` resolves, 0 ticks | **RED** | `summary-half :: (run open, state=rowing)`, then `out-of-window ... nothing filed`; `summaryTotals = undefined` |
+| A1 — 1 tick, `endSession()` still unresolved | GREEN | `(run closed, state=terminated)`, `terminate-observations`, `summary-recorded`, `handoff-released :: burst-heard` |
+| A2 (2 ticks), B (3, resolved), C (5), D (resolved → unmount → deliver inside the real linger) | GREEN | identical to A1 |
+| E — resolved → unmount → real 2000 ms linger EXPIRES → deliver | **RED** | `handoff-released :: burst-timeout`, `disconnect-requested :: caller-initiated`, then `terminate-observations` — but **no `summary-recorded`**; `summaryTotals = undefined` |
 
-**Conclusion: one status tick is the whole blocker, and no production change
-is needed.** The free-row terminate does route through the fake's *prepare*
-handler rather than the *armed* one, so the terminated frame is a tick later
-than on the programmed arm — but a tick is enough. (PRIMARY for the
-observations; INFERENCE for the attribution of the 2026-09-07 silence, which
-this probe never reproduced at the hook layer in four orderings.)
+**The corrected rule. Both the first probe's mechanism AND the anchor pass's
+proposed replacement are wrong.** It is not "one status tick", because
+`endSession()` needs three. It is not "once `endSession()` has resolved the
+summary lands", because ORDER E resolves and still loses the totals.
 
-**Why the original attempt saw nothing.** `teardown` defers hang-up for
-`BURST_LINGER_MS = 2000` (`useMonitorSession.ts:883`), so the driver outlives
-the navigate by two seconds. Delivery later than that reaches no live
-listener, which is the only route left to total silence. (INFERENCE.) The
-attempt proved its hold was open by asserting "Wrapping up" —
-`ConnectedSurface.tsx:466-472` says in its own comment that this text
-"replaces 'That is the session' on EVERY ended state, held or not", so that
-assertion proved nothing. The working programmed walk adds a URL check
-(`connected.spec.ts:916`) that the free-row attempt did not. (PRIMARY.)
+> **The totals are filed iff the 0x0039 arrives (a) AFTER the driver has seen
+> the `terminated` status frame — one new status tick past the terminate ack
+> — and (b) BEFORE the hook's ended hand-off burst linger closes at
+> `BURST_LINGER_MS` = 2000 ms.** `endSession()`'s own resolution is neither
+> bound: it lands three ticks after the ack, strictly later than (a) and
+> strictly earlier than (b).
+
+The `summary-half` line carries the discriminator in plain text:
+`(run open, state=rowing)` loses, `(run closed, state=terminated)` wins.
+
+**A fourth outcome nobody had named, and it corrects the oracle.** ORDER E
+logs `terminate-observations` and files nothing. **So the reconcile verdict
+is NOT proof the totals landed** — the oracle is `summary-recorded` plus the
+store read, never the verdict alone. Any gate written against
+`terminate-observations` would be green on a run that lost the data.
+
+**This finally explains the 2026-09-07 silence**, and it is Candidate B: the
+hook stashes, hangs up, and a summary arriving after the 2 s deadline
+reconciles into a ring nobody commits. The first probe was built to test
+exactly that and had disabled the deadline it was testing.
+
+**Consequence for the capture, and it is tighter than "add a tick".** The
+delivery must land inside a 2 s window that opens one status frame after the
+terminate ack. Waiting for `endSession()` to resolve satisfies (a) with
+margin and is safe, but at a real 2 Hz cadence it burns roughly 1.5 s of the
+2 s budget — so a capture that also navigates or unmounts in between has very
+little room. §4.3 and §7.3 are written against the measured rule, not against
+the tick count.
 
 ### 1.4 The ROADMAP's grouping premise is FALSE
 
@@ -130,8 +163,20 @@ either: `db/pool.ts:4` sets no `statement_timeout`, so the send hangs to the
 `FromTheLog.tsx:57` declares `MachineConfirmedBlock({ row }: { row:
 StoredLog })`, `:63` calls `useConcept2Link()`, and `:64` is the
 `row.machineWorkSeconds === null` early return — so the hook is above it, as
-the row claims, and the block renders unconditionally at `:594` beside
-`<Concept2SendBlock row={row} />` at `:615`. (PRIMARY.) But
+the row claims. (PRIMARY.)
+
+**But "the block renders unconditionally" is FALSE, and the ROADMAP row says
+it too.** Both blocks sit inside the ready-row guard opened at
+`FromTheLog.tsx:474` (`{row !== null && view !== null && (`) and closed at
+`:661-662`, and `row` is non-null only in the `ready` state (`:284`;
+`FetchState` has four members at `:175-187`). (PRIMARY.) **This matters to the
+change, not just to the prose:** lifting the hook to `FromTheLog` (`:275`)
+fires the read at PARENT mount, so the `loading`, `error` and `not-found`
+states go from zero link reads to one — and each `pageshow`/`visibilitychange`
+on those states fires one too. The lift is a reduction on the guarded path and
+an ADDITION on three others. I2 still holds as stated, but the phase's
+headline framing ("twice on every single view") does not, and both this spec
+and the ROADMAP row are corrected. But
 `Concept2SendBlock.tsx:29` destructures **three** values, not one:
 `const { link, failed, reload } = useConcept2Link();`, with `failed` used in
 the silence guard at `:78` and `reload` in the gone/reauth branch at `:59`.
@@ -141,10 +186,20 @@ behaviour change, recorded here as one rather than sold as a pure refactor.
 
 ### 1.7 The existing link gate cannot bite (RF21)
 
-`e2e/concept2.spec.ts:105` already maintains a `linkReads` counter. Every
-assertion on it — `:351, :383, :392, :497, :911, :927, :958, :1054, :1093,
-:1313` — is `toBeGreaterThan`. None pins an exact count, so the gate that
-looks like it watches this cannot fail on it. (PRIMARY.)
+`e2e/concept2.spec.ts:105` maintains a `linkReads` counter, and every
+existing use of it is `toBeGreaterThan`. **An earlier revision called these a
+broken gate. That was wrong and the correction matters**, because a later
+agent acting on it would either "fix" correct code into flakes or bless a
+real RF21 population. The file says what they are at `:337-351`: `linkReads`
+there is "a precondition, not a readiness nicety" — a `toBeGreaterThan` used
+to AWAIT an async read is correct, not decoration. (PRIMARY.) Five of the ten
+line numbers that revision cited were the `readsBefore` assignments rather
+than the assertions.
+
+**They are left exactly as they are.** What is true is the narrower thing:
+**no existing assertion pins an EXACT count, so nothing in the suite can go
+red on a duplicate read.** That is the hole this phase fills, by adding one
+exact-delta assertion — not by touching the ten readiness polls.
 
 ## 2. Does the system have the concept?
 
@@ -174,8 +229,15 @@ were removed from this phase by James on 2026-09-12 and leave as dated rows
 
 ### 4.1 TD-1 — the reconciliation gate
 
-**Invariant (I1):** when the Concept2 reconciliation throws, the send still
-answers 200 and the result is still recorded.
+**Invariant (I1):** when the reconciliation's **store write** throws — that
+is, `markC2Verified` — the send still answers 200 and the result is still
+recorded.
+
+**The narrow wording is deliberate.** Only `markC2Verified` is inside the
+`try` at `routes/concept2.ts:1239-1254`. `logs.sentC2ResultIds` (`:1206`) and
+`client.fetchResults` (`:1195`) sit OUTSIDE it, and either throwing 500s the
+send. A gate that claimed "the reconciliation cannot fail the send" would be
+claiming something false about two of its three steps.
 
 The catch at `routes/concept2.ts:1254` warns rather than swallowing
 silently — that was the real defect and it is already fixed. What has never
@@ -185,10 +247,18 @@ real Postgres via Testcontainers (`:189-192`, `postgres:18.4`, assigned to
 the `integration` project by `app/vitest.config.ts:40-43`) and already
 carries the two-send reconciliation template at `:445-527`.
 
-**Mechanism.** Between the two sends, install a row-scoped failure keyed to
-the OLDER row's id — a `CHECK` constraint or a `BEFORE UPDATE ... WHEN
-(OLD.id = <olderId>)` trigger. The second send's `recordC2Result` targets a
-different row and passes. `markC2Verified` runs on the pool, not inside
+**Mechanism: a `BEFORE UPDATE ... WHEN (OLD.id = <olderId>)` trigger that
+raises. One form, chosen, with the reason.** The `CHECK` alternative is
+rejected: `ALTER TABLE ... ADD CONSTRAINT ... CHECK` validates existing rows
+on creation and would fail on the very row it targets, so it needs
+`NOT VALID` to work at all — and this row has already burned four attempts on
+precisely the class of "a 500 from the FIXTURE rather than from the code
+under test". A trigger has no such trap. Secondary hazard, recorded because
+§1.5 found its cause: `ALTER TABLE` takes ACCESS EXCLUSIVE and `db/pool.ts:4`
+sets no `statement_timeout`, so a stray open transaction hangs the test to
+the 120 s cap instead of failing it.
+
+The second send's `recordC2Result` targets a different row and passes. `markC2Verified` runs on the pool, not inside
 `withLinkLock`'s transaction (`stores/concept2.ts:300-339`, entered only at
 `:1023`/`:1129`, both returned before `:1357`), so nothing downstream is
 poisoned.
@@ -206,14 +276,46 @@ exercises the real store. Recorded rather than silently dropped (RF30).
 Lift `useConcept2Link()` into `FromTheLog` (`:275`, which does not call it
 today) and pass its values down. `MachineConfirmedBlock`'s signature goes
 `{ row }` → `{ row, link }`; `Concept2SendBlock`'s goes `{ row }` →
-`{ row, link, failed, reload }`. Delete the now-false comment at
-`FromTheLog.tsx:57-62` and the stale one at `FromTheLog.test.tsx:192-198`.
+`{ row, link, failed, reload }`. Delete the now-false comment at `FromTheLog.tsx:57-62`. **Do NOT delete
+`FromTheLog.test.tsx:192-198`** — an earlier revision said to, and that was
+backwards: it explains a deliberately SCOPED assertion in the error→Retry
+test, and since the lift adds a link read on the error state (§1.6), the
+scoping is needed more, not less. Update it to say why.
 
-**Stated behaviour change (I3):** both blocks now share one `reload`, so a
-refresh triggered by either is seen by both. This is a consequence of the
-lift, not an incidental detail, and the PR body says so.
+**Stated behaviour change (I3), in rower terms: the lift FIXES a stale
+verification mark.** `useConcept2Link` registers `pageshow` and
+`visibilitychange` PER INSTANCE, so two instances issue two reads on every
+foreground — not only on mount — and the two hold independent `link` state.
+Today a rower who relinks to a different Concept2 account through the send
+block's reauth branch keeps a stale `VERIFIED ✓` on the same screen until the
+next foreground or remount. That is exactly the account gate
+`MachineConfirmedBlock` exists for (`FromTheLog.tsx:66-84`: "a row verified
+on one Concept2 account keeps its tick after relinking to another that never
+saw it"), defeated by its own second read. After the lift the mark
+re-evaluates with the send block. **This is an improvement and the PR body
+presents it as one.**
 
-**Out of scope, deliberately:** the four other `useConcept2Link` callers, all
+**Four further consequences, none of them incidental** (RF27 — a spec owes
+invariants, not one mechanism):
+
+1. **Shared generation ref.** `useConcept2Link.ts:238-246` gives each
+   instance its own counter today, so a post-send `reload()` and a foreground
+   `pageshow` read both apply. Sharing one counter makes the later START
+   silently discard the other — cross-block supersede becomes possible.
+2. **A failed first read now blanks BOTH blocks deterministically.** Two
+   independent reads currently give `VERIFIED ✓` a second chance under a
+   flaky link read. That is the same disagreement window
+   `Concept2Screen.tsx:33-41` documents and explicitly ACCEPTS on You; the
+   lift removes it here, which is a real trade and is recorded as one.
+3. **The shared `reload` can turn `VERIFIED ✓` ON mid-view** without a
+   remount, on a row whose `c2UserId` matches a newly-read link. The OFF
+   direction is unreachable — no Send affordance exists while the tick shows.
+4. **Whole-screen re-render on every link transition**, including the
+   unmemoized `buildStoredSummary(row)` at `FromTheLog.tsx:430` and
+   `TraceChart`'s per-render SVG geometry. No effect re-fires and no draft is
+   lost. Cost, not a defect.
+
+**Out of scope, deliberately:** the three other `useConcept2Link` callers, all
 on the You surface (`you/Concept2Card.tsx:445`, `you/Concept2Screen.tsx:60`,
 `you/Concept2Row.tsx:40`). `Concept2Screen.tsx:53` documents its second
 instance as intentional — "A SECOND `useConcept2Link` INSTANCE, on purpose"
@@ -225,35 +327,78 @@ instance as intentional — "A SECOND `useConcept2Link` INSTANCE, on purpose"
 still live, so the machine tiles render.
 
 No production change. `screenshots.spec.ts`'s free-row capture delivers the
-summary **after at least one status tick has followed `endSession()`**, and
-while still on the pre-navigation URL — the free-row analogue of
-`connected.spec.ts:916`'s check, replacing the "Wrapping up" assertion that
-§1.3 showed proves nothing.
+0x0039 inside the measured window (§1.3): **after the driver has seen the
+`terminated` status frame, and before the 2000 ms hand-off linger closes.**
+The "Wrapping up" assertion the 2026-09-07 attempt relied on is replaced —
+§1.3 showed it proves nothing, because `ConnectedSurface.tsx:466-472` says it
+renders on every ended state, held or not.
 
-**Accepted and stated: four of the six tiles render dashes.**
-`machineTierFromRun` (`summaryModel.ts:1232-1271`) takes `calories` from
-`detail?.totalCalories` and leaves `calPerHour` undefined when calories are;
-`totalCalories` lives only on 0x003A, which `deliverSummary` never writes.
-So calories, avg watts, avg cal/hr and rest distance are dashes, and
-elapsed and distance carry figures.
+**The capture must not navigate or unmount before delivering.** The window is
+2 s wide and waiting for `endSession()` to resolve already spends ~1.5 s of
+it at a real 2 Hz cadence. The positive check is the free-row analogue of
+`connected.spec.ts:916`: assert the URL is still the pre-navigation one.
 
-**This is the truthful frame, not a degraded one** — it is exactly what a
-real run with no 0x003A renders, and `driver.ts:4811-4841`'s own log line
-says "the screen renders a dash, never 0". Ruled by James 2026-09-12: take
-the partial capture. The alternative was rejected with its cost recorded
-(RF30): a stamp-matched 0x003A means either a zero-stamped constant or a
-raw-bytes override, and `statusFrames.ts:281-287` deliberately writes that
-stamp as zeros because "a fake that invented a plausible date/time would be
-asserting a layout nobody has read". `KEYSTONE_ADDITIONAL_SUMMARY_BYTES`
-(`fake.ts:952`) decodes to 2026-08-23 09:28, so `stampsEqual` would fail and
-the frame would be dropped regardless.
+**Accepted and stated: THREE of the six tiles render dashes, and three carry
+figures.** An earlier revision of this section said four dashed including
+AVG WATTS, and was wrong in three separate ways — it read
+`driver.ts:4836`'s log sentence, which names `MachineSummaryDetail` FIELDS,
+as if it were the list of rendered tiles. **The tile list is read off the
+RENDERER.** The six are `AVG WATTS · CALORIES · CAL / HOUR · RATE · DRAG ·
+AVG HR` (`PostWorkoutSummary.tsx:368-387`); elapsed and distance are HEROES,
+not tiles (`SummaryHeroesBlock`, `:392-419`); and there is no REST tile at
+all — James ruled it out on 2026-09-07 (`PostWorkoutSummary.tsx:384-387`:
+"AVG HR in the sixth cell, not REST — rest metres already live on the total
+line").
+
+On this fixture, with a bare 0x0039:
+
+| Tile | Outcome | Source |
+| --- | --- | --- |
+| AVG WATTS | **125** | `logbookWatts(t, d)` off `summaryTotals` (`summaryModel.ts:1238`) — derived from the delivered totals, so it can never dash while totals exist |
+| CALORIES | — | `detail?.totalCalories`, 0x003A only |
+| CAL / HOUR | — | undefined whenever calories are |
+| RATE | **24** | `fake.ts:921` `avgStrokeRate: 24`, written from 0x0039 unconditionally |
+| DRAG | **128** | `fake.ts:935` `dragFactorAverage: 128`, likewise |
+| AVG HR | — | `fake.ts:932` `avgHeartRateBpm: null`, and all 90 fixture frames carry `heartRateBpm: null` (`screenshots.spec.ts:6534`), so the `deriveAverageHeartRate` fallback is empty too |
+
+**RULED (James, 2026-09-12), re-affirmed on this corrected cost:** take the
+capture. The first ruling was taken on the wrong number — RF30 binds the
+option CHOSEN as hard as the one struck, so it was put back to him and
+stands.
+
+**What this frame is NOT: "exactly what a real run renders".** An earlier
+revision claimed that and it is unsupported. The only real free row this repo
+holds carries 0x003A: `justRowReplay.test.ts:350-355` drives the 2026-08-31
+walk's own bytes through the real driver, hook and store and asserts
+`AVG WATTS125 / CALORIES80 / CAL / HOUR731 / RATE25 / DRAG101 / AVG HR—` —
+five of six. So this capture deliberately shows a state the observed hardware
+does not produce, and `screenshots.spec.ts`'s header and the PR body both say
+so in one line rather than letting the frame imply otherwise.
+
+**Why the capture is still worth taking:** today `docs/screenshots/justrow-log.png`
+cannot show the tier block AT ALL — `JustRowLog.tsx:380-383` gates it on
+`summaryTotals !== undefined && workDistanceMeters > 0 && workElapsedSeconds > 0`.
+The deliverable is not the PNG; it is a capture STEP that currently produces
+a frame missing the thing it exists to show, which is worse than no step
+because it reads as evidence.
+
+The alternative was rejected with its cost recorded (RF30): a stamp-matched
+0x003A means either a zero-stamped constant or a raw-bytes override, and
+`statusFrames.ts:281-287` deliberately writes that stamp as zeros because "a
+fake that invented a plausible date/time would be asserting a layout nobody
+has read". `KEYSTONE_ADDITIONAL_SUMMARY_BYTES` (`fake.ts:952`) decodes to
+2026-08-23 09:28, so `stampsEqual` would fail and the frame would be dropped
+regardless.
 
 ### 4.4 Riders
 
 - `fake.ts:376-380` documents `FakeBurst.additionalSummaryBytes` as "nothing
   decodes this characteristic". False since Phase LP —
-  `parseAdditionalSummary` feeds `run.additionalSummary` and four tiles.
-  Campsite fix.
+  `parseAdditionalSummary` feeds `run.additionalSummary`, and through it
+  CALORIES and CAL / HOUR. **The identical false claim also sits at
+  `fake.ts:949-951`** ("nothing in this codebase decodes this
+  characteristic"); both are corrected, because fixing one and leaving the
+  other is the partial reconciliation CLAUDE.md forbids. Campsite fix.
 - The ROADMAP's Phase TD header claims two rows share one blocker. §1.4
   falsifies it. Corrected in the same PR.
 
@@ -262,11 +407,14 @@ the frame would be dropped regardless.
 1. **TD-4 is the only one that touches code a rower runs.** Its risk is not
    the extra request; it is the shared `reload`. A reviewer must see that
    stated (I3) rather than discover it.
-2. **TD-5's capture can go green while proving nothing (RF41).** The fixture
-   streams frames, and the first rowing frame opens the run and renders the
-   connected surface regardless of any flag. An assertion about the summary
-   must be bounded below the fixture's own behaviour, and the capture must be
-   opened and looked at (RF7).
+2. **TD-5's capture can go green while proving nothing, in two distinct ways
+   (RF41 and RF21).** The fixture streams frames, and the first rowing frame
+   opens the run and renders the connected surface regardless of any flag, so
+   "the surface appeared" is free. And §1.3's ORDER E shows the ring can log
+   `terminate-observations` while filing nothing — so a verdict-keyed
+   assertion is green on a run that lost the data. The gate takes a DOM
+   locator, the oracle is `summary-recorded`, and the capture is opened and
+   looked at (RF7).
 3. **TD-1's constraint could break the request instead of the
    reconciliation**, which is the failure mode that killed four previous
    attempts. The gate is that the send returns **200** — a 500 means the
@@ -274,8 +422,10 @@ the frame would be dropped regardless.
 
 ## 6. Invariants
 
-- **I1** — a throwing reconciliation leaves the send at 200 and the result
-  recorded.
+- **I1** — a throwing reconciliation STORE WRITE (`markC2Verified`) leaves
+  the send at 200 and the result recorded. Says nothing about
+  `logs.sentC2ResultIds` or `client.fetchResults`, which are outside the
+  `try` and do fail the send.
 - **I2** — one log-detail view issues exactly one `GET /api/concept2/link`.
 - **I3** — both log-detail Concept2 blocks share one link read and one
   `reload`.
@@ -298,18 +448,39 @@ the frame would be dropped regardless.
 
 ### 7.2 I2/I3 — e2e (`concept2.spec.ts`) and client
 
-1. **Production invariant:** one view, one link read.
-2. **Supported producer and ordering:** a real log-detail navigation, on
-   both a machine row and a manual row (the second is where the ROADMAP's
-   original wording was imprecise, and it is the case that bites).
+1. **Production invariant:** one ready-row log-detail view, one link read.
+2. **Supported producer and ordering:** a real log-detail navigation on a
+   READY row. An earlier revision said "on both a machine row and a manual
+   row, the second being the case that bites". **Both halves were wrong.**
+   Both hooks sit ABOVE their guards (`FromTheLog.tsx:63-64`,
+   `Concept2SendBlock.tsx:29` vs `:77-80`), so the delta is 2 on every ready
+   row alike and no row kind bites harder. And a machine-row leg is not
+   constructible as the suite stands: `postMonitorLog`
+   (`concept2.spec.ts:211-245`) never sends `machineWorkSeconds` and
+   `server/routes/data.ts:2033-2034` stores `?? null`, so
+   `MachineConfirmedBlock` has never rendered in that spec at all. One ready
+   row is the leg; adding a machine-row fixture is out of scope and said so.
 3. **Independent observable:** the `linkReads` counter, asserted as an
-   **exact** delta of 1 — the existing ten `toBeGreaterThan` assertions stay
-   where they are and are not the gate.
-4. **Deciding-source mutation:** restore the second `useConcept2Link()` call
-   inside `Concept2SendBlock`. Expected failure: the delta reads 2.
-5. **Strongest conclusion permitted:** that the log detail reads the link
-   once. Not that the app reads it once — the You surface deliberately does
-   not, per §4.2.
+   **exact** delta of 1. The ten existing `toBeGreaterThan` uses are
+   readiness preconditions (§1.7) and are neither touched nor relied on.
+4. **Deciding-source mutation — measured BEFORE the fix, not after
+   (RF35).** An earlier revision proposed restoring the deleted hook call in
+   the fixed tree, which tests the fix's shape rather than the defect. The
+   honest order costs one run: write the exact-delta assertion FIRST, run it
+   against `97fc7cc9`'s unmodified tree, and record that it reads **2** with
+   the command and output. Only then lift the hook.
+5. **Shape of the assertion: two-step, not one poll.**
+   `expect.poll(() => fake.linkReads).toBe(n + 1)` evaluates on entry and can
+   sample BETWEEN the two increments on the unfixed build, passing by luck.
+   This file already learned that — `concept2.spec.ts:1303-1307`: "the poll
+   above passes the instant the count reaches 1, so a duplicate landing
+   afterwards would be invisible to it; re-asserted after the navigation and
+   detail load that followed". The gate takes the same shape.
+6. **Strongest conclusion permitted:** that a ready-row log detail reads the
+   link once. NOT that the app reads it once — the You surface deliberately
+   does not (§4.2) — and NOT that the screen reads it once in every state:
+   §1.6 records that `loading`, `error` and `not-found` gain a read they did
+   not have.
 
 `Concept2SendBlock.test.tsx` (29 `it`s, `renderBlock` at `:133`) moves to
 passing props; the five assertions keyed on the block's own fetch (`:142,
@@ -320,23 +491,44 @@ passing props; the five assertions keyed on the block's own fetch (`:142,
 
 1. **Production invariant:** the free-row summary renders machine tiles.
 2. **Supported producer and ordering:** the real free-row flow, ended by the
-   rower, summary delivered after one status tick, pre-navigation.
-3. **Independent observable:** the tiles present in the committed PNG, and a
-   URL assertion proving the delivery was pre-navigation.
-4. **Deciding-source mutation:** remove the tick. Expected failure: the ring
-   reads `out-of-window` and the tiles are absent — the exact pair §1.3
-   measured.
-5. **Strongest conclusion permitted:** that the capture shows a real
-   free-row summary with two of six tiles populated. Not that the summary
-   path is fully exercised — 0x003A is not.
+   rower, the 0x0039 delivered inside §1.3's measured window, pre-navigation.
+3. **Independent observable: a DOM locator, not the PNG.** An earlier
+   revision named "the tiles present in the committed PNG" — **a PNG is not
+   an assertion and nothing can go red on it.** The gate asserts
+   `[data-testid="summary-machine-tier"]` (`PostWorkoutSummary.tsx:367`)
+   before the shot is taken, plus the URL check proving pre-navigation. The
+   committed image is the record; the locator is the gate.
+4. **Deciding-source mutation: delay the delivery past the 2000 ms linger,
+   not "remove the tick".** An earlier revision said remove the tick, and
+   that mutation is vacuous — the browser fake self-ticks every 100 ms on an
+   interval `endSession` never stops (`transports/index.ts:223`, `:255`,
+   since `endSession` terminates rather than disconnects), and the repo's own
+   comments say that clock both stalls (`screenshots.spec.ts:5771-5775`) and
+   throttles to ~1/s when backgrounded (`transports/index.ts:138-146`), so it
+   would be a coin flip in both directions. The linger deadline is a real
+   `setTimeout` and is deterministic: ORDER E in §1.3 is the expected
+   failure, and it fails with the tier block absent.
+5. **The oracle is `summary-recorded` plus the store read, never the
+   reconcile verdict.** §1.3's ORDER E logs `terminate-observations` and
+   files nothing, so a gate keyed on the verdict would be green on a run that
+   lost the data.
+6. **Strongest conclusion permitted:** that the capture shows a real free-row
+   summary with THREE of six tiles populated (§4.3's table). Not that the
+   summary path is fully exercised — 0x003A is not — and not that the frame
+   matches hardware, which §4.3 records that it deliberately does not.
 
 **Commit narrowly (RF1/TESTING.md §8):** only the captures for screens this
 diff touches; `git checkout -- docs/screenshots/` discards the rest.
 
 ## 8. PR shape and gates
 
-**One PR.** Three small non-triad rows in one area; a reviewer holds one
-risk model, which is the grouping rule's own test.
+**One PR.** Not because they are "one area" — an earlier revision said that
+and it is false: TD-1 and TD-4 share the Concept2 link/send risk model, and
+TD-5 shares nothing with either, being the PM5 fake, the driver's summary
+window and a screenshot. The honest justification, which is the grouping
+rule's actual test: three independent evidence gaps, each individually
+reviewable, none TRIAD, none rower-visible, and **none constraining another**
+— so bundling them costs a reviewer nothing.
 
 Gates that RUN:
 
@@ -361,13 +553,35 @@ Gates that SKIP, with the reason said aloud:
 
 1. I1-I4 each have a gate, and each gate has a recorded biting mutation and
    what its failure said.
-2. `docs/screenshots/justrow-log.png` (or its named successor) shows the
-   free-row machine tiles, and the PR body states which four are dashes.
-3. The ROADMAP's Phase TD header no longer claims two rows share one
-   blocker.
-4. TD-2 and TD-3 are filed as dated rows with their real blockers written
+2. **I2's gate was run against `97fc7cc9`'s unmodified tree BEFORE the lift
+   and read 2**, with the command and its output recorded (RF35 — a mutation
+   of the fixed code tests the fix's shape, not the defect).
+3. `docs/screenshots/justrow-log.png` (or its named successor) shows the
+   free-row machine tier block, which it cannot today at all
+   (`JustRowLog.tsx:380-383`), and the PR body names the THREE dashed tiles
+   and the three populated ones — per §4.3's table, not the earlier false
+   count.
+4. **The capture was opened and looked at** (RF7), and the tile states read
+   off the image match §4.3's table. A predicted tile state is not a
+   verified one.
+5. **The Icebox twin of TD-1 is REMOVED in the same PR.** `# Icebox` carries
+   "'A failing reconciliation does not fail the send' has no test — Phase AV,
+   2026-09-08" with its own trigger, and TD-1's row says "Keep them in step".
+   The file's contract is one home per body of work; a tripwire for a gate
+   that now exists is furniture.
+6. **Phase TD's own disposition is recorded, per James's ruling 2026-09-12:**
+   the section STAYS OPEN as the standing home for debt rows
+   (`ROADMAP.md:43`) and `/close-phase` is explicitly NOT run on it. The
+   heading's `dies 2026-09-26` governs THIS slate of three rows; the section
+   survives it. Landing these three empties the section to zero rows, and
+   archiving it would delete the convention along with the phase.
+7. The ROADMAP's Phase TD header no longer claims two rows share one
+   blocker, and its TD-4 row no longer says the block renders
+   unconditionally (§1.6).
+8. TD-2 and TD-3 are filed as dated rows with their real blockers written
    down, not left implied by their removal.
-5. `fake.ts:376-380`'s stale claim is corrected.
+9. `fake.ts:376-380` AND `fake.ts:949-951`'s stale claims are both
+   corrected.
 
 ## 10. Out of scope
 
@@ -383,7 +597,13 @@ Gates that SKIP, with the reason said aloud:
   Gate 0 and belongs to its own piece of work.
 - **TD-3 — no committed capture shows `VERIFIED ✓`.** Split out 2026-09-12.
   Blocked on the Concept2-dark stack (§1.4), which needs the row READ routed
-  — a larger fake than anything in this phase.
+  — a larger fake than anything in this phase. **What this row is NOT:** the
+  mark is not un-reviewed. James approved it as rendered at Gate 0
+  `555f1eaa-624c-434e-b7cd-d882eb88b173` on 2026-09-07
+  (`docs/superpowers/specs/2026-09-07-verify-by-hand-design.md:9-13`). The
+  gap is BUILT versus APPROVED, which is RC-24's lesson exactly — a shape
+  approved on a description shipped as `display: none` on the very surface
+  whose complaint produced it.
 - The four You-surface `useConcept2Link` callers (§4.2).
 - Anything touching 0x003A's fake payload (§4.3).
 

@@ -41,8 +41,12 @@ Each wave gets its own design/plan cycle (spec in `docs/superpowers/specs/`,
 plan in `docs/superpowers/plans/`) when it starts.
 
 **Phase TD (below the live slate) is where DEBT goes** — gaps in evidence, a
-capture that cannot be taken, a test that could not be made to bite. It is
-deliberately not scheduled. The rule that put it there (James, 2026-09-08):
+capture that cannot be taken, a test that could not be made to bite. **It is
+a STANDING HOME, not a scheduled phase** (James, 2026-09-12): a slate inside
+it may be opened, dated and closed, but the section itself is never archived
+and `/close-phase` is never run on it, because archiving it would delete this
+convention along with the phase. It first opened a slate on 2026-09-12. The
+rule that put it there (James, 2026-09-08):
 a filed row needs either a TRIGGER, so it resurfaces when it starts to
 matter, or a PHASE, so it can be scheduled as one piece of work. "Small,
 queued" is neither once it passes a couple of hundred rows, and it had.
@@ -3274,19 +3278,42 @@ reconciliation, the double link read, and the free-row summary capture. The
 other two left the phase and are filed below with dates.
 
 **THIS SECTION USED TO SAY TWO OF THESE SHARE ONE BLOCKER AND SHOULD BE DONE
-TOGETHER. THAT WAS FALSE, and a spike measured it** (spec §1.3-1.4). The
-claim was that the fake sends no end-of-workout summary burst, so neither the
-free-row machine tiles nor `VERIFIED ✓` could be photographed. The fake sends
-one fine: the free row's terminated frame is one status tick later than the
-programmed arm's, and delivering the summary before that tick is refused
-`out-of-window` while delivering it after files the totals. One tick was the
-whole blocker and no production change is needed. `VERIFIED ✓` is blocked on
-something unrelated — the screenshots stack is Concept2-DARK by construction,
-so the only writer of `verified` 403s — and unblocking one does nothing for
-the other.
+TOGETHER. THAT WAS FALSE, and a spike at production defaults measured it**
+(spec §1.3-1.4, probe `1ae217e1` on `td-spike`). The claim was that the fake
+sends no end-of-workout summary burst, so neither the free-row machine tiles
+nor `VERIFIED ✓` could be photographed. The fake sends one fine — but the
+window is narrow, and an earlier revision of this paragraph stated the rule
+wrongly as "one tick was the whole blocker", which was measured on a harness
+that had stubbed out the three knobs that decide it. **Measured rule:** the
+totals are filed iff the 0x0039 arrives after the driver has seen the
+`terminated` frame AND before the hook's hand-off linger closes at 2000 ms.
+Delivering too early is refused `out-of-window`; delivering too late logs
+`terminate-observations` and files NOTHING, which is also why the reconcile
+verdict alone is not a safe oracle. `endSession()` resolving is neither
+bound — it lands three status ticks after the terminate ack. No production
+change is needed; the fix is the capture's timing.
+`VERIFIED ✓` is blocked on something unrelated — the screenshots stack is
+Concept2-DARK by construction, so the only writer of `verified` 403s — and
+unblocking one does nothing for the other.
 
 **None of these is a defect a rower can hit today**, which is why the entry
 condition is a quiet week rather than an incident.
+
+· dies 2026-09-26 (set 2026-09-12 by James at the open gate, matching the
+date Wave A PR 1 carried) · **the date governs THIS SLATE of three rows, not
+the section.** A stalled Phase TD must never become the reason the front door
+slipped, and under the wave-heading rule one date on the heading covers all
+three rows rather than writing the same clause three times.
+
+**THE SECTION ITSELF SURVIVES ITS OWN DATE, and that is a ruling, not an
+oversight (James, 2026-09-12).** Line 43 of this file makes Phase TD the
+designated home for every debt row, created because "Small, queued" had
+passed 240 rows. Landing these three empties the section to ZERO rows, and
+`/close-phase` archives a closed phase verbatim — which would delete the
+convention along with the phase. So: **this phase STAYS OPEN as the standing
+debt home and `/close-phase` is explicitly NOT run on it.** When the slate
+empties, the heading keeps the home and the next debt row lands here rather
+than back in the queue this was built to replace.
 
 **Sizes:** S each.
 
@@ -3375,10 +3402,18 @@ condition is a quiet week rather than an incident.
       because it is a refactor that PR did not need. **Scope corrected after
       the branch review (N9): the hook is called at the top of
       `MachineConfirmedBlock`, BEFORE its `machineWorkSeconds === null` early
-      return, and the block is rendered unconditionally — so the second
-      request fires on manual and timer rows too, where the block draws
-      nothing. The first wording said "per view", which is true and reads as
-      "per machine row".**
+      return — so the second request fires on manual and timer rows too,
+      where the block draws nothing. The first wording said "per view", which
+      is true and reads as "per machine row".**
+      **SCOPE CORRECTED AGAIN 2026-09-12 (Phase TD anchor pass): "the block
+      is rendered unconditionally" was FALSE.** Both blocks sit inside the
+      ready-row guard at `FromTheLog.tsx:474`, closing at `:661-662`, and
+      `row` is non-null only in the `ready` state (`:284`). That changes the
+      fix, not just the sentence: lifting the hook to `FromTheLog` fires the
+      read at PARENT mount, so `loading`, `error` and `not-found` go from
+      zero link reads to one. The lift is a reduction on the guarded path and
+      an ADDITION on three others — net better, but not the pure halving the
+      row implied. Spec §1.6.
 
 - [ ] **No committed capture shows the free-row summary's machine tiles.**
       They ship in #351 gated from upstream of the producer — the
