@@ -60,6 +60,14 @@ every engagement asks. Read whole by the `dba` agent; bounded on purpose
 
 ## Reading an EXPLAIN (ANALYZE, BUFFERS)
 
+- **An unqualified `FOR UPDATE` on a join locks matching rows in every joined
+  table.** Widening an original-session lookup to include the account email
+  added a user-row lock: same-user and same-session updates exceeded a 250 ms
+  `lock_timeout`, while another user remained writable. Hold one joined row
+  on a second connection, start the join, then probe each relation; `LockRows`
+  alone does not identify which write now contends. Measured in the
+  [2026-09-13 access-policy report](../../docs/superpowers/research/2026-09-13-access-mode/db-cost.md).
+
 - **`rows=` estimated vs actual** — a 10× gap is stale stats (`analyze`) or
   a predicate the planner cannot see through (a jsonb path).
 - **`Seq Scan on session_logs` under a `user_id` filter** is a FAIL at 100k+

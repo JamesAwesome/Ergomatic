@@ -8,6 +8,30 @@ the history of a table you are about to judge again. Every number here
 carries the command that produced it; a section without commands is not a
 DBA entry.
 
+## 2026-09-13 — Apple account-access policy query and lock gate
+
+**PASS, new policy scope only.** Five synthetic users/25 sessions ruled:
+every path remains a point lookup. At 100k synthetic users/1m sessions,
+session resolution measured 0.011 ms, baseline vs widened original-session
+lookup 0.008 vs 0.006 ms, Google/Apple subject lookups 0.008/0.009 ms,
+and the saved-email-preserving legacy upsert 0.020 ms. These are medians
+of five warm PostgreSQL execution times, discarding run 1. Existing unique
+and primary-key indexes served every stress query; no schema, migration,
+new index, bulk API or workout-log scan was added.
+
+Postgres 18.4 Debian aarch64; Docker Desktop 29.4.1, 10 CPUs/8.32 GB;
+Apple M5 host, 10 CPUs/16 GiB. Settings: shared buffers 128 MB, work memory
+4 MB, JIT off, parallel gather workers 0. The widened unqualified
+`FOR UPDATE` locks one matched user in addition to its session; 250 ms
+lock-timeout probes blocked writes to that user/session while another user
+remained writable. A held-user probe showed the session was locked first.
+Production scale, throughput and whole-transaction lock duration are untested.
+
+Commands, exact SQL, measurements and limitations are in the
+[report](../../docs/superpowers/research/2026-09-13-access-mode/db-cost.md)
+and its linked evidence archive. This does not complete the original Apple
+implementation's outstanding DBA PR gate.
+
 ## 2026-09-12 — PR #412, Phase MD PR 3 "one Sample shape" (gate, TRIAD: stored shape)
 
 **Verdict: PASS.** No migration, no schema change, no SQL change, zero stored
