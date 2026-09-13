@@ -1,5 +1,0 @@
- total_rows | expired_rows | live_rows | heap_bytes | index_bytes | total_bytes 
-------------+--------------+-----------+------------+-------------+-------------
-         20 |            0 |        20 |       8192 |       49152 |       98304
-(1 row)
-

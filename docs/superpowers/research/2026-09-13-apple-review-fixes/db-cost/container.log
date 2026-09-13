@@ -1,1 +1,0 @@
-name=/erg-dba-session-sweep-pg image=postgres:18.4 memory=1073741824 cpus=2000000000 port=127.0.0.1:55436

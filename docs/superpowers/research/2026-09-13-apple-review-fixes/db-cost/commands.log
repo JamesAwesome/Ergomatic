@@ -1,8 +1,0 @@
-docker run --rm -d --name erg-dba-session-sweep-pg --memory=1g --cpus=2 -p 127.0.0.1:55436:5432 -e POSTGRES_PASSWORD=dev postgres:18.4
-docker exec erg-dba-session-sweep-pg rm -rf /measure
-docker cp .superpowers/sdd/2026-09-13-apple-review-fixes/db-cost/. erg-dba-session-sweep-pg:/measure
-docker exec erg-dba-session-sweep-pg bash /measure/04-measure.sh
-docker exec erg-dba-session-sweep-pg bash /measure/05-lock-probe.sh
-docker cp erg-dba-session-sweep-pg:/measure/. .superpowers/sdd/2026-09-13-apple-review-fixes/db-cost/
-docker stop erg-dba-session-sweep-pg
-

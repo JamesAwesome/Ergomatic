@@ -1,4 +1,0 @@
-SET
-ERROR:  canceling statement due to lock timeout
-CONTEXT:  while updating tuple (0,10) in relation "sessions"
-expired_update_exit=1

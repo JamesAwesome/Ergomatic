@@ -1,6 +1,8 @@
 # Session expiry sweep: bounded DBA review
 
-**PASS.** Moving `SessionStore.sweepExpired()` onto `createFrontDoor`'s existing startup/60-second cleanup owner does not require an `expires_at` index or migration at the measured scales. The deciding fixture is the 100,000-row diagnostic backlog: the initial 10,000-row delete took a 6.421 ms median, and the subsequent zero-match scan over 90,000 live rows took 2.523 ms per minute. The five-person household fixture is effectively free. The production host and populations above 100,000 sessions are unmeasured.
+**Historical parent-table isolation only; superseded for full-query cost by the [migrated-schema correction](cascade/report.md).** This fixture omitted the auth-attempt cascade. Its 6.421 ms / 540,000 WAL B describe the parent DELETE core, not the complete production operation.
+
+The original report follows for provenance. Moving `SessionStore.sweepExpired()` onto `createFrontDoor`'s existing startup/60-second cleanup owner does not require an `expires_at` index or migration at the measured scales. The deciding fixture is the 100,000-row diagnostic backlog: the initial 10,000-row delete took a 6.421 ms median, and the subsequent zero-match scan over 90,000 live rows took 2.523 ms per minute. The five-person household fixture is effectively free. The production host and populations above 100,000 sessions are unmeasured.
 
 ## Source and scope
 

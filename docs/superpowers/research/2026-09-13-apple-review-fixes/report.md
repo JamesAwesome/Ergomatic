@@ -24,7 +24,7 @@ Claude's [design comment](https://github.com/JamesAwesome/Ergomatic/pull/425#iss
 
 [Native source research](native-logging-fix-research.md) and the single [mechanism pass plus controller disposition](native-logging-harden.md) establish the public registration seam and required oracle. The proposed arbitrary 4,068-character truncation was declined; preserve vendor full-message behavior. No executable implementation blocks were prescribed, so the prescribed-code lens is skipped for this delta. Runtime validation belongs to the implementation evidence, not those source-only reports.
 
-The [DBA schedule measurement](db-cost/report.md) passes without an `expires_at` index or migration: at 100,000 sessions the 10,000-row expiry DELETE took 6.421 ms median; the subsequent scan over 90,000 live sessions took 2.523 ms per minute. Exact fixtures, plans, lock probes and commands are alongside that report. The isolated synthetic database was stopped after measurement. Production host performance is unmeasured.
+The corrected [DBA schedule measurement](db-cost/cascade/report.md) passes without an additional index or migration: the complete DELETE through the actual migrated schema, including 10,000 indexed auth-attempt cascades, took 29.290 ms median at 100,000 sessions; the subsequent 90,000-live-session scan took 2.628 ms per minute. The original parent-table-only fixture omitted those cascades and is retained solely as historical isolation evidence. Exact fixtures, plans, lock probes and commands are alongside that report. The isolated synthetic database was stopped after measurement. Production host performance is unmeasured.
 
 ## Review boundary
 

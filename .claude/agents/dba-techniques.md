@@ -113,7 +113,7 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
 
 ## Measured facts that keep paying (2026-09-07 unless dated otherwise)
 
-- **(2026-09-13, session cleanup) A once-per-minute unindexed expiry sweep is cheap at 100k sessions.** The exact expiry DELETE chose a Seq Scan: 10k/100k deletion median 6.421 ms and 540,000 WAL B; the subsequent zero-match scan over 90k live rows median 2.523 ms, touching 1,819 cached pages (14,901,248 B). Household 5/25 was 0.024 ms. No `expires_at` index is justified at this scale. Keep cleanup error boundaries independent so one sweep cannot starve the other. If host `psql` is absent, run the scratch harness inside its dedicated Postgres container against its own loopback database.
+- **(2026-09-13, corrected session cleanup) Measure FK cascades from the migrated schema, not a hand-built parent table.** The sessions expiry DELETE uses a parent Seq Scan plus indexed child cascades through `auth_attempts_link_session_unique`. With 10k expired/100k sessions and one bound link each, complete median was 29.290 ms (committed trigger 22.082 ms, total WAL 1,124,048 B by LSN); the next 90k-live minute scan was 2.628 ms/1,819 pages. Household 5/25 plus 511 anonymous attempts was 0.170 ms. No new index is justified at this scale. The earlier 6.421 ms/540,000 B were parent-core measurements only. Keep cleanup error boundaries independent; run the harness in its dedicated container if host `psql` is absent.
 
 - **jsonb aggregation costs ~0.6 µs per row scanned**; indexed reads are
   identical between jsonb and columns (≤ 0.36 ms at 1M).
