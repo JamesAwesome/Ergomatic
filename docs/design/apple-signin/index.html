@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Ergomatic · Apple sign-in Gate 0</title>
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/newsreader/400.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/newsreader/500.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/archivo/400.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/archivo/500.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/archivo/600.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/ibm-plex-mono/400.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/ibm-plex-mono/500.css">
+  <style>
+    :root {
+      --page: #f4f1e8;
+      --surface: #fffdf7;
+      --surface-sunken: #efeade;
+      --ink: #1b1a17;
+      --ink-2: #3f3c35;
+      --ink-3: #57544c;
+      --ink-4: #6f6a5f;
+      --rule: #d8d3c4;
+      --rule-2: #ded8c9;
+      --accent: #b5341f;
+      --accent-hover: #9c2c19;
+      --on-color: #fffdf7;
+      --focus: #1d4e89;
+      --success: #49624f;
+      --radius: 2px;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Archivo", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      background: #ddd8cc;
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 14px;
+    }
+    button { font: inherit; }
+    button:focus-visible, [tabindex]:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+    .handoff {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(258px, 310px) 1fr;
+    }
+    .artifact-nav {
+      background: var(--surface);
+      border-right: 1px solid var(--ink-4);
+      padding: 24px;
+      min-height: 100vh;
+      overflow-y: auto;
+    }
+    .artifact-nav h1 {
+      margin: 0 0 4px;
+      font: 500 27px/1.1 var(--font-serif);
+    }
+    .artifact-kicker, .artifact-note, .control-label {
+      font: 500 10px/1.45 var(--font-mono);
+      letter-spacing: .12em;
+      color: var(--ink-3);
+      text-transform: uppercase;
+    }
+    .artifact-note { margin: 14px 0 22px; text-transform: none; letter-spacing: .05em; }
+    .control-group { border-top: 1px solid var(--rule); padding-top: 14px; margin-top: 14px; }
+    .control-label { display: block; margin-bottom: 8px; }
+    .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .control {
+      min-height: 44px;
+      border: 1px solid var(--ink-4);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      padding: 7px 8px;
+      text-align: left;
+      font-size: 12px;
+    }
+    .control[aria-pressed="true"] { background: var(--ink); color: var(--on-color); }
+    .device-shell {
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      min-width: 0;
+      overflow: auto;
+    }
+    .device-wrap { display: grid; justify-items: center; gap: 10px; }
+    .device {
+      width: 390px;
+      height: 844px;
+      position: relative;
+      overflow: hidden;
+      background: var(--page);
+      border: 1px solid var(--ink-4);
+      border-radius: 34px;
+      box-shadow: 0 16px 44px rgba(27, 26, 23, .18);
+    }
+    .device.landscape { width: 844px; height: 390px; border-radius: 28px; }
+    .device-caption {
+      font: 500 10px var(--font-mono);
+      letter-spacing: .12em;
+      color: var(--ink-3);
+      text-transform: uppercase;
+    }
+    .status-bar {
+      display: none;
+      position: absolute;
+      z-index: 4;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 47px;
+      padding: 15px 27px 0;
+      justify-content: space-between;
+      align-items: flex-start;
+      font: 600 11px var(--font-sans);
+      pointer-events: none;
+    }
+    .status-icons { letter-spacing: .06em; }
+    .platform-native:not(.landscape) .status-bar { display: flex; }
+    .app-screen {
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      background: var(--page);
+      padding: 20px;
+    }
+    .platform-native:not(.landscape) .app-screen { padding: 59px 20px 54px; }
+    .platform-native.landscape .app-screen { padding: 16px 64px 31px; }
+    .screen-inner { width: min(100%, 480px); min-height: 100%; margin: 0 auto; }
+    .signin-layout {
+      max-width: 440px;
+      display: flex;
+      min-height: 100%;
+      flex-direction: column;
+      justify-content: center;
+      gap: 12px;
+    }
+    .brand-title, .screen-title, .identity-name {
+      font-family: var(--font-serif);
+      font-weight: 500;
+    }
+    .brand-title { font-size: 31px; line-height: 1.08; margin: 0 0 28px; }
+    .tagline { color: var(--ink-3); font-size: 16px; margin: 0 0 14px; white-space: nowrap; }
+    .comparison-inner { width: 100%; min-height: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: center; }
+    .compare-pane { background: var(--surface); border: 1px solid var(--rule); padding: 18px; min-width: 0; }
+    .compare-label { margin: 0 0 18px; padding-bottom: 8px; border-bottom: 1px solid var(--ink-4); font: 500 11px var(--font-mono); letter-spacing: .12em; color: var(--ink-3); }
+    .compare-pane .brand-title { font-size: 27px; margin-bottom: 16px; }
+    .compare-pane .tagline { font-size: 14px; margin-bottom: 12px; }
+    .auth-stack, .action-stack { display: grid; gap: 12px; }
+    .auth-button, .button-l1, .button-l2 {
+      width: 100%;
+      min-height: 52px;
+      padding: 0;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      position: relative;
+    }
+    .auth-button.apple {
+      border: 1px solid #000;
+      background: #000;
+      color: #fff;
+    }
+    .auth-button.apple img {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: auto;
+    }
+    .auth-button.google, .button-l1 {
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: var(--on-color);
+    }
+    .button-l2 {
+      border: 1px solid var(--ink);
+      background: var(--surface);
+      color: var(--ink);
+    }
+    .auth-button:hover.google, .button-l1:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .auth-button:hover.apple { background: #1b1b1b; }
+    .button-l2:hover { background: var(--surface-sunken); }
+    .intro { max-width: 38ch; color: var(--ink-3); line-height: 1.45; margin: 0 0 8px; }
+    .back-button {
+      min-width: 44px;
+      min-height: 44px;
+      border: 0;
+      background: transparent;
+      color: var(--ink-3);
+      padding: 0;
+      text-align: left;
+      cursor: pointer;
+      font: 500 11px var(--font-mono);
+      letter-spacing: .12em;
+    }
+    .flow-screen { display: flex; flex-direction: column; min-height: 100%; }
+    .flow-header { margin-bottom: 18px; }
+    .screen-title { font-size: 31px; line-height: 1.1; margin: 4px 0 8px; }
+    .flow-body { flex: 1; display: flex; flex-direction: column; }
+    .identity-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--rule);
+      border-radius: var(--radius);
+      min-width: 0;
+    }
+    .avatar {
+      flex: 0 0 46px;
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      background: var(--ink);
+      color: var(--on-color);
+      font-weight: 600;
+    }
+    .identity-copy { min-width: 0; flex: 1; }
+    .identity-name { font-size: 24px; line-height: 1.1; margin: 0; }
+    .identity-email { color: var(--ink-3); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 3px 0 0; }
+    .flow-body > .identity-card .identity-email { white-space: nowrap; font-size: 12px; }
+    .flow-body > .identity-card .provider-mark { display: none; }
+    .provider-mark, .connected-mark {
+      font: 500 10px var(--font-mono);
+      letter-spacing: .1em;
+      color: var(--ink-3);
+    }
+    .explain-card {
+      background: var(--surface-sunken);
+      border-left: 3px solid var(--ink-4);
+      padding: 14px 14px 14px 16px;
+      margin: 16px 0;
+      color: var(--ink-2);
+      line-height: 1.5;
+    }
+    .explain-card p { margin: 0; }
+    .flow-actions { margin-top: auto; padding-top: 18px; }
+    .you-screen { display: flex; flex-direction: column; min-height: 100%; padding-bottom: 48px; }
+    .you-screen .identity-card { margin-top: 8px; }
+    .signout {
+      min-width: 72px;
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid var(--ink);
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--ink);
+    }
+    .stats-strip { padding: 16px 2px 14px; border-bottom: 1px solid var(--rule); }
+    .stat-line { margin: 0 0 5px; font: 500 12px var(--font-mono); letter-spacing: .08em; }
+    .stat-bar { display: grid; grid-template-columns: 6fr 27fr 43fr 10fr 14fr; height: 24px; margin: 10px 0 7px; gap: 2px; }
+    .stat-bar span:nth-child(1) { background: #5c4382; }
+    .stat-bar span:nth-child(2) { background: #8a5f18; }
+    .stat-bar span:nth-child(3) { background: #2a6275; }
+    .stat-bar span:nth-child(4) { background: var(--ink); }
+    .stat-bar span:nth-child(5) { background: #7a766d; }
+    .stat-legend { font: 400 9px var(--font-mono); color: var(--ink-3); word-spacing: 7px; }
+    .methods { margin-top: 16px; }
+    .section-label { margin: 0 2px 7px; font: 500 11px var(--font-mono); letter-spacing: .12em; color: var(--ink-3); }
+    .method-list { border-top: 1px solid var(--rule); }
+    .method-row {
+      width: 100%;
+      min-height: 54px;
+      border: 0;
+      border-bottom: 1px solid var(--rule);
+      background: transparent;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 2px;
+      text-align: left;
+    }
+    button.method-row { cursor: pointer; }
+    .method-name { font-weight: 500; }
+    .method-action { color: var(--ink-2); }
+    .connected-mark { color: var(--success); }
+    .you-doors { margin-top: auto; padding-top: 26px; border-top: 1px solid var(--rule); }
+    .door-row {
+      min-height: 44px;
+      border-bottom: 1px solid var(--rule);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--ink-3);
+      font: 400 11px var(--font-mono);
+      letter-spacing: .1em;
+    }
+    .notice {
+      padding: 13px 14px;
+      border: 1px solid var(--ink);
+      background: var(--surface);
+      border-radius: var(--radius);
+      line-height: 1.4;
+      margin: 12px 0 2px;
+    }
+    .notice.success { border-color: var(--success); }
+    .notice.error { border-color: var(--accent); }
+    .steps { margin: 8px 0 18px; border-top: 1px solid var(--rule); }
+    .step { display: grid; grid-template-columns: 32px 1fr; gap: 9px; padding: 13px 0; border-bottom: 1px solid var(--rule); }
+    .step-index { font: 500 11px var(--font-mono); color: var(--ink-3); }
+    .step.done .step-index { color: var(--success); }
+    .step strong { display: block; font-size: 14px; }
+    .step small { display: block; color: var(--ink-3); font-size: 12px; margin-top: 3px; line-height: 1.35; }
+    .tabbar {
+      height: 44px;
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      background: var(--surface);
+      border-top: 1px solid var(--rule);
+      z-index: 3;
+    }
+    .platform-native:not(.landscape) .tabbar { bottom: 0; padding-bottom: 9px; height: 53px; }
+    .tab { display: grid; place-items: center; font: 500 9px var(--font-mono); letter-spacing: .14em; color: var(--ink-3); }
+    .tab.active { color: var(--ink); box-shadow: inset 0 3px 0 var(--accent); }
+
+    body.capture .handoff { display: block; }
+    body.capture .artifact-nav, body.capture .device-caption { display: none; }
+    body.capture .device-shell { display: block; padding: 0; overflow: hidden; }
+    body.capture .device-wrap { display: block; }
+    body.capture .device {
+      width: 100vw;
+      height: 100vh;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    @media (max-width: 760px) {
+      body:not(.capture) .handoff { grid-template-columns: 1fr; }
+      body:not(.capture) .artifact-nav { min-height: auto; border-right: 0; border-bottom: 1px solid var(--ink-4); }
+      body:not(.capture) .device-shell { place-items: start center; padding: 18px 0; }
+    }
+    @media (max-width: 520px) {
+      .comparison-inner { grid-template-columns: 1fr; align-items: stretch; padding: 12px 0; }
+    }
+    @media (max-height: 460px) {
+      .signin-layout { justify-content: center; }
+      .brand-title { margin-bottom: 6px; }
+      .tagline { margin-bottom: 4px; }
+      .flow-header { margin-bottom: 8px; }
+      .screen-title { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="handoff">
+    <aside class="artifact-nav" aria-label="Prototype controls">
+      <p class="artifact-kicker">Wave A · Gate 0</p>
+      <h1>Apple sign-in</h1>
+      <p class="artifact-note">Navigation-only mock. No provider or Ergomatic authentication calls are made.</p>
+      <div class="control-group">
+        <span class="control-label">Sign in</span>
+        <div class="control-grid">
+          <button class="control" data-screen="compare">Compare</button>
+          <button class="control" data-screen="before">Before</button>
+          <button class="control" data-screen="welcome">Welcome</button>
+          <button class="control" data-screen="create-apple">New Apple</button>
+          <button class="control" data-screen="apple-missing-email">Missing email</button>
+          <button class="control" data-screen="usual-google">Usual login</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="control-label">You · sign-in methods</span>
+        <div class="control-grid">
+          <button class="control" data-screen="you-google">Google connected</button>
+          <button class="control" data-screen="you-apple">Apple connected</button>
+          <button class="control" data-screen="link-apple-confirm">Add Apple</button>
+          <button class="control" data-screen="link-google-confirm">Add Google</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="control-label">Link outcomes</span>
+        <div class="control-grid">
+          <button class="control" data-screen="link-success-apple">Success</button>
+          <button class="control" data-screen="link-conflict">Conflict</button>
+          <button class="control" data-screen="link-retry">Expired</button>
+          <button class="control" data-screen="link-account-changed">Account changed</button>
+          <button class="control" data-screen="you-google">Cancel</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="control-label">Surface</span>
+        <div class="control-grid">
+          <button class="control" data-platform="native">Native</button>
+          <button class="control" data-platform="web">Web</button>
+          <button class="control" data-orientation="portrait">390 × 844</button>
+          <button class="control" data-orientation="landscape">844 × 390</button>
+        </div>
+      </div>
+    </aside>
+    <section class="device-shell" aria-label="Rendered mockup">
+      <div class="device-wrap">
+        <div class="device platform-native" id="device">
+          <div class="status-bar" aria-hidden="true"><span>9:41</span><span class="status-icons">● ◓ ▰</span></div>
+          <div class="app-screen" id="screen"></div>
+        </div>
+        <div class="device-caption" id="caption">Native safe-area desk mock · 844 × 390</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const query = new URLSearchParams(location.search);
+    let current = query.get("screen") || "compare";
+    let platform = query.get("platform") || "native";
+    let orientation = query.get("orientation") || "landscape";
+    const capture = query.get("capture") === "1";
+    if (capture) document.body.classList.add("capture");
+
+    const identities = {
+      google: { name: "Maya Chen", initials: "MC", email: "maya.chen@example.com", provider: "GOOGLE" },
+      apple: { name: "Rower", initials: "R", email: "9m3x7k2p1r@privaterelay.appleid.com", provider: "APPLE" }
+    };
+
+    function authButton(provider, label = `Continue with ${provider[0].toUpperCase()}${provider.slice(1)}`) {
+      const logo = provider === "apple" ? '<img src="apple-logo-left-white-medium.svg" alt="">' : "";
+      return `<button class="auth-button ${provider}" data-go="create-${provider}">${logo}<span>${label}</span></button>`;
+    }
+
+    function welcome(before = false) {
+      return `<div class="screen-inner signin-layout">
+        <h1 class="brand-title">Ergomatic</h1>
+        <p class="tagline">Rowing workout tracker &amp; planner.</p>
+        <div class="auth-stack">
+          ${before ? "" : authButton("apple")}
+          ${authButton("google")}
+        </div>
+      </div>`;
+    }
+
+    function compare() {
+      return `<div class="comparison-inner">
+        <section class="compare-pane">
+          <p class="compare-label">CURRENT</p>
+          <h1 class="brand-title">Ergomatic</h1>
+          <p class="tagline">Rowing workout tracker &amp; planner.</p>
+          <div class="auth-stack">${authButton("google")}</div>
+        </section>
+        <section class="compare-pane">
+          <p class="compare-label">PROPOSED</p>
+          <h1 class="brand-title">Ergomatic</h1>
+          <p class="tagline">Rowing workout tracker &amp; planner.</p>
+          <div class="auth-stack">${authButton("apple")}${authButton("google")}</div>
+        </section>
+      </div>`;
+    }
+
+    function identityCard(identity, signout = false) {
+      return `<section class="identity-card">
+        <div class="avatar" aria-hidden="true">${identity.initials}</div>
+        <div class="identity-copy">
+          <p class="identity-name">${identity.name}</p>
+          <p class="identity-email">${identity.email}</p>
+        </div>
+        ${signout ? '<button class="signout">Sign out</button>' : `<span class="provider-mark">${identity.provider}</span>`}
+      </section>`;
+    }
+
+    function createAccount(provider) {
+      const identity = identities[provider];
+      const usual = provider === "apple" ? "google" : "apple";
+      return `<div class="screen-inner flow-screen">
+        <header class="flow-header">
+          <button class="back-button" data-go="welcome">← BACK</button>
+          <h1 class="screen-title">Create your account</h1>
+          <p class="intro">Your workouts and training plan will be saved here.</p>
+        </header>
+        <div class="flow-body">
+          ${identityCard(identity)}
+          <div class="explain-card"><p>This makes a new Ergomatic account. If you already row here, sign in the way you usually do and add ${provider === "apple" ? "Apple" : "Google"} from You.</p></div>
+          <div class="action-stack flow-actions">
+            <button class="button-l1" data-go="you-${provider}">Create account</button>
+            <button class="button-l2" data-go="usual-${usual}">I already have an account</button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function missingAppleEmail() {
+      return `<div class="screen-inner flow-screen">
+        <header class="flow-header">
+          <button class="back-button" data-go="welcome">← BACK</button>
+          <h1 class="screen-title">Email needed</h1>
+          <p class="intro">We need an email to create a new Ergomatic account.</p>
+        </header>
+        <div class="flow-body">
+          <p class="notice error" role="alert">This Apple account didn’t provide an email address. Continue with Google.</p>
+          <div class="explain-card"><p>No account was created. If this Apple sign-in is already linked to an Ergomatic account, returning sign-in still works from its Apple identity.</p></div>
+          <div class="action-stack flow-actions">
+            ${authButton("google")}
+            <button class="button-l2" data-go="welcome">Back to all options</button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function usualLogin(provider) {
+      const add = provider === "google" ? "Apple" : "Google";
+      return `<div class="screen-inner signin-layout">
+        <h1 class="brand-title">Sign in to your account</h1>
+        <p class="intro">Use your usual sign-in. Then open You → Sign-in methods to add ${add}. Your workouts stay with the account you already have.</p>
+        <div class="auth-stack">${authButton(provider)}</div>
+        <button class="back-button" data-go="welcome">← ALL SIGN-IN OPTIONS</button>
+      </div>`;
+    }
+
+    function stats() {
+      return `<section class="stats-strip" aria-label="Career totals">
+        <p class="stat-line">LIFETIME · 56,752 M</p>
+        <p class="stat-line">SEASON 2027 · 43,012 M</p>
+        <div class="stat-bar" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+        <div class="stat-legend">AN 6% AT 27% O2 43% TR 10% NO TYPE 15%</div>
+      </section>`;
+    }
+
+    function methods(connected) {
+      const appleConnected = connected.includes("apple");
+      const googleConnected = connected.includes("google");
+      return `<section class="methods">
+        <p class="section-label">SIGN-IN METHODS</p>
+        <div class="method-list">
+          ${appleConnected
+            ? '<div class="method-row"><span class="method-name">Apple</span><span class="connected-mark">CONNECTED</span></div>'
+            : '<button class="method-row" data-go="link-apple-confirm"><span class="method-name">Apple</span><span class="method-action">Add Apple ›</span></button>'}
+          ${googleConnected
+            ? '<div class="method-row"><span class="method-name">Google</span><span class="connected-mark">CONNECTED</span></div>'
+            : '<button class="method-row" data-go="link-google-confirm"><span class="method-name">Google</span><span class="method-action">Add Google ›</span></button>'}
+        </div>
+      </section>`;
+    }
+
+    function tabbar() {
+      return `<nav class="tabbar" aria-label="Primary"><span class="tab">TODAY</span><span class="tab">NEWS</span><span class="tab">LIBRARY</span><span class="tab">PLAN</span><span class="tab active">YOU</span></nav>`;
+    }
+
+    function you(provider, status = "") {
+      const base = provider === "apple" ? identities.apple : identities.google;
+      let connected = provider;
+      let notice = "";
+      if (status === "success-apple" || status === "success-google") {
+        connected = "apple-google";
+        const added = status === "success-apple" ? "Apple" : "Google";
+        notice = `<p class="notice success" role="status">${added} is now connected. You can sign in either way.</p>`;
+      } else if (status === "conflict") {
+        notice = '<p class="notice error" role="alert">That Apple sign-in is already connected to another Ergomatic account. Nothing changed.</p>';
+      } else if (status === "retry") {
+        notice = '<p class="notice error" role="alert">This linking attempt expired. Nothing changed. Start linking again.</p>';
+      } else if (status === "account-changed") {
+        notice = '<p class="notice error" role="alert">Your account changed. Start linking again. Neither account was modified.</p>';
+      }
+      return `<div class="screen-inner you-screen">
+        ${identityCard(base, true)}
+        ${notice}
+        ${stats()}
+        ${methods(connected)}
+        ${status === "retry" || status === "account-changed" ? '<div class="action-stack" style="margin-top:12px"><button class="button-l2" data-go="link-apple-confirm">Start linking again</button></div>' : ""}
+        <nav class="you-doors" aria-label="More">
+          <div class="door-row"><span>BASELINES</span><span>2K 1:52.0 · 6K 2:02.0 ›</span></div>
+          <div class="door-row"><span>SETTINGS</span><span>›</span></div>
+          <div class="door-row"><span>DIAGNOSTICS</span><span>›</span></div>
+        </nav>
+      </div>${tabbar()}`;
+    }
+
+    function link(provider, stage) {
+      const usual = provider === "apple" ? "Google" : "Apple";
+      const target = provider === "apple" ? "Apple" : "Google";
+      const origin = provider === "apple" ? "you-google" : "you-apple";
+      const firstDone = stage === "authorize";
+      return `<div class="screen-inner flow-screen">
+        <header class="flow-header">
+          <button class="back-button" data-go="${origin}">← CANCEL</button>
+          <h1 class="screen-title">Add ${target}</h1>
+          <p class="intro">Confirm ${usual}, then sign in with ${target}. Your workouts stay with this account.</p>
+        </header>
+        <div class="flow-body">
+          <div class="steps">
+            <div class="step ${firstDone ? "done" : ""}"><span class="step-index">${firstDone ? "✓" : "1"}</span><div><strong>Confirm your usual ${usual} sign-in</strong><small>Keep your workouts in this account.</small></div></div>
+            <div class="step"><span class="step-index">2</span><div><strong>Sign in with ${target}</strong><small>Add ${target} as another way to sign in.</small></div></div>
+          </div>
+          <div class="action-stack flow-actions">
+            ${firstDone ? authButton(provider) : authButton(usual.toLowerCase(), `Confirm with ${usual}`)}
+            <button class="button-l2" data-go="${origin}">Cancel</button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function render() {
+      const screen = document.getElementById("screen");
+      const views = {
+        compare: () => compare(),
+        before: () => welcome(true),
+        welcome: () => welcome(false),
+        "create-apple": () => createAccount("apple"),
+        "apple-missing-email": () => missingAppleEmail(),
+        "create-google": () => createAccount("google"),
+        "usual-google": () => usualLogin("google"),
+        "usual-apple": () => usualLogin("apple"),
+        "you-google": () => you("google"),
+        "you-apple": () => you("apple"),
+        "link-apple-confirm": () => link("apple", "confirm"),
+        "link-google-confirm": () => link("google", "confirm"),
+        "link-apple-authorize": () => link("apple", "authorize"),
+        "link-google-authorize": () => link("google", "authorize"),
+        "link-success-apple": () => you("google", "success-apple"),
+        "link-success-google": () => you("apple", "success-google"),
+        "link-conflict": () => you("google", "conflict"),
+        "link-retry": () => you("google", "retry"),
+        "link-account-changed": () => you("google", "account-changed")
+      };
+      screen.innerHTML = (views[current] || views.welcome)();
+      const device = document.getElementById("device");
+      device.className = `device platform-${platform} ${orientation === "landscape" ? "landscape" : ""}`;
+      document.getElementById("caption").textContent = `${platform === "native" ? "native safe-area desk mock" : "web desk mock"} · ${orientation === "landscape" ? "844 × 390" : "390 × 844"}`;
+      document.querySelectorAll("[data-screen]").forEach(button => button.setAttribute("aria-pressed", button.dataset.screen === current));
+      document.querySelectorAll("[data-platform]").forEach(button => button.setAttribute("aria-pressed", button.dataset.platform === platform));
+      document.querySelectorAll("[data-orientation]").forEach(button => button.setAttribute("aria-pressed", button.dataset.orientation === orientation));
+      bind();
+    }
+
+    function navigate(next) {
+      if (next === "create-google" && current === "usual-google") next = "you-google";
+      if (next === "create-apple" && current === "usual-apple") next = "you-apple";
+      if (current === "link-apple-confirm" && next === "create-google") next = "link-apple-authorize";
+      if (current === "link-google-confirm" && next === "create-apple") next = "link-google-authorize";
+      if (current === "link-apple-authorize" && next === "create-apple") next = "link-success-apple";
+      if (current === "link-google-authorize" && next === "create-google") next = "link-success-google";
+      current = next;
+      if (!capture) {
+        query.set("screen", current);
+        query.set("platform", platform);
+        query.set("orientation", orientation);
+        history.replaceState(null, "", `?${query}`);
+      }
+      render();
+    }
+
+    function bind() {
+      document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => navigate(button.dataset.go)));
+    }
+    document.querySelectorAll("[data-screen]").forEach(button => button.addEventListener("click", () => navigate(button.dataset.screen)));
+    document.querySelectorAll("[data-platform]").forEach(button => button.addEventListener("click", () => { platform = button.dataset.platform; render(); }));
+    document.querySelectorAll("[data-orientation]").forEach(button => button.addEventListener("click", () => { orientation = button.dataset.orientation; render(); }));
+    render();
+  </script>
+</body>
+</html>

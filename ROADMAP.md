@@ -755,9 +755,11 @@ his Concept2 logbook page, both pairs of numbers and the gap's explanation
 
 ## Wave A — The front door
 
-**Status:** Next in the slate; Wave F closed 2026-09-04. Not opened by that
-closeout. **TRIAD twice — auth AND stored shape** (the second half found
-2026-09-10; see the sign-up row). **L.**
+**Status: OPEN 2026-09-12 — James chose Apple sign-in first and approved
+new rowers creating accounts.** In design; implementation awaits the rendered
+Gate 0 and spec approval. Draft:
+[Apple sign-in and open accounts](docs/superpowers/specs/2026-09-12-apple-signin-design.md).
+**TRIAD twice — auth AND stored shape. L.**
 · dies 2026-10-10 (set 2026-09-10 under the wave-heading rule above) · a month
 after being named next; if the front door has not opened by then the north star
 has gone unfunded for a month, and that comes back to James rather than sliding
@@ -830,49 +832,26 @@ it lands the stranger on this same denial.
       enforces any individual guideline in practice — the text binds, the
       folklore that beta review is lighter has no Apple page behind it and is
       not planned on in either direction.
-- [ ] **An open sign-up policy, replacing deny-by-default.** What replaces the
-      allowlist is the design question: open, invite-code, or a waitlist. The
-      denied-user surface stops being a dead end either way. **AUTH — full
-      antagonist pass on the spec plus a PM final-PR gate.** **M**
-      **THE GATE'S OPTION LIST GAINED A MEMBER on 2026-09-10, from the
-      binding research above:** guideline 4.8's FIRST exemption is _"Your app
-      exclusively uses your company's own account setup and sign-in
-      systems"_, so **an Ergomatic with no Google door is outside 4.8
-      entirely** and owes no Apple sign-in. It is a real option and it
-      belongs on the list; it is not a recommendation, because it trades one
-      build for a password/reset/verification surface we do not have and
-      takes away the one-tap door every current tester uses.
-      **That trade is UNPRICED, and the SPEC is where it gets priced —
-      ruled 2026-09-10, not a separate errand before the spec.** Pricing one
-      option in isolation produces a list where one member has a number and
-      the rest have adjectives; the option list is costed as a list, in one
-      pass, so the comparison is real (RF30: a ruled-out option gets a
-      measured reason, not a clause). What the pricing must cover: password
-      storage, a reset flow with real email delivery, verification, and the
-      migration of every existing tester off a Google identity.
-      And note the exemption's word is _exclusively_: adding our own accounts
-      BESIDE Google discharges nothing.
-      **AND THE ROW IS TRIAD TWICE OVER, not once — found 2026-09-10 while
-      writing the guidance above, and it binds BOTH options rather than only
-      the exempt one.** `server/db/schema.ts`'s `users` table keys identity on
-      `googleSub: text("google_sub").notNull().unique()` — **NOT NULL**, and
-      it is the only identity column there is. So a rower who signs in with
-      Apple has nothing to be stored as, and a rower with an own-accounts
-      login has nothing either. Every version of this wave's front door needs
-      `google_sub` nullable or identity lifted into its own table, which makes
-      this **a STORED-SHAPE change and a migration on top of the auth change**
-      the row already declared. The row read as auth-only; it is not, and the
-      spec sizes the migration before the gate rather than discovering it in
-      the build. **The migration landed in PR 1 (#409).** The identity-table
-      option is a SUPERSET of it — a backfill, a `UNIQUE (provider, subject)`,
-      two rewritten store methods, a dual-read window and a later removal
-      migration (`docs/superpowers/audits/2026-09-12-wave-a-pr1-census.md`
-      §4b) — and is priced here with the rest of the option list. **And the
-      spec decides what IDENTIFIES a sub-less user** (PM gate on #409):
-      `users.email` carries no unique constraint and the allowlist is keyed on
-      email while the only identity lookup is by sub, so duplicate emails —
-      unreachable while `google_sub` was NOT NULL — become reachable the
-      moment the first sub-less user is written.
+- [ ] **An open sign-up policy, replacing deny-by-default.** **James approved
+      new rowers creating accounts on 2026-09-12**, while choosing Apple
+      sign-in as the first slice. The draft recommends shared open admission
+      for Apple and Google, first-account confirmation in the updated client,
+      and explicit provider linking from You; email never joins accounts.
+      Legacy Google endpoints keep their successful response contracts for
+      installed builds. The denied-user surface stops being a dead end.
+      **AUTH AND STORED SHAPE — full antagonist spec pass, DBA spec/plan/PR
+      gates, and PM final-PR gate. M.**
+      PR 1 (#409) already made `google_sub` nullable. The Apple draft adds a
+      unique Apple subject and retains per-client Apple grants for later
+      deletion; it does not infer identity from a matching or relay email.
+      The larger identity-table alternative is recorded in
+      [the PR 1 census](docs/superpowers/audits/2026-09-12-wave-a-pr1-census.md).
+      The earlier own-accounts-only option and Apple's Login Services
+      exemption remain sourced in the binding research above; James's
+      Apple-first ruling supplies this slice's provider direction.
+      · dies 2026-09-26 · the policy is chosen and rides the Apple auth design;
+      changing admission now without its account-continuity gate would split
+      the first slice's invariant.
 - [ ] **In-app account deletion.** No DELETE-user route and no UI exist
       anywhere (checked across `app/server` and `app/src`: baselines reset and
       logs delete, but nothing removes a user). The spec enumerates exactly
@@ -899,12 +878,18 @@ it lands the stranger on this same denial.
       significant — and "probably" is what RF16 says to stop writing. The
       spec answers it in one paragraph with the feature list beside it.
 - [ ] **Apple sign-in** (moved from Phase PROD; the duplicate entry that lived
-      under triggered follow-ons is deleted). Works with the existing
-      openid-client stack (ES256 client secret, form_post callback, name and
-      email on first auth ONLY — Apple sends them once and never again).
-      **Design the private-relay story with the sign-up policy above, not after
-      it:** an allowlist cannot match a relay address the rower has never seen,
-      which is why these are one wave and not two. **L**
+      under triggered follow-ons is deleted). **FIRST, ruled by James
+      2026-09-12.** Draft covers native and web Apple, shared open signup,
+      and explicit linking from You so either provider opens the same account.
+      Reuse openid-client/jose server-side; the native draft proposes a small
+      AuthenticationServices bridge because the installed plugin's Apple arm
+      persists and logs token-bearing data. **Research correction:** name/the
+      user object is first-auth-only; Apple includes email in subsequent ID
+      tokens. Provider subject, never email, owns identity. Private relay and
+      later deletion's per-client Apple credentials are part of this design.
+      See the linked draft for source evidence and the rendered Gate 0. **L**
+      · dies 2026-10-10 · the first implementation slice is in design and must
+      clear its auth, stored-shape and rendered gates before it can ship.
 - [ ] **Door 2 can Save mid-entry and ship the clamped partial** (from Phase
       BL). Type "1", tap Save, and 60 s rides the wire. The You editor's
       identical path is announced by its ConfirmLine; door 2 has no confirm.
