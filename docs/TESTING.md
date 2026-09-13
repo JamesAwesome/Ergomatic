@@ -438,6 +438,18 @@ Three habits, each learned the same way:
 - **Behaviour is exercised, not existence-checked.** Covered by §3, but the
   most common live instance is a retry/callback asserted with
   `expect(typeof fn).toBe("function")`. Call it and assert what changed.
+- **A probe's readout has to be readable, and `console.log` is not.** Under
+  `pnpm exec vitest run --project client <file>`, a client test's
+  `console.log` never reaches stdout — the project runs in jsdom and jsdom
+  owns the console, and `--silent=false` does not help.
+  `process.stdout.write` does reach it. Measured 2026-09-12: a one-test probe
+  printed `HELLO_FROM_STDOUT` and swallowed `HELLO_FROM_TEST`. **This bites
+  investigative probes specifically** — the ones that dump a ring buffer and
+  quote it back as evidence — and it bit one: a spike's report carried
+  "verbatim" ring entries that could not have come from the command it cited.
+  An assertion is unaffected; only the human-readable readout is lost, which
+  is exactly the part a reader trusts. Route readouts through
+  `process.stdout.write`, or write them to a file and commit it.
 
 ## 12. What a reviewer is for
 

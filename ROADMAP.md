@@ -2350,7 +2350,13 @@ fixed.
   it to the bash array. Filed under Tooling rather than the connected surface,
   because nothing about it is connected-surface work. **S**
 
-- **A client test's `console.log` never reaches stdout, so any probe that
+- **DONE 2026-09-13 — landed in the debt round's docs PR.** The fix is where
+  the row said it should go: a fourth habit in `docs/TESTING.md` §11
+  ("Verification is measured, not asserted"), and a third footgun beside the
+  two scoped-run ones in `CLAUDE.md`'s Commands section. Proposed for
+  eviction at the next hand-back; left here until James rules, since nothing
+  is struck without him. Original filing follows.
+  **A client test's `console.log` never reaches stdout, so any probe that
   REPORTS what it saw that way is reporting something nobody read.** Measured
   2026-09-12 during the Phase TD spike: under
   `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>`,

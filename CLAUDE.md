@@ -81,6 +81,14 @@ requirements).
   — jsdom loads and the tests pass. Note this form collapses a signal death
   to exit 1 — see recurring failure 40. Prefer `pnpm test --project client`
   when you do not need a file filter.
+  **A THIRD footgun on the same command: `console.log` from a client test
+  never reaches stdout** (jsdom owns the console; `--silent=false` does not
+  help), while `process.stdout.write` does. Assertions are unaffected — only
+  the human-readable readout is lost, which is the part a reader trusts. It
+  bites investigative probes that dump a ring buffer and quote it back as
+  evidence, and it bit one: a spike's report carried "verbatim" entries that
+  could not have come from the command it cited. Route probe readouts through
+  `process.stdout.write` or commit them to a file (docs/TESTING.md §11).
 - `pnpm dist:grep` — the production-bundle gate. CI runs it in the `app` job
   right after `pnpm build`; it proves named dev-only seams are absent from
   `dist/`.
