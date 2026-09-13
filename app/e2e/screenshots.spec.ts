@@ -6,6 +6,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import {
   backdateLog,
+  seedGate0Tests,
   signInViaBackdoor,
   stubBluetoothScanFailure,
 } from "./helpers";
@@ -2665,6 +2666,7 @@ test("import", async ({ page }) => {
  *  whatever that zone is; `new Date("YYYY-MM-DDT12:00:00")` is Node's
  *  local parse, and `toISOString()` hands `backdateLog` the instant. */
 async function seedGate0Stats(page: Page): Promise<void> {
+  const ids: Record<string, string> = {};
   for (const { id, date, body } of GATE0_LOG_BODIES) {
     const created = await page.evaluate(async (b) => {
       const res = await fetch("/api/logs", {
@@ -2675,11 +2677,13 @@ async function seedGate0Stats(page: Page): Promise<void> {
       return { ok: res.ok, text: await res.text() };
     }, body);
     if (!created.ok) throw new Error(`${id}: ${created.text}`);
-    await backdateLog(
-      (JSON.parse(created.text) as { id: string }).id,
-      new Date(`${date}T12:00:00`).toISOString(),
-    );
+    ids[id] = (JSON.parse(created.text) as { id: string }).id;
+    await backdateLog(ids[id], new Date(`${date}T12:00:00`).toISOString());
   }
+  // PR 2: the six test rows too, backdated the same way (local noon).
+  await seedGate0Tests(page, ids, (d) =>
+    new Date(`${d}T12:00:00`).toISOString(),
+  );
 }
 
 // Phase PS PR 1 (Gate 0 A3): the subpage on the same seed, ALL selected.
@@ -2691,9 +2695,9 @@ test("you-stats", async ({ page }) => {
   await seedGate0Stats(page);
   await page.clock.install({ time: new Date("2026-09-12T09:00:00") });
   await page.goto("/you/stats");
-  // Ruling 19: no prose on the page; the AVG WATTS row is the last thing the
-  // seeded card renders.
-  await page.getByRole("row", { name: /^AVG WATTS/ }).waitFor();
+  // PR 2: the TEST TREND is the last group and its 2k label the last thing
+  // the seeded page renders (two fetches; the second lands after the first).
+  await page.getByText("2K 1:54.0").waitFor();
   // /you/stats is a plain-flow route with the fixed `.tabbar` on screen
   // (not in HIDDEN_TABBAR_PREFIXES); a fullPage capture re-paints that bar
   // in every stitched segment (reason 1 above) — the first capture drew it

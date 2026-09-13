@@ -70,3 +70,16 @@ hairline to hairline, which is what validates the three options against it.
   on `--page`, the B2 card border, everything on the pressed fill); `A7`
   lists them and the B0-B3 heights. The over-drawn captions noted above
   still stand on A2-H3/A3/A4; the B/C boards carry none.
+- **Outcome (RULED 2026-09-12, spec §14 rulings 20 and 21; built in PR
+  2):** ruling 20 takes `B1` — the trailing `›` in the doors' style AND
+  the proposed `--surface-sunken` pressed fill, the hero still 140 px
+  (`docs/screenshots/you.png`, hairline rows 120 → 259); `B2` (the card
+  edge) and `B3` (`STATS ›`) are NOT taken. Ruling 21 takes `C1`'s
+  variant **A** on EVERY preset (`1 MAY TO 12 SEP 2026` for SEASON;
+  `ALL TIME · SINCE 8 NOV 2025` for ALL); variant B (`· TO DATE`) is not.
+  One deviation from the boards in the shipped charts: METRES PER WEEK and
+  SEASON use a 44 px left gutter where `A3` drew 36 — a six-glyph tick
+  (`15,000`, `60,000`) at 9 px mono, end-anchored at `PAD_L − 6`, clipped
+  its first digit on the first capture at 36 (`WeekBarsGroup.tsx`,
+  `SeasonGroup.tsx`; the shipped `docs/screenshots/you-stats.png` reads
+  `15,000 · 10,000 · 5,000 · 0` and `60,000 · 40,000 · 20,000 · 0` whole).
