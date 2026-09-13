@@ -37,6 +37,11 @@ export type AuthFlowView =
       kind: "link_authorize";
       targetProvider: AuthProvider;
       provider: AuthProvider;
+      /** Always `true` where it is set, and read by no production code —
+       * `LinkSignInMethod` derives its ✓ from `view.kind` instead. Kept
+       * because the view union is the client's own contract and a field
+       * removal is a wider edit than this round; filed as a row rather than
+       * deleted in passing. */
       existingProofComplete: boolean;
     }
   | { kind: "linked"; targetProvider: AuthProvider }
@@ -125,7 +130,12 @@ function isAuthOptions(value: unknown): value is AuthOptions {
   return typeof record.frontDoorEnabled === "boolean";
 }
 
-function destinationFor(
+/** Exported for its own unit gate: this is pure view->route mapping over
+ * eight kinds, and it previously had no client coverage at all —
+ * `return null` as its first line left the whole client suite green,
+ * with two e2e cases reaching about three of the eight branches. Gating
+ * pure logic exclusively through a browser inverts the pyramid. */
+export function destinationFor(
   view: AuthFlowView,
 ): "/" | "/you" | "/you/sign-in-methods" | null {
   if (view.kind === "link_confirm" || view.kind === "link_authorize") {

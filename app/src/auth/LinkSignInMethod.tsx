@@ -35,8 +35,14 @@ export default function LinkSignInMethod({
       <div className="auth-flow-body">
         <div className="auth-steps">
           <div className={`auth-step${firstDone ? " auth-step-done" : ""}`}>
+            {/* role="img" is load-bearing, not decoration: a bare <span> maps
+                to role `generic`, where ARIA 1.2 PROHIBITS naming, so the
+                aria-label was discarded and a screen reader got "check mark"
+                or silence. Only the done state is named — the "1" is a step
+                number the adjacent text already carries. */}
             <span
               className="auth-step-index"
+              role={firstDone ? "img" : undefined}
               aria-label={firstDone ? "Usual sign-in confirmed" : undefined}
             >
               {firstDone ? "✓" : "1"}

@@ -650,6 +650,35 @@ describe("front-door transactions against Postgres", () => {
         .rowCount,
     ).toBe(0);
   });
+  it("accepts existing-provider proof just INSIDE the freshness window", async () => {
+    // The other half of the pin. The staleness test below moves
+    // `reauthenticated_at` back 5 minutes and asserts rejection, so
+    // LENGTHENING `ttl` bites — but SHORTENING it does not: 300000 -> 30000
+    // left every test green (they all finish well under 30s) while handing a
+    // real rower a 30-second window to get through Apple's sheet. An
+    // independent literal just inside the boundary is what makes the constant
+    // observable from both sides (RF33).
+    const b = await link();
+    const target = (
+      await store.accept(await store.claim(b.attempt), {
+        sub: "google",
+        email: "",
+        emailVerified: false,
+        name: "Rower",
+      })
+    ).attempt!;
+    const ready = (await store.accept(await store.claim(target), apple))
+      .attempt!;
+    await pool.query(
+      "UPDATE auth_attempts SET reauthenticated_at=now()-interval '4 minutes 30 seconds' WHERE id=$1",
+      [ready.id],
+    );
+    const fresh = await store.read(b.attempt.id, b.bindingSecret, "native");
+    await expect(
+      store.finalize(fresh, b.attempt.originalSessionId!),
+    ).resolves.toStrictEqual({ linked: true });
+  });
+
   it("rejects stale existing-provider proof even if target attempt has a later expiry", async () => {
     const b = await link();
     const target = (

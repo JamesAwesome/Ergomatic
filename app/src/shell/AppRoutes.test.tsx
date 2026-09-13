@@ -627,6 +627,10 @@ describe("hidesTabBar", () => {
     "/session/complete",
     "/session/log",
     "/justrow/observe",
+    // Wave A: the linking flow is the same full-bleed holder pattern, and it
+    // was added to HIDDEN_TABBAR_PREFIXES with no row here — so deleting the
+    // string was green.
+    "/you/sign-in-methods",
     // Sub-paths of a hidden prefix stay hidden too (a future param/query
     // string on any of these routes never needs its own opt-out).
     "/session/run/foo",

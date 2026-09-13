@@ -34,7 +34,8 @@ vi.mock("../native/signin", () => ({
 vi.mock("../native/session", () => ({ storeToken: seam.storeToken }));
 vi.mock("./webNavigate", () => ({ navigateWeb: seam.navigateWeb }));
 
-import { useAuthFlow } from "./authFlow";
+import { destinationFor, useAuthFlow } from "./authFlow";
+import type { AuthFlowView } from "./authFlow";
 import LinkSignInMethod from "../auth/LinkSignInMethod";
 import You from "../You";
 
@@ -876,6 +877,110 @@ describe("useAuthFlow", () => {
     });
     expect(cancellations).toBe(2);
   });
+
+  it("shows a busy view while an attempt is being minted, and routes it nowhere", async () => {
+    // `busy` is what disables BOTH provider buttons during the round-trip
+    // (SignIn.tsx), and nothing built it. Deleting `setView({kind:"busy"})`
+    // from `start` was green, and a double-tap on Continue with Apple then
+    // mints a second attempt that cancels the first. `destinationFor` must
+    // also return null for it — a busy view that routed would navigate the
+    // rower away mid-mint.
+    let release!: (response: Response) => void;
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts")
+        return new Promise<Response>((done) => {
+          release = done;
+        });
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+
+    let started!: Promise<void>;
+    act(() => {
+      started = result.current.startSignIn("apple");
+    });
+    await waitFor(() =>
+      expect(result.current.view).toStrictEqual({
+        kind: "busy",
+        purpose: "signin",
+      }),
+    );
+    expect(result.current.destination).toBeNull();
+
+    await act(async () => {
+      release(
+        ok({
+          outcome: "authorize",
+          attemptId: "busy-1",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "apple",
+          stage: "signin",
+          nonce: "n",
+          state: "s",
+          authorizationUrl: "/?authAttempt=busy-1",
+        }),
+      );
+      await started;
+    });
+    // On web the operation's terminal is the redirect, not a view change —
+    // the page is leaving. `navigateWeb` is mocked, so the view legitimately
+    // STAYS busy here; asserting it changed would be asserting a behaviour
+    // this surface does not have.
+    expect(seam.navigateWeb).toHaveBeenCalledWith("/?authAttempt=busy-1");
+  });
+
+  it.each([
+    ["confirm", "/"],
+    ["usual", "/"],
+    ["link_confirm", "/you/sign-in-methods"],
+    ["link_authorize", "/you/sign-in-methods"],
+    ["linked", "/you"],
+    ["idle", null],
+    ["busy", null],
+  ] as const)("routes a %s view to %s", (kind, expected) => {
+    // Independent route literals, never imported from the component tree.
+    const view = (
+      kind === "confirm"
+        ? { kind, targetProvider: "apple", profile: { email: "", name: "" } }
+        : kind === "usual"
+          ? { kind, provider: "apple" }
+          : kind === "link_confirm" || kind === "linked"
+            ? { kind, targetProvider: "apple" }
+            : kind === "link_authorize"
+              ? {
+                  kind,
+                  targetProvider: "apple",
+                  provider: "google",
+                  existingProofComplete: true,
+                }
+              : kind === "busy"
+                ? { kind, purpose: "signin" }
+                : { kind }
+    ) as AuthFlowView;
+    expect(destinationFor(view)).toStrictEqual(expected);
+  });
+
+  it.each([
+    ["signin", "/"],
+    ["link", "/you"],
+  ] as const)(
+    "routes a terminal %s outcome back to the surface that started it",
+    (purpose, expected) => {
+      // cancelled and error share the purpose split, and it is the half that
+      // decides whether a signed-in rower ever SEES the failure: a link error
+      // routed to "/" lands somewhere that renders no link notice at all.
+      expect(destinationFor({ kind: "cancelled", purpose })).toStrictEqual(
+        expected,
+      );
+      expect(
+        destinationFor({ kind: "error", purpose, code: "signin_failed" }),
+      ).toStrictEqual(expected);
+    },
+  );
 
   it("releases a cancellation the server refuses, so an expired binding cannot wedge the flow", async () => {
     // The web binding cookie and the attempt both live 300s. Hesitate on the

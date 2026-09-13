@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { AuthFlowController, AuthFlowView } from "./adapters/authFlow";
 import SignIn from "./SignIn";
 
+/** Hoisted so the email_required cases below read as one pair. */
+const EMAIL_NEEDED_COPY = /didn.t provide an email address/i;
+
 function controller(view: AuthFlowView): AuthFlowController {
   return {
     options: {
@@ -93,6 +96,26 @@ describe("SignIn front door", () => {
       screen.getByRole("button", { name: "Continue with Google" }),
     );
     expect(auth.startSignIn).toHaveBeenCalledWith("google");
+  });
+
+  it("does NOT show the Apple email-needed screen when the provider was Google", async () => {
+    // `EmailNeeded` hardcodes "This Apple account ... Continue with Google",
+    // so it is only true behind the `targetProvider === "apple"` clause in
+    // SignIn.tsx. Nothing built the Google case, so deleting that clause was
+    // green while telling a Google rower their APPLE account had no email and
+    // offering them Google as the way out — the provider they just came from.
+    // This is the other half of the pair above.
+    const auth = controller({
+      kind: "error",
+      purpose: "signin",
+      code: "email_required",
+      targetProvider: "google",
+    });
+    render(<SignIn auth={auth} />);
+    expect(
+      screen.queryByRole("heading", { name: "Email needed" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(EMAIL_NEEDED_COPY)).not.toBeInTheDocument();
   });
 
   it("renders the usual-provider guidance and both provider variants", async () => {
