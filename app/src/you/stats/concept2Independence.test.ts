@@ -19,7 +19,13 @@ const FORBIDDEN = [
 const ROOT = process.cwd();
 const here = path.join(ROOT, "src/you/stats/");
 const SCANNED_DIRS = [path.join(ROOT, "domain/stats/"), here];
-const SCANNED_FILES = [path.join(ROOT, "src/api/useStatsRows.ts")];
+// Both stats hooks (spec §8.4, widened at PR 2): a `use*Stats*`-style glob
+// would miss `useTestHistory`, so the list is explicit and the first test
+// pins that each is present.
+const SCANNED_FILES = [
+  path.join(ROOT, "src/api/useStatsRows.ts"),
+  path.join(ROOT, "src/api/useTestHistory.ts"),
+];
 
 function sources(): { path: string; text: string }[] {
   const out: { path: string; text: string }[] = [];
@@ -49,6 +55,10 @@ describe("stats code is Concept2-free (spec §8.4, invariant 12)", () => {
       true,
     );
     expect(paths.some((p) => p.endsWith("api/useStatsRows.ts"))).toBe(true);
+    expect(paths.some((p) => p.endsWith("api/useTestHistory.ts"))).toBe(true);
+    expect(paths.some((p) => p.endsWith("you/stats/TestTrendGroup.tsx"))).toBe(
+      true,
+    );
   });
 
   it("no scanned file contains a Concept2 identifier, case-insensitively", () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { GATE0_ROWS } from "../../../domain/stats/gate0Seed.js";
+import { GATE0_ROWS, GATE0_TESTS } from "../../../domain/stats/gate0Seed.js";
 
 beforeEach(() => {
   vi.resetModules();
@@ -309,7 +309,16 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
 });
 
 // Phase PS PR 2 — the range line (§14 ruling 21), the page's order (§5) and
-// the two unfiltered groups (invariant 19).
+// the two unfiltered groups (invariant 19). Test rows as the route lists
+// them: NEWEST first, `loggedAt` at 16:00Z of the seed date.
+const GATE0_TEST_ROWS = [...GATE0_TESTS].reverse().map((t) => ({
+  id: t.id,
+  distance: t.distance,
+  splitSeconds: t.splitSeconds,
+  loggedAt: `${t.date.y}-${String(t.date.m).padStart(2, "0")}-${String(t.date.d).padStart(2, "0")}T16:00:00.000Z`,
+  sessionLogId: t.log,
+}));
+
 describe("/you/stats — PR 2: the range line, the groups in order, SEASON and TEST TREND unfiltered", () => {
   const rangeLine = () => document.querySelector(".stats-range")?.textContent;
 
@@ -336,6 +345,24 @@ describe("/you/stats — PR 2: the range line, the groups in order, SEASON and T
     });
     expect(rangeLine()).toBe("8 NOV 2025 TO 12 SEP 2026");
     expect(rowValue("METRES", 1)).toBe("56,752");
+  });
+
+  it("the groups run TOTALS · METRES PER WEEK · TIME BY TYPE · SEASON 2027 · TEST TREND (§5's order) and the range line is the ONE .stats-caption above them", async () => {
+    await renderScreen(GATE0_ROWS, GATE0_TEST_ROWS);
+    await screen.findByText("2K 1:54.0");
+    expect(
+      Array.from(
+        document.querySelectorAll("section.stats-group h2"),
+        (h) => h.textContent,
+      ),
+    ).toStrictEqual([
+      "TOTALS",
+      "METRES PER WEEK",
+      "TIME BY TYPE",
+      "SEASON 2027",
+      "TEST TREND",
+    ]);
+    expect(document.querySelectorAll(".stats-caption")).toHaveLength(1);
   });
 
   it("METRES PER WEEK on ALL: labels on the tallest (13,000) and the current (2,000) bars only, THIS WK on the axis, the current bar in ink", async () => {
@@ -399,8 +426,8 @@ describe("/you/stats — PR 2: the range line, the groups in order, SEASON and T
     expect(season.getByText("43,012 TODAY")).toBeInTheDocument();
   });
 
-  it("a CUSTOM range with no rows still renders SEASON under the NO ROWS BETWEEN line", async () => {
-    await renderScreen(GATE0_ROWS);
+  it("a CUSTOM range with no rows still renders SEASON and TEST TREND under the NO ROWS BETWEEN line", async () => {
+    await renderScreen(GATE0_ROWS, GATE0_TEST_ROWS);
     fireEvent.click(chip("CUSTOM"));
     fireEvent.change(screen.getByLabelText("FROM"), {
       target: { value: "2026-09-12" },
@@ -410,6 +437,7 @@ describe("/you/stats — PR 2: the range line, the groups in order, SEASON and T
     expect(
       screen.getByRole("region", { name: "SEASON 2027" }),
     ).toBeInTheDocument();
+    expect(await screen.findByText("2K 1:54.0")).toBeInTheDocument();
   });
 
   it("the season card at 0 season rows reads NO ROWS THIS SEASON YET whatever the lifetime count (R1-R4 alone)", async () => {
@@ -420,5 +448,99 @@ describe("/you/stats — PR 2: the range line, the groups in order, SEASON and T
         "NO ROWS THIS SEASON YET",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("TEST TREND: six dots, the last of each series labelled 2K 1:54.0 and 6K 2:01.4, ticks 1:55 · 2:00 · 2:05, months NOV … SEP; with no tests, NO 2K OR 6K TEST LOGGED", async () => {
+    await renderScreen(GATE0_ROWS, GATE0_TEST_ROWS);
+    const trend = within(
+      await screen.findByRole("region", { name: "TEST TREND" }),
+    );
+    expect(document.querySelectorAll(".stats-dot").length).toBe(6 + 1); // + the season's end dot
+    expect(trend.getByText("2K 1:54.0")).toBeInTheDocument();
+    expect(trend.getByText("6K 2:01.4")).toBeInTheDocument();
+    expect(trend.getByText("2K 1:54.0").getAttribute("text-anchor")).toBe(
+      "start",
+    );
+    expect(
+      ["1:55", "2:00", "2:05"].map((t) => trend.getByText(t).textContent),
+    ).toStrictEqual(["1:55", "2:00", "2:05"]);
+    expect(
+      Array.from(
+        trend.getByRole("img").querySelectorAll("text.stats-tick"),
+        (t) => t.textContent,
+      ).filter((t) => /^[A-Z]{3}$/.test(t ?? "")),
+    ).toStrictEqual(["NOV", "JAN", "MAR", "MAY", "JUL", "SEP"]);
+    expect(trend.getByText("FASTER IS UP")).toBeInTheDocument();
+    // Faster is UP (a smaller y): the 2k's last dot (1:54.0) sits above the
+    // 6k's last (2:01.4) — the `invert` mutation flips this. Three 6k dots.
+    const svg = trend.getByRole("img");
+    const cy = (series: string) => {
+      const dots = svg.querySelectorAll(`[data-series="${series}"] circle`);
+      return Number(dots[dots.length - 1]!.getAttribute("cy"));
+    };
+    expect(cy("2k")).toBeLessThan(cy("6k"));
+    expect(svg.querySelectorAll(".stats-dot-6k")).toHaveLength(3);
+    expect(svg.getAttribute("aria-label")).toBe(
+      "2k and 6k test splits over time, 6 tests, latest 2k 1:54.0, latest 6k 2:01.4",
+    );
+  });
+
+  it("no tests: NO 2K OR 6K TEST LOGGED; one test: a record of one is drawn, labelled, with no line", async () => {
+    await renderScreen(GATE0_ROWS, []);
+    expect(
+      await screen.findByText("NO 2K OR 6K TEST LOGGED"),
+    ).toBeInTheDocument();
+  });
+
+  it("a test on its month's last day flips its label to the LEFT of the dot (text-anchor end); the seed's own labels stay to the right", async () => {
+    await renderScreen(GATE0_ROWS, [
+      {
+        ...GATE0_TEST_ROWS[0],
+        id: "t-last",
+        loggedAt: "2026-09-30T16:00:00.000Z",
+      },
+    ]);
+    const trend = within(
+      await screen.findByRole("region", { name: "TEST TREND" }),
+    );
+    expect(trend.getByText("2K 1:54.0").getAttribute("text-anchor")).toBe(
+      "end",
+    );
+  });
+
+  it("one test: drawn and labelled, no polyline", async () => {
+    await renderScreen(GATE0_ROWS, [GATE0_TEST_ROWS[0]]);
+    const trend = within(
+      await screen.findByRole("region", { name: "TEST TREND" }),
+    );
+    expect(trend.getByText("2K 1:54.0")).toBeInTheDocument();
+    expect(trend.getByRole("img").querySelectorAll("polyline")).toHaveLength(0);
+    expect(trend.getByRole("img").querySelectorAll("circle")).toHaveLength(1);
+  });
+
+  it("the trend's own fetch failing leaves the rest of the page standing and offers Try again", async () => {
+    let testCalls = 0;
+    vi.doMock("../../api", () => ({
+      api: vi.fn(async (path: string) => {
+        if (path === "/api/test-history") {
+          testCalls += 1;
+          return new Response("nope", { status: 500 });
+        }
+        return new Response(JSON.stringify({ rows: GATE0_ROWS }), {
+          status: 200,
+        });
+      }),
+    }));
+    const { default: StatsScreen } = await import("./StatsScreen");
+    render(
+      <MemoryRouter initialEntries={["/you/stats"]}>
+        <StatsScreen />
+      </MemoryRouter>,
+    );
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Couldn't load your tests.");
+    expect(rowValue("METRES", 1)).toBe("56,752");
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    await vi.waitFor(() => expect(testCalls).toBe(2));
   });
 });

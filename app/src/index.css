@@ -12268,10 +12268,16 @@ section:not(.news-pinned) .news-row:last-of-type {
   stroke-linejoin: round;
   stroke-linecap: round;
 }
+.stats-line-6k {
+  stroke: var(--type-o2);
+}
 .stats-dot {
   fill: var(--ink);
   stroke: var(--surface);
   stroke-width: 2;
+}
+.stats-dot-6k {
+  fill: var(--type-o2);
 }
 .stats-today-line {
   stroke: var(--ink-4);
@@ -12316,4 +12322,25 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 9px;
   letter-spacing: 0.08em;
   color: var(--ink-3);
+}
+.stats-trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+.stats-trend-legend .stats-legend-chip {
+  color: var(--ink);
+}
+.stats-trend-swatch {
+  width: 14px;
+  height: 2px;
+  background: var(--ink);
+}
+.stats-trend-swatch-6k {
+  background: var(--type-o2);
 }
