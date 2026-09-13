@@ -712,7 +712,8 @@ carries what PR 2 builds.
   2026`; 30 DAYS `14 AUG TO 12 SEP 2026`; CUSTOM the two inputs' values
   in the same shape — `14 AUG TO 12 SEP 2026` for the seeded pair. The
   shape collapses a shared year and a shared month (`build.mjs`
-  `rangeText`); across years both ends print in full. While CUSTOM's pair
+  `rangeText`); across years both ends print in full; a one-day range is
+  ONE date, `1 OCT 2026` (§14 ruling 23). While CUSTOM's pair
   is unusable (FROM > TO, or a cleared field) the line names the range
   still APPLIED — the same range the totals show — beside the error
   sentence. It is the ONE prose line on the page: rulings 18 and 19 stand
@@ -1356,6 +1357,12 @@ the record.
     May 1 (the cost, accepted: a rower six weeks deep on May 3 reads
     `CURRENT STREAK 1`). Pinned in §8.3 and in the plan's Task 3 with its
     mutation (streak keys taken from every row instead of the season's).
+23. **A one-day range reads as a single date (2026-09-13, PR 2 review).**
+    `1 OCT 2026`, never `1 TO 1 OCT 2026`; the `TO` form returns the moment
+    the two ends differ (`11 TO 12 SEP 2026`). Ruling 21's three shapes
+    stand for every range longer than a day. Applied in `fmtRange`
+    (`src/you/stats/format.ts`) and pinned in `format.test.ts`
+    (`12 SEP 2026` for from = to = today).
 
 ## 15. Gate record (PR 0, at `93b91d66`)
 

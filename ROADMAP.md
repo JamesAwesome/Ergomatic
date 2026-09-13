@@ -682,7 +682,9 @@ line naming it was struck by ruling 19), never corrected.
       `1 MAY TO 12 SEP 2026`, `1 JAN TO 12 SEP 2026`, `1 TO 12 SEP 2026`,
       `14 AUG TO 12 SEP 2026`, CUSTOM the inputs' values in the same
       shape — the one prose line rulings 18-19 allow back, hidden with the
-      filter bar at zero rows.** Gates: the Gate 0 addendum (RULED,
+      filter bar at zero rows; RULING 23 (2026-09-13, PR 2 review): a
+      one-day range is ONE date, `1 OCT 2026`, never `1 TO 1 OCT 2026`.**
+      Gates: the Gate 0 addendum (RULED,
       both notes); antagonist
       DELTA pass on the streak/avg-per-day/metres-per-week definitions
       only (watts and time by type ship in PR 1; the notes are copy and

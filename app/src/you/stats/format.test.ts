@@ -43,13 +43,15 @@ describe("fmtRangeLine — the days the totals cover", () => {
     expect(line({ y: 2026, m: 9, d: 1 })).toBe("1 TO 12 SEP 2026");
     expect(line({ y: 2026, m: 8, d: 14 })).toBe("14 AUG TO 12 SEP 2026");
   });
-  it("across years both ends print in full: 8 NOV 2025 TO 12 SEP 2026; a one-day range reads 12 TO 12 SEP 2026", () => {
+  it("across years both ends print in full: 8 NOV 2025 TO 12 SEP 2026; a one-day range is a single date, 12 SEP 2026 (ruling 23)", () => {
     expect(
       fmtRangeLine({ from: { y: 2025, m: 11, d: 8 }, to: today }, null),
     ).toBe("8 NOV 2025 TO 12 SEP 2026");
-    expect(fmtRangeLine({ from: today, to: today }, null)).toBe(
-      "12 TO 12 SEP 2026",
-    );
+    expect(fmtRangeLine({ from: today, to: today }, null)).toBe("12 SEP 2026");
+    // The TO form returns the moment the ends differ.
+    expect(
+      fmtRangeLine({ from: { y: 2026, m: 9, d: 11 }, to: today }, null),
+    ).toBe("11 TO 12 SEP 2026");
     // A one-sided range has no producer (presetRange/customRange set both
     // ends): it reads as ALL rather than inventing a SINCE line.
     expect(

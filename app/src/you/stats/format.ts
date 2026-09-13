@@ -48,8 +48,11 @@ export function fmtMonth(d: CalendarDate): string {
 /** The range line's shape (§14 ruling 21, `build.mjs` `rangeText`): the
  *  month once when both ends share it (`1 TO 12 SEP 2026`), the year once
  *  when both ends share it (`14 AUG TO 12 SEP 2026`), both ends in full
- *  across years (`8 NOV 2025 TO 12 SEP 2026`). */
+ *  across years (`8 NOV 2025 TO 12 SEP 2026`); a one-day range is ONE
+ *  date (`1 OCT 2026`, §14 ruling 23), never `1 TO 1 OCT 2026`. */
 export function fmtRange(from: CalendarDate, to: CalendarDate): string {
+  if (from.y === to.y && from.m === to.m && from.d === to.d)
+    return `${fmtDayMonth(from)} ${from.y}`;
   if (from.y === to.y && from.m === to.m)
     return `${from.d} TO ${to.d} ${MON[to.m - 1]} ${to.y}`;
   if (from.y === to.y)
