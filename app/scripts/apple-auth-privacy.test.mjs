@@ -21,6 +21,9 @@ const configurationSource = read(
 const bridgeControllerSource = read(
   "node_modules/@capacitor/ios/Capacitor/Capacitor/CAPBridgeViewController.swift",
 );
+const jsExportSource = read(
+  "node_modules/@capacitor/ios/Capacitor/Capacitor/JSExport.swift",
+);
 const capacitorBridgeSource = read(
   "node_modules/@capacitor/ios/Capacitor/Capacitor/CapacitorBridge.swift",
 );
@@ -36,6 +39,10 @@ assert.match(
   /case "none":\s+return InstanceLoggingBehavior\.none/,
 );
 assert.match(
+  descriptorSource,
+  /\(config\[keyPath: "ios\.loggingBehavior"\] as\? String\) \?\? \(config\[keyPath: "loggingBehavior"\] as\? String\)/,
+);
+assert.match(
   configurationSource,
   /case CAPInstanceLoggingBehaviorDebug:\s+_loggingEnabled = debug;/,
 );
@@ -44,6 +51,7 @@ assert.match(
   bridgeControllerSource,
   /CAPLog\.enableLogging = configuration\.loggingEnabled/,
 );
+assert.match(jsExportSource, /isLoggingEnabled: \\\(loggingEnabled\)/);
 assert.match(
   capacitorBridgeSource,
   /CAPLog\.print\("⚡️  TO JS", resultJson\.prefix\(256\)\)/,
