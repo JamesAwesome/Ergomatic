@@ -920,6 +920,44 @@ describe("useAuthFlow", () => {
     expect(cancellations).toBe(1);
   });
 
+  it("releases a cancellation refused for a missing binding cookie", async () => {
+    // THE case the release exists for, and it is a 400, not a 401: an absent
+    // `erg_auth_attempt` cookie reaches `requiredText(undefined)` in
+    // `webBinding`, which throws `invalid_request`. A malformed cookie is the
+    // 401 above. Both are spent bindings; this is the one a five-minute pause
+    // on the confirmation screen actually produces.
+    window.history.replaceState(null, "", "/?authAttempt=cancel-nocookie");
+    let cancellations = 0;
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/cancel-nocookie") {
+        return ok({
+          outcome: "confirm",
+          attemptId: "cancel-nocookie",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          profile: { email: "relay@apple.test", name: "Rower" },
+        });
+      }
+      if (path === "/api/auth/web/attempts/cancel-nocookie/cancel") {
+        cancellations += 1;
+        return ok({ error: "invalid_request" }, 400);
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.view.kind).toBe("confirm"));
+
+    await act(async () => result.current.cancel());
+    expect(result.current.view).toStrictEqual({
+      kind: "cancelled",
+      purpose: "signin",
+      targetProvider: "apple",
+    });
+    expect(cancellations).toBe(1);
+  });
+
   it("keeps a rate-limited cancellation for retry rather than releasing it", async () => {
     // 429 is the one 4xx the server did not act on: the attempt and its
     // binding both survive, so this must retain like a 5xx.
