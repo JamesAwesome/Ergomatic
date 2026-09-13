@@ -1,0 +1,33 @@
+diff --git a/app/server/auth/attempts.ts b/app/server/auth/attempts.ts
+index 365b6e24..c1437de7 100644
+--- a/app/server/auth/attempts.ts
++++ b/app/server/auth/attempts.ts
+@@ -431,6 +431,28 @@ export function createAttempts(pool: pg.Pool) {
+         return { linked: true };
+       });
+     },
++    // Failure cleanup owns one snapshot, unlike an explicit holder cancel.
++    // A single conditional DELETE locks only the attempt and cannot erase a
++    // newer authorization stage after another callback wins its transition.
++    async discard(expected: Attempt): Promise<boolean> {
++      const result = await pool.query(
++        `DELETE FROM auth_attempts WHERE id=$1 AND binding_hash=$2 AND surface=$3 AND purpose=$4 AND target_provider=$5 AND existing_provider IS NOT DISTINCT FROM $6 AND stage=$7 AND version=$8 AND state=$9 AND nonce=$10 AND original_session_id IS NOT DISTINCT FROM $11`,
++        [
++          expected.id,
++          expected.bindingHash,
++          expected.surface,
++          expected.purpose,
++          expected.targetProvider,
++          expected.existingProvider,
++          expected.stage,
++          expected.version,
++          expected.state,
++          expected.nonce,
++          expected.originalSessionId,
++        ],
++      );
++      return result.rowCount === 1;
++    },
+     async cancel(
+       id: string,
+       bindingSecret: string,

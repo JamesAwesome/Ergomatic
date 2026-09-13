@@ -1,0 +1,10 @@
+$ bash scripts/test-run.sh --project integration server/auth/frontDoorRoutes.integration.test.ts server/auth/attempts.integration.test.ts
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+
+ Test Files  2 passed (2)
+      Tests  47 passed (47)
+   Start at  01:21:01
+   Duration  3.14s (transform 154ms, setup 0ms, import 923ms, tests 3.95s, environment 0ms)
+

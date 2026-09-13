@@ -372,3 +372,18 @@ returning begin→claim→accept 4.747 ms; no additional index was recommended.
 The full 512 pending-confirmation cap with 8192-character synthetic refresh
 tokens occupied 5,177,344 B total relation. No ROADMAP row proposed. This is the
 plan gate; the final PR still owes measurement against its shipped source.
+
+## 2026-09-13 — Apple failure-discard plan delta
+
+**PASS for the plan delta, not final-PR signoff**, committed candidate259882ba1087b6ad853159b19799b2358fbf3905; attempts SHA256d8df3812f5b4bb6e29256f3ced465616f3b0cf3b9d51582b6a90657772a88980. Diff from prior299a31d3 is exactly one new conditional DELETE; prior migration/schema/index and session-first query measurements remain inherited by byte identity.
+
+| Environment | Value |
+|---|---|
+| Container / PG | apple-dba-discard-pg / PostgreSQL18.4 Debian aarch64 |
+| Host | Apple M5,10CPUs,16GiB |
+| Query settings | work_mem4MB,shared_buffers128MB,jit on,parallel gather0,WAL FPI off then restored |
+| Scale | 5users;512anonymous attempts plus5/1k/100k/1M links with matching sessions; smallest full-anonymous-cap fixture rules |
+
+Real discard-call medians under benchmark rollback transactions: matching signup0.310/0.276/0.351/0.290ms; matching link0.281/0.261/0.358/0.261ms. The actual index is state_unique, despite a PK predicate. Matched/stale WAL54/0B; warm matching buffers4–5, stale3–4. Held real accept→COMMIT protects confirm/version3+grant and target_authorize/version3 from stale discard; the old id/hash/surface cleanup fails the exact gate; pinned original rerun passes. Holding the parent session does not block child discard (0.569ms), and the original claim-versus-replacement deadlock reproducer still fulfills both operations (13.048ms).
+
+Commands and complete SQL/EXPLAIN/held outputs are in `docs/superpowers/research/2026-09-13-apple-db-discard/report.md`, `measure.ts`→`measure.json`, `held.ts`→`held.json`/`held-mutant.json`, and `original-deadlock-replay.ts`→JSON. Run with Node26 `pnpm exec tsx /tmp/apple-dba-discard/<script>.ts` from candidate app, using the report's isolated postgres:18.4 command and the pinned source snapshot. The original scripts and raw artifacts are archived beside the report with a SHA256 manifest and replay prerequisites. No ROADMAP row; final integrated-head fingerprint, caller/gate and migration-competition checks remain owed.

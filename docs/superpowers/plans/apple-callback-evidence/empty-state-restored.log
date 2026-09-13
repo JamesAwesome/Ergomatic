@@ -1,0 +1,10 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple/app
+
+
+ Test Files  1 passed (1)
+      Tests  25 passed (25)
+   Start at  01:44:07
+   Duration  456ms (transform 34ms, setup 44ms, import 20ms, tests 143ms, environment 196ms)
+
+$ bash scripts/test-run.sh --project client src/adapters/linkFlow.test.ts

@@ -1,0 +1,2 @@
+{"atSecondTap":{"providerCalls":2,"serverAttempt":false,"views":[{"kind":"error","purpose":"link","code":"signin_failed","targetProvider":"apple"}],"requests":["/api/auth/native/attempts/one/cancel"]}}
+{"afterFirstCallback":{"serverAttempt":false,"views":[{"kind":"error","purpose":"link","code":"signin_failed","targetProvider":"apple"},{"kind":"error","purpose":"link","code":"attempt_expired","targetProvider":"apple"}],"requests":["/api/auth/native/attempts/one/cancel","/api/auth/native/attempts/one/proof"]}}

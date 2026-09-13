@@ -1,0 +1,50 @@
+$ node /tmp/apple-mechanism-probes/client-stale-cancel.cjs
+/private/tmp/apple-mechanism-probes/client-stale-cancel.cjs:88
+      operation: context.operation.current.step.attemptId,
+                                           ^
+
+TypeError: Cannot read properties of null (reading 'step')
+    at /private/tmp/apple-mechanism-probes/client-stale-cancel.cjs:88:44
+
+Node.js v26.5.0
+probe-exit=1
+$ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "keeps a newly prepared link when an older provider cancellation finishes cleanup"
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/apple-client-plan-scratch/app
+
+ ❯ |client| src/adapters/authFlow.test.tsx (32 tests | 1 failed | 31 skipped) 171ms
+     × keeps a newly prepared link when an older provider cancellation finishes cleanup 170ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |client| src/adapters/authFlow.test.tsx > useAuthFlow > keeps a newly prepared link when an older provider cancellation finishes cleanup
+AssertionError: expected { kind: 'cancelled', …(2) } to strictly equal { kind: 'link_confirm', …(1) }
+
+- Expected
++ Received
+
+  {
+-   "kind": "link_confirm",
+-   "targetProvider": "google",
++   "kind": "cancelled",
++   "purpose": "link",
++   "targetProvider": "apple",
+  }
+
+ ❯ src/adapters/authFlow.test.tsx:331:23
+    329|       await Promise.resolve();
+    330|     });
+    331|     expect(auth.view).toStrictEqual({
+       |                       ^
+    332|       kind: "link_confirm",
+    333|       targetProvider: "google",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 31 skipped (32)
+   Start at  01:36:57
+   Duration  524ms (transform 45ms, setup 44ms, import 54ms, tests 171ms, environment 199ms)
+
+expected-failure-exit=1

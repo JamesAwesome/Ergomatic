@@ -1,0 +1,502 @@
+$ pnpm build
+$ tsc -b && vite build && tsc -p tsconfig.server.build.json
+vite v8.2.2 building client environment for production...
+transforming...
+✓ 335 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/client/index.html                                                     0.56 kB │ gzip:   0.33 kB
+dist/client/assets/archivo-vietnamese-600-normal-anCjMumA.woff2            5.19 kB
+dist/client/assets/newsreader-vietnamese-500-normal-CL6a8tp2.woff2         5.43 kB
+dist/client/assets/ibm-plex-mono-vietnamese-500-normal-C8zxqsMH.woff       5.61 kB
+dist/client/assets/ibm-plex-mono-vietnamese-400-normal-DDuiU_S-.woff       5.62 kB
+dist/client/assets/archivo-vietnamese-500-normal-k0drYPZA.woff2            5.65 kB
+dist/client/assets/archivo-vietnamese-400-normal-BF4g3tCF.woff2            5.67 kB
+dist/client/assets/ibm-plex-mono-vietnamese-600-normal-iLQfcSjf.woff       5.71 kB
+dist/client/assets/ibm-plex-mono-cyrillic-ext-500-normal-BIfNGwUT.woff     5.77 kB
+dist/client/assets/ibm-plex-mono-cyrillic-ext-600-normal-9HEixskS.woff     5.79 kB
+dist/client/assets/ibm-plex-mono-cyrillic-ext-400-normal-DMdlQ8Kv.woff     5.82 kB
+dist/client/assets/ibm-plex-mono-vietnamese-400-normal-BulugwFq.woff2      5.86 kB
+dist/client/assets/ibm-plex-mono-vietnamese-500-normal-DZ4AoWbu.woff2      6.04 kB
+dist/client/assets/ibm-plex-mono-cyrillic-ext-400-normal-xuaO2J-f.woff2    6.91 kB
+dist/client/assets/ibm-plex-mono-vietnamese-600-normal-D2EvbN8M.woff2      6.93 kB
+dist/client/assets/ibm-plex-mono-cyrillic-ext-500-normal-BqneJy0T.woff2    6.97 kB
+dist/client/assets/newsreader-vietnamese-500-normal-BEAbKU8A.woff          7.03 kB
+dist/client/assets/ibm-plex-mono-cyrillic-400-normal-CEL4l2ZJ.woff         7.20 kB
+dist/client/assets/ibm-plex-mono-cyrillic-500-normal-Ael50iVv.woff         7.20 kB
+dist/client/assets/ibm-plex-mono-cyrillic-600-normal-fLZuRloM.woff         7.26 kB
+dist/client/assets/archivo-vietnamese-600-normal-C8xBVdfP.woff             7.38 kB
+dist/client/assets/archivo-vietnamese-500-normal-7W3lD2kQ.woff             7.66 kB
+dist/client/assets/archivo-vietnamese-400-normal-FGOLYM1a.woff             7.68 kB
+dist/client/assets/ibm-plex-mono-cyrillic-ext-600-normal-V-xxqcpd.woff2    7.69 kB
+dist/client/assets/ibm-plex-mono-cyrillic-400-normal-BSMlKf0J.woff2        8.35 kB
+dist/client/assets/ibm-plex-mono-cyrillic-500-normal-Bq9vWWag.woff2        8.46 kB
+dist/client/assets/ibm-plex-mono-cyrillic-600-normal-CTOM6hUh.woff2        9.35 kB
+dist/client/assets/ibm-plex-mono-latin-ext-400-normal-D3D2R8hC.woff       11.76 kB
+dist/client/assets/ibm-plex-mono-latin-ext-500-normal-CZ70TYgx.woff       11.76 kB
+dist/client/assets/ibm-plex-mono-latin-ext-600-normal-DmB0ttJJ.woff       11.83 kB
+dist/client/assets/archivo-latin-ext-600-normal-Dm61iqcg.woff2            12.38 kB
+dist/client/assets/archivo-latin-ext-400-normal-B5tPZzqW.woff2            12.92 kB
+dist/client/assets/ibm-plex-mono-latin-400-normal-CvHOgSBP.woff           13.14 kB
+dist/client/assets/ibm-plex-mono-latin-500-normal-CB9ihrfo.woff           13.15 kB
+dist/client/assets/archivo-latin-ext-500-normal-RFhg4CpD.woff2            13.16 kB
+dist/client/assets/ibm-plex-mono-latin-600-normal-DWFSQ4vo.woff           13.20 kB
+dist/client/assets/ibm-plex-mono-latin-ext-400-normal-BmRBH3aV.woff2      13.34 kB
+dist/client/assets/ibm-plex-mono-latin-ext-500-normal-CAhNIIs5.woff2      13.43 kB
+dist/client/assets/archivo-latin-600-normal-3BBy0ZsW.woff2                13.82 kB
+dist/client/assets/ibm-plex-mono-latin-ext-600-normal-D38SheWl.woff2      14.32 kB
+dist/client/assets/archivo-latin-500-normal-CGugC8dq.woff2                14.60 kB
+dist/client/assets/archivo-latin-400-normal-C81ewxNO.woff2                14.70 kB
+dist/client/assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2          14.70 kB
+dist/client/assets/ibm-plex-mono-latin-500-normal-DSY6xOcd.woff2          14.88 kB
+dist/client/assets/newsreader-latin-ext-500-normal-BNHmvKvI.woff2         15.06 kB
+dist/client/assets/ibm-plex-mono-latin-600-normal-BgSNZQsw.woff2          15.62 kB
+dist/client/assets/archivo-latin-ext-600-normal-D7uErJuz.woff             17.72 kB
+dist/client/assets/archivo-latin-ext-400-normal-DrmqtLj6.woff             17.98 kB
+dist/client/assets/archivo-latin-600-normal-DwYieO8P.woff                 18.20 kB
+dist/client/assets/archivo-latin-ext-500-normal-D7mXw3Kz.woff             18.29 kB
+dist/client/assets/archivo-latin-400-normal-Bl602Mgc.woff                 18.97 kB
+dist/client/assets/archivo-latin-500-normal-pkzA7jw9.woff                 18.98 kB
+dist/client/assets/newsreader-latin-ext-500-normal-CZruMFou.woff          19.29 kB
+dist/client/assets/newsreader-latin-500-normal-B66TYsaK.woff2             23.62 kB
+dist/client/assets/newsreader-latin-500-normal-DFwuUcdu.woff              29.63 kB
+dist/client/assets/index-NeajD2YL.css                                    119.83 kB │ gzip:  17.95 kB
+dist/client/assets/webAuth-Ch6J0S-C.js                                     0.07 kB │ gzip:   0.08 kB
+dist/client/assets/appleAuth-C-55XkHU.js                                   0.08 kB │ gzip:   0.09 kB
+dist/client/assets/appSettings-D3Wp7rcf.js                                 0.11 kB │ gzip:   0.11 kB
+dist/client/assets/keepAwake-2XTEeiyO.js                                   0.45 kB │ gzip:   0.29 kB
+dist/client/assets/appLifecycle-OODLQ2Db.js                                0.52 kB │ gzip:   0.33 kB
+dist/client/assets/keyboard-Cx1VmE8N.js                                    0.57 kB │ gzip:   0.37 kB
+dist/client/assets/haptics-CNBAwURv.js                                     0.59 kB │ gzip:   0.38 kB
+dist/client/assets/native-D7UX7wR7.js                                      0.72 kB │ gzip:   0.33 kB
+dist/client/assets/web-BOP2GcBb.js                                         0.76 kB │ gzip:   0.38 kB
+dist/client/assets/web-szr0shcW.js                                         0.77 kB │ gzip:   0.35 kB
+dist/client/assets/web-B9dskbiE.js                                         0.84 kB │ gzip:   0.40 kB
+dist/client/assets/web-CQEoMDjn.js                                         0.92 kB │ gzip:   0.46 kB
+dist/client/assets/web-DbKzwR46.js                                         1.15 kB │ gzip:   0.46 kB
+dist/client/assets/session-DhqQuZh9.js                                     1.39 kB │ gzip:   0.62 kB
+dist/client/assets/base-D7oW4e3f.js                                        2.53 kB │ gzip:   0.92 kB
+dist/client/assets/nfc-RLxlrmun.js                                         3.11 kB │ gzip:   1.31 kB
+dist/client/assets/capacitorBle-ZQnAk9CQ.js                                6.67 kB │ gzip:   2.63 kB
+dist/client/assets/web-B_G5Qgjx.js                                         7.67 kB │ gzip:   2.24 kB
+dist/client/assets/dist-Dhrj-3P3.js                                        7.75 kB │ gzip:   3.09 kB
+dist/client/assets/esm-CpcOJMvV.js                                         8.63 kB │ gzip:   2.42 kB
+dist/client/assets/web-CBZU7BIt.js                                        13.30 kB │ gzip:   3.94 kB
+dist/client/assets/signin-DU-_fjt8.js                                     45.90 kB │ gzip:  11.70 kB
+dist/client/assets/index-Frj_POr1.js                                     736.64 kB │ gzip: 222.44 kB
+
+✓ built in 127ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+build-exit=0
+$ rg -n "Nothing changed after this attempt" dist/assets
+rg: dist/assets: IO error for operation on dist/assets: No such file or directory (os error 2)
+dist-literal-exit=2
+$ NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "a lost finalize response reports uncertainty without claiming failure or success"
+$ bash scripts/e2e.sh -g 'a lost finalize response reports uncertainty without claiming failure or success'
+stack: ergomatic-62230 (web :8330, pg :15330)
+time="2026-09-13T01:42:08-04:00" level=warning msg="The \"CLOUDFLARE_TUNNEL_TOKEN\" variable is not set. Defaulting to a blank string."
+ Image ergomatic-62230-api Building 
+ Image ergomatic-62230-web Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.39kB done
+#1 DONE 0.0s
+
+#2 [web internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.96kB done
+#2 DONE 0.0s
+
+#3 [web internal] load metadata for docker.io/library/node:26.5.0-slim
+#3 DONE 0.0s
+
+#4 [web internal] load metadata for docker.io/nginxinc/nginx-unprivileged:1.30.4-alpine
+#4 DONE 0.0s
+
+#5 [api internal] load .dockerignore
+#5 transferring context: 86B done
+#5 DONE 0.0s
+
+#6 [web build 1/8] FROM docker.io/library/node:26.5.0-slim@sha256:715e55e4b84e4bb0ff48e49b398a848f08e55daed8eb6a0ea1839ae53bc57583
+#6 resolve docker.io/library/node:26.5.0-slim@sha256:715e55e4b84e4bb0ff48e49b398a848f08e55daed8eb6a0ea1839ae53bc57583 done
+#6 DONE 0.0s
+
+#7 [web web 1/3] FROM docker.io/nginxinc/nginx-unprivileged:1.30.4-alpine@sha256:44e36330f74d4f3a1d4e222acca9e23b401fb87811a7597024502bb759c4dd49
+#7 resolve docker.io/nginxinc/nginx-unprivileged:1.30.4-alpine@sha256:44e36330f74d4f3a1d4e222acca9e23b401fb87811a7597024502bb759c4dd49 done
+#7 DONE 0.0s
+
+#8 [api internal] load build context
+#8 transferring context: 321.73kB 0.0s done
+#8 DONE 0.0s
+
+#9 [api build 3/8] WORKDIR /app
+#9 CACHED
+
+#10 [api build 5/8] COPY patches ./patches
+#10 CACHED
+
+#11 [api build 4/8] COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+#11 CACHED
+
+#12 [api build 2/8] RUN npm install -g pnpm@11.17.0
+#12 CACHED
+
+#13 [api build 6/8] RUN pnpm install --frozen-lockfile
+#13 CACHED
+
+#14 [web build 7/8] COPY . .
+#14 DONE 0.1s
+
+#15 [api build 8/8] RUN pnpm build
+#15 0.530 ✓ Lockfile passes supply-chain policies (verified 4d ago)
+#15 0.534 Lockfile is up to date, resolution step is skipped
+#15 0.580 Already up to date
+#15 0.816 
+#15 0.816    ╭─────────────────────────────────────────╮
+#15 0.816    │                                         │
+#15 0.816    │   Update available! 11.17.0 → 12.4.1.   │
+#15 0.816    │   Changelog: https://pnpm.io/v/12.4.1   │
+#15 0.816    │    To update, run: pnpm add -g pnpm     │
+#15 0.816    │                                         │
+#15 0.816    ╰─────────────────────────────────────────╯
+#15 0.816 
+#15 0.891 
+#15 0.921 Done in 612ms using pnpm v11.17.0
+#15 0.931 $ tsc -b && vite build && tsc -p tsconfig.server.build.json
+#15 6.577 vite v8.2.2 building client environment for production...
+#15 6.582 transforming...
+#15 6.694 ✓ 335 modules transformed.
+#15 6.758 rendering chunks...
+#15 6.868 computing gzip size...
+#15 6.877 dist/client/index.html                                                     0.56 kB │ gzip:   0.33 kB
+#15 6.877 dist/client/assets/archivo-vietnamese-600-normal-anCjMumA.woff2            5.19 kB
+#15 6.877 dist/client/assets/newsreader-vietnamese-500-normal-CL6a8tp2.woff2         5.43 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-vietnamese-500-normal-C8zxqsMH.woff       5.61 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-vietnamese-400-normal-DDuiU_S-.woff       5.62 kB
+#15 6.877 dist/client/assets/archivo-vietnamese-500-normal-k0drYPZA.woff2            5.65 kB
+#15 6.877 dist/client/assets/archivo-vietnamese-400-normal-BF4g3tCF.woff2            5.67 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-vietnamese-600-normal-iLQfcSjf.woff       5.71 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-cyrillic-ext-500-normal-BIfNGwUT.woff     5.77 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-cyrillic-ext-600-normal-9HEixskS.woff     5.79 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-cyrillic-ext-400-normal-DMdlQ8Kv.woff     5.82 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-vietnamese-400-normal-BulugwFq.woff2      5.86 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-vietnamese-500-normal-DZ4AoWbu.woff2      6.04 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-cyrillic-ext-400-normal-xuaO2J-f.woff2    6.91 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-vietnamese-600-normal-D2EvbN8M.woff2      6.93 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-cyrillic-ext-500-normal-BqneJy0T.woff2    6.97 kB
+#15 6.877 dist/client/assets/newsreader-vietnamese-500-normal-BEAbKU8A.woff          7.03 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-cyrillic-400-normal-CEL4l2ZJ.woff         7.20 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-cyrillic-500-normal-Ael50iVv.woff         7.20 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-cyrillic-600-normal-fLZuRloM.woff         7.26 kB
+#15 6.877 dist/client/assets/archivo-vietnamese-600-normal-C8xBVdfP.woff             7.38 kB
+#15 6.877 dist/client/assets/archivo-vietnamese-500-normal-7W3lD2kQ.woff             7.66 kB
+#15 6.877 dist/client/assets/archivo-vietnamese-400-normal-FGOLYM1a.woff             7.68 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-cyrillic-ext-600-normal-V-xxqcpd.woff2    7.69 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-cyrillic-400-normal-BSMlKf0J.woff2        8.35 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-cyrillic-500-normal-Bq9vWWag.woff2        8.46 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-cyrillic-600-normal-CTOM6hUh.woff2        9.35 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-latin-ext-400-normal-D3D2R8hC.woff       11.76 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-latin-ext-500-normal-CZ70TYgx.woff       11.76 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-latin-ext-600-normal-DmB0ttJJ.woff       11.83 kB
+#15 6.877 dist/client/assets/archivo-latin-ext-600-normal-Dm61iqcg.woff2            12.38 kB
+#15 6.877 dist/client/assets/archivo-latin-ext-400-normal-B5tPZzqW.woff2            12.92 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-latin-400-normal-CvHOgSBP.woff           13.14 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-latin-500-normal-CB9ihrfo.woff           13.15 kB
+#15 6.877 dist/client/assets/archivo-latin-ext-500-normal-RFhg4CpD.woff2            13.16 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-latin-600-normal-DWFSQ4vo.woff           13.20 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-latin-ext-400-normal-BmRBH3aV.woff2      13.34 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-latin-ext-500-normal-CAhNIIs5.woff2      13.43 kB
+#15 6.877 dist/client/assets/archivo-latin-600-normal-3BBy0ZsW.woff2                13.82 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-latin-ext-600-normal-D38SheWl.woff2      14.32 kB
+#15 6.877 dist/client/assets/archivo-latin-500-normal-CGugC8dq.woff2                14.60 kB
+#15 6.877 dist/client/assets/archivo-latin-400-normal-C81ewxNO.woff2                14.70 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2          14.70 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-latin-500-normal-DSY6xOcd.woff2          14.88 kB
+#15 6.877 dist/client/assets/newsreader-latin-ext-500-normal-BNHmvKvI.woff2         15.06 kB
+#15 6.877 dist/client/assets/ibm-plex-mono-latin-600-normal-BgSNZQsw.woff2          15.62 kB
+#15 6.877 dist/client/assets/archivo-latin-ext-600-normal-D7uErJuz.woff             17.72 kB
+#15 6.877 dist/client/assets/archivo-latin-ext-400-normal-DrmqtLj6.woff             17.98 kB
+#15 6.877 dist/client/assets/archivo-latin-600-normal-DwYieO8P.woff                 18.20 kB
+#15 6.877 dist/client/assets/archivo-latin-ext-500-normal-D7mXw3Kz.woff             18.29 kB
+#15 6.877 dist/client/assets/archivo-latin-400-normal-Bl602Mgc.woff                 18.97 kB
+#15 6.877 dist/client/assets/archivo-latin-500-normal-pkzA7jw9.woff                 18.98 kB
+#15 6.877 dist/client/assets/newsreader-latin-ext-500-normal-CZruMFou.woff          19.29 kB
+#15 6.877 dist/client/assets/newsreader-latin-500-normal-B66TYsaK.woff2             23.62 kB
+#15 6.877 dist/client/assets/newsreader-latin-500-normal-DFwuUcdu.woff              29.63 kB
+#15 6.877 dist/client/assets/index-NeajD2YL.css                                    119.83 kB │ gzip:  17.95 kB
+#15 6.877 dist/client/assets/webAuth-Ch6J0S-C.js                                     0.07 kB │ gzip:   0.08 kB
+#15 6.877 dist/client/assets/appleAuth-C-55XkHU.js                                   0.08 kB │ gzip:   0.09 kB
+#15 6.877 dist/client/assets/appSettings-D3Wp7rcf.js                                 0.11 kB │ gzip:   0.11 kB
+#15 6.877 dist/client/assets/keepAwake-2XTEeiyO.js                                   0.45 kB │ gzip:   0.29 kB
+#15 6.877 dist/client/assets/appLifecycle-OODLQ2Db.js                                0.52 kB │ gzip:   0.33 kB
+#15 6.877 dist/client/assets/keyboard-Cx1VmE8N.js                                    0.57 kB │ gzip:   0.37 kB
+#15 6.877 dist/client/assets/haptics-CNBAwURv.js                                     0.59 kB │ gzip:   0.38 kB
+#15 6.877 dist/client/assets/native-D7UX7wR7.js                                      0.72 kB │ gzip:   0.33 kB
+#15 6.877 dist/client/assets/web-BOP2GcBb.js                                         0.76 kB │ gzip:   0.38 kB
+#15 6.877 dist/client/assets/web-szr0shcW.js                                         0.77 kB │ gzip:   0.35 kB
+#15 6.877 dist/client/assets/web-B9dskbiE.js                                         0.84 kB │ gzip:   0.40 kB
+#15 6.877 dist/client/assets/web-CQEoMDjn.js                                         0.92 kB │ gzip:   0.46 kB
+#15 6.877 dist/client/assets/web-DbKzwR46.js                                         1.15 kB │ gzip:   0.46 kB
+#15 6.877 dist/client/assets/session-DhqQuZh9.js                                     1.39 kB │ gzip:   0.62 kB
+#15 6.877 dist/client/assets/base-D7oW4e3f.js                                        2.53 kB │ gzip:   0.92 kB
+#15 6.877 dist/client/assets/nfc-RLxlrmun.js                                         3.11 kB │ gzip:   1.31 kB
+#15 6.877 dist/client/assets/capacitorBle-ZQnAk9CQ.js                                6.67 kB │ gzip:   2.63 kB
+#15 6.877 dist/client/assets/web-B_G5Qgjx.js                                         7.67 kB │ gzip:   2.24 kB
+#15 6.877 dist/client/assets/dist-Dhrj-3P3.js                                        7.75 kB │ gzip:   3.09 kB
+#15 6.877 dist/client/assets/esm-CpcOJMvV.js                                         8.63 kB │ gzip:   2.42 kB
+#15 6.877 dist/client/assets/web-CBZU7BIt.js                                        13.30 kB │ gzip:   3.94 kB
+#15 6.877 dist/client/assets/signin-DU-_fjt8.js                                     45.90 kB │ gzip:  11.70 kB
+#15 6.877 dist/client/assets/index-Frj_POr1.js                                     736.64 kB │ gzip: 222.44 kB
+#15 6.877 
+#15 6.878 [plugin builtin:vite-reporter] 
+#15 6.878 (!) Some chunks are larger than 500 kB after minification. Consider:
+#15 6.878 - Using dynamic import() to code-split the application
+#15 6.878 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+#15 6.878 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+#15 6.879 ✓ built in 302ms
+#15 ...
+
+#16 [web build 8/8] RUN pnpm build
+#16 0.534 ✓ Lockfile passes supply-chain policies (verified 4d ago)
+#16 0.538 Lockfile is up to date, resolution step is skipped
+#16 0.586 Already up to date
+#16 0.820 
+#16 0.820    ╭─────────────────────────────────────────╮
+#16 0.820    │                                         │
+#16 0.820    │   Update available! 11.17.0 → 12.4.1.   │
+#16 0.820    │   Changelog: https://pnpm.io/v/12.4.1   │
+#16 0.820    │    To update, run: pnpm add -g pnpm     │
+#16 0.820    │                                         │
+#16 0.820    ╰─────────────────────────────────────────╯
+#16 0.820 
+#16 0.893 
+#16 0.920 Done in 612ms using pnpm v11.17.0
+#16 0.929 $ tsc -b && vite build && tsc -p tsconfig.server.build.json
+#16 6.579 vite v8.2.2 building client environment for production...
+#16 6.587 transforming...
+#16 6.727 ✓ 341 modules transformed.
+#16 6.770 rendering chunks...
+#16 6.872 computing gzip size...
+#16 6.878 dist/client/index.html                                                     0.56 kB │ gzip:   0.33 kB
+#16 6.878 dist/client/assets/archivo-vietnamese-600-normal-anCjMumA.woff2            5.19 kB
+#16 6.878 dist/client/assets/newsreader-vietnamese-500-normal-CL6a8tp2.woff2         5.43 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-vietnamese-500-normal-C8zxqsMH.woff       5.61 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-vietnamese-400-normal-DDuiU_S-.woff       5.62 kB
+#16 6.878 dist/client/assets/archivo-vietnamese-500-normal-k0drYPZA.woff2            5.65 kB
+#16 6.878 dist/client/assets/archivo-vietnamese-400-normal-BF4g3tCF.woff2            5.67 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-vietnamese-600-normal-iLQfcSjf.woff       5.71 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-cyrillic-ext-500-normal-BIfNGwUT.woff     5.77 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-cyrillic-ext-600-normal-9HEixskS.woff     5.79 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-cyrillic-ext-400-normal-DMdlQ8Kv.woff     5.82 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-vietnamese-400-normal-BulugwFq.woff2      5.86 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-vietnamese-500-normal-DZ4AoWbu.woff2      6.04 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-cyrillic-ext-400-normal-xuaO2J-f.woff2    6.91 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-vietnamese-600-normal-D2EvbN8M.woff2      6.93 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-cyrillic-ext-500-normal-BqneJy0T.woff2    6.97 kB
+#16 6.878 dist/client/assets/newsreader-vietnamese-500-normal-BEAbKU8A.woff          7.03 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-cyrillic-400-normal-CEL4l2ZJ.woff         7.20 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-cyrillic-500-normal-Ael50iVv.woff         7.20 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-cyrillic-600-normal-fLZuRloM.woff         7.26 kB
+#16 6.878 dist/client/assets/archivo-vietnamese-600-normal-C8xBVdfP.woff             7.38 kB
+#16 6.878 dist/client/assets/archivo-vietnamese-500-normal-7W3lD2kQ.woff             7.66 kB
+#16 6.878 dist/client/assets/archivo-vietnamese-400-normal-FGOLYM1a.woff             7.68 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-cyrillic-ext-600-normal-V-xxqcpd.woff2    7.69 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-cyrillic-400-normal-BSMlKf0J.woff2        8.35 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-cyrillic-500-normal-Bq9vWWag.woff2        8.46 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-cyrillic-600-normal-CTOM6hUh.woff2        9.35 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-latin-ext-400-normal-D3D2R8hC.woff       11.76 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-latin-ext-500-normal-CZ70TYgx.woff       11.76 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-latin-ext-600-normal-DmB0ttJJ.woff       11.83 kB
+#16 6.878 dist/client/assets/archivo-latin-ext-600-normal-Dm61iqcg.woff2            12.38 kB
+#16 6.878 dist/client/assets/archivo-latin-ext-400-normal-B5tPZzqW.woff2            12.92 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-latin-400-normal-CvHOgSBP.woff           13.14 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-latin-500-normal-CB9ihrfo.woff           13.15 kB
+#16 6.878 dist/client/assets/archivo-latin-ext-500-normal-RFhg4CpD.woff2            13.16 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-latin-600-normal-DWFSQ4vo.woff           13.20 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-latin-ext-400-normal-BmRBH3aV.woff2      13.34 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-latin-ext-500-normal-CAhNIIs5.woff2      13.43 kB
+#16 6.878 dist/client/assets/archivo-latin-600-normal-3BBy0ZsW.woff2                13.82 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-latin-ext-600-normal-D38SheWl.woff2      14.32 kB
+#16 6.878 dist/client/assets/archivo-latin-500-normal-CGugC8dq.woff2                14.60 kB
+#16 6.878 dist/client/assets/archivo-latin-400-normal-C81ewxNO.woff2                14.70 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2          14.70 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-latin-500-normal-DSY6xOcd.woff2          14.88 kB
+#16 6.878 dist/client/assets/newsreader-latin-ext-500-normal-BNHmvKvI.woff2         15.06 kB
+#16 6.878 dist/client/assets/ibm-plex-mono-latin-600-normal-BgSNZQsw.woff2          15.62 kB
+#16 6.878 dist/client/assets/archivo-latin-ext-600-normal-D7uErJuz.woff             17.72 kB
+#16 6.878 dist/client/assets/archivo-latin-ext-400-normal-DrmqtLj6.woff             17.98 kB
+#16 6.878 dist/client/assets/archivo-latin-600-normal-DwYieO8P.woff                 18.20 kB
+#16 6.878 dist/client/assets/archivo-latin-ext-500-normal-D7mXw3Kz.woff             18.29 kB
+#16 6.878 dist/client/assets/archivo-latin-400-normal-Bl602Mgc.woff                 18.97 kB
+#16 6.878 dist/client/assets/archivo-latin-500-normal-pkzA7jw9.woff                 18.98 kB
+#16 6.878 dist/client/assets/newsreader-latin-ext-500-normal-CZruMFou.woff          19.29 kB
+#16 6.878 dist/client/assets/newsreader-latin-500-normal-B66TYsaK.woff2             23.62 kB
+#16 6.878 dist/client/assets/newsreader-latin-500-normal-DFwuUcdu.woff              29.63 kB
+#16 6.878 dist/client/assets/index-NeajD2YL.css                                    119.83 kB │ gzip:  17.95 kB
+#16 6.878 dist/client/assets/webAuth-Ch6J0S-C.js                                     0.07 kB │ gzip:   0.08 kB
+#16 6.878 dist/client/assets/appleAuth-C-55XkHU.js                                   0.08 kB │ gzip:   0.09 kB
+#16 6.878 dist/client/assets/appSettings-B5U5QmXA.js                                 0.11 kB │ gzip:   0.11 kB
+#16 6.878 dist/client/assets/keepAwake-DY-Cy6a8.js                                   0.45 kB │ gzip:   0.29 kB
+#16 6.878 dist/client/assets/appLifecycle-BN8GtREa.js                                0.52 kB │ gzip:   0.34 kB
+#16 6.878 dist/client/assets/keyboard-Cx1VmE8N.js                                    0.57 kB │ gzip:   0.37 kB
+#16 6.878 dist/client/assets/haptics-BCaJ90w9.js                                     0.59 kB │ gzip:   0.39 kB
+#16 6.878 dist/client/assets/native-6_cqAWHf.js                                      0.72 kB │ gzip:   0.33 kB
+#16 6.878 dist/client/assets/web-CsvLtLbv.js                                         0.76 kB │ gzip:   0.38 kB
+#16 6.878 dist/client/assets/web-szr0shcW.js                                         0.77 kB │ gzip:   0.35 kB
+#16 6.878 dist/client/assets/nfcBridge-BxkFL8oB.js                                   0.79 kB │ gzip:   0.37 kB
+#16 6.878 dist/client/assets/web-B9dskbiE.js                                         0.84 kB │ gzip:   0.40 kB
+#16 6.878 dist/client/assets/web-s6zIGyET.js                                         0.92 kB │ gzip:   0.46 kB
+#16 6.878 dist/client/assets/web-DbKzwR46.js                                         1.15 kB │ gzip:   0.46 kB
+#16 6.878 dist/client/assets/scriptedNfcReader--NrN2TTI.js                           1.20 kB │ gzip:   0.66 kB
+#16 6.878 dist/client/assets/session-MB9c73E_.js                                     1.39 kB │ gzip:   0.62 kB
+#16 6.878 dist/client/assets/holdOpen-DOxjdhE6.js                                    1.82 kB │ gzip:   0.86 kB
+#16 6.878 dist/client/assets/JustRowObserver-Cbl-KL7Y.js                             2.30 kB │ gzip:   0.95 kB
+#16 6.878 dist/client/assets/nfc-D3pvuQyR.js                                         2.37 kB │ gzip:   1.08 kB
+#16 6.878 dist/client/assets/recording-B9tSrtcV.js                                   2.39 kB │ gzip:   1.14 kB
+#16 6.878 dist/client/assets/base-D8A7zzGE.js                                        2.53 kB │ gzip:   0.92 kB
+#16 6.878 dist/client/assets/capacitorBle-i9USjQob.js                                6.67 kB │ gzip:   2.64 kB
+#16 6.878 dist/client/assets/web-BX8DK0Tn.js                                         7.67 kB │ gzip:   2.24 kB
+#16 6.878 dist/client/assets/dist-Dhrj-3P3.js                                        7.75 kB │ gzip:   3.09 kB
+#16 6.878 dist/client/assets/esm-Brv8grX1.js                                         8.63 kB │ gzip:   2.42 kB
+#16 6.878 dist/client/assets/web-DwN027oO.js                                        13.30 kB │ gzip:   3.94 kB
+#16 6.878 dist/client/assets/fake-B9_urQS3.js                                       14.75 kB │ gzip:   5.09 kB
+#16 6.878 dist/client/assets/signin-Bizci5b_.js                                     45.90 kB │ gzip:  11.71 kB
+#16 6.878 dist/client/assets/index-3CPvZXPF.js                                     739.35 kB │ gzip: 223.42 kB
+#16 6.878 
+#16 6.879 [plugin builtin:vite-reporter] 
+#16 6.879 (!) Some chunks are larger than 500 kB after minification. Consider:
+#16 6.879 - Using dynamic import() to code-split the application
+#16 6.879 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+#16 6.879 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+#16 6.879 ✓ built in 299ms
+#16 DONE 9.0s
+
+#15 [api build 8/8] RUN pnpm build
+#15 DONE 9.1s
+
+#17 [web web 2/3] COPY nginx.conf /etc/nginx/conf.d/default.conf
+#17 CACHED
+
+#18 [web web 3/3] COPY --from=build /app/dist/client /usr/share/nginx/html
+#18 CACHED
+
+#19 [web] exporting to image
+#19 exporting layers 0.0s done
+#19 exporting manifest sha256:f7c168ad5117e8be3ed495c861d09e5b83e875e4574754fd88190764bdc4b4d8 done
+#19 exporting config sha256:55409d558ad40ab420cb233e25e0420c6d683f4a1c5be9065cad128dc3caa7aa done
+#19 exporting attestation manifest sha256:ef83d4f28cdb385eff65b8102bf11782eef975ef6360323ad7e92aa9f6ed3344 0.0s done
+#19 exporting manifest list sha256:1cfc44d13976ca716bbd3f011d78f0b896c903259d96a42b73f354d80e978e13 done
+#19 naming to docker.io/library/ergomatic-62230-web:latest done
+#19 unpacking to docker.io/library/ergomatic-62230-web:latest 0.0s done
+#19 DONE 0.1s
+
+#20 [web] resolving provenance for metadata file
+#20 DONE 0.0s
+
+#21 [api api 7/8] COPY --from=build /app/dist/server ./dist/server
+#21 CACHED
+
+#22 [api api 6/8] RUN pnpm install --frozen-lockfile --prod
+#22 CACHED
+
+#23 [api api 8/8] COPY --from=build /app/drizzle ./drizzle
+#23 CACHED
+
+#24 [api] exporting to image
+#24 exporting layers 0.0s done
+#24 exporting manifest sha256:4a2f14c9152501ad49e9b9f19fede27aab1d897c58016259cbd873ed580581b5 done
+#24 exporting config sha256:cc6dd2b967dcf76a87aff0a50646dd552dd40db3a2572716b629d2454497e34d done
+#24 exporting attestation manifest sha256:16164a6bc2d545e0b791a28469b271466df70aed96b6a455389d28ab77e593da 0.0s done
+#24 exporting manifest list sha256:fcd44396ec8c7a89480e60aa7333014c25ba1b6d9ced55006fdc717f0b490d11 done
+#24 naming to docker.io/library/ergomatic-62230-api:latest done
+#24 unpacking to docker.io/library/ergomatic-62230-api:latest 0.0s done
+#24 DONE 0.2s
+
+#25 [api] resolving provenance for metadata file
+#25 DONE 0.0s
+ Image ergomatic-62230-api Built 
+ Image ergomatic-62230-web Built 
+ Network ergomatic-62230_default Creating 
+ Network ergomatic-62230_default Created 
+ Container ergomatic-62230-postgres Creating 
+ Container ergomatic-62230-postgres Created 
+ Container ergomatic-62230-api Creating 
+ Container ergomatic-62230-api Created 
+ Container ergomatic-62230-web Creating 
+ Container ergomatic-62230-web Created 
+ Container ergomatic-62230-postgres Starting 
+ Container ergomatic-62230-postgres Started 
+ Container ergomatic-62230-postgres Waiting 
+ Container ergomatic-62230-postgres Healthy 
+ Container ergomatic-62230-api Starting 
+ Container ergomatic-62230-api Started 
+ Container ergomatic-62230-api Waiting 
+ Container ergomatic-62230-api Healthy 
+ Container ergomatic-62230-web Starting 
+ Container ergomatic-62230-web Started 
+ Container ergomatic-62230-api Waiting 
+ Container ergomatic-62230-web Waiting 
+ Container ergomatic-62230-postgres Waiting 
+ Container ergomatic-62230-postgres Healthy 
+ Container ergomatic-62230-api Healthy 
+ Container ergomatic-62230-web Healthy 
+
+Running 1 test using 1 worker
+
+(node:30459) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/1] [chromium] › e2e/appleAuth.spec.ts:221:1 › a lost finalize response reports uncertainty without claiming failure or success
+  1) [chromium] › e2e/appleAuth.spec.ts:221:1 › a lost finalize response reports uncertainty without claiming failure or success 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByRole('alert')
+    Expected: "We couldn’t confirm the result. Check your sign-in methods and try again."
+    Received: "We couldn’t confirm the result. Nothing changed after this attempt. Try again."
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveText" with timeout 5000ms
+      - waiting for getByRole('alert')
+        14 × locator resolved to <p role="alert" class="notice auth-notice-error">We couldn’t confirm the result. Nothing changed a…</p>
+           - unexpected value "We couldn’t confirm the result. Nothing changed after this attempt. Try again."
+
+
+      257 |
+      258 |   await page.goto("/?authAttempt=lost-finalize");
+    > 259 |   await expect(page.getByRole("alert")).toHaveText(
+          |                                         ^
+      260 |     "We couldn’t confirm the result. Check your sign-in methods and try again.",
+      261 |   );
+      262 |   expect(finalizations).toBe(1);
+        at /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/apple-client-plan-scratch/app/e2e/appleAuth.spec.ts:259:41
+
+    Error Context: test-results/appleAuth-a-lost-finalize--da190-claiming-failure-or-success-chromium/error-context.md
+
+
+  1 failed
+    [chromium] › e2e/appleAuth.spec.ts:221:1 › a lost finalize response reports uncertainty without claiming failure or success 
+time="2026-09-13T01:42:42-04:00" level=warning msg="The \"CLOUDFLARE_TUNNEL_TOKEN\" variable is not set. Defaulting to a blank string."
+ Container ergomatic-62230-web Stopping 
+ Container ergomatic-62230-web Stopped 
+ Container ergomatic-62230-web Removing 
+ Container ergomatic-62230-web Removed 
+ Container ergomatic-62230-api Stopping 
+ Container ergomatic-62230-api Stopped 
+ Container ergomatic-62230-api Removing 
+ Container ergomatic-62230-api Removed 
+ Container ergomatic-62230-postgres Stopping 
+ Container ergomatic-62230-postgres Stopped 
+ Container ergomatic-62230-postgres Removing 
+ Container ergomatic-62230-postgres Removed 
+ Network ergomatic-62230_default Removing 
+ Network ergomatic-62230_default Removed 
+[ELIFECYCLE] Command failed with exit code 1.
+expected-browser-failure-exit=1
+$ rg -n "Nothing changed after this attempt" dist/client/assets
+dist/client/assets/index-Frj_POr1.js:19:`).slice(1).map(e=>(0,W.jsx)(`p`,{className:`connected-body-line`,children:e},e)),!PC[t.reason]&&(0,W.jsx)(`p`,{className:`connected-body-line`,children:`End whatever is showing on the monitor, then try again.`}),t.reason===`permission-denied`&&(0,W.jsx)(`p`,{className:`connected-body-line`,children:t.detail}),t.reason===`unsupported-machine`&&(0,W.jsx)(Hg,{}),(0,W.jsx)(`p`,{className:`connected-reassurance`,children:`YOUR WORKOUT AND NUDGES ARE KEPT`}),t.reason!==`unsupported-machine`&&(0,W.jsxs)(`div`,{className:`connected-detail-panel`,children:[(0,W.jsx)(`p`,{className:`connected-detail-title`,children:`DETAIL`}),(0,W.jsx)(`p`,{className:`connected-detail-line`,children:t.reason.toUpperCase()}),!IC(t)&&(0,W.jsx)(`p`,{className:`connected-detail-line`,children:t.detail}),t.raw!==void 0&&(0,W.jsx)(`p`,{className:`connected-detail-line connected-detail-raw`,children:t.raw})]})]})]}),(0,W.jsxs)(`div`,{className:`action-stack connected-interstitial-actions connected-interstitial-actions--failure`,children:[t!==null&&t.reason===`permission-denied`&&MC()&&(0,W.jsx)(`button`,{type:`button`,className:`button-l1`,onClick:()=>void NC().catch(()=>void 0),children:`Open Settings`}),(0,W.jsx)(`button`,{type:`button`,className:`button-l1`,disabled:!x,onClick:w,children:`Try again`}),(t===null||t.reason!==`unsupported-machine`)&&(0,W.jsx)(`button`,{type:`button`,className:`button-l2`,onClick:C,children:`Row on the phone timer instead`}),(0,W.jsx)(`button`,{type:`button`,className:`button-l2`,onClick:e=>{y.current=e.currentTarget,_(!0)},children:`View connection log`}),(0,W.jsx)(`button`,{type:`button`,className:`button-l2`,onClick:S,children:`Cancel`})]}),g&&(0,W.jsx)(Qb,{deviceCaption:d.deviceName??`CONNECT`,elapsedDisplay:`—`,readLog:d.exportLog,program:e,opener:y,onClose:()=>_(!1)})]})}if(d.phase===`failed`)return T(d.error);if(d.phase===`ready`&&!f)return(0,W.jsxs)(`main`,{className:`screen connected-interstitial`,children:[(0,W.jsxs)(`div`,{className:`connected-interstitial-body`,children:[(0,W.jsx)(`p`,{className:`connected-status-label`,children:d.deviceName===null?`PROGRAMMED`:`${d.deviceName} · PROGRAMMED`}),(0,W.jsx)(`p`,{className:`connected-serif-line`,children:`Ready when you pull`}),(0,W.jsx)(`p`,{className:`connected-body-line`,children:`The monitor starts the clock on your first stroke.`}),(0,W.jsx)(`p`,{className:`connected-keep-on`,children:`KEEP YOUR PHONE SCREEN ON`})]}),(0,W.jsxs)(`div`,{className:`action-stack connected-interstitial-actions`,children:[(0,W.jsx)(`button`,{type:`button`,className:`button-l1`,onClick:()=>p(!0),children:`Show me the numbers`}),(0,W.jsx)(`button`,{type:`button`,className:`button-l2`,onClick:S,children:`Cancel`})]})]});let E=d.axes;return d.phase===`disconnected`&&E.session===`none`?T(LC):(0,W.jsx)(wx,{freeRow:!1,phases:t,program:e,session:d,onEnded:s})}function zC(){let[e,t]=(0,v.useState)(`unknown`);return(0,v.useEffect)(()=>{let e=!1;return tg().then(n=>{e||t(n)}),()=>{e=!0}},[]),e}function BC(){let{id:e}=pt(),t=Er(),n=Tr(),r=Em();if(t.state===`loading`||n.state===`loading`||r.state===`loading`)return(0,W.jsx)(`main`,{className:`screen`,children:(0,W.jsx)(`p`,{className:`mono-status`,children:`LOADING…`})});if(t.state===`error`)return(0,W.jsxs)(`main`,{className:`screen`,children:[(0,W.jsx)(`p`,{className:`mono-status`,children:`Couldn't load your library.`}),(0,W.jsx)(`button`,{type:`button`,className:`button-outline`,onClick:t.retry,children:`Retry`})]});if(n.state===`error`)return(0,W.jsxs)(`main`,{className:`screen`,children:[(0,W.jsx)(`p`,{className:`mono-status`,children:`Couldn't load your baselines.`}),(0,W.jsx)(`button`,{type:`button`,className:`button-outline`,onClick:n.retry,children:`Retry`})]});let i=t.workouts.find(t=>t.id===e);if(!i)return(0,W.jsxs)(`main`,{className:`screen`,children:[(0,W.jsx)(`p`,{className:`mono-status`,children:`That workout isn't in your library.`}),(0,W.jsx)(Yr,{})]});let a=n.baselines.k2Seconds!==null&&n.baselines.k6Seconds!==null?{k2Seconds:n.baselines.k2Seconds,k6Seconds:n.baselines.k6Seconds}:null;return(0,W.jsx)(VC,{workout:i,baselines:a,onSetOneUp:r.state===`ready`?()=>r.setBaselinesSkipped(!1):null,halfPairSide:a===null?n.baselines.k2Seconds===null?n.baselines.k6Seconds===null?null:`k6`:`k2`:null},i.id)}function VC({workout:e,baselines:t,onSetOneUp:n,halfPairSide:r}){let[i,a]=(0,v.useState)({}),[o,s]=(0,v.useState)(null),[c,l]=(0,v.useState)(null),[u,d]=(0,v.useState)(()=>By()),f=zC(),p=Vg(),[m,h]=(0,v.useState)(null),{replaceStage:g,startError:_,handleStart:y,confirmReplace:b,cancelReplace:x,unsavedCount:S}=wC(e,i),C=dt(),w=ct().state?.from;function T(e){O({kind:`picker`,attemptId:e})}function E(e){s(null),p.run(e,{onTarget:(e,t)=>O(e,t),onInlineError:s})}function D(e){if(e.kind===`nfc`){E(e.attemptId);return}T(e.attemptId)}function O(n,r){s(null);let a=ls($r(e,i),t,new Date),o=SC(a.phases);if(`code`in o)return s(o.message),Zm(n.attemptId),!1;let c=Object.values(i).filter(e=>e!==0).length,u=hc(a.phases,t);return l({program:o,phases:a.phases,identity:{workoutId:e.id,title:e.title,logSeed:u},baselines:t,nudgedCount:c,request:n,...r===void 0?{}:{trace:r}}),!0}function k(){l(null),d(By())}function A(){if(l(null),ti(ai($r(e,i)))){pi();let e=ph();e!==null&&mh(e,`row-instead`),C(`/session/countdown`)}else h(`Couldn't start this session. Try again.`)}function j(){l(null),C(`/library/${e.id}/log?from=monitor`)}if(c!==null)return(0,W.jsx)(RC,{program:c.program,phases:c.phases,identity:c.identity,baselines:c.baselines,nudgedCount:c.nudgedCount,onExit:k,onRowInstead:A,onEnded:j,request:c.request,trace:c.trace});let ee=es(e.steps,t),M=`${ee.assumed?`~`:``}${ee.minutes} MIN`,N=e.lastDoneDaysAgo===null?`NEVER DONE`:`LAST DONE ${e.lastDoneDaysAgo} DAYS AGO`,P=(n,r)=>{a(i=>{let a=i[n]??0,o=e.steps[n];if(!t||o.k!==`w`||Rr(o.ref))return{...i,[n]:a+r};let s=zr(t,o.ref,0),c=s+a+r,l=Math.min(240,Math.max(60,c));return{...i,[n]:l-s}})};return(0,W.jsxs)(`main`,{className:`screen`,children:[(0,W.jsx)(Yr,{}),(0,W.jsxs)(`div`,{className:`workout-detail-meta`,children:[(0,W.jsx)(_d,{type:e.type}),!e.isGlobal&&(0,W.jsx)(`span`,{className:`workout-row-custom`,children:`MY WORKOUTS`})]}),(0,W.jsx)(`h1`,{className:`workout-detail-title`,children:e.title}),(0,W.jsxs)(`p`,{className:`mono-status`,children:[M,` · EFFORT `,e.effort,`/5 · `,N]}),t!==null&&(0,W.jsx)(`p`,{className:`workout-detail-note`,children:`PREVIEW · NUDGE ANY TARGET`}),(0,W.jsx)(`div`,{className:`step-list`,children:e.steps.map((e,n)=>e.k===`reps`?(0,W.jsxs)(`p`,{className:`step-reps-marker`,children:[e.count,`× the block below`]},n):(0,W.jsx)(EC,{step:e,baselines:t,nudge:i[n]??0,onNudge:e=>P(n,e)},n))}),(0,W.jsxs)(`div`,{className:`action-stack workout-detail-actions`,children:[(0,W.jsx)(HC,{bluetoothStatus:f,lastDevice:u,onProceed:D,nfcCapability:p.capability,busy:p.busy,accepted:p.accepted}),o&&(0,W.jsx)(`p`,{className:`baseline-error`,children:o}),g===null?(0,W.jsx)(`button`,{type:`button`,className:`button-l2`,onClick:y,children:`Start Timer`}):g===`unlogged`?(0,W.jsx)(ng,{count:S,replacement:`Starting a new one`,replaceLabel:`Replace session`,onReplace:b,onCancel:x,onView:()=>{x(),C(`/today`)}}):(0,W.jsxs)(`div`,{className:`baseline-confirm`,children:[(0,W.jsx)(`p`,{className:`baseline-confirm-line`,children:`A session is in progress. Replace it?`}),(0,W.jsxs)(`div`,{className:`baseline-actions`,children:[(0,W.jsx)(`button`,{type:`button`,className:`button-outline`,onClick:x,children:`Cancel`}),(0,W.jsx)(`button`,{type:`button`,className:`button-primary`,onClick:b,children:`Replace session`})]})]}),(_??m)&&(0,W.jsx)(`p`,{className:`baseline-error`,children:_??m}),(0,W.jsx)(U,{to:`/library/${e.id}/log`,state:{from:w},className:`button-l2`,children:`Log it after`}),t===null&&CC(e.steps)&&(0,W.jsxs)(`p`,{className:`workout-detail-caption`,children:[r===null?`Targets are words until you set a baseline. `:`Your ${r===`k2`?`2k`:`6k`} is set. Targets stay words until the ${r===`k2`?`6k`:`2k`} is too. `,(0,W.jsx)(`button`,{type:`button`,className:`workout-detail-caption-link`,onClick:()=>{let e=()=>{C(`/today`)};if(n===null){e();return}n().then(e,e)},children:r===null?`Set one up`:r===`k2`?`Set your 6k`:`Set your 2k`})]}),!e.isGlobal&&(0,W.jsx)(UC,{workoutId:e.id,navigate:C,from:w})]})]})}function HC({bluetoothStatus:e,lastDevice:t,onProceed:n,nfcCapability:r,busy:i,accepted:a}){return(0,W.jsxs)(`div`,{className:e===`off`||e===`absent`?`connect-block connect-block-dashed`:`connect-block`,children:[(0,W.jsx)(og,{onProceed:n,nfcCapability:r,busy:i,accepted:a}),e===`off`&&(0,W.jsx)(`p`,{className:`mono-status connect-block-caption`,children:`BLUETOOTH IS OFF`}),e===`absent`&&(0,W.jsx)(`p`,{className:`mono-status connect-block-caption`,children:`NO BLUETOOTH ON THIS DEVICE`}),e===`available`&&t!==null&&(0,W.jsxs)(`p`,{className:`mono-status connect-block-caption`,children:[`LAST USED · `,t]})]})}function UC({workoutId:e,navigate:t,from:n}){let[r,i]=(0,v.useState)(!1),[a,o]=(0,v.useState)(!1),[s,c]=(0,v.useState)(null),l=(0,v.useRef)(null);(0,v.useEffect)(()=>()=>{l.current!==null&&clearTimeout(l.current)},[]);function u(){l.current!==null&&(clearTimeout(l.current),l.current=null),i(!1)}function d(){i(!0),l.current=setTimeout(u,mi)}let f=async()=>{c(null),o(!0);try{if(!(await G(`/api/workouts/${e}`,{method:`DELETE`})).ok){c(`Couldn't delete this workout. Try again.`),u();return}t(`/library`)}catch{c(`Couldn't delete this workout. Try again.`),u()}finally{o(!1)}};function p(){r?(u(),f()):d()}return(0,W.jsxs)(`div`,{className:`workout-owner-actions`,children:[(0,W.jsx)(U,{to:`/library/${e}/edit`,state:{from:n},className:`button-l2`,children:`Edit`}),(0,W.jsx)(`hr`,{className:`action-stack-rule`}),r&&(0,W.jsx)(`p`,{className:`baseline-confirm-line`,children:`Your logged sessions are kept. They keep their own copy of the title and type.`}),(0,W.jsx)(`button`,{type:`button`,className:r?`button-l4-armed`:`button-l4`,onClick:p,onBlur:u,disabled:a,children:r?`Tap again to delete`:`Delete workout`}),s&&(0,W.jsx)(`p`,{className:`baseline-error`,children:s})]})}function WC(e){if(e.state===`loading`)return null;if(e.state===`error`)return`COULDN'T READ`;let{k2Seconds:t,k6Seconds:n}=e.baselines;return t===null&&n===null?`NOT SET`:`2K ${GC(t)} · 6K ${GC(n)}`}var GC=e=>e===null?`—`:K(e);function KC(){let e=WC(Tr());return(0,W.jsxs)(U,{to:`/you/baselines`,state:{from:`/you`},className:`diag-row`,children:[(0,W.jsx)(`span`,{children:`BASELINES`}),(0,W.jsxs)(`span`,{className:`diag-row-end`,children:[e!==null&&(0,W.jsx)(`span`,{className:`diag-row-state`,children:e}),(0,W.jsx)(`span`,{"aria-hidden":`true`,children:`›`})]})]})}var qC=`ergomatic.concept2Seen.`;function JC(e){return`${qC}${e}`}function YC(e){try{return localStorage.getItem(JC(e))===`1`}catch{return!1}}function XC(e,t){try{t?localStorage.setItem(JC(e),`1`):localStorage.removeItem(JC(e))}catch{}}function ZC(e){XC(e,!1)}function QC(e){return e.needsReauth?`RECONNECT NEEDED`:e.sendFailedAt===null?`LINKED ✓`:`SEND FAILED`}function $C(e,t,n){if(e===null)return t!==null&&n?`COULDN'T READ`:null;if(!e.available)return null;if(e.linked){let t=QC(e);if(t!==`LINKED ✓`)return t}return t===null?e.linked?`LINKED ✓`:`NOT LINKED`:`COULDN'T READ`}function ew({accountId:e}){let{link:t,failed:n}=ru(),[r]=(0,v.useState)(()=>YC(e));(0,v.useEffect)(()=>{t!==null&&XC(e,t.available)},[e,t]);let i=$C(t,n,r);return i===null?null:(0,W.jsxs)(U,{to:`/you/concept2`,state:{from:`/you`},className:`diag-row`,children:[(0,W.jsx)(`span`,{children:`CONCEPT2`}),(0,W.jsxs)(`span`,{className:`diag-row-end`,children:[(0,W.jsx)(`span`,{className:`diag-row-state`,children:i}),(0,W.jsx)(`span`,{"aria-hidden":`true`,children:`›`})]})]})}function tw({y:e,m:t,d:n}){let r=t<=2?e-1:e,i=Math.floor(r/400),a=r-i*400,o=(t+9)%12,s=Math.floor((153*o+2)/5)+n-1,c=a*365+Math.floor(a/4)-Math.floor(a/100)+s;return i*146097+c-719468}function nw(e){let t=e+719468,n=Math.floor(t/146097),r=t-n*146097,i=Math.floor((r-Math.floor(r/1460)+Math.floor(r/36524)-Math.floor(r/146096))/365),a=r-(365*i+Math.floor(i/4)-Math.floor(i/100)),o=Math.floor((5*a+2)/153),s=a-Math.floor((153*o+2)/5)+1,c=o<10?o+3:o-9;return{y:i+n*400+ +(c<=2),m:c,d:s}}function rw(e,t){return nw(tw(e)+t)}function iw(e,t){return tw(e)-tw(t)}function aw(e,t){return(t.from===null||iw(e,t.from)>=0)&&(t.to===null||iw(e,t.to)<=0)}function ow(e){let t=e.m>=5?e.y:e.y-1;return{start:{y:t,m:5,d:1},end:{y:t+1,m:4,d:30},name:t+1}}var sw=[`all`,`season`,`year`,`month`,`30d`,`custom`];function cw(e,t){switch(e){case`all`:return{from:null,to:null};case`season`:return{from:ow(t).start,to:t};case`year`:return{from:{y:t.y,m:1,d:1},to:t};case`month`:return{from:{y:t.y,m:t.m,d:1},to:t};case`30d`:return{from:rw(t,-29),to:t}}}function lw(e,t){return iw(e,t)>0?null:{from:e,to:t}}function uw({y:e,m:t,d:n}){return`${e}-${String(t).padStart(2,`0`)}-${String(n).padStart(2,`0`)}`}function dw(e){let t=/^(\d{4})-(\d{2})-(\d{2})$/.exec(e);return t?{y:Number(t[1]),m:Number(t[2]),d:Number(t[3])}:null}function fw(e,t){return e.filter(e=>aw(e.date,t))}function pw(e){let t=0,n=0;for(let r of e)t+=r.workMeters??0,n+=r.workSeconds??0;return{meters:t,seconds:n,sessions:e.length}}function mw(e,t){let n=fw(e,t),r=n.filter(e=>e.source===`pm5`),i=0,a=0,o=0,s=0,c=0;for(let e of r)i+=e.restMeters??0,e.calories!==null&&(a+=e.calories,o+=1),e.tier!==`stored`&&e.workSeconds!==null&&e.workMeters!==null&&(s+=e.workSeconds,c+=e.workMeters);return{all:pw(n),machine:{...pw(r),ownTotals:r.filter(e=>e.tier===`machine`).length,restMeters:i,calories:a,caloriesRows:o,avgWatts:bc(s,c)},storedTierRows:n.filter(e=>e.source===`pm5`&&e.tier===`stored`).length}}var hw=[`AN`,`AT`,`O2`,`TR`,`NO TYPE`];function gw(e,t){let n={AN:0,AT:0,O2:0,TR:0,"NO TYPE":0},r=0;for(let i of fw(e,t)){let e=i.workSeconds??0;n[i.workoutType??`NO TYPE`]+=e,r+=e}return hw.filter(e=>n[e]>0).map(e=>({key:e,seconds:n[e],share:n[e]/r}))}function _w(e){return{y:e.getFullYear(),m:e.getMonth()+1,d:e.getDate()}}function vw(){let[e,t]=(0,v.useState)({state:`loading`}),[n,r]=(0,v.useState)(0);return(0,v.useEffect)(()=>{let e=!1,n=()=>{t({state:`loading`}),r(e=>e+1)};return G(`/api/stats/rows`).then(async r=>{if(!e){if(r.ok){let e=await r.json();t({state:`ready`,rows:e.rows.map(e=>({...e,date:_w(new Date(e.loggedAt))})),today:_w(new Date)})}else t({state:`error`,retry:n})}}).catch(()=>{e||t({state:`error`,retry:n})}),()=>{e=!0}},[n]),e}function yw(e){return q(e/60)}function bw(e){return`${Math.round(e*100)}%`}function xw(e,t,n){let r=e.filter(e=>e.value>0),i=r.reduce((e,t)=>e+t.value,0);if(i<=0)return[];let a=Math.max(0,t-n*(r.length-1)),o=0;return r.map(e=>{let t=e.value/i*a,r={key:e.key,x:o,width:t};return o+=t+n,r})}var Sw=320,Cw=24,ww=2,Tw={AN:`stacked-bar-seg-an`,AT:`stacked-bar-seg-at`,O2:`stacked-bar-seg-o2`,TR:`stacked-bar-seg-tr`,"NO TYPE":`stacked-bar-seg-none`};function Ew({buckets:e}){let t=xw(e.map(e=>({key:e.key,value:e.seconds})),Sw,ww);return(0,W.jsx)(`svg`,{className:`stacked-bar`,viewBox:`0 0 ${Sw} ${Cw}`,preserveAspectRatio:`none`,"aria-hidden":`true`,focusable:`false`,children:t.map(e=>(0,W.jsx)(`rect`,{className:Tw[e.key],"data-bucket":e.key,x:e.x,y:0,width:e.width,height:Cw},e.key))})}var Dw=e=>`stats-swatch-${e===`NO TYPE`?`none`:e.toLowerCase()}`;function Ow({buckets:e,withTime:t}){return t?(0,W.jsx)(`ul`,{className:`stats-legend`,children:e.map(e=>(0,W.jsxs)(`li`,{className:`stats-legend-row`,"data-bucket":e.key,children:[(0,W.jsx)(`span`,{className:`stats-swatch ${Dw(e.key)}`,"aria-hidden":`true`}),(0,W.jsx)(`span`,{className:`stats-legend-key`,children:e.key}),(0,W.jsx)(`span`,{className:`stats-legend-time`,children:yw(e.seconds)}),(0,W.jsx)(`span`,{className:`stats-legend-pct`,children:bw(e.share)})]},e.key))}):(0,W.jsx)(`p`,{className:`stats-legend-line`,children:e.map(e=>(0,W.jsxs)(`span`,{className:`stats-legend-chip`,"data-bucket":e.key,children:[(0,W.jsx)(`span`,{className:`stats-swatch ${Dw(e.key)}`,"aria-hidden":`true`}),(0,W.jsx)(`span`,{className:`stats-legend-key`,children:e.key}),` `,(0,W.jsx)(`span`,{className:`stats-legend-pct`,children:bw(e.share)})]},e.key))})}var kw=`NO ROWS YET · YOUR FIRST SAVED ROW STARTS THE COUNT`,Aw=`NO WORK TIME TO DRAW YET`,jw=`you-stats-figures`;function Mw(){let e=vw();return(0,W.jsxs)(U,{to:`/you/stats`,state:{from:`/you`},className:`you-stats-hero`,"aria-label":`Stats`,"aria-describedby":e.state===`ready`?jw:void 0,children:[e.state===`loading`&&(0,W.jsx)(`p`,{className:`stats-caption`,children:`LOADING…`}),e.state===`error`&&(0,W.jsx)(`p`,{className:`stats-caption`,children:`COULDN'T LOAD STATS · TAP TO OPEN`}),e.state===`ready`&&(0,W.jsx)(Nw,{...e})]})}function Nw({rows:e,today:t}){let n=cw(`all`,t),r=mw(e,n).all.meters,i=mw(e,cw(`season`,t)).all.meters,a=gw(e,n);return(0,W.jsxs)(W.Fragment,{children:[(0,W.jsxs)(`p`,{className:`you-stats-figures`,id:jw,children:[(0,W.jsxs)(`span`,{children:[`LIFETIME · `,Gr(r),` M`]}),(0,W.jsxs)(`span`,{children:[`SEASON `,ow(t).name,` · `,Gr(i),` M`]})]}),e.length===0?(0,W.jsx)(`p`,{className:`stats-caption`,children:kw}):a.length===0?(0,W.jsx)(`p`,{className:`stats-caption`,children:Aw}):(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(Ew,{buckets:a}),(0,W.jsx)(Ow,{buckets:a,withTime:!1})]})]})}function Pw(e){if(typeof e!=`object`||!e)return!1;let t=e;return typeof t.apple==`boolean`&&typeof t.google==`boolean`}function Fw(e){let[t,n]=(0,v.useState)({state:`loading`});return(0,v.useEffect)(()=>{let e=!0;return G(`/api/auth/methods`).then(async t=>{if(!t.ok)throw Error(`methods unavailable`);let r=await t.json();if(!Pw(r))throw Error(`invalid methods response`);e&&n({state:`ready`,methods:r})}).catch(()=>{e&&n({state:`error`})}),()=>{e=!1}},[e]),t}function Iw(e){return e===`apple`?`Apple`:`Google`}function Lw(e){let t=e.view;return t.kind===`linked`?(0,W.jsxs)(`p`,{className:`notice auth-notice-success`,role:`status`,children:[Iw(t.targetProvider),` is now connected. You can sign in either way.`]}):t.kind===`cancelled`&&t.purpose===`link`||t.kind!==`error`||t.purpose!==`link`?null:t.code===`account_changed`?(0,W.jsx)(`p`,{className:`notice auth-notice-error`,role:`alert`,children:`Your account changed. Start linking again. Neither account was modified.`}):t.code===`account_conflict`&&t.targetProvider?(0,W.jsxs)(`p`,{className:`notice auth-notice-error`,role:`alert`,children:[`That `,Iw(t.targetProvider),` sign-in is already connected to another Ergomatic account. Nothing changed.`]}):t.code===`signin_failed`||t.code===`attempt_expired`?(0,W.jsx)(`p`,{className:`notice auth-notice-error`,role:`alert`,children:`We couldn’t confirm the result. Nothing changed after this attempt. Try again.`}):(0,W.jsx)(`p`,{className:`notice auth-notice-error`,role:`alert`,children:`That linking attempt didn’t work. Nothing changed. Start linking again.`})}function Rw(e){return e.kind===`linked`?`linked-${e.targetProvider}`:e.kind===`error`&&e.purpose===`link`&&(e.code===`signin_failed`||e.code===`attempt_expired`)?`uncertain-${e.targetProvider??`unknown`}`:`current`}function zw({auth:e}){let t=Fw(Rw(e.view)),n=Lw(e);if(e.options.state!==`ready`||!e.options.frontDoorEnabled)return null;if(t.state!==`ready`)return n?(0,W.jsx)(`section`,{className:`auth-methods`,children:n}):null;let r=e.view.kind===`error`&&e.view.purpose===`link`&&(e.view.code===`account_changed`||(e.view.code===`attempt_expired`||e.view.code===`signin_failed`)&&e.view.targetProvider!==void 0&&!t.methods[e.view.targetProvider])?e.view.targetProvider:void 0;return(0,W.jsxs)(`section`,{className:`auth-methods`,"aria-labelledby":`auth-methods-heading`,children:[n,(0,W.jsx)(`h2`,{id:`auth-methods-heading`,children:`SIGN-IN METHODS`}),(0,W.jsx)(`div`,{className:`auth-method-list`,children:[`apple`,`google`].map(n=>t.methods[n]?(0,W.jsxs)(`div`,{className:`auth-method-row`,children:[(0,W.jsx)(`span`,{className:`auth-method-name`,children:Iw(n)}),(0,W.jsx)(`span`,{className:`auth-method-connected`,children:`CONNECTED`})]},n):(0,W.jsxs)(`button`,{className:`auth-method-row`,"aria-label":`Add ${Iw(n)}`,onClick:()=>e.prepareLink(n),children:[(0,W.jsx)(`span`,{className:`auth-method-name`,children:Iw(n)}),(0,W.jsxs)(`span`,{className:`auth-method-action`,children:[`Add `,Iw(n),` `,(0,W.jsx)(`span`,{"aria-hidden":`true`,children:`›`})]})]},n))}),r&&(0,W.jsx)(`button`,{className:`button-l2 auth-link-retry`,onClick:()=>e.prepareLink(r),children:`Start linking again`})]})}function Bw(e){return e.split(/\s+/).filter(Boolean).slice(0,2).map(e=>e[0].toUpperCase()).join(``)}function Vw({user:e,onSignedOut:t,authFlow:n}){let[r,i]=(0,v.useState)(!1);return(0,W.jsxs)(`main`,{className:`screen you-screen`,children:[(0,W.jsxs)(`section`,{className:`you`,children:[(0,W.jsx)(`div`,{className:`avatar`,"aria-hidden":`true`,children:Bw(e.name)}),(0,W.jsxs)(`div`,{className:`you-identity`,children:[(0,W.jsx)(`p`,{className:`you-name`,children:e.name}),(0,W.jsx)(`p`,{className:`you-email`,children:e.email})]}),r&&(0,W.jsx)(`p`,{className:`notice`,role:`alert`,children:`That sign-out didn't work. You're still signed in. Give it another try.`}),(0,W.jsx)(`button`,{className:`button-outline`,onClick:async()=>{ZC(e.id);try{i(!1),await Rn()}catch{i(!0);return}n?.abandon(),t()},children:`Sign out`})]}),(0,W.jsx)(Mw,{}),n&&(0,W.jsx)(zw,{auth:n}),(0,W.jsxs)(`nav`,{className:`you-doors`,"aria-label":`More`,children:[(0,W.jsx)(KC,{}),(0,W.jsx)(ew,{accountId:e.id}),(0,W.jsxs)(U,{to:`/you/settings`,state:{from:`/you`},className:`diag-row`,children:[(0,W.jsx)(`span`,{children:`SETTINGS`}),(0,W.jsx)(`span`,{"aria-hidden":`true`,children:`›`})]}),(0,W.jsxs)(U,{to:`/you/diagnostics`,state:{from:`/you`},className:`diag-row`,children:[(0,W.jsx)(`span`,{children:`DIAGNOSTICS`}),(0,W.jsx)(`span`,{"aria-hidden":`true`,children:`›`})]})]})]})}var Hw=Mr.k2Seconds,Uw=Mr.k6Seconds;function Ww({label:e,from:t,to:n}){return t===n?null:(0,W.jsxs)(`p`,{className:`baseline-confirm-line`,children:[e,` `,t===null?`Not set`:K(t),` → `,K(n)]})}function Gw(e){if(e.k2Seconds===null&&e.k6Seconds!==null){let t=Nr(e.k6Seconds);return t>=60&&t<=240?{which:`k2`,value:t}:null}if(e.k6Seconds===null&&e.k2Seconds!==null){let t=Pr(e.k2Seconds);return t>=60&&t<=240?{which:`k6`,value:t}:null}return null}function Kw({offer:e,touched:t,draftValue:n,onFill:r}){let i=e.which===`k2`?`ESTIMATE FROM 6K (−7s)`:`ESTIMATE FROM 2K (+7s)`;return(0,W.jsx)(`div`,{className:`baseline-derive-slot`,children:t?n===e.value?(0,W.jsx)(`p`,{className:`baseline-derive-done`,children:`ESTIMATED`}):null:(0,W.jsx)(`button`,{type:`button`,className:`button-l3 baseline-derive`,onClick:r,children:i})})}function qw({baselines:e,save:t}){let n=e.k2Seconds===null&&e.k6Seconds===null,[r,i]=(0,v.useState)(()=>Gp(e.k2Seconds,e.k6Seconds)),[a,o]=(0,v.useState)(null),[s,c]=(0,v.useState)(!1),l=Zp(r),u=Gw(e),d=e=>u?.which===e?u.value:e===`k2`?Hw:Uw,f=()=>{i(e=>Yp(e)),o(null)},p=()=>{u&&i(e=>Jp(e,u.which,u.value))};return(0,W.jsxs)(`div`,{className:`baselines-card`,children:[n&&(0,W.jsx)(`p`,{className:`baseline-prompt`,children:`No baselines yet. Tap a field and type, or use minus and plus to start from the suggestion.`}),(0,W.jsxs)(`div`,{className:`baseline-row`,children:[(0,W.jsx)(`span`,{className:`baseline-label`,children:`2k`}),(0,W.jsx)(Qp,{label:`2k`,seconds:r.draft.k2,seed:d(`k2`),onType:e=>i(t=>Jp(t,`k2`,e)),onNudge:e=>i(t=>qp(t,`k2`,e)),className:`baseline-input`})]}),u?.which===`k2`&&(0,W.jsx)(Kw,{offer:u,touched:r.touched.k2,draftValue:r.draft.k2,onFill:p}),(0,W.jsxs)(`div`,{className:`baseline-row`,children:[(0,W.jsx)(`span`,{className:`baseline-label`,children:`6k`}),(0,W.jsx)(Qp,{label:`6k`,seconds:r.draft.k6,seed:d(`k6`),onType:e=>i(t=>Jp(t,`k6`,e)),onNudge:e=>i(t=>qp(t,`k6`,e)),className:`baseline-input`})]}),u?.which===`k6`&&(0,W.jsx)(Kw,{offer:u,touched:r.touched.k6,draftValue:r.draft.k6,onFill:p}),l&&(0,W.jsxs)(`div`,{className:`baseline-confirm`,children:[(0,W.jsx)(Ww,{label:`2k`,from:r.committed.k2,to:r.draft.k2}),(0,W.jsx)(Ww,{label:`6k`,from:r.committed.k6,to:r.draft.k6}),a&&(0,W.jsx)(`p`,{className:`baseline-error`,children:a}),(0,W.jsxs)(`div`,{className:`baseline-actions`,children:[(0,W.jsx)(`button`,{type:`button`,className:`button-outline`,onClick:f,disabled:s,children:`Discard`}),(0,W.jsx)(`button`,{type:`button`,className:`button-primary baseline-apply`,onClick:async()=>{o(null),c(!0);try{let n=e=>u?.which===e&&r.draft[e]===u.value?`derived`:`manual`,a=t=>{let n=t===`k2`?e.k2Seconds:e.k6Seconds;return n===null||r.draft[t]!==n},o={};r.touched.k2&&a(`k2`)&&(o.k2Seconds=r.draft.k2,o.k2Source=n(`k2`)),r.touched.k6&&a(`k6`)&&(o.k6Seconds=r.draft.k6,o.k6Source=n(`k6`)),Object.keys(o).length>0&&await t(o),i(e=>Xp(e))}catch{o(`Couldn't save your baselines. Try again.`)}finally{c(!1)}},disabled:s,children:`Apply baselines`})]})]})]})}function Jw(){let e=Tr();return e.state===`loading`?(0,W.jsx)(`div`,{className:`baselines-card`,children:(0,W.jsx)(`p`,{className:`mono-status`,children:`LOADING…`})}):e.state===`error`?(0,W.jsxs)(`div`,{className:`baselines-card`,children:[(0,W.jsx)(`p`,{className:`mono-status`,children:`Couldn't load your baselines.`}),(0,W.jsx)(`button`,{type:`button`,className:`button-outline`,onClick:e.retry,children:`Retry`})]}):(0,W.jsx)(qw,{baselines:e.baselines,save:e.save})}function Yw({onReset:e}){let[t,n]=(0,v.useState)(!1),[r,i]=(0,v.useState)(!1),[a,o]=(0,v.useState)(null),s=async()=>{o(null),i(!0);try{if(!(await G(`/api/baselines`,{method:`DELETE`})).ok)throw Error(`failed to clear baselines`);n(!1),e()}catch{o(`Couldn't reset your baseline setup. Try again.`)}finally{i(!1)}};return t?(0,W.jsx)(`div`,{className:`reset-baselines`,children:(0,W.jsxs)(`div`,{className:`baseline-confirm`,children:[(0,W.jsx)(`p`,{className:`baseline-confirm-line`,children:`This clears both baseline splits. Workouts show effort words in place of pace targets until you set a baseline again. Today offers the setup doors.`}),a&&(0,W.jsx)(`p`,{className:`baseline-error`,children:a}),(0,W.jsxs)(`div`,{className:`baseline-actions`,children:[(0,W.jsx)(`button`,{type:`button`,className:`button-outline`,onClick:()=>n(!1),disabled:r,children:`Cancel`}),(0,W.jsx)(`button`,{type:`button`,className:`button-primary`,onClick:()=>void s(),disabled:r,children:`Reset baseline setup`})]})]})}):(0,W.jsx)(`div`,{className:`reset-baselines`,children:(0,W.jsx)(`button`,{type:`button`,className:`button-outline`,onClick:()=>{o(null),n(!0)},children:`Reset baseline setup`})})}function Xw(){let e=Er();if(e.state!==`ready`)return null;let t=e.workouts.find(e=>e.title===Ei.k6&&e.isGlobal),n=e.workouts.find(e=>e.title===Ei.k2&&e.isGlobal);return t===void 0&&n===void 0?null:(0,W.jsxs)(`div`,{className:`retest`,children:[t!==void 0&&(0,W.jsx)(U,{to:`/library/${t.id}`,state:{from:`/you/baselines`},className:`button-l3 retest-button`,children:`ROW THE 6K`}),n!==void 0&&(0,W.jsx)(U,{to:`/library/${n.id}`,state:{from:`/you/baselines`},className:`button-l3 retest-button`,children:`RACE THE 2K`})]})}function Zw(){let[e,t]=(0,v.useState)(0);return(0,W.jsxs)(`main`,{className:`screen`,children:[(0,W.jsx)(Yr,{fallback:`/you`}),(0,W.jsx)(`h1`,{className:`screen-title`,children:`Baselines`}),(0,W.jsx)(Jw,{},e),(0,W.jsx)(Xw,{}),(0,W.jsx)(Yw,{onReset:()=>t(e=>e+1)})]})}function Qw(){return(0,W.jsxs)(`main`,{className:`screen overlay-screen`,tabIndex:0,children:[(0,W.jsx)(Yr,{fallback:`/you`}),(0,W.jsx)(`h1`,{className:`screen-title`,children:`Diagnostics`}),(0,W.jsx)(`p`,{className:`diag-caption`,children:`Tools for looking under the hood.`}),(0,W.jsxs)(U,{to:`/you/diagnostics/monitor-logs`,state:{from:`/you/diagnostics`},className:`diag-card`,children:[(0,W.jsxs)(`div`,{children:[(0,W.jsx)(`p`,{className:`diag-card-title`,children:`Monitor logs`}),(0,W.jsx)(`p`,{className:`diag-card-sub`,children:`THE LAST 3 CONNECTED SESSIONS`})]}),(0,W.jsx)(`span`,{"aria-hidden":`true`,className:`diag-chevron`,children:`›`})]})]})}var $w=`haus.waffle.ergomatic`,eT=`webauth-1`,tT=!1;async function nT(e){try{let t=await e.json();if(typeof t==`object`&&t&&`error`in t){let e=t.error;return typeof e==`string`?e:null}return null}catch{return null}}function rT(e){let t=typeof e==`object`&&e&&`code`in e?String(e.code):``,n=e instanceof Error?e.message:String(e);switch(t){case`cancelled`:return{kind:`cancelled`};case`abandoned`:return{kind:`abandoned`};case`busy`:return{kind:`busy`,source:`sheet`};case`noWindow`:return{kind:`noWindow`};case`noContext`:return{kind:`noContext`};case`contextInvalid`:return{kind:`contextInvalid`};default:return{kind:`pluginError`,code:t===``?`unknown`:t,message:n}}}async function iT(e,t){let{WebAuth:n}=await C(async()=>{let{WebAuth:e}=await import(`./webAuth-Ch6J0S-C.js`);return{WebAuth:e}},__vite__mapDeps([12,1])),r;try{r=(await n.start({url:e,callbackScheme:$w,ephemeral:!0})).callbackUrl}catch(e){return rT(e)}let i=new URL(r).searchParams,a=i.get(`code`),o=a===null||a===``?null:a,s=i.get(`state`),c=s!==null;if(o===null)return i.get(`error`)===`access_denied`?{kind:`declined`,stateEchoed:c}:{kind:`malformed`,stateEchoed:c};if(s!==null&&s!==t)return console.error(`[linkFlow] the callback carried a state that does not match this attempt's; refusing to exchange`),{kind:`stateMismatch`};let l=await G(`/api/concept2/exchange`,{method:`POST`,headers:{"Content-Type":`application/json`},body:JSON.stringify({code:o,state:t})});if(l.ok)return{kind:`linked`,c2UserId:(await l.json()).c2UserId,stateEchoed:c};let u=await nT(l);return u===null?{kind:`serverError`,status:l.status,stateEchoed:c}:{kind:`exchangeFailed`,status:l.status,error:u,stateEchoed:c}}async function aT(){if(tT)return{kind:`busy`,source:`guard`};tT=!0;try{let e=In(),t=await G(`/api/concept2/connect`,{method:`POST`,headers:{"Content-Type":`application/json`},body:JSON.stringify(e?{linkClient:eT}:{})});if(!t.ok){let e=await nT(t);return t.status===409&&e===`update_required`?{kind:`updateRequired`}:{kind:`mintFailed`,status:t.status,error:e}}let{authorizeUrl:n,state:r}=await t.json();return e?await iT(n,r):(Ql(n),{kind:`navigating`})}catch(e){return{kind:`networkError`,message:e instanceof Error?e.message:String(e)}}finally{tT=!1}}var oT=`The connection didn't complete. Nothing was linked.`;function sT(e,t){return`Concept2 ${e.c2Username!==null&&e.c2Username!==``?e.c2Username:e.c2UserId===null?`account`:`account #${String(e.c2UserId)}`} · Ergomatic ${t}`}function cT(e){switch(e.kind){case`linked`:case`navigating`:case`cancelled`:case`updateRequired`:return null;case`busy`:return e.source===`guard`?null:{line:oT,reason:`A LINK IS ALREADY OPEN · CLOSE IT AND TRY AGAIN`};case`declined`:return{line:`You cancelled at Concept2. Nothing was linked.`,reason:`DECLINED AT CONCEPT2`};case`abandoned`:return{line:oT,reason:`THE BROWSER LEFT CONCEPT2`};case`stateMismatch`:return{line:oT,reason:`THE RETURN DIDN'T MATCH THIS ATTEMPT`};case`malformed`:return{line:oT,reason:`CONCEPT2 SENT SOMETHING WE COULDN'T READ`};case`exchangeFailed`:return e.error===`already_linked_elsewhere`?{line:`That Concept2 account is already connected to a different Ergomatic account.`,reason:`ALREADY LINKED ELSEWHERE · 409`}:{line:oT,reason:`CONCEPT2 REFUSED THE LINK · ${String(e.status)}`};case`serverError`:return{line:oT,reason:`ERGOMATIC'S SERVER DIDN'T ANSWER · ${String(e.status)}`};case`mintFailed`:return{line:oT,reason:`COULDN'T START THE LINK · ${String(e.status)}`};case`networkError`:return{line:oT,reason:`NO CONNECTION`};case`noWindow`:case`noContext`:case`contextInvalid`:case`pluginError`:return{line:oT,reason:`THIS DEVICE COULDN'T OPEN CONCEPT2`}}}var lT=`Send each finished monitor row yourself, from the log.`,uT=`Finished monitor rows are sent when you save them.`,dT=`Sends are paused until you reconnect.`;function fT(e){switch(e){case`no_weight`:return`Rows aren't being sent: Concept2 needs a weight class, and your Concept2 profile has no weight set.`;case`unreadable_weight`:case`implausible_weight`:return`Rows aren't being sent: Concept2 needs a weight class, and we couldn't read the weight on your Concept2 profile.`;default:return`Rows aren't being sent: Concept2 needs a weight class, and we couldn't work one out from your Concept2 profile.`}}function pT(e){switch(QC(e)){case`RECONNECT NEEDED`:return{text:dT,warn:!1,remedy:null};case`SEND FAILED`:return{text:fT(e.sendFailedReason),warn:!0,remedy:`profile`};case`LINKED ✓`:return{text:e.autoSend?uT:lT,warn:!1,remedy:null}}}function mT(e){return QC(e)}var hT=4e3;function gT(e){return e.status===null?`NO CONNECTION`:`THE SERVER ANSWERED ${String(e.status)}`}function _T({failure:e}){return(0,W.jsxs)(`div`,{className:`c2-card-panel`,children:[(0,W.jsx)(`p`,{className:`c2-card-panel-label`,children:`THE LINK DIDN'T FINISH`}),(0,W.jsx)(`p`,{className:`c2-card-panel-line`,children:e.line}),(0,W.jsxs)(`p`,{className:`c2-card-panel-reason`,children:[`REASON: `,e.reason]})]})}function vT({link:e,busy:t,reload:n}){let[r,i]=(0,v.useState)(!1),[a,o]=(0,v.useState)(!1),s=(0,v.useRef)(null),c=(0,v.useRef)(null);(0,v.useEffect)(()=>{r||c.current===null||(c.current.focus(),c.current=null)},[r]);async function l(t){if(e.autoVerify===t)return;o(!1);let r=document.activeElement;c.current=r instanceof HTMLButtonElement&&s.current!==null&&s.current.contains(r)?r:null,i(!0);try{(await G(`/api/concept2/link`,{method:`PATCH`,headers:{"Content-Type":`application/json`},body:JSON.stringify({autoVerify:t})})).ok||o(!0)}catch{o(!0)}finally{await n(),i(!1)}}function u(e){let t=e.key===`ArrowRight`?1:e.key===`ArrowLeft`?-1:0;if(t===0||s.current===null)return;let n=[...s.current.querySelectorAll(`button`)],r=n.findIndex(e=>e===document.activeElement);r!==-1&&(e.preventDefault(),n[(r+t+n.length)%n.length]?.focus())}let d=t||r;return(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(`p`,{className:`c2-card-row-label`,children:`AUTO VERIFY`}),(0,W.jsxs)(`div`,{ref:s,className:`c2-card-mode c2-card-mode-two`,role:`group`,"aria-label":`Auto verify`,"aria-describedby":`c2-card-verify-line`,onKeyDown:u,children:[(0,W.jsx)(`button`,{type:`button`,className:`c2-card-mode-btn`,"aria-label":`Auto verify off`,"aria-pressed":!e.autoVerify,disabled:d,onClick:()=>void l(!1),children:`OFF`}),(0,W.jsx)(`button`,{type:`button`,className:`c2-card-mode-btn`,"aria-label":`Auto verify on`,"aria-pressed":e.autoVerify,disabled:d,onClick:()=>void l(!0),children:`ON`})]}),(0,W.jsx)(`p`,{id:`c2-card-verify-line`,className:`c2-card-mode-line`,children:e.autoVerify?`Rows arrive verified.`:`Concept2 leaves verifying to you.`}),a&&(0,W.jsx)(`p`,{className:`c2-card-mode-error`,children:`Couldn't change this. Try again.`})]})}function yT({link:e,armed:t,busy:n,profileUrl:r,onArm:i,onUnlink:a,disarm:o,reload:s}){let[c,l]=(0,v.useState)(!1),[u,d]=(0,v.useState)(!1),f=(0,v.useRef)(null),p=(0,v.useRef)(null);(0,v.useEffect)(()=>{c||p.current===null||(p.current.focus(),p.current=null)},[c]);let m=pT(e);async function h(t){if(o(),d(!1),e.autoSend===t)return;let n=document.activeElement;p.current=n instanceof HTMLButtonElement&&f.current!==null&&f.current.contains(n)?n:null,l(!0);try{(await G(`/api/concept2/link`,{method:`PATCH`,headers:{"Content-Type":`application/json`},body:JSON.stringify({autoSend:t})})).ok||d(!0)}catch{d(!0)}finally{await s(),l(!1)}}function g(e){let n=e.key===`ArrowRight`?1:e.key===`ArrowLeft`?-1:0;if(n===0||t||f.current===null)return;let r=[...f.current.querySelectorAll(`button`)],i=r.findIndex(e=>e===document.activeElement);i!==-1&&(e.preventDefault(),r[(i+n+r.length)%r.length]?.focus())}let _=n||c;return(0,W.jsxs)(W.Fragment,{children:[(0,W.jsxs)(`div`,{ref:f,className:`c2-card-mode${t?` c2-card-mode-is-armed`:``}`,role:`group`,"aria-label":`Sending mode`,"aria-describedby":t?void 0:`c2-card-mode-line`,onKeyDown:g,children:[(0,W.jsx)(`button`,{type:`button`,className:`c2-card-mode-btn${t?` c2-card-mode-armed`:``}`,"aria-pressed":!1,disabled:_,onClick:t?a:i,children:t?`Tap again to unlink`:`OFF`}),(0,W.jsx)(`button`,{type:`button`,className:`c2-card-mode-btn`,"aria-pressed":!t&&!e.autoSend,disabled:_,onClick:()=>void h(!1),children:`MANUAL`}),(0,W.jsx)(`button`,{type:`button`,className:`c2-card-mode-btn`,"aria-pressed":!t&&e.autoSend,disabled:_,onClick:()=>void h(!0),children:`AUTOMATIC`})]}),t?(0,W.jsx)(`p`,{className:`c2-card-foot`,children:`DISARMS ON ITS OWN AFTER 4 SECONDS`}):(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(`p`,{id:`c2-card-mode-line`,className:`c2-card-mode-line${m.warn?` c2-card-mode-line-warn`:``}`,children:m.text}),m.remedy===`profile`&&r!==null&&(0,W.jsx)(`button`,{type:`button`,className:`c2-card-linkout`,onClick:()=>void $l(r),children:`OPEN CONCEPT2 PROFILE`}),u&&(0,W.jsx)(`p`,{className:`c2-card-mode-error`,children:`Couldn't change this. Try again.`})]})]})}function bT({email:e}){let{link:t,failed:n,reload:r}=ru(),[i,a]=(0,v.useState)(null),[o,s]=(0,v.useState)(!1),[c,l]=(0,v.useState)(null),[u,d]=(0,v.useState)(!1),f=(0,v.useRef)(null),p=(0,v.useCallback)(()=>{f.current!==null&&(clearTimeout(f.current),f.current=null),d(!1)},[]);(0,v.useEffect)(()=>p,[p]),(0,v.useEffect)(()=>{let e=()=>{a(null),s(!1)};return window.addEventListener(`pageshow`,e),()=>{window.removeEventListener(`pageshow`,e)}},[]);function m(){f.current!==null&&clearTimeout(f.current),f.current=setTimeout(()=>{f.current=null,d(!1)},hT),d(!0)}async function h(){s(!0),a(null);try{let e=await aT();a(e),await r()}finally{s(!1)}}async function g(){s(!0),l(null);try{let e=await G(`/api/concept2/link`,{method:`DELETE`});e.ok||e.status===404?(a(null),await r()):l({status:e.status})}catch{l({status:null})}finally{p(),s(!1)}}if(n!==null)return(0,W.jsxs)(`section`,{className:`c2-card`,"aria-labelledby":`c2-card-label`,children:[(0,W.jsxs)(`div`,{className:`c2-card-head`,children:[(0,W.jsx)(`h2`,{className:`c2-card-label`,id:`c2-card-label`,children:`CONCEPT2`}),(0,W.jsx)(`span`,{className:`c2-card-status`,children:`COULDN'T READ`})]}),(0,W.jsxs)(`div`,{className:`c2-card-body c2-card-body-split`,children:[(0,W.jsx)(`div`,{className:`c2-card-tell`,children:(0,W.jsxs)(`div`,{className:`c2-card-panel`,children:[(0,W.jsx)(`p`,{className:`c2-card-panel-label`,children:`COULDN'T READ CONCEPT2`}),(0,W.jsx)(`p`,{className:`c2-card-panel-line`,children:`Couldn't reach Concept2 linking.`}),(0,W.jsxs)(`p`,{className:`c2-card-panel-reason`,children:[`REASON: `,gT(n)]})]})}),(0,W.jsx)(`div`,{className:`c2-card-act`,children:(0,W.jsx)(`button`,{type:`button`,className:`c2-card-retry`,onClick:()=>void r(),children:`Retry`})})]})]});if(t===null||!t.available)return null;let _=i===null?null:cT(i),y=o||i!==null&&i.kind===`navigating`||i!==null&&i.kind===`busy`&&i.source===`guard`,b=i!==null&&i.kind===`updateRequired`,x=t.linked?mT(t):y?`WAITING`:`NOT LINKED`,S=t.linked&&t.logbookBaseUrl!==null?cu(t.logbookBaseUrl):null,C=u||!t.linked&&(y||b||_!==null);return(0,W.jsxs)(`section`,{className:`c2-card`,"aria-labelledby":`c2-card-label`,children:[(0,W.jsxs)(`div`,{className:`c2-card-head`,children:[(0,W.jsx)(`h2`,{className:`c2-card-label`,id:`c2-card-label`,children:`CONCEPT2`}),(0,W.jsx)(`span`,{className:`c2-card-status${t.linked?` c2-card-status-on`:``}`,children:x})]}),(0,W.jsxs)(`div`,{className:`c2-card-body${C?``:` c2-card-body-split`}`,children:[(0,W.jsxs)(`div`,{className:`c2-card-tell`,children:[t.linked&&(0,W.jsx)(`p`,{className:`c2-card-identity`,children:sT(t,e)}),t.linked&&t.needsReauth&&(0,W.jsxs)(`div`,{className:`c2-card-panel`,children:[(0,W.jsx)(`p`,{className:`c2-card-panel-label`,children:`CONCEPT2 STOPPED ACCEPTING THIS LINK`}),(0,W.jsx)(`p`,{className:`c2-card-panel-line`,children:`Your link is kept. Reconnect to send rows again.`})]}),t.linked&&t.needsReauth&&_!==null&&(0,W.jsx)(_T,{failure:_}),t.linked&&t.needsReauth&&b&&(0,W.jsxs)(`div`,{className:`c2-card-panel`,children:[(0,W.jsx)(`p`,{className:`c2-card-panel-label`,children:`UPDATE NEEDED`}),(0,W.jsx)(`p`,{className:`c2-card-panel-line`,children:`Update Ergomatic to link your Concept2 account.`})]}),t.linked&&u&&(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(`hr`,{className:`c2-card-hair`}),(0,W.jsx)(`p`,{className:`c2-card-explain`,children:`Unlink removes this app's access. Rows already sent stay on Concept2.`})]}),t.linked&&c!==null&&(0,W.jsxs)(`div`,{className:`c2-card-panel`,children:[(0,W.jsx)(`p`,{className:`c2-card-panel-label`,children:`UNLINK DIDN'T HAPPEN`}),(0,W.jsx)(`p`,{className:`c2-card-panel-line`,children:`Couldn't unlink. Your link is unchanged.`}),(0,W.jsxs)(`p`,{className:`c2-card-panel-reason`,children:[`REASON: `,gT(c)]})]}),!t.linked&&y&&(0,W.jsxs)(`div`,{className:`c2-card-panel`,children:[(0,W.jsx)(`p`,{className:`c2-card-panel-label`,children:`OPENING CONCEPT2`}),(0,W.jsx)(`p`,{className:`c2-card-panel-line`,children:`Approve access on Concept2's page.`})]}),!t.linked&&!y&&b&&(0,W.jsxs)(`div`,{className:`c2-card-panel`,children:[(0,W.jsx)(`p`,{className:`c2-card-panel-label`,children:`UPDATE NEEDED`}),(0,W.jsx)(`p`,{className:`c2-card-panel-line`,children:`Update Ergomatic to link your Concept2 account.`})]}),!t.linked&&!y&&!b&&_!==null&&(0,W.jsx)(_T,{failure:_}),!t.linked&&!y&&!b&&_===null&&(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(`p`,{className:`c2-card-explain`,children:`Sends finished monitor rows to your Concept2 logbook, one row at a time, from the log.`}),(0,W.jsx)(`hr`,{className:`c2-card-hair`})]})]}),(0,W.jsxs)(`div`,{className:`c2-card-act`,children:[t.linked&&t.needsReauth&&(0,W.jsx)(W.Fragment,{children:(0,W.jsx)(`button`,{type:`button`,className:`c2-card-primary`,disabled:o,onClick:()=>void h(),children:`RECONNECT CONCEPT2`})}),t.linked&&(0,W.jsxs)(W.Fragment,{children:[!u&&(0,W.jsx)(`hr`,{className:`c2-card-hair`}),(0,W.jsx)(yT,{link:t,armed:u,busy:o,profileUrl:S,onArm:m,onUnlink:()=>void g(),disarm:p,reload:r}),!u&&(0,W.jsx)(vT,{link:t,busy:o,reload:r})]}),!t.linked&&!y&&!b&&_!==null&&(0,W.jsx)(`button`,{type:`button`,className:`c2-card-retry`,disabled:o,onClick:()=>void h(),children:`Try again`}),!t.linked&&!y&&!b&&_===null&&(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(`button`,{type:`button`,className:`c2-card-primary`,disabled:o,onClick:()=>void h(),children:`CONNECT TO CONCEPT2`}),(0,W.jsx)(`p`,{className:`c2-card-foot`,children:`OPENS CONCEPT2 IN YOUR BROWSER`})]})]})]})]})}var xT=null;function ST({email:e}){let{link:t}=ru();return t!==null&&!t.available?(0,W.jsx)(Ft,{to:`/you`,replace:!0}):(0,W.jsxs)(`main`,{className:`screen overlay-screen`,tabIndex:0,children:[(0,W.jsx)(Yr,{fallback:`/you`}),(0,W.jsx)(`h1`,{className:`screen-title`,children:`Concept2`}),(0,W.jsx)(bT,{email:e}),xT]})}var CT=`ergomatic.judgeColors`,wT={paceFaster:`blue`,paceSlower:`red`,spmFaster:`blue`,spmSlower:`red`},TT={paceFaster:`--judge-pace-faster`,paceSlower:`--judge-pace-slower`,spmFaster:`--judge-spm-faster`,spmSlower:`--judge-spm-slower`},ET={red:`var(--judge-red)`,blue:`var(--judge-blue)`,off:`var(--ink)`},DT=Object.keys(wT);function OT(e){return e===`red`||e===`blue`||e===`off`}function kT(e){let t;try{t=JSON.parse(e)}catch{return{...wT}}let n=typeof t==`object`&&t&&!Array.isArray(t)?t:{},r={...wT};for(let e of DT){let t=n[e];OT(t)&&(r[e]=t)}return r}function AT(){try{let e=localStorage.getItem(CT);return e===null?{...wT}:kT(e)}catch{return{...wT}}}function jT(e){try{return localStorage.setItem(CT,JSON.stringify(e)),!0}catch{return!1}}function MT(e){let t=document.documentElement;for(let n of DT)t.style.setProperty(TT[n],ET[e[n]])}var NT=[{value:`red`,label:(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(`span`,{className:`judge-swatch`,"data-color":`red`,"aria-hidden":`true`}),`RED`]})},{value:`blue`,label:(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(`span`,{className:`judge-swatch`,"data-color":`blue`,"aria-hidden":`true`}),`BLUE`]})},{value:`off`,label:(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(`span`,{className:`judge-swatch`,"data-color":`off`,"aria-hidden":`true`}),`OFF`]})}],PT=[{heading:`COLORS · PACE`,rows:[{slot:`paceFaster`,name:`FASTER`,hint:`a lower split`,ariaLabel:`Pace faster color`,judgedClass:`judge-pace-faster`,specimen:`1:52.3`},{slot:`paceSlower`,name:`SLOWER`,hint:`a higher split`,ariaLabel:`Pace slower color`,judgedClass:`judge-pace-slower`,specimen:`1:58.0`}]},{heading:`COLORS · SPM`,rows:[{slot:`spmFaster`,name:`FASTER`,hint:`a higher rate`,ariaLabel:`SPM faster color`,judgedClass:`judge-spm-faster`,specimen:`26`},{slot:`spmSlower`,name:`SLOWER`,hint:`a lower rate`,ariaLabel:`SPM slower color`,judgedClass:`judge-spm-slower`,specimen:`22`}]}],FT=[{value:`show`,label:`SHOW`},{value:`skip`,label:`SKIP`}];function IT(){let[e,t]=(0,v.useState)(AT),[n,r]=(0,v.useState)(!1),[i,a]=(0,v.useState)(Mx),[o,s]=(0,v.useState)(!1);function c(n,i){let a={...e,[n]:i};t(a),MT(a),r(!jT(a))}function l(e){a(e),s(!Nx(e))}return(0,W.jsxs)(`main`,{className:`screen`,children:[(0,W.jsx)(Yr,{fallback:`/you`}),(0,W.jsx)(`h1`,{className:`screen-title`,children:`Settings`}),n&&(0,W.jsx)(`p`,{className:`notice`,role:`alert`,children:`These colors are on now, but they won't stick. This device wouldn't let the app save them, so a reload brings the old ones back.`}),o&&(0,W.jsx)(`p`,{className:`notice`,role:`alert`,children:`This is set for now, but it won't stick. This device wouldn't let the app save it, so a reload brings the old choice back.`}),PT.map(t=>(0,W.jsxs)(`section`,{className:`judge-group`,children:[(0,W.jsx)(`h2`,{className:`section-heading`,children:t.heading}),t.rows.map(t=>(0,W.jsxs)(`div`,{className:`judge-slot`,children:[(0,W.jsxs)(`p`,{className:`judge-slot-name`,children:[(0,W.jsx)(`span`,{className:`judge-slot-title`,children:t.name}),` `,(0,W.jsxs)(`span`,{className:`judge-slot-hint`,children:[`(`,t.hint,`)`]})]}),(0,W.jsx)(tm,{options:NT,value:e[t.slot],onChange:e=>c(t.slot,e),ariaLabel:t.ariaLabel,className:`judge-options`,optionClassName:`judge-option`})]},t.slot)),(0,W.jsxs)(`p`,{className:`judge-preview`,"aria-hidden":`true`,children:[(0,W.jsx)(`span`,{className:`judge-preview-label`,children:`PREVIEW`}),t.rows.map(e=>(0,W.jsx)(`span`,{className:`judge-preview-value ${e.judgedClass}`,children:e.specimen},e.slot))]})]},t.heading)),(0,W.jsxs)(`section`,{className:`setting-group`,children:[(0,W.jsx)(`h2`,{className:`section-heading`,children:`READY SCREEN`}),(0,W.jsxs)(`div`,{className:`setting-slot`,children:[(0,W.jsxs)(`p`,{className:`setting-slot-name`,children:[(0,W.jsx)(`span`,{className:`setting-slot-title`,children:`WHEN THE MONITOR IS READY`}),` `,(0,W.jsx)(`span`,{className:`setting-slot-hint`,children:`(before your first pull)`})]}),(0,W.jsx)(tm,{options:FT,value:i,onChange:l,ariaLabel:`Ready screen`,className:`setting-options`,optionClassName:`setting-option`})]})]})]})}var LT={all:`ALL`,season:`SEASON`,year:`YEAR`,month:`MONTH`,"30d":`30 DAYS`,custom:`CUSTOM`},RT=sw.map(e=>({value:e,label:LT[e]}));function zT({preset:e,onPreset:t,custom:n,onCustom:r,customProblem:i}){let a=i!==null;return(0,W.jsxs)(`div`,{className:`stats-filter`,children:[(0,W.jsx)(tm,{options:RT,value:e,onChange:t,ariaLabel:`Range`,className:`stats-chips`,optionClassName:`stats-chip`}),e===`custom`&&(0,W.jsxs)(`div`,{className:`stats-custom`,children:[(0,W.jsxs)(`label`,{className:`stats-date`,children:[`FROM`,(0,W.jsx)(`input`,{type:`date`,value:n.from,"aria-invalid":a||void 0,onChange:e=>r({...n,from:e.target.value})})]}),(0,W.jsxs)(`label`,{className:`stats-date`,children:[`TO`,(0,W.jsx)(`input`,{type:`date`,value:n.to,"aria-invalid":a||void 0,onChange:e=>r({...n,to:e.target.value})})]}),a&&(0,W.jsx)(`p`,{className:`stats-caption`,role:`alert`,children:i===`empty`?`ENTER BOTH DATES`:`FROM MUST NOT FOLLOW TO`})]})]})}var BT=`TWO ROWS MAKE A CHART`;function VT({buckets:e,rowsInRange:t}){return(0,W.jsxs)(`section`,{className:`stats-group`,"aria-labelledby":`stats-tbt-h`,children:[(0,W.jsx)(`h2`,{id:`stats-tbt-h`,className:`stats-group-title`,children:`TIME BY TYPE`}),t<2?(0,W.jsx)(`p`,{className:`stats-caption`,children:BT}):e.length===0?(0,W.jsx)(`p`,{className:`stats-caption`,children:Aw}):(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(Ew,{buckets:e}),(0,W.jsx)(Ow,{buckets:e,withTime:!0})]})]})}function HT({summary:e}){let{all:t,machine:n}=e,r=n.sessions>0,i=e=>r?e:``;return(0,W.jsxs)(`section`,{className:`stats-group`,"aria-labelledby":`stats-totals-h`,children:[(0,W.jsx)(`h2`,{id:`stats-totals-h`,className:`stats-group-title`,children:`TOTALS`}),(0,W.jsx)(`div`,{className:`stats-card`,children:(0,W.jsxs)(`table`,{className:`stats-table`,children:[(0,W.jsx)(`thead`,{children:(0,W.jsxs)(`tr`,{children:[(0,W.jsx)(`th`,{scope:`col`}),(0,W.jsx)(`th`,{scope:`col`,children:`ALL ROWS`}),(0,W.jsx)(`th`,{scope:`col`,children:`MACHINE`})]})}),(0,W.jsxs)(`tbody`,{children:[(0,W.jsxs)(`tr`,{children:[(0,W.jsx)(`th`,{scope:`row`,children:`METRES`}),(0,W.jsx)(`td`,{children:Gr(t.meters)}),(0,W.jsx)(`td`,{children:i(Gr(n.meters))})]}),(0,W.jsxs)(`tr`,{children:[(0,W.jsx)(`th`,{scope:`row`,children:`TIME`}),(0,W.jsx)(`td`,{children:yw(t.seconds)}),(0,W.jsx)(`td`,{children:i(yw(n.seconds))})]}),(0,W.jsxs)(`tr`,{children:[(0,W.jsx)(`th`,{scope:`row`,children:`SESSIONS`}),(0,W.jsx)(`td`,{children:t.sessions}),(0,W.jsx)(`td`,{children:i(String(n.sessions))})]}),!r&&(0,W.jsxs)(`tr`,{children:[(0,W.jsx)(`td`,{}),(0,W.jsx)(`td`,{}),(0,W.jsx)(`td`,{className:`stats-note`,children:`NO MONITOR ROWS YET`})]}),r&&(0,W.jsxs)(W.Fragment,{children:[(0,W.jsxs)(`tr`,{children:[(0,W.jsx)(`th`,{scope:`row`,children:`REST METRES`}),(0,W.jsx)(`td`,{}),(0,W.jsx)(`td`,{children:Gr(n.restMeters)})]}),(0,W.jsxs)(`tr`,{children:[(0,W.jsx)(`th`,{scope:`row`,children:`CALORIES`}),(0,W.jsx)(`td`,{}),(0,W.jsx)(`td`,{children:Gr(n.calories)})]}),(0,W.jsxs)(`tr`,{children:[(0,W.jsx)(`th`,{scope:`row`,children:`AVG WATTS`}),(0,W.jsx)(`td`,{}),(0,W.jsx)(`td`,{children:n.avgWatts===void 0?`—`:String(n.avgWatts)})]})]})]})]})})]})}function UT(){let e=vw(),[t,n]=(0,v.useState)(`all`),[r,i]=(0,v.useState)(null),[a,o]=(0,v.useState)(null);function s(e){i(e);let t=dw(e.from),n=dw(e.to),r=t&&n?lw(t,n):null;r&&o(r)}return(0,W.jsxs)(`main`,{className:`screen`,children:[(0,W.jsx)(Yr,{fallback:`/you`}),(0,W.jsx)(`h1`,{className:`screen-title`,children:`Stats`}),e.state===`loading`&&(0,W.jsx)(`p`,{className:`stats-caption`,children:`LOADING…`}),e.state===`error`&&(0,W.jsxs)(`p`,{className:`notice`,role:`alert`,children:[`Couldn't load your stats.`,` `,(0,W.jsx)(`button`,{type:`button`,className:`button-outline`,onClick:e.retry,children:`Try again`})]}),e.state===`ready`&&e.rows.length===0&&(0,W.jsx)(`p`,{className:`stats-caption`,children:`NO ROWS YET · YOUR FIRST SAVED ROW STARTS THE COUNT`}),e.state===`ready`&&e.rows.length>0&&(0,W.jsx)(WT,{rows:e.rows,today:e.today,preset:t,onPreset:n,custom:r??{from:uw(rw(e.today,-29)),to:uw(e.today)},onCustom:s,applied:a})]})}function WT({rows:e,today:t,preset:n,onPreset:r,custom:i,onCustom:a,applied:o}){let s=dw(i.from),c=dw(i.to),l=n===`custom`?s===null||c===null?`empty`:lw(s,c)===null?`order`:null:null,u=n===`custom`?o??cw(`30d`,t):cw(n,t),d=fw(e,u),f=mw(e,u);return(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(zT,{preset:n,onPreset:r,custom:i,onCustom:a,customProblem:l}),d.length===0?(0,W.jsxs)(`p`,{className:`stats-caption`,children:[`NO ROWS BETWEEN `,u.from?uw(u.from):`THE START`,` AND`,` `,u.to?uw(u.to):`TODAY`]}):(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(HT,{summary:f}),(0,W.jsx)(VT,{buckets:gw(e,u),rowsInRange:d.length})]})]})}var GT={idle:`COPY`,copied:`COPIED`,failed:`COPY FAILED`};function KT(e,t){let n=e=>new Date(e.getFullYear(),e.getMonth(),e.getDate()).getTime(),r=Math.round((n(t)-n(e))/864e5);return r===0?`Today`:r===1?`Yesterday`:e.toLocaleDateString([],{day:`numeric`,month:`short`})}function qT(e,t){return`${KT(new Date(e),t)}, ${dl(e)}`}function JT(e){let t;try{t=JSON.parse(e)}catch{return null}return Array.isArray(t)?t.length:null}function YT({entry:e,count:t,now:n}){let[r,i]=(0,v.useState)(`idle`);async function a(){try{await navigator.clipboard.writeText(e.exported),i(`copied`)}catch{i(`failed`)}}return(0,W.jsxs)(`div`,{className:`diag-log-card`,children:[(0,W.jsxs)(`div`,{children:[(0,W.jsx)(`p`,{className:`diag-log-when`,children:qT(e.savedAt,n)}),(0,W.jsxs)(`p`,{className:`diag-log-count`,children:[t,` EVENT`,t===1?``:`S`]})]}),(0,W.jsx)(`button`,{type:`button`,className:`diag-copy`,onClick:()=>void a(),children:GT[r]})]})}function XT(e){return e.flatMap(e=>{let t=JT(e.exported);return t===null?[]:[{entry:e,count:t}]})}function ZT(){let[e]=(0,v.useState)(Ly),[t]=(0,v.useState)(()=>new Date),n=XT(e);return(0,W.jsxs)(`main`,{className:`screen overlay-screen`,tabIndex:0,children:[(0,W.jsx)(Yr,{fallback:`/you/diagnostics`}),(0,W.jsx)(`h1`,{className:`screen-title`,children:`Monitor logs`}),(0,W.jsx)(`p`,{className:`diag-caption`,children:`The app keeps the last three connected sessions' diagnostic logs. Copy one to send it with a bug report.`}),n.length===0?(0,W.jsx)(`p`,{className:`diag-empty`,children:`No logs yet. They appear here after a connected session.`}):n.map(({entry:e,count:n})=>(0,W.jsx)(YT,{entry:e,count:n,now:t},e.slot))]})}function QT(e){return e===`apple`?`Apple`:`Google`}function $T({auth:e}){if(e.view.kind!==`link_confirm`&&e.view.kind!==`link_authorize`)return null;let t=e.view.targetProvider,n=t===`apple`?`google`:`apple`,r=e.view.kind===`link_authorize`;return(0,W.jsxs)(`main`,{className:`auth-flow-screen`,children:[(0,W.jsxs)(`header`,{className:`auth-flow-header`,children:[(0,W.jsx)(`button`,{className:`auth-back`,onClick:()=>void e.cancel(),children:`← CANCEL`}),(0,W.jsxs)(`h1`,{children:[`Add `,QT(t)]}),(0,W.jsxs)(`p`,{className:`auth-intro`,children:[`Confirm `,QT(n),`, then sign in with`,` `,QT(t),`. Your workouts stay with this account.`]})]}),(0,W.jsxs)(`div`,{className:`auth-flow-body`,children:[(0,W.jsxs)(`div`,{className:`auth-steps`,children:[(0,W.jsxs)(`div`,{className:`auth-step${r?` auth-step-done`:``}`,children:[(0,W.jsx)(`span`,{className:`auth-step-index`,"aria-label":r?`Usual sign-in confirmed`:void 0,children:r?`✓`:`1`}),(0,W.jsxs)(`div`,{children:[(0,W.jsxs)(`strong`,{children:[`Confirm your usual `,QT(n),` sign-in`]}),(0,W.jsx)(`small`,{children:`Keep your workouts in this account.`})]})]}),(0,W.jsxs)(`div`,{className:`auth-step`,children:[(0,W.jsx)(`span`,{className:`auth-step-index`,children:`2`}),(0,W.jsxs)(`div`,{children:[(0,W.jsxs)(`strong`,{children:[`Sign in with `,QT(t)]}),(0,W.jsxs)(`small`,{children:[`Add `,QT(t),` as another way to sign in.`]})]})]})]}),(0,W.jsxs)(`div`,{className:`auth-actions`,children:[(0,W.jsx)(Bn,{provider:r?t:n,disabled:r&&e.targetAuthorizationBusy,label:r?void 0:`Confirm with ${QT(n)}`,onClick:()=>void(r?e.authorizeLinkTarget():e.startPreparedLink())}),(0,W.jsx)(`button`,{className:`button-l2`,onClick:()=>void e.cancel(),children:`Cancel`})]})]})]})}function eE(){pf(),xf()}var tE={"/today":Ad,"/library":eE,"/news":Ap},nE=[{path:`/today`,label:`TODAY`},{path:`/news`,label:`NEWS`},{path:`/library`,label:`LIBRARY`},{path:`/plan`,label:`PLAN`},{path:`/you`,label:`YOU`}];function rE(){return(0,W.jsx)(`nav`,{className:`tabbar`,"aria-label":`Main`,children:nE.map(e=>(0,W.jsx)(Tn,{to:e.path,onClick:tE[e.path],className:({isActive:e})=>e?`tab tab-active`:`tab`,children:({isActive:t})=>(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(`span`,{className:`tab-mark`,"aria-hidden":`true`,"data-active":t}),e.label]})},e.path))})}var iE=null,aE=[`/session/countdown`,`/session/run`,`/session/complete`,`/session/log`,`/justrow/observe`,`/you/sign-in-methods`,`/onboarding`];function oE(e){return aE.some(t=>e.startsWith(t))}function sE(){let e=dt();return(0,W.jsx)(io,{onImported:()=>e(`/library`)})}function cE(){return ni()===null?(0,W.jsx)(Ft,{to:`/today`,replace:!0}):fi()===null?(0,W.jsx)(Ft,{to:`/session/countdown`,replace:!0}):(0,W.jsx)(Ft,{to:`/session/run`,replace:!0})}function lE(){let e=fi();return e!==null&&bs(e)?(0,W.jsx)(Ft,{to:e.mode===`justrow`?`/justrow/log`:`/session/log`,replace:!0}):(0,W.jsx)(Ft,{to:`/today`,replace:!0})}function uE({user:e,onSignedOut:t,authFlow:n}={}){let r=ct(),i=wr();return(0,W.jsxs)(`div`,{className:`app-shell`,children:[(0,W.jsx)(`div`,{className:`status-backdrop`,"aria-hidden":`true`}),(0,W.jsxs)(Lt,{children:[(0,W.jsx)(H,{path:`/`,element:(0,W.jsx)(Ft,{to:`/today`,replace:!0})}),(0,W.jsx)(H,{path:`/today`,element:(0,W.jsx)(sC,{})}),(0,W.jsx)(H,{path:`/today/log`,element:(0,W.jsx)(Pd,{})}),(0,W.jsx)(H,{path:`/today/log/:id`,element:(0,W.jsx)(md,{})}),(0,W.jsx)(H,{path:`/library`,element:(0,W.jsx)(qf,{})}),(0,W.jsx)(H,{path:`/library/new`,element:(0,W.jsx)(to,{})}),(0,W.jsx)(H,{path:`/library/import`,element:(0,W.jsx)(sE,{})}),(0,W.jsx)(H,{path:`/library/:id`,element:(0,W.jsx)(BC,{})}),(0,W.jsx)(H,{path:`/library/:id/edit`,element:(0,W.jsx)(ao,{})}),(0,W.jsx)(H,{path:`/library/:id/log`,element:(0,W.jsx)(Wh,{})}),(0,W.jsx)(H,{path:`/justrow`,element:(0,W.jsx)(Px,{})}),(0,W.jsx)(H,{path:`/justrow/log`,element:(0,W.jsx)(Ux,{})}),(0,W.jsx)(H,{path:`/news`,element:(0,W.jsx)(zp,{})}),(0,W.jsx)(H,{path:`/news/releases`,element:(0,W.jsx)(fm,{})}),(0,W.jsx)(H,{path:`/news/:slug`,element:(0,W.jsx)(dm,{})}),(0,W.jsx)(H,{path:`/plan`,element:(0,W.jsx)(wm,{})}),(0,W.jsx)(H,{path:`/onboarding/recommend`,element:(0,W.jsx)(lm,{})}),(0,W.jsx)(H,{path:`/onboarding/know`,element:(0,W.jsx)(em,{})}),(0,W.jsx)(H,{path:`/onboarding/row`,element:(0,W.jsx)(um,{})}),(0,W.jsx)(H,{path:`/session/confirm`,element:(0,W.jsx)(cE,{})}),(0,W.jsx)(H,{path:`/session/countdown`,element:(0,W.jsx)(Am,{})}),(0,W.jsx)(H,{path:`/session/run`,element:(0,W.jsx)(Js,{})}),(0,W.jsx)(H,{path:`/session/complete`,element:(0,W.jsx)(lE,{})}),(0,W.jsx)(H,{path:`/session/log`,element:(0,W.jsx)(Wh,{})}),(0,W.jsx)(H,{path:`/session/review`,element:(0,W.jsx)(Xx,{})}),iE,e&&t&&(0,W.jsxs)(W.Fragment,{children:[(0,W.jsx)(H,{path:`/you`,element:(0,W.jsx)(Vw,{user:e,onSignedOut:t,authFlow:n})}),n&&(0,W.jsx)(H,{path:`/you/sign-in-methods`,element:(0,W.jsx)($T,{auth:n})}),(0,W.jsx)(H,{path:`/you/baselines`,element:(0,W.jsx)(Zw,{})}),(0,W.jsx)(H,{path:`/you/diagnostics`,element:(0,W.jsx)(Qw,{})}),(0,W.jsx)(H,{path:`/you/concept2`,element:(0,W.jsx)(ST,{email:e.email})}),(0,W.jsx)(H,{path:`/you/settings`,element:(0,W.jsx)(IT,{})}),(0,W.jsx)(H,{path:`/you/stats`,element:(0,W.jsx)(UT,{})}),(0,W.jsx)(H,{path:`/you/diagnostics/monitor-logs`,element:(0,W.jsx)(ZT,{})})]}),(0,W.jsx)(H,{path:`*`,element:(0,W.jsx)(Ft,{to:`/today`,replace:!0})})]}),!oE(r.pathname)&&!i&&(0,W.jsx)(rE,{})]})}function dE(){let[e,t]=(0,v.useState)({state:`loading`}),[n,r]=(0,v.useState)(0),i=()=>{tp(),t({state:`out`})};return(0,v.useEffect)(()=>{let e=!1;return G(`/api/me`).then(async n=>{if(!e){if(n.ok){let e=await n.json();t({state:`in`,user:e.user})}else i()}}).catch(()=>{e||i()}),()=>{e=!0}},[n]),[e,i,()=>r(e=>e+1)]}function fE(){let[e,t,n]=dE(),r=hr(n),i=ct(),a=dt();return(0,v.useEffect)(()=>{r.destination&&r.destination!==i.pathname&&a(r.destination)},[r.destination,i.pathname,a]),(0,v.useEffect)(()=>{`scrollRestoration`in window.history&&(window.history.scrollRestoration=`manual`)},[]),e.state===`loading`?null:e.state===`out`?(0,W.jsx)(Kn,{onSignedIn:n,auth:r}):(0,W.jsx)(uE,{user:e.user,onSignedOut:t,authFlow:r})}function pE(){return(0,W.jsx)(wn,{children:(0,W.jsx)(fE,{})})}gr(),MT(AT()),(0,y.createRoot)(document.getElementById(`root`)).render((0,W.jsx)(v.StrictMode,{children:(0,W.jsx)(pE,{})}));export{C,G as S,ug as _,Xv as a,dg as b,Zv as c,Kv as d,qv as f,pg as g,Ng as h,zv as i,Bv as l,Wg as m,Wv as n,Yv as o,Vv as p,Gv as r,Uv as s,Jv as t,Hv as u,fg as v,ts as x,mg as y};
+corrected-dist-literal-exit=0

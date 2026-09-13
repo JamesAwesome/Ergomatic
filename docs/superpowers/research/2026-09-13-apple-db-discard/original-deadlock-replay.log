@@ -1,0 +1,24 @@
+{
+  "deadlock": {
+    "waits": [
+      {
+        "pid": 92,
+        "application_name": "",
+        "wait_event_type": "Lock",
+        "wait_event": "transactionid",
+        "query": "SELECT id,user_id AS \"userId\" FROM sessions WHERE id=$1 AND expires_at>now() FOR UPDATE"
+      }
+    ],
+    "result": [
+      {
+        "ok": true,
+        "stage": "reauth_exchanging"
+      },
+      {
+        "ok": true,
+        "id": "9230829a-cc64-4b15-8173-2702743ccdbd"
+      }
+    ],
+    "elapsedMs": 13.04849999999999
+  }
+}

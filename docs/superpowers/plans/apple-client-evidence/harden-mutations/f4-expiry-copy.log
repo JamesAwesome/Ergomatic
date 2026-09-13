@@ -1,0 +1,33 @@
+$ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/you/SignInMethods.test.tsx -t "renders the bounded link terminal copy"
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/apple-client-plan-scratch/app
+
+ ❯ |client| src/you/SignInMethods.test.tsx (8 tests | 1 failed | 5 skipped) 47ms
+     × renders the bounded link terminal copy 39ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |client| src/you/SignInMethods.test.tsx > SignInMethods > renders the bounded link terminal copy
+Error: expect(element).toHaveTextContent()
+
+Expected element to have text content:
+  We couldn’t confirm the result. Check your sign-in methods and try again.
+Received:
+  That linking attempt didn’t work. Nothing changed. Start linking again.
+ ❯ src/you/SignInMethods.test.tsx:156:46
+    154|     );
+    155|     render(<SignInMethods auth={controller(view)} />);
+    156|     expect(await screen.findByRole("alert")).toHaveTextContent(copy);
+       |                                              ^
+    157|   });
+    158|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed | 5 skipped (8)
+   Start at  01:44:15
+   Duration  366ms (transform 24ms, setup 40ms, import 38ms, tests 47ms, environment 186ms)
+
+expected-failure-exit=1

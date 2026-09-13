@@ -30,7 +30,7 @@ case('signup-conflict','attempts.ts',' ON CONFLICT(${column}) DO UPDATE SET ${co
 case('link-profile','attempts.ts','UPDATE users SET ${column}=$1 WHERE','UPDATE users SET name=\'corrupt\',email=\'corrupt\',${column}=$1 WHERE','integration','attempts.integration.test.ts'),
 case('session-before-attempt-lock','attempts.ts','    if (expected.originalSessionId)\n      await original(tx, expected.originalSessionId, true);\n','', 'integration','attempts.integration.test.ts'),
 case('callback-mount','../app.ts','"/api/auth/apple/callback",\n      noStore','"/api/auth/apple/callback-broken",\n      noStore','integration','frontDoorRoutes.integration.test.ts'),
-case('callback-cancel-erasure','frontDoorRoutes.ts','await attempts.cancel(a.id, binding.bindingSecret, "web");','await Promise.resolve();','integration','frontDoorRoutes.integration.test.ts'),
+case('callback-cancel-erasure','frontDoorRoutes.ts','if (!(await discard(a))) throw new AuthFailure("attempt_expired");','await Promise.resolve();','integration','frontDoorRoutes.integration.test.ts'),
 case('web-token-projection','frontDoorRoutes.ts','return projection;','return s;','integration','frontDoorRoutes.integration.test.ts'),
 case('legacy-open-admission','routes.ts','if (!frontDoor)\n      return signInWithClaims','if (true)\n      return signInWithClaims','integration','frontDoorRoutes.integration.test.ts'),
 case('default-dark','../app.ts','frontDoorEnabled: Boolean(deps.frontDoor)','frontDoorEnabled: true','unit','frontDoor.test.ts'),
@@ -60,6 +60,14 @@ cases += [
 case('http-start-limit','frontDoorRoutes.ts','limit: 120,','limit: 121,','integration','frontDoorRoutes.integration.test.ts'),
 case('legacy-native-start-charge','routes.ts','    router.post("/api/auth/native", frontDoor.admission);\n','','integration','frontDoorRoutes.integration.test.ts'),
 case('legacy-web-start-charge','routes.ts','    router.get("/api/auth/signin", frontDoor.admission);\n','','integration','frontDoorRoutes.integration.test.ts'),
+]
+cases += [
+case('failure-id-only-cleanup','attempts.ts','    async discard(expected: Attempt): Promise<boolean> {\n      const result = await pool.query(\n        `DELETE FROM auth_attempts WHERE id=$1 AND binding_hash=$2 AND surface=$3 AND purpose=$4 AND target_provider=$5 AND existing_provider IS NOT DISTINCT FROM $6 AND stage=$7 AND version=$8 AND state=$9 AND nonce=$10 AND original_session_id IS NOT DISTINCT FROM $11`,\n        [\n          expected.id,\n          expected.bindingHash,\n          expected.surface,\n          expected.purpose,\n          expected.targetProvider,\n          expected.existingProvider,\n          expected.stage,\n          expected.version,\n          expected.state,\n          expected.nonce,\n          expected.originalSessionId,\n        ],\n      );\n      return result.rowCount === 1;\n    },\n','    async discard(expected: Attempt): Promise<boolean> {\n      const result = await pool.query("DELETE FROM auth_attempts WHERE id=$1", [expected.id]);\n      return result.rowCount === 1;\n    },\n','integration','frontDoorRoutes.integration.test.ts'),
+case('failure-stale-cookie','frontDoorRoutes.ts','if (owned && (await discard(owned)))','if (owned && ((await discard(owned)) || true))','integration','frontDoorRoutes.integration.test.ts'),
+case('failure-claimed-snapshot','frontDoorRoutes.ts','      owned = claimed;\n','','integration','frontDoorRoutes.integration.test.ts'),
+case('native-failure-cleanup','frontDoorRoutes.ts','if (claimed) await discard(claimed);','if (false && claimed) await discard(claimed);','integration','frontDoorRoutes.integration.test.ts'),
+case('failure-cleanup-error-cookie','frontDoorRoutes.ts','      return false;\n    }\n  }\n  async function callback','      return true;\n    }\n  }\n  async function callback','integration','frontDoorRoutes.integration.test.ts'),
+case('lost-response-grant','attempts.ts','        await grant(tx, session.userId, a);','        await Promise.resolve();','integration','frontDoorRoutes.integration.test.ts'),
 ]
 report=[]
 for c in cases:

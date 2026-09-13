@@ -1,0 +1,108 @@
+$ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/you/SignInMethods.test.tsx -t "refetches authoritative methods before showing an uncertain finalize result"
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/apple-client-plan-scratch/app
+
+ ❯ |client| src/you/SignInMethods.test.tsx (8 tests | 1 failed | 7 skipped) 1056ms
+     × refetches authoritative methods before showing an uncertain finalize result 1055ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |client| src/you/SignInMethods.test.tsx > SignInMethods > refetches authoritative methods before showing an uncertain finalize result
+AssertionError: expected 1 to be 2 // Object.is equality
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<section[39m
+        [33maria-labelledby[39m=[32m"auth-methods-heading"[39m
+        [33mclass[39m=[32m"auth-methods"[39m
+      [36m>[39m
+        [36m<p[39m
+          [33mclass[39m=[32m"notice auth-notice-error"[39m
+          [33mrole[39m=[32m"alert"[39m
+        [36m>[39m
+          [0mWe couldn’t confirm the result. Check your sign-in methods and try again.[0m
+        [36m</p>[39m
+        [36m<h2[39m
+          [33mid[39m=[32m"auth-methods-heading"[39m
+        [36m>[39m
+          [0mSIGN-IN METHODS[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"auth-method-list"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-label[39m=[32m"Add Apple"[39m
+            [33mclass[39m=[32m"auth-method-row"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"auth-method-name"[39m
+            [36m>[39m
+              [0mApple[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"auth-method-action"[39m
+            [36m>[39m
+              [0mAdd [0m
+              [0mApple[0m
+              [0m [0m
+              [36m<span[39m
+                [33maria-hidden[39m=[32m"true"[39m
+              [36m>[39m
+                [0m›[0m
+              [36m</span>[39m
+            [36m</span>[39m
+          [36m</button>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"auth-method-row"[39m
+          [36m>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"auth-method-name"[39m
+            [36m>[39m
+              [0mGoogle[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"auth-method-connected"[39m
+            [36m>[39m
+              [0mCONNECTED[0m
+            [36m</span>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<button[39m
+          [33mclass[39m=[32m"button-l2 auth-link-retry"[39m
+        [36m>[39m
+          [0mStart linking again[0m
+        [36m</button>[39m
+      [36m</section>[39m
+    [36m</div>[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ src/you/SignInMethods.test.tsx:120:39
+    118|       "We couldn’t confirm the result. Check your sign-in methods and …
+    119|     );
+    120|     await waitFor(() => expect(reads).toBe(2));
+       |                                       ^
+    121|     expect(screen.queryByRole("button", { name: "Add Apple" })).toBeNu…
+    122|     expect(screen.getAllByText("CONNECTED")).toHaveLength(2);
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 skipped (8)
+   Start at  01:37:08
+   Duration  1.39s (transform 26ms, setup 41ms, import 53ms, tests 1.06s, environment 184ms)
+
+expected-failure-exit=1

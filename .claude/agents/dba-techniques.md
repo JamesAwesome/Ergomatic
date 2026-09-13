@@ -202,6 +202,8 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
   health200 after migration proves boot/schema compatibility, not access for
   Apple-only rowers. (2026-09-13 Apple plan.)
 
+- **(2026-09-13, Apple discard delta) A PK predicate does not mean a PK plan.** The snapshot-conditional failure DELETE includes id, binding, provider intent, stage/version, state/nonce and original session; PostgreSQL18.4 chose `auth_attempts_state_unique` at517–1,000,512 attempts. Matching deletion cost54WAL B; stale stage/version/binding cost0; captured warm execution0.005–0.019ms. Hold the real winner after its UPDATE and before COMMIT, issue stale cleanup on another connection, observe its lock wait, then commit: the conditional delete returnedfalse and retained the winner. The former id/hash/surface predicate deleted it and failed the same gate. Read the actual Index Cond and test failure cleanup independently of successful transitions.
+
 ## Where the dated record lives
 
 `dba-ledger.md`, one section per engagement with its environment table and

@@ -1,0 +1,2 @@
+$ tsc -b && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.server.build.json --noEmit && tsc -p e2e/tsconfig.json --noEmit && bash scripts/e2e-typecheck-census.sh
+E2E TypeScript membership: 24/24

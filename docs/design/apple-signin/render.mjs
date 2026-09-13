@@ -32,6 +32,7 @@ const shots = [
   ["link-reverse-google-success", "link-success-google", "native", "portrait", 390, 844],
   ["link-conflict", "link-conflict", "native", "portrait", 390, 844],
   ["link-expired-restart", "link-retry", "native", "portrait", 390, 844],
+  ["link-expired-restart-landscape", "link-retry", "native", "landscape", 844, 390],
   ["link-account-changed-restart", "link-account-changed", "native", "portrait", 390, 844],
   ["link-account-changed-restart-landscape", "link-account-changed", "native", "landscape", 844, 390]
 ];

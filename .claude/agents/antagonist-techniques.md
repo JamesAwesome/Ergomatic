@@ -175,6 +175,9 @@ toolkit, not a history.
 
 ## Techniques that keep paying
 
+- **A failed CAS can still erase the winner in its catch.** Hold two supported callbacks after they read the same authorization stage; let one commit, then release the loser and inspect the real row after cleanup. Apple auth's version guard rejected correctly while ID-only failure cleanup deleted the winner's pending credential. Trace ownership through the exception path, and through every await in client cancellation.
+- **A plugin with no logging calls can still log its whole credential through the bridge.** Follow `call.resolve` into native serialization and JavaScript `fromNative`, then run the vendor bridge with the actual build's logging configuration; a plugin-only forbidden-string test cannot gate that producer. Native authorization identity also does not prove JavaScript document identity.
+
 1. **Replay the committed captures.** Most wire questions are already answered in
    `docs/monitor/sessions/*.log.gz`. No hardware, no speculation.
 2. **Make the probe bite before trusting its silence.** Demonstrate the failure

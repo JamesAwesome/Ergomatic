@@ -1,0 +1,79 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |integration| server/auth/frontDoorRoutes.integration.test.ts (34 tests | 8 failed) 2221ms
+     × stale signin callback (success) cannot erase the winning stage or clear its cookie 13ms
+     × stale signin callback (cancel) cannot erase the winning stage or clear its cookie 11ms
+     × stale signin callback (provider-error) cannot erase the winning stage or clear its cookie 10ms
+     × stale signin callback (malformed) cannot erase the winning stage or clear its cookie 10ms
+     × stale link callback (success) cannot erase the winning stage or clear its cookie 19ms
+     × stale link callback (cancel) cannot erase the winning stage or clear its cookie 17ms
+     × stale link callback (provider-error) cannot erase the winning stage or clear its cookie 18ms
+     × stale link callback (malformed) cannot erase the winning stage or clear its cookie 18ms
+
+ Test Files  1 failed (1)
+      Tests  8 failed | 26 passed (34)
+   Start at  01:22:19
+   Duration  2.68s (transform 109ms, setup 0ms, import 407ms, tests 2.22s, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project integration server/auth/frontDoorRoutes.integration.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale signin callback (success) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale signin callback (cancel) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale signin callback (provider-error) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale signin callback (malformed) cannot erase the winning stage or clear its cookie
+AssertionError: expected [] to strictly equal [ { stage: 'confirm', …(2) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "grant": true,
+-     "stage": "confirm",
+-     "version": 3,
+-   },
+- ]
++ []
+
+ ❯ server/auth/frontDoorRoutes.integration.test.ts:752:9
+    750|           )
+    751|         ).rows,
+    752|       ).toStrictEqual(snapshot);
+       |         ^
+    753|       expect(lost.headers["set-cookie"]).toBeUndefined();
+    754|       expect(lost.headers.location).toContain("authError=");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale link callback (success) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale link callback (cancel) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale link callback (provider-error) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale link callback (malformed) cannot erase the winning stage or clear its cookie
+AssertionError: expected [] to strictly equal [ { stage: 'target_authorize', …(2) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "grant": true,
+-     "stage": "target_authorize",
+-     "version": 3,
+-   },
+- ]
++ []
+
+ ❯ server/auth/frontDoorRoutes.integration.test.ts:752:9
+    750|           )
+    751|         ).rows,
+    752|       ).toStrictEqual(snapshot);
+       |         ^
+    753|       expect(lost.headers["set-cookie"]).toBeUndefined();
+    754|       expect(lost.headers.location).toContain("authError=");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+

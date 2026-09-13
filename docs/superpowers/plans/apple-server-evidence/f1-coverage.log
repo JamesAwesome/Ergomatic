@@ -1,0 +1,29 @@
+$ bash scripts/test-run.sh --coverage --project integration server/auth/frontDoorRoutes.integration.test.ts server/auth/attempts.integration.test.ts --coverage.include=server/auth/attempts.ts --coverage.include=server/auth/frontDoorRoutes.ts
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+      Coverage enabled with v8
+
+
+ Test Files  2 passed (2)
+      Tests  47 passed (47)
+   Start at  01:22:52
+   Duration  3.25s (transform 149ms, setup 0ms, import 721ms, tests 4.11s, environment 0ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    89.9 |     89.3 |   98.18 |   91.89 |                   
+ attempts.ts       |   89.17 |    89.06 |   96.96 |   92.41 | ...73,347,378,478 
+ ...tDoorRoutes.ts |   90.62 |    89.56 |     100 |   91.39 | ...52,289,352-354 
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 89.9% ( 285/317 )
+Branches     : 89.3% ( 217/243 )
+Functions    : 98.18% ( 54/55 )
+Lines        : 91.89% ( 272/296 )
+================================================================================
+ERROR: Coverage for statements (89.9%) does not meet global threshold (90%)
+ERROR: Coverage for branches (89.3%) does not meet global threshold (90%)
+[ELIFECYCLE] Command failed with exit code 1.

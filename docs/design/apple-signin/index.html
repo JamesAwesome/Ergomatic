@@ -566,7 +566,7 @@
       } else if (status === "conflict") {
         notice = '<p class="notice error" role="alert">That Apple sign-in is already connected to another Ergomatic account. Nothing changed.</p>';
       } else if (status === "retry") {
-        notice = '<p class="notice error" role="alert">This linking attempt expired. Nothing changed. Start linking again.</p>';
+        notice = '<p class="notice error" role="alert">We couldn’t confirm the result. Check your sign-in methods and try again.</p>';
       } else if (status === "account-changed") {
         notice = '<p class="notice error" role="alert">Your account changed. Start linking again. Neither account was modified.</p>';
       }

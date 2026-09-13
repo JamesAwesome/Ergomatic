@@ -1,0 +1,79 @@
+$ bash scripts/test-run.sh --project integration server/auth/frontDoorRoutes.integration.test.ts
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |integration| server/auth/frontDoorRoutes.integration.test.ts (31 tests | 8 failed) 2060ms
+     × stale signin callback (success) cannot erase the winning stage or clear its cookie 12ms
+     × stale signin callback (cancel) cannot erase the winning stage or clear its cookie 10ms
+     × stale signin callback (provider-error) cannot erase the winning stage or clear its cookie 11ms
+     × stale signin callback (malformed) cannot erase the winning stage or clear its cookie 10ms
+     × stale link callback (success) cannot erase the winning stage or clear its cookie 20ms
+     × stale link callback (cancel) cannot erase the winning stage or clear its cookie 17ms
+     × stale link callback (provider-error) cannot erase the winning stage or clear its cookie 17ms
+     × stale link callback (malformed) cannot erase the winning stage or clear its cookie 16ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale signin callback (success) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale signin callback (cancel) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale signin callback (provider-error) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale signin callback (malformed) cannot erase the winning stage or clear its cookie
+AssertionError: expected [] to strictly equal [ { stage: 'confirm', …(2) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "grant": true,
+-     "stage": "confirm",
+-     "version": 3,
+-   },
+- ]
++ []
+
+ ❯ server/auth/frontDoorRoutes.integration.test.ts:649:9
+    647|           )
+    648|         ).rows,
+    649|       ).toStrictEqual(snapshot);
+       |         ^
+    650|       expect(lost.headers["set-cookie"]).toBeUndefined();
+    651|       expect(lost.headers.location).toContain("authError=");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale link callback (success) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale link callback (cancel) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale link callback (provider-error) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale link callback (malformed) cannot erase the winning stage or clear its cookie
+AssertionError: expected [] to strictly equal [ { stage: 'target_authorize', …(2) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "grant": true,
+-     "stage": "target_authorize",
+-     "version": 3,
+-   },
+- ]
++ []
+
+ ❯ server/auth/frontDoorRoutes.integration.test.ts:649:9
+    647|           )
+    648|         ).rows,
+    649|       ).toStrictEqual(snapshot);
+       |         ^
+    650|       expect(lost.headers["set-cookie"]).toBeUndefined();
+    651|       expect(lost.headers.location).toContain("authError=");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  8 failed | 23 passed (31)
+   Start at  01:17:06
+   Duration  2.50s (transform 106ms, setup 0ms, import 388ms, tests 2.06s, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.

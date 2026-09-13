@@ -1,0 +1,30 @@
+[34mℹ Configuring dynamic provider dependencies for SocialLogin[0m
+[1m
+Provider configuration:[0m
+  [32m✔[0m [1mGoogle[0m: [32menabled[0m
+  [32m✔[0m [1mFacebook[0m: [32menabled[0m
+  [32m✔[0m [1mApple[0m: [32menabled[0m
+  [32m✔[0m [1mTwitter[0m: [32menabled[0m
+
+[34mℹ Configuring iOS dependencies...[0m
+[34mℹ Podspec already up to date[0m
+[34mℹ Package.swift already up to date[0m
+[32m✔ Configuration complete
+[0m
+✔ Copying web assets from client to ios/App/App/public in 11.14ms
+✔ Creating capacitor.config.json in ios/App/App in 191.13μs
+✔ copy ios in 32.28ms
+✔ Updating iOS plugins in 2.83ms
+[info] All Capacitor plugins have a Package.swift file and will be included in Package.swift
+[info] Writing Package.swift
+[info] Found 8 Capacitor plugins for ios:
+       @aparajita/capacitor-secure-storage@8.0.0
+       @capacitor-community/bluetooth-le@8.3.0
+       @capacitor-community/keep-awake@8.0.1
+       @capacitor/app@8.1.1
+       @capacitor/haptics@8.0.2
+       @capgo/capacitor-nfc@8.2.5
+       @capacitor/keyboard@8.0.5
+       @capgo/capacitor-social-login@8.5.5
+✔ update ios in 16.07ms
+[info] Sync finished in 0.086s

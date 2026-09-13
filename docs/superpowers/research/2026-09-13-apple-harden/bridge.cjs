@@ -1,0 +1,8 @@
+const fs = require('node:fs');
+const {createRequire} = require('node:module');
+const r=createRequire('/tmp/ergomatic-apple-native-paste/app/package.json');
+const {JSDOM}=r('jsdom');
+const script=fs.readFileSync('/tmp/ergomatic-apple-native-paste/app/node_modules/@capacitor/ios/Capacitor/Capacitor/assets/native-bridge.js','utf8');
+const logs=[];const sent=[];
+function page(){const dom=new JSDOM('',{url:'https://app.test',runScripts:'outside-only'});const w=dom.window;w.Capacitor={DEBUG:true,isLoggingEnabled:true,Plugins:{}};w.WEBVIEW_SERVER_URL='https://app.test';w.webkit={messageHandlers:{bridge:{postMessage:x=>sent.push(x)}}};w.fetch=fetch;w.Headers=Headers;w.Request=Request;w.Response=Response;w.Math.random=()=>0.5;for(const key of ['log','warn','error','groupCollapsed','groupEnd','dir'])w.console[key]=(...args)=>logs.push(args);w.eval(script);return w;}
+(async()=>{const old=page();void old.Capacitor.nativePromise('AppleAuth','authorize',{nonce:'synthetic-nonce',state:'synthetic-state'});const oldCall=sent.at(-1);const fresh=page();const pending=fresh.Capacitor.nativePromise('UnrelatedPlugin','get',{});const freshCall=sent.at(-1);fresh.Capacitor.fromNative({callbackId:oldCall.callbackId,pluginId:'AppleAuth',methodName:'authorize',save:false,success:true,data:{idToken:'SYNTHETIC_SECRET_ID_TOKEN',authorizationCode:'SYNTHETIC_SECRET_CODE',state:'synthetic-state'}});const received=await pending;console.log(JSON.stringify({sameCallbackId:oldCall.callbackId===freshCall.callbackId,oldPlugin:oldCall.pluginId,newPlugin:freshCall.pluginId,received,credentialLogged:JSON.stringify(logs).includes('SYNTHETIC_SECRET_CODE')}));old.close();fresh.close();})();

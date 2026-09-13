@@ -4,17 +4,17 @@
 
 **Goal:** Add the approved Apple-first sign-in and account-linking client on iOS and web while preserving legacy Google behavior, native sign-out, and account/history continuity.
 
-**Architecture:** `useAuthFlow` is the sole client operation adapter. It consumes the shared server union, invokes the thin native Apple/Google proof bridges or follows the server's exact web authorization URL, and exposes credential-free view states to Welcome, confirmation, and You. A generation number invalidates every pending async continuation when a rower starts another operation, cancels, resets, signs out, or leaves the flow. Browser tests intercept only the new auth endpoints and begin at real UI producers; server plans separately prove signed callbacks and database behavior.
+**Architecture:** `useAuthFlow` is the sole client operation adapter. It consumes the shared server union, invokes the thin native Apple/Google proof bridges or follows the server's exact web authorization URL, and exposes credential-free view states to Welcome, confirmation, and You. A generation number invalidates every pending async continuation when a rower starts another operation, cancels, resets, signs out, or leaves the flow. An operation-local authorization owner serializes provider launch, proof, and finalization; the rendered target action reflects that busy authority. Browser tests intercept only the new auth endpoints and begin at real UI producers; server plans separately prove signed callbacks and database behavior.
 
 **Tech Stack:** React 19, TypeScript 6, React Router 7, Capacitor 8, Vitest, Testing Library, Playwright
 
 **Spec:** `docs/superpowers/specs/2026-09-12-apple-signin-design.md`
 
-**Candidate:** `0ca9849567e7ba38cdd5ecc79aa6ce655b26f859` in `/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/apple-client-plan-scratch`
+**Candidate through:** `0f990a68e930f4c2dbd6ee46736405554abd18d2` in `/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/apple-client-plan-scratch`
 
 ## Global constraints
 
-- Integrate the full server candidate through `0f4921d8` before this module so `app/shared/auth.ts`, `app/tsconfig.app.json`, and `app/tsconfig.server.json` are present. Integrate native commit `202f6087` before this module so `app/src/native/appleAuth.ts` is present. The client commit deliberately excludes those four owned files.
+- Integrate the full server candidate through `259882ba` before this module so `app/shared/auth.ts`, `app/tsconfig.app.json`, and `app/tsconfig.server.json` are present. Integrate native commit `81ce6040` before this module so `app/src/native/appleAuth.ts` is present. The client series deliberately excludes those four owned files.
 - The native bridge remains `AppleAuth.authorize({nonce,state}) -> {idToken,authorizationCode,state,name?}`. The adapter passes the server nonce and state unchanged. Native Google calls the existing plugin with the server nonce and `forcePrompt:true`.
 - Provider credentials and binding secrets stay in adapter/native-session scope and out of React screen state, Ergomatic return URLs, browser storage, logs, analytics and preferences. Provider authorization URLs carry protocol state/nonce as prescribed by the server. The existing native-session module alone persists the Ergomatic session token.
 - Web code follows only the server-produced `authorizationUrl`. It consumes and removes `authAttempt`, `authResult`, `authError`, `authPurpose`, and allowlisted `authProvider`. A providerless unbound error/cancel stays providerless.
@@ -37,7 +37,7 @@
 | `app/src/App.tsx`, `app/src/shell/AppRoutes.tsx`, `app/src/You.tsx` | Shared flow owner and `/you/sign-in-methods` route integration.                                 |
 | `app/src/index.css`, `app/src/theme/tokens.css`, Apple SVG          | Approved rower-facing layout and provider styling.                                              |
 | `app/e2e/appleAuth.spec.ts`                                         | Functional UI producer-to-adapter browser proof and workout continuity.                         |
-| `app/e2e/design.spec.ts`, `app/e2e/screenshots.spec.ts`             | Approved-copy/layout checks and five canonical captures.                                        |
+| `app/e2e/design.spec.ts`, `app/e2e/screenshots.spec.ts`             | Approved-copy/layout checks and seven canonical captures, including uncertain completion.       |
 | `docs/screenshots/apple-*.png`                                      | Reviewed portrait/landscape evidence.                                                           |
 
 ## Shared interfaces
@@ -51,6 +51,7 @@ export interface AuthFlowController {
   options: AuthOptionsView;
   view: AuthFlowView;
   destination: "/" | "/you" | "/you/sign-in-methods" | null;
+  targetAuthorizationBusy: boolean;
   startSignIn(provider: AuthProvider): Promise<void>;
   confirmAccount(): Promise<void>;
   useUsualSignIn(): Promise<void>;
@@ -103,13 +104,15 @@ export type AuthFlowView =
 | Web provider navigation          | Browser document reloads                                                  | Old hook memory cannot survive; cookie-bound resume creates the new operation view. |
 | Native signed-in result          | Check generation before and after dynamic import and token storage        | Invalidated flow cannot store a token or call the signed-in callback.               |
 
+The operation-local authorization owner is claimed synchronously before any dynamic import, provider initialization, provider proof, proof POST, or finalization. Every continuation checks the same operation object, generation, and owner. The target provider action renders disabled while that owner exists; Cancel remains available. Cleanup captures the operation it owns before awaiting the server and cannot clear or render over a newer operation.
+
 Busy screens remove or disable competing auth actions. `/you/sign-in-methods` is a normal history entry, so Browser Back can expose You while a native request is pending; successful sign-out must call `abandon()` and the generation guard remains mandatory.
 
 ---
 
 ### Task 1: Verify neighboring contracts and adopt the tested client commit
 
-**Files:** server/native owned files above, then the 27 client-owned files in the file map.
+**Files:** server/native owned files above, then the 22 client-owned source files and seven captures in the file map.
 
 - [ ] **Step 1: Confirm the integration worktree and exact dependencies**
 
@@ -118,24 +121,27 @@ From the integration root:
 ```bash
 pwd
 git status --short
-git diff --stat 3cf849c7 0f4921d8 -- app
-git show --stat --oneline 202f6087
+git diff --stat 3cf849c7 259882ba -- app
+git show --stat --oneline 81ce6040
 git show --stat --oneline 0ca9849567e7ba38cdd5ecc79aa6ce655b26f859
-git diff-tree --no-commit-id --name-only -r 0ca9849567e7ba38cdd5ecc79aa6ce655b26f859
+git show --stat --oneline 0f990a68e930f4c2dbd6ee46736405554abd18d2
+git diff --name-only 3cf849c7 0f990a68e930f4c2dbd6ee46736405554abd18d2
 ```
 
-Expected: the complete server candidate owns shared types and both TypeScript inclusion edits, the native commit owns the thin bridge, and the client commit owns exactly the 27 files listed by `git show --name-only` in the evidence report. Stop if the client commit includes `app/shared`, either tsconfig, or `app/src/native/appleAuth.ts`.
+Expected: the complete server candidate owns shared types and both TypeScript inclusion edits, the native commit owns the thin bridge, and the two client commits together own exactly 22 source files plus seven PNG captures. Stop if the client series includes `app/shared`, either tsconfig, or `app/src/native/appleAuth.ts`.
 
 - [ ] **Step 2: Adopt the client commit after the server and native commits**
 
 ```bash
 git rev-parse --show-toplevel
 git cherry-pick 0ca9849567e7ba38cdd5ecc79aa6ce655b26f859
+git rev-parse --show-toplevel
+git cherry-pick 0f990a68e930f4c2dbd6ee46736405554abd18d2
 git diff --check HEAD^
 git status --short
 ```
 
-Expected: cherry-pick succeeds without ownership conflicts and the worktree is clean.
+Expected: both cherry-picks succeed without ownership conflicts and the worktree is clean.
 
 - [ ] **Step 3: Inspect the boundary, not just compilation**
 
@@ -143,7 +149,7 @@ Expected: cherry-pick succeeds without ownership conflicts and the worktree is c
 rg -n 'bindingSecret|authorizationCode|idToken|nonce|state' app/src/adapters/authFlow.ts
 rg -n 'localStorage|sessionStorage|console\.|logger|analytics' \
   app/src/adapters/authFlow.ts app/src/SignIn.tsx app/src/auth app/src/you
-rg -n 'forcePrompt: true|nativeGoogleProof\(step\.nonce\)' app/src/native/signin.ts app/src/adapters/authFlow.ts
+rg -n 'forcePrompt: true|nativeGoogleProofAfterInit\(step\.nonce\)' app/src/native/signin.ts app/src/adapters/authFlow.ts
 ```
 
 Expected: sensitive values stay inside adapter request scope, the storage/log scan has no credential use, and Google uses the server nonce with forced prompt.
@@ -165,76 +171,74 @@ pnpm exec vitest run --project client \
   src/SignIn.frontDoor.test.tsx
 ```
 
-Expected from the candidate: 6 files and 64 tests pass, including late native begin after You sign-out, binding-secret request bodies, providerless returns, cancel cleanup, nonce-bound proofs, first-account confirmation, both link directions, and legacy fallback.
+Expected from the candidate: 6 files and 68 tests pass, including late native begin after You sign-out, binding-secret request bodies, providerless returns, cancel cleanup, nonce-bound proofs, first-account confirmation, both link directions, and legacy fallback.
 
 - [ ] **Step 2: Run repository gates once on the assembled branch**
 
 ```bash
-pnpm test --project client
 pnpm lint
 pnpm typecheck
 pnpm format:check
+pnpm test:coverage
 ```
 
 Expected: all exit 0. Do not substitute the focused HTML diagnostic for the repository aggregate coverage gate.
 
-- [ ] **Step 3: Generate per-file coverage evidence**
+- [ ] **Step 3: Read the integrated coverage evidence**
 
-```bash
-pnpm exec vitest run --project client \
-  src/adapters/authFlow.test.tsx \
-  src/api/useAuthMethods.test.ts \
-  src/native/signin.test.ts \
-  src/auth/LinkSignInMethod.test.tsx \
-  src/you/SignInMethods.test.tsx \
-  src/SignIn.frontDoor.test.tsx \
-  --coverage.enabled \
-  --coverage.reporter=html \
-  --coverage.reporter=text \
-  '--coverage.include=src/{adapters/authFlow,api/useAuthMethods,auth/AuthProviderButton,auth/LinkSignInMethod,you/SignInMethods,SignIn}.{ts,tsx}'
-```
+Read the per-file rows and missed branches in `app/coverage/index.html` from the single assembled `pnpm test:coverage` run above; archive the current-source result with integration evidence. The repo-wide aggregate must meet 90×4 and domain 100%. Do not run a duplicate full client suite or a narrowed coverage diagnostic merely to refresh a historical percentage.
 
-Expected: 64 tests pass. Read file rows from `app/coverage/index.html`, then retain that report under `docs/superpowers/plans/apple-client-evidence/coverage/`. This intentionally restricted diagnostic currently exits 1 because its isolated branch percentage is 88.32%; the repository gate is aggregate 90×4. Preserve actual per-file gaps instead of adding tests that mirror defensive guards.
+The earlier narrowed diagnostic at `0ca98495` ran 64 tests and exited 1 on 88.32% branches. Its retained HTML is historical evidence for that source, not a measured result for `0f990a68` and not the final aggregate gate.
 
 ### Task 3: Prove browser producer-to-consumer behavior and approved design
 
 - [ ] **Step 1: Run functional browser paths**
 
 ```bash
-E2E_KEEP=0 pnpm e2e --grep "Apple welcome\|linking Apple"
+NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "Apple welcome begins"
+NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "linking Apple"
+NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "a lost finalize response reports uncertainty"
 ```
 
-Expected: the welcome test clicks the real Apple control, follows the intercepted server `authorizationUrl`, consumes `authAttempt`, and reaches account confirmation. The link test starts from Add Apple, proves Google then Apple, finalizes, and keeps a workout created from real `LIBRARY_WORKOUTS` via `fromWorkout`/`toSteps` on the same account.
+Expected: the welcome test clicks the real Apple control, follows the intercepted server `authorizationUrl`, consumes `authAttempt`, and reaches account confirmation. The link test starts from Add Apple, proves Google then Apple, finalizes, and keeps a workout created from real `LIBRARY_WORKOUTS` via `fromWorkout`/`toSteps` on the same account. The response-loss test aborts the finalize response, shows uncertainty, refetches methods, and shows both providers connected without a success notice.
 
 - [ ] **Step 2: Run design and canonical screenshot paths**
 
 ```bash
-E2E_KEEP=0 pnpm e2e --grep "Apple front door and sign-in methods"
-E2E_KEEP=0 pnpm screenshots --grep "apple-"
+NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "Apple front door and sign-in methods"
+NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm screenshots -g "apple-"
 ```
 
-Expected: 2 design tests and 5 screenshot cases pass. Inspect all five PNGs at native dimensions for copy, focusable controls, portrait/landscape clipping, and the 44px minimum action sizes.
+Expected: 2 design tests and 7 screenshot cases pass. Inspect all seven PNGs at native dimensions for copy, focusable controls, portrait/landscape clipping, and the 44px minimum action sizes.
 
 ### Task 4: Re-run deciding-source mutations
+
+Keep the Task 2 `NODE_OPTIONS` export active. In a new shell, run `export NODE_OPTIONS=--no-experimental-webstorage` before any direct Vitest command.
 
 - [ ] **Step 1: Prove focused tests own the credential and UI decisions**
 
 Apply each replacement independently, run the named command, verify the stated failure, then restore the file before the next row:
 
-| Source replacement                                       | Command                                                                                                                                           | Required red                              |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `forcePrompt: true` → `forcePrompt: false`               | `pnpm exec vitest run --project client src/native/signin.test.ts`                                                                                 | Forced-prompt assertion fails.            |
-| Google login option `nonce` → `nonce: "wrong"`           | same                                                                                                                                              | Nonce assertion fails.                    |
-| Remove the missing Google ID-token throw                 | same                                                                                                                                              | Missing-token rejection fails.            |
-| Remove `bindingSecret` from native proof body            | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx`                                                                            | Exact proof-body assertion fails.         |
-| `nonce: step.nonce` → `nonce: "wrong"` in Apple call     | same                                                                                                                                              | Apple bridge input assertion fails.       |
-| Stop deleting `authProvider`                             | same                                                                                                                                              | Two return-cleanup assertions fail.       |
-| Default absent `authProvider` to `"apple"`               | same                                                                                                                                              | Both providerless return assertions fail. |
-| `legacyGoogle: true` → `legacyGoogle: false` in fallback | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx src/SignIn.frontDoor.test.tsx`                                              | Legacy fallback assertions fail.          |
-| Reverse Apple/Google methods order                       | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx`                                                                            | Apple-first assertion fails.              |
-| First link action bypasses `startPreparedLink`           | `pnpm exec vitest run --project client src/auth/LinkSignInMethod.test.tsx`                                                                        | Existing-provider proof assertion fails.  |
-| Remove `now` from success copy                           | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx`                                                                            | Approved-copy assertion fails.            |
-| Remove the first generation guard in `acceptStep`        | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "does not resurrect a native link begin after You sign-out abandons it"` | Late begin invokes Google proof.          |
+| Source replacement                                                   | Command                                                                                                                                                                                                                       | Required red                                                                  |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `forcePrompt: true` → `forcePrompt: false`                           | `pnpm exec vitest run --project client src/native/signin.test.ts`                                                                                                                                                             | Forced-prompt assertion fails.                                                |
+| Google login option `nonce` → `nonce: "wrong"`                       | same                                                                                                                                                                                                                          | Nonce assertion fails.                                                        |
+| Remove the missing Google ID-token throw                             | same                                                                                                                                                                                                                          | Missing-token rejection fails.                                                |
+| Remove `bindingSecret` from native proof body                        | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx`                                                                                                                                                        | Exact proof-body assertion fails.                                             |
+| `nonce: step.nonce` → `nonce: "wrong"` in Apple call                 | same                                                                                                                                                                                                                          | Apple bridge input assertion fails.                                           |
+| Stop deleting `authProvider`                                         | same                                                                                                                                                                                                                          | Two return-cleanup assertions fail.                                           |
+| Default absent `authProvider` to `"apple"`                           | same                                                                                                                                                                                                                          | Both providerless return assertions fail.                                     |
+| `legacyGoogle: true` → `legacyGoogle: false` in fallback             | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx src/SignIn.frontDoor.test.tsx`                                                                                                                          | Legacy fallback assertions fail.                                              |
+| Reverse Apple/Google methods order                                   | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx`                                                                                                                                                        | Apple-first assertion fails.                                                  |
+| First link action bypasses `startPreparedLink`                       | `pnpm exec vitest run --project client src/auth/LinkSignInMethod.test.tsx`                                                                                                                                                    | Existing-provider proof assertion fails.                                      |
+| Remove `now` from success copy                                       | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx`                                                                                                                                                        | Approved-copy assertion fails.                                                |
+| Remove the first generation guard in `acceptStep`                    | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "does not resurrect a native link begin after You sign-out abandons it"`                                                                             | Late begin invokes Google proof.                                              |
+| Let a second `claimAuthorization` replace the current owner          | `node /tmp/apple-mechanism-probes/client.cjs`; then `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "keeps one rendered native target action"`                                                       | Probe reports a second owner and no completion; rendered test fails.          |
+| Render the target provider action enabled while owned                | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "keeps one rendered native target action"`                                                                                                           | Disabled-control assertion fails.                                             |
+| Remove the ownership check after Google initialization               | `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "does not launch Google after initialization loses its operation"`                                                                                   | Stale Google proof launches.                                                  |
+| Remove captured-operation and generation checks after cancel cleanup | `node /tmp/apple-mechanism-probes/client-stale-cancel.cjs`; then `pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "keeps a newly prepared link when an older provider cancellation finishes cleanup"` | Probe loses the new operation and rendered test shows the stale cancellation. |
+| Stop refreshing methods for an uncertain result                      | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx -t "refetches authoritative methods before showing an uncertain finalize result"`                                                                       | Only one methods read occurs and stale Add Apple remains.                     |
+| Route `attempt_expired` to the old default failure copy              | `pnpm exec vitest run --project client src/you/SignInMethods.test.tsx -t "renders the bounded link terminal copy"`                                                                                                            | Expiry renders false `Nothing changed` certainty.                             |
 
 After every restore:
 
@@ -261,10 +265,22 @@ Then run:
 ```bash
 NODE_OPTIONS=--no-experimental-webstorage pnpm build
 rg -l -F "RF24 Apple welcome producer mutation" dist/client
-E2E_KEEP=0 pnpm e2e --grep "Apple welcome begins"
+NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "Apple welcome begins"
 ```
 
 Required red: the production build succeeds, `rg` finds the literal in the emitted client bundle, and the named browser test fails because clicking the actual control never reaches `Create your account`. Restore `SignIn.tsx`, then rerun the same three commands with the ordinary source; the literal scan should find nothing and the named browser test must pass.
+
+- [ ] **Step 3: Prove response-loss copy cannot claim a no-change outcome**
+
+Temporarily replace the uncertain notice with `We couldn’t confirm the result. Nothing changed after this attempt. Try again.`, then run:
+
+```bash
+pnpm build
+rg -n "Nothing changed after this attempt" dist/client/assets
+NODE_OPTIONS=--no-experimental-webstorage E2E_KEEP=0 pnpm e2e -g "a lost finalize response reports uncertainty without claiming failure or success"
+```
+
+Required red: the production build succeeds, the false-certainty literal is in the bundle, and the named Chromium test fails on the alert text after its intercepted finalize response is aborted. Restore the source and rerun the named browser test; it must show `We couldn’t confirm the result. Check your sign-in methods and try again.`, refetch `/api/auth/methods`, render both providers connected when the server committed, and render no false success or `Nothing changed` claim. Pair this client consumer proof with server commit `259882ba`, whose real-PG `createApp` test commits identity and grant before destroying the HTTP response and then proves both methods from the real endpoint.
 
 ### Task 5: Record assembled evidence and release-only residuals
 
@@ -290,21 +306,23 @@ Before release, exercise live Apple and Google credentials, an iOS device launch
 
 ## Complete tested source patch
 
-The following exact patch is generated by `git diff --binary 3cf849c7
-0ca9849567e7ba38cdd5ecc79aa6ce655b26f859 -- app`. Every touched source file
-was byte-compared with that commit in the retained candidate and the patch
-passed `git apply --reverse --check` there. PNG captures travel in the same
-candidate commit and are listed in the evidence report; they are not executable
-source blocks. This archive preserves the source even after candidate worktrees
-are removed following merge.
+The following exact source patch is generated by:
+
+```bash
+git diff --full-index \
+  3cf849c7614caa25bff78c64517e8d2e47ada39a \
+  0f990a68e930f4c2dbd6ee46736405554abd18d2 -- app
+```
+
+Context-only blank diff markers are stored as empty lines so the Markdown passes whitespace checks. The embedded patch passed reverse and forward `git apply`, then every resulting source byte matched candidate HEAD `0f990a68e930f4c2dbd6ee46736405554abd18d2`. The seven reviewed PNG captures travel in the two client commits and are listed in the evidence report; binary bytes are intentionally omitted from this executable source archive.
 
 ```diff
 diff --git a/app/e2e/appleAuth.spec.ts b/app/e2e/appleAuth.spec.ts
 new file mode 100644
-index 00000000..6ba7c035
+index 0000000000000000000000000000000000000000..a8122d434dc1fe58fa010b6e024723d02e13e7a5
 --- /dev/null
 +++ b/app/e2e/appleAuth.spec.ts
-@@ -0,0 +1,219 @@
+@@ -0,0 +1,267 @@
 +import { expect, test, type Page } from "@playwright/test";
 +import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
 +import { fromWorkout, toSteps } from "../src/builder/builderState.js";
@@ -524,8 +542,56 @@ index 00000000..6ba7c035
 +    }, title);
 +  }
 +});
++
++test("a lost finalize response reports uncertainty without claiming failure or success", async ({
++  page,
++}, testInfo) => {
++  let finalizations = 0;
++  await enableFrontDoor(page);
++  await page.route("**/api/auth/methods", (route) =>
++    route.fulfill({
++      status: 200,
++      json: { apple: true, google: true },
++    }),
++  );
++  await page.route("**/api/auth/web/attempts/lost-finalize", (route) =>
++    route.fulfill({
++      status: 200,
++      json: {
++        outcome: "link_ready",
++        attemptId: "lost-finalize",
++        purpose: "link",
++        targetProvider: "apple",
++        expiresAt: "2026-09-13T00:05:00.000Z",
++      },
++    }),
++  );
++  await page.route(
++    "**/api/auth/web/attempts/lost-finalize/finalize",
++    async (route) => {
++      finalizations += 1;
++      expect(route.request().method()).toBe("POST");
++      expect(route.request().postDataJSON()).toStrictEqual({});
++      await route.abort("connectionfailed");
++    },
++  );
++  await signInViaBackdoor(page, {
++    email: `apple-lost-finalize-${testInfo.parallelIndex}@e2e.test`,
++    name: "Apple Link Tester",
++  });
++
++  await page.goto("/?authAttempt=lost-finalize");
++  await expect(page.getByRole("alert")).toHaveText(
++    "We couldn’t confirm the result. Check your sign-in methods and try again.",
++  );
++  expect(finalizations).toBe(1);
++  await expect(page.locator(".auth-method-connected")).toHaveCount(2);
++  await expect(page.getByRole("button", { name: "Add Apple" })).toHaveCount(0);
++  await expect(page.getByText(/Nothing changed/)).toHaveCount(0);
++  await expect(page.getByRole("status")).toHaveCount(0);
++});
 diff --git a/app/e2e/design.spec.ts b/app/e2e/design.spec.ts
-index f44fd40b..ea715803 100644
+index f44fd40bdfa41aeb208db3eb4e2083b9bdbe3e2c..ea71580326ff04a332fa4398f91a7707d95c9452 100644
 --- a/app/e2e/design.spec.ts
 +++ b/app/e2e/design.spec.ts
 @@ -624,6 +624,119 @@ test("Just Row observer: VITE-enabled route, accessibility, controls, and shell"
@@ -649,10 +715,10 @@ index f44fd40b..ea715803 100644
  // re-derived per call site.
  const INK_4_RGB = "rgb(111, 106, 95)";
 diff --git a/app/e2e/screenshots.spec.ts b/app/e2e/screenshots.spec.ts
-index 043f863e..eda2bf1c 100644
+index 043f863ec20b56a961b33e6c5bf95d380938a2e0..ca65be48b9463b52497ca44c143399e5378db493 100644
 --- a/app/e2e/screenshots.spec.ts
 +++ b/app/e2e/screenshots.spec.ts
-@@ -7631,3 +7631,120 @@ for (const viewport of [
+@@ -7631,3 +7631,169 @@ for (const viewport of [
      });
    });
  }
@@ -773,9 +839,58 @@ index 043f863e..eda2bf1c 100644
 +  await page.setViewportSize({ width: 844, height: 390 });
 +  await captureAppleMethods(page, "apple-link-confirm-landscape.png", true);
 +});
++
++async function captureAppleUncertainResult(
++  page: Page,
++  fileName: string,
++): Promise<void> {
++  await page.route("**/api/auth/options", (route) =>
++    route.fulfill({ status: 200, json: APPLE_AUTH_OPTIONS }),
++  );
++  await page.route("**/api/auth/methods", (route) =>
++    route.fulfill({ status: 200, json: { apple: true, google: true } }),
++  );
++  await page.route("**/api/auth/web/attempts/capture-uncertain", (route) =>
++    route.fulfill({
++      status: 200,
++      json: {
++        outcome: "link_ready",
++        attemptId: "capture-uncertain",
++        purpose: "link",
++        targetProvider: "apple",
++        expiresAt: "2026-09-13T00:05:00.000Z",
++      },
++    }),
++  );
++  await page.route(
++    "**/api/auth/web/attempts/capture-uncertain/finalize",
++    (route) => route.abort("connectionfailed"),
++  );
++  await signInViaBackdoor(page, {
++    email: `screenshots-apple-uncertain-${fileName}@e2e.test`,
++    name: "Maya Chen",
++  });
++  await page.goto("/?authAttempt=capture-uncertain");
++  await expect(page.getByRole("alert")).toHaveText(
++    "We couldn’t confirm the result. Check your sign-in methods and try again.",
++  );
++  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, fileName) });
++}
++
++test("apple-link-result-uncertain", async ({ page }) => {
++  await captureAppleUncertainResult(page, "apple-link-result-uncertain.png");
++});
++
++test("apple-link-result-uncertain-landscape", async ({ page }) => {
++  await page.setViewportSize({ width: 844, height: 390 });
++  await captureAppleUncertainResult(
++    page,
++    "apple-link-result-uncertain-landscape.png",
++  );
++});
 diff --git a/app/public/apple-logo-left-white-medium.svg b/app/public/apple-logo-left-white-medium.svg
 new file mode 100644
-index 00000000..362dd785
+index 0000000000000000000000000000000000000000..362dd7855930e007b6f747a1b42c534fa6539982
 --- /dev/null
 +++ b/app/public/apple-logo-left-white-medium.svg
 @@ -0,0 +1,10 @@
@@ -791,7 +906,7 @@ index 00000000..362dd785
 +</svg>
 \ No newline at end of file
 diff --git a/app/src/App.tsx b/app/src/App.tsx
-index f18240f9..217f1b09 100644
+index f18240f93395daf2edd215abdb127a8203e451fc..217f1b09abc2bd737958b0dd1e18df151082f302 100644
 --- a/app/src/App.tsx
 +++ b/app/src/App.tsx
 @@ -1,11 +1,21 @@
@@ -838,10 +953,10 @@ index f18240f9..217f1b09 100644
  }
 diff --git a/app/src/SignIn.frontDoor.test.tsx b/app/src/SignIn.frontDoor.test.tsx
 new file mode 100644
-index 00000000..59091669
+index 0000000000000000000000000000000000000000..79a5f1d26bc5809c80905c062cd692e084aaed22
 --- /dev/null
 +++ b/app/src/SignIn.frontDoor.test.tsx
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,157 @@
 +import { render, screen } from "@testing-library/react";
 +import userEvent from "@testing-library/user-event";
 +import { describe, expect, it, vi } from "vitest";
@@ -858,6 +973,7 @@ index 00000000..59091669
 +      google: true,
 +    },
 +    view,
++    targetAuthorizationBusy: false,
 +    destination: null,
 +    startSignIn: vi.fn(),
 +    confirmAccount: vi.fn(),
@@ -999,7 +1115,7 @@ index 00000000..59091669
 +  });
 +});
 diff --git a/app/src/SignIn.tsx b/app/src/SignIn.tsx
-index 40f7533f..0b074968 100644
+index 40f7533ffb6d3922f85744813d404f7450e2b940..0b074968e0617e249ddb15a8720fe1497873ea1a 100644
 --- a/app/src/SignIn.tsx
 +++ b/app/src/SignIn.tsx
 @@ -1,12 +1,221 @@
@@ -1226,7 +1342,7 @@ index 40f7533f..0b074968 100644
      <main className="signin">
        <h1>Ergomatic</h1>
 diff --git a/app/src/You.tsx b/app/src/You.tsx
-index 5d07363d..42cc1631 100644
+index 5d07363d8ce50cb913138da8b8c8c3e66d9596f6..42cc163145853d26820bf06d488919df1133aaf5 100644
 --- a/app/src/You.tsx
 +++ b/app/src/You.tsx
 @@ -1,11 +1,13 @@
@@ -1273,17 +1389,25 @@ index 5d07363d..42cc1631 100644
            baselines-subpage Gate 0, 2026-09-05): the foot of You is one
 diff --git a/app/src/adapters/authFlow.test.tsx b/app/src/adapters/authFlow.test.tsx
 new file mode 100644
-index 00000000..88b7c59e
+index 0000000000000000000000000000000000000000..7f450935606b61ff0c6d4f909f6a8dbeea2f302a
 --- /dev/null
 +++ b/app/src/adapters/authFlow.test.tsx
-@@ -0,0 +1,802 @@
-+import { act, renderHook, waitFor } from "@testing-library/react";
+@@ -0,0 +1,1103 @@
++import {
++  act,
++  fireEvent,
++  render,
++  renderHook,
++  screen,
++  waitFor,
++} from "@testing-library/react";
 +import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 +
 +const seam = vi.hoisted(() => ({
 +  native: false,
 +  api: vi.fn(),
 +  appleAuthorize: vi.fn(),
++  googleInit: vi.fn(),
 +  googleProof: vi.fn(),
 +  storeToken: vi.fn(),
 +  navigateWeb: vi.fn(),
@@ -1295,12 +1419,23 @@ index 00000000..88b7c59e
 +  AppleAuth: { authorize: seam.appleAuthorize },
 +}));
 +vi.mock("../native/signin", () => ({
++  initNativeAuth: seam.googleInit,
 +  nativeGoogleProof: seam.googleProof,
++  nativeGoogleProofAfterInit: seam.googleProof,
 +}));
 +vi.mock("../native/session", () => ({ storeToken: seam.storeToken }));
 +vi.mock("./webNavigate", () => ({ navigateWeb: seam.navigateWeb }));
 +
 +import { useAuthFlow } from "./authFlow";
++import LinkSignInMethod from "../auth/LinkSignInMethod";
++
++function deferred<T>() {
++  let resolve!: (value: T) => void;
++  const promise = new Promise<T>((next) => {
++    resolve = next;
++  });
++  return { promise, resolve };
++}
 +
 +const ok = (body: unknown, status = 200) =>
 +  new Response(JSON.stringify(body), {
@@ -1318,6 +1453,8 @@ index 00000000..88b7c59e
 +  seam.native = false;
 +  seam.api.mockReset();
 +  seam.appleAuthorize.mockReset();
++  seam.googleInit.mockReset();
++  seam.googleInit.mockResolvedValue(undefined);
 +  seam.googleProof.mockReset();
 +  seam.storeToken.mockReset();
 +  seam.navigateWeb.mockReset();
@@ -1386,6 +1523,286 @@ index 00000000..88b7c59e
 +
 +    expect(seam.googleProof).not.toHaveBeenCalled();
 +    expect(result.current.view).toStrictEqual({ kind: "idle" });
++  });
++
++  it("keeps one rendered native target action in flight through provider, proof, and finalization", async () => {
++    seam.native = true;
++    seam.googleProof.mockResolvedValue({ idToken: "google-proof" });
++    const appleProof = deferred<{
++      idToken: string;
++      authorizationCode: string;
++      state: string;
++    }>();
++    const targetProof = deferred<Response>();
++    const finalization = deferred<Response>();
++    seam.appleAuthorize.mockReturnValue(appleProof.promise);
++    let proofCount = 0;
++    let cancelCount = 0;
++    seam.api.mockImplementation(async (path: string) => {
++      if (path === "/api/auth/options") return ok(options);
++      if (path === "/api/auth/native/attempts") {
++        return ok({
++          outcome: "authorize",
++          attemptId: "single-flight",
++          purpose: "link",
++          targetProvider: "apple",
++          expiresAt: "soon",
++          provider: "google",
++          stage: "reauth",
++          nonce: "google-nonce",
++          state: "google-state",
++          bindingSecret: "single-binding",
++        });
++      }
++      if (path === "/api/auth/native/attempts/single-flight/proof") {
++        proofCount += 1;
++        if (proofCount === 1) {
++          return ok({
++            outcome: "authorize",
++            attemptId: "single-flight",
++            purpose: "link",
++            targetProvider: "apple",
++            expiresAt: "soon",
++            provider: "apple",
++            stage: "target",
++            nonce: "apple-nonce",
++            state: "apple-state",
++          });
++        }
++        return targetProof.promise;
++      }
++      if (path === "/api/auth/native/attempts/single-flight/finalize") {
++        return finalization.promise;
++      }
++      if (path === "/api/auth/native/attempts/single-flight/cancel") {
++        cancelCount += 1;
++        return new Response(null, { status: 204 });
++      }
++      throw new Error(`unexpected ${path}`);
++    });
++
++    let auth!: ReturnType<typeof useAuthFlow>;
++    function Harness() {
++      auth = useAuthFlow(() => {});
++      return (
++        <>
++          <button onClick={() => auth.prepareLink("apple")}>Add Apple</button>
++          <LinkSignInMethod auth={auth} />
++        </>
++      );
++    }
++    render(<Harness />);
++    await waitFor(() => expect(auth.options.state).toBe("ready"));
++    fireEvent.click(screen.getByRole("button", { name: "Add Apple" }));
++    fireEvent.click(
++      await screen.findByRole("button", { name: "Confirm with Google" }),
++    );
++    const target = await screen.findByRole("button", {
++      name: "Continue with Apple",
++    });
++
++    act(() => {
++      fireEvent.click(target);
++      fireEvent.click(target);
++    });
++    await waitFor(() => expect(seam.appleAuthorize).toHaveBeenCalledOnce());
++    expect(target).toBeDisabled();
++    expect(cancelCount).toBe(0);
++
++    await act(async () => {
++      appleProof.resolve({
++        idToken: "apple-proof",
++        authorizationCode: "apple-code",
++        state: "apple-state",
++      });
++      await waitFor(() => expect(proofCount).toBe(2));
++    });
++    await act(async () => auth.authorizeLinkTarget());
++    expect(seam.appleAuthorize).toHaveBeenCalledOnce();
++    expect(cancelCount).toBe(0);
++
++    await act(async () => {
++      targetProof.resolve(
++        ok({
++          outcome: "link_ready",
++          attemptId: "single-flight",
++          purpose: "link",
++          targetProvider: "apple",
++          expiresAt: "soon",
++        }),
++      );
++      await Promise.resolve();
++    });
++    await act(async () => auth.authorizeLinkTarget());
++    expect(seam.appleAuthorize).toHaveBeenCalledOnce();
++    expect(cancelCount).toBe(0);
++
++    await act(async () => {
++      finalization.resolve(ok({ outcome: "linked" }));
++      await Promise.resolve();
++    });
++    await waitFor(() =>
++      expect(auth.view).toStrictEqual({
++        kind: "linked",
++        targetProvider: "apple",
++      }),
++    );
++    expect(cancelCount).toBe(0);
++  });
++
++  it("keeps a newly prepared link when an older provider cancellation finishes cleanup", async () => {
++    seam.native = true;
++    seam.googleProof.mockResolvedValue({ idToken: "google-proof" });
++    seam.appleAuthorize.mockRejectedValue({ code: "cancelled" });
++    const cancelResponse = deferred<Response>();
++    seam.api.mockImplementation(async (path: string) => {
++      if (path === "/api/auth/options") return ok(options);
++      if (path === "/api/auth/native/attempts") {
++        return ok({
++          outcome: "authorize",
++          attemptId: "stale-cancel",
++          purpose: "link",
++          targetProvider: "apple",
++          expiresAt: "soon",
++          provider: "google",
++          stage: "reauth",
++          nonce: "google-nonce",
++          state: "google-state",
++          bindingSecret: "cancel-binding",
++        });
++      }
++      if (path === "/api/auth/native/attempts/stale-cancel/proof") {
++        return ok({
++          outcome: "authorize",
++          attemptId: "stale-cancel",
++          purpose: "link",
++          targetProvider: "apple",
++          expiresAt: "soon",
++          provider: "apple",
++          stage: "target",
++          nonce: "apple-nonce",
++          state: "apple-state",
++        });
++      }
++      if (path === "/api/auth/native/attempts/stale-cancel/cancel") {
++        return cancelResponse.promise;
++      }
++      throw new Error(`unexpected ${path}`);
++    });
++
++    let auth!: ReturnType<typeof useAuthFlow>;
++    function Harness() {
++      auth = useAuthFlow(() => {});
++      return (
++        <>
++          <button onClick={() => auth.prepareLink("apple")}>Add Apple</button>
++          <button onClick={() => auth.prepareLink("google")}>Add Google</button>
++          <LinkSignInMethod auth={auth} />
++        </>
++      );
++    }
++    render(<Harness />);
++    await waitFor(() => expect(auth.options.state).toBe("ready"));
++    fireEvent.click(screen.getByRole("button", { name: "Add Apple" }));
++    fireEvent.click(
++      await screen.findByRole("button", { name: "Confirm with Google" }),
++    );
++    fireEvent.click(
++      await screen.findByRole("button", { name: "Continue with Apple" }),
++    );
++    await waitFor(() =>
++      expect(seam.api).toHaveBeenCalledWith(
++        "/api/auth/native/attempts/stale-cancel/cancel",
++        expect.anything(),
++      ),
++    );
++
++    fireEvent.click(screen.getByRole("button", { name: "Add Google" }));
++    expect(screen.getByRole("heading", { name: "Add Google" })).toBeVisible();
++    await act(async () => {
++      cancelResponse.resolve(new Response(null, { status: 204 }));
++      await Promise.resolve();
++    });
++    expect(auth.view).toStrictEqual({
++      kind: "link_confirm",
++      targetProvider: "google",
++    });
++    expect(screen.getByRole("heading", { name: "Add Google" })).toBeVisible();
++  });
++
++  it("does not launch Google after initialization loses its operation", async () => {
++    seam.native = true;
++    seam.appleAuthorize.mockResolvedValue({
++      idToken: "apple-proof",
++      authorizationCode: "apple-code",
++      state: "apple-state",
++    });
++    const initialization = deferred<void>();
++    seam.googleInit.mockReturnValue(initialization.promise);
++    seam.api.mockImplementation(async (path: string) => {
++      if (path === "/api/auth/options") return ok(options);
++      if (path === "/api/auth/native/attempts") {
++        return ok({
++          outcome: "authorize",
++          attemptId: "held-init",
++          purpose: "link",
++          targetProvider: "google",
++          expiresAt: "soon",
++          provider: "apple",
++          stage: "reauth",
++          nonce: "apple-nonce",
++          state: "apple-state",
++          bindingSecret: "init-binding",
++        });
++      }
++      if (path === "/api/auth/native/attempts/held-init/proof") {
++        return ok({
++          outcome: "authorize",
++          attemptId: "held-init",
++          purpose: "link",
++          targetProvider: "google",
++          expiresAt: "soon",
++          provider: "google",
++          stage: "target",
++          nonce: "google-nonce",
++          state: "google-state",
++        });
++      }
++      throw new Error(`unexpected ${path}`);
++    });
++
++    let auth!: ReturnType<typeof useAuthFlow>;
++    function Harness() {
++      auth = useAuthFlow(() => {});
++      return (
++        <>
++          <button onClick={() => auth.prepareLink("google")}>Add Google</button>
++          <button onClick={() => auth.prepareLink("apple")}>Add Apple</button>
++          <LinkSignInMethod auth={auth} />
++        </>
++      );
++    }
++    render(<Harness />);
++    await waitFor(() => expect(auth.options.state).toBe("ready"));
++    fireEvent.click(screen.getByRole("button", { name: "Add Google" }));
++    fireEvent.click(
++      await screen.findByRole("button", { name: "Confirm with Apple" }),
++    );
++    fireEvent.click(
++      await screen.findByRole("button", { name: "Continue with Google" }),
++    );
++    await waitFor(() => expect(seam.googleInit).toHaveBeenCalledOnce());
++
++    fireEvent.click(screen.getByRole("button", { name: "Add Apple" }));
++    await act(async () => {
++      initialization.resolve();
++      await Promise.resolve();
++    });
++    expect(seam.googleProof).not.toHaveBeenCalled();
++    expect(auth.view).toStrictEqual({
++      kind: "link_confirm",
++      targetProvider: "apple",
++    });
 +  });
 +
 +  it("keeps native Apple credentials and the binding secret out of the screen view", async () => {
@@ -2081,10 +2498,10 @@ index 00000000..88b7c59e
 +});
 diff --git a/app/src/adapters/authFlow.ts b/app/src/adapters/authFlow.ts
 new file mode 100644
-index 00000000..c418cb3b
+index 0000000000000000000000000000000000000000..d3723e0484a21c2db540fe05b720a21856da4052
 --- /dev/null
 +++ b/app/src/adapters/authFlow.ts
-@@ -0,0 +1,624 @@
+@@ -0,0 +1,727 @@
 +import { useEffect, useMemo, useRef, useState } from "react";
 +import type {
 +  AuthError,
@@ -2142,6 +2559,7 @@ index 00000000..c418cb3b
 +export interface AuthFlowController {
 +  options: AuthOptionsView;
 +  view: AuthFlowView;
++  targetAuthorizationBusy: boolean;
 +  destination: "/" | "/you" | "/you/sign-in-methods" | null;
 +  startSignIn(provider: AuthProvider): Promise<void>;
 +  confirmAccount(): Promise<void>;
@@ -2159,6 +2577,7 @@ index 00000000..c418cb3b
 +interface ActiveOperation {
 +  step: ActiveStep;
 +  bindingSecret?: string;
++  authorizationOwner?: symbol;
 +}
 +
 +interface FlowContext {
@@ -2166,6 +2585,7 @@ index 00000000..c418cb3b
 +  generation: React.MutableRefObject<number>;
 +  operation: React.MutableRefObject<ActiveOperation | null>;
 +  onSignedIn: React.MutableRefObject<() => void>;
++  setTargetAuthorizationBusy: React.Dispatch<React.SetStateAction<boolean>>;
 +  setView: React.Dispatch<React.SetStateAction<AuthFlowView>>;
 +}
 +
@@ -2270,6 +2690,7 @@ index 00000000..c418cb3b
 +): void {
 +  if (context.generation.current !== generation) return;
 +  context.operation.current = null;
++  context.setTargetAuthorizationBusy(false);
 +  context.setView({
 +    kind: "error",
 +    purpose,
@@ -2300,14 +2721,56 @@ index 00000000..c418cb3b
 +    if (context.generation.current !== generation) return;
 +  }
 +  context.operation.current = null;
++  context.setTargetAuthorizationBusy(false);
 +  context.setView({ kind: "idle" });
 +  context.onSignedIn.current();
 +}
 +
-+async function cancelActive(context: FlowContext): Promise<void> {
-+  const active = context.operation.current;
-+  context.operation.current = null;
-+  if (!active) return;
++function ownsOperation(
++  context: FlowContext,
++  active: ActiveOperation,
++  generation: number,
++  owner?: symbol,
++): boolean {
++  return (
++    context.generation.current === generation &&
++    context.operation.current === active &&
++    (owner === undefined || active.authorizationOwner === owner)
++  );
++}
++
++function claimAuthorization(
++  context: FlowContext,
++  active: ActiveOperation,
++  generation: number,
++): symbol | null {
++  if (
++    !ownsOperation(context, active, generation) ||
++    active.authorizationOwner
++  ) {
++    return null;
++  }
++  const owner = Symbol("auth-authorization");
++  active.authorizationOwner = owner;
++  return owner;
++}
++
++function releaseAuthorization(
++  context: FlowContext,
++  active: ActiveOperation,
++  generation: number,
++  owner: symbol,
++): boolean {
++  if (!ownsOperation(context, active, generation, owner)) return false;
++  active.authorizationOwner = undefined;
++  return true;
++}
++
++async function cancelActive(
++  context: FlowContext,
++  active = context.operation.current,
++): Promise<boolean> {
++  if (!active || context.operation.current !== active) return active === null;
 +  const surface = context.native ? "native" : "web";
 +  const body = context.native ? { bindingSecret: active.bindingSecret } : {};
 +  try {
@@ -2316,17 +2779,24 @@ index 00000000..c418cb3b
 +      body,
 +    );
 +  } catch {
-+    // Local authority is already gone. The bound server attempt expires and
-+    // cannot be completed from this client after its secret is discarded.
++    // The local holder still discards this attempt below. The bound server
++    // attempt expires and cannot be completed after its secret is discarded.
 +  }
++  if (context.operation.current !== active) return false;
++  context.operation.current = null;
++  return true;
 +}
 +
 +async function finalizeLink(
 +  context: FlowContext,
++  active: ActiveOperation,
 +  generation: number,
++  owner?: symbol,
 +): Promise<void> {
-+  const active = context.operation.current;
-+  if (!active || active.step.outcome !== "link_ready") {
++  if (
++    !ownsOperation(context, active, generation, owner) ||
++    active.step.outcome !== "link_ready"
++  ) {
 +    throw new AuthRequestError("invalid_request");
 +  }
 +  const surface = context.native ? "native" : "web";
@@ -2335,10 +2805,11 @@ index 00000000..c418cb3b
 +    `/api/auth/${surface}/attempts/${encodeURIComponent(active.step.attemptId)}/finalize`,
 +    body,
 +  );
-+  if (context.generation.current !== generation) return;
++  if (!ownsOperation(context, active, generation, owner)) return;
 +  if (result.outcome !== "linked") throw new AuthRequestError("signin_failed");
 +  const targetProvider = active.step.targetProvider;
 +  context.operation.current = null;
++  context.setTargetAuthorizationBusy(false);
 +  context.setView({ kind: "linked", targetProvider });
 +}
 +
@@ -2348,13 +2819,20 @@ index 00000000..c418cb3b
 +  bindingSecret?: string,
 +  autoAuthorize = false,
 +  generation = context.generation.current,
++  existing?: ActiveOperation,
 +): Promise<void> {
 +  if (context.generation.current !== generation) return;
 +  if (step.outcome === "signed_in") {
 +    await finishSignedIn(context, step, generation);
 +    return;
 +  }
-+  context.operation.current = { step, bindingSecret };
++  const active =
++    existing && context.operation.current === existing
++      ? existing
++      : { step, bindingSecret };
++  active.step = step;
++  if (bindingSecret !== undefined) active.bindingSecret = bindingSecret;
++  context.operation.current = active;
 +  if (step.outcome === "confirm") {
 +    context.setView({
 +      kind: "confirm",
@@ -2364,10 +2842,11 @@ index 00000000..c418cb3b
 +    return;
 +  }
 +  if (step.outcome === "link_ready") {
-+    await finalizeLink(context, generation);
++    await finalizeLink(context, active, generation);
 +    return;
 +  }
 +  if (step.purpose === "link" && step.stage === "target") {
++    context.setTargetAuthorizationBusy(false);
 +    context.setView({
 +      kind: "link_authorize",
 +      targetProvider: step.targetProvider,
@@ -2376,7 +2855,9 @@ index 00000000..c418cb3b
 +    });
 +  }
 +  if (context.native && autoAuthorize) {
-+    await authorizeNative(context, step, bindingSecret, generation);
++    const owner = claimAuthorization(context, active, generation);
++    if (!owner) return;
++    await authorizeNative(context, active, owner, generation);
 +  } else if (!context.native && autoAuthorize && step.authorizationUrl) {
 +    navigateWeb(step.authorizationUrl);
 +  }
@@ -2384,12 +2865,20 @@ index 00000000..c418cb3b
 +
 +async function authorizeNative(
 +  context: FlowContext,
-+  step: Extract<AuthStep, { outcome: "authorize" }>,
-+  bindingSecret?: string,
++  active: ActiveOperation,
++  owner: symbol,
 +  generation = context.generation.current,
 +): Promise<void> {
-+  if (!bindingSecret) throw new AuthRequestError("invalid_request");
++  const step = active.step;
++  if (
++    step.outcome !== "authorize" ||
++    !ownsOperation(context, active, generation, owner)
++  ) {
++    return;
++  }
++  const bindingSecret = active.bindingSecret;
 +  try {
++    if (!bindingSecret) throw new AuthRequestError("invalid_request");
 +    let proof: {
 +      state: string;
 +      idToken: string;
@@ -2398,25 +2887,42 @@ index 00000000..c418cb3b
 +    };
 +    if (step.provider === "apple") {
 +      const { AppleAuth } = await import("../native/appleAuth");
++      if (!ownsOperation(context, active, generation, owner)) return;
 +      proof = await AppleAuth.authorize({
 +        nonce: step.nonce,
 +        state: step.state,
 +      });
 +    } else {
-+      const { nativeGoogleProof } = await import("../native/signin");
-+      proof = { ...(await nativeGoogleProof(step.nonce)), state: step.state };
++      const { initNativeAuth, nativeGoogleProofAfterInit } =
++        await import("../native/signin");
++      if (!ownsOperation(context, active, generation, owner)) return;
++      await initNativeAuth();
++      if (!ownsOperation(context, active, generation, owner)) return;
++      proof = {
++        ...(await nativeGoogleProofAfterInit(step.nonce)),
++        state: step.state,
++      };
 +    }
-+    if (context.generation.current !== generation) return;
++    if (!ownsOperation(context, active, generation, owner)) return;
 +    const next = await postJson<AuthStep>(
 +      `/api/auth/native/attempts/${encodeURIComponent(step.attemptId)}/proof`,
 +      { bindingSecret, ...proof },
 +    );
-+    if (context.generation.current !== generation) return;
-+    await acceptStep(context, next, bindingSecret, false, generation);
++    if (!ownsOperation(context, active, generation, owner)) return;
++    if (next.outcome === "link_ready") {
++      active.step = next;
++      await finalizeLink(context, active, generation, owner);
++      return;
++    }
++    if (!releaseAuthorization(context, active, generation, owner)) return;
++    context.setTargetAuthorizationBusy(false);
++    await acceptStep(context, next, bindingSecret, false, generation, active);
 +  } catch (error) {
-+    if (context.generation.current !== generation) return;
++    if (!ownsOperation(context, active, generation, owner)) return;
 +    const cancelled = isProviderCancellation(error);
-+    await cancelActive(context);
++    const cleaned = await cancelActive(context, active);
++    if (!cleaned || context.generation.current !== generation) return;
++    context.setTargetAuthorizationBusy(false);
 +    if (cancelled) {
 +      context.setView({
 +        kind: "cancelled",
@@ -2481,12 +2987,14 @@ index 00000000..c418cb3b
 +  const onSignedInRef = useRef(onSignedIn);
 +  const [options, setOptions] = useState<AuthOptionsView>({ state: "loading" });
 +  const [view, setView] = useState<AuthFlowView>({ kind: "idle" });
++  const [targetAuthorizationBusy, setTargetAuthorizationBusy] = useState(false);
 +  const context = useMemo<FlowContext>(
 +    () => ({
 +      native,
 +      generation,
 +      operation,
 +      onSignedIn: onSignedInRef,
++      setTargetAuthorizationBusy,
 +      setView,
 +    }),
 +    [native],
@@ -2590,6 +3098,7 @@ index 00000000..c418cb3b
 +  async function start(provider: AuthProvider, purpose: AuthPurpose) {
 +    const startGeneration = ++generation.current;
 +    operation.current = null;
++    setTargetAuthorizationBusy(false);
 +    setView({ kind: "busy", purpose });
 +    try {
 +      if (native) {
@@ -2622,6 +3131,7 @@ index 00000000..c418cb3b
 +  return {
 +    options,
 +    view,
++    targetAuthorizationBusy,
 +    destination: destinationFor(view),
 +    startSignIn: (provider) => start(provider, "signin"),
 +    async confirmAccount() {
@@ -2661,6 +3171,7 @@ index 00000000..c418cb3b
 +    prepareLink(provider) {
 +      generation.current += 1;
 +      operation.current = null;
++      setTargetAuthorizationBusy(false);
 +      setView({ kind: "link_confirm", targetProvider: provider });
 +    },
 +    async startPreparedLink() {
@@ -2670,15 +3181,20 @@ index 00000000..c418cb3b
 +    async authorizeLinkTarget() {
 +      const active = operation.current;
 +      if (!active || active.step.outcome !== "authorize") return;
++      const authorizationGeneration = generation.current;
++      const owner = claimAuthorization(
++        context,
++        active,
++        authorizationGeneration,
++      );
++      if (!owner) return;
 +      if (native) {
-+        await authorizeNative(
-+          context,
-+          active.step,
-+          active.bindingSecret,
-+          generation.current,
-+        );
++        setTargetAuthorizationBusy(true);
++        await authorizeNative(context, active, owner, authorizationGeneration);
 +      } else if (active.step.authorizationUrl) {
 +        navigateWeb(active.step.authorizationUrl);
++      } else {
++        releaseAuthorization(context, active, authorizationGeneration, owner);
 +      }
 +    },
 +    async cancel() {
@@ -2689,8 +3205,10 @@ index 00000000..c418cb3b
 +          : "signin");
 +      const targetProvider = operation.current?.step.targetProvider;
 +      const cancelGeneration = ++generation.current;
-+      await cancelActive(context);
++      const active = operation.current;
++      await cancelActive(context, active);
 +      if (generation.current !== cancelGeneration) return;
++      setTargetAuthorizationBusy(false);
 +      setView({
 +        kind: "cancelled",
 +        purpose,
@@ -2700,18 +3218,20 @@ index 00000000..c418cb3b
 +    reset() {
 +      generation.current += 1;
 +      operation.current = null;
++      setTargetAuthorizationBusy(false);
 +      setView({ kind: "idle" });
 +    },
 +    abandon() {
 +      generation.current += 1;
 +      operation.current = null;
++      setTargetAuthorizationBusy(false);
 +      setView({ kind: "idle" });
 +    },
 +  };
 +}
 diff --git a/app/src/api/useAuthMethods.test.ts b/app/src/api/useAuthMethods.test.ts
 new file mode 100644
-index 00000000..fa99a71f
+index 0000000000000000000000000000000000000000..fa99a71f2038992d1eb28b2993ec2050397c8132
 --- /dev/null
 +++ b/app/src/api/useAuthMethods.test.ts
 @@ -0,0 +1,101 @@
@@ -2818,7 +3338,7 @@ index 00000000..fa99a71f
 +});
 diff --git a/app/src/api/useAuthMethods.ts b/app/src/api/useAuthMethods.ts
 new file mode 100644
-index 00000000..d6af9359
+index 0000000000000000000000000000000000000000..d6af9359bab25635f0646bb8c424b7ce3bf619a1
 --- /dev/null
 +++ b/app/src/api/useAuthMethods.ts
 @@ -0,0 +1,37 @@
@@ -2861,7 +3381,7 @@ index 00000000..d6af9359
 +}
 diff --git a/app/src/auth/AuthProviderButton.tsx b/app/src/auth/AuthProviderButton.tsx
 new file mode 100644
-index 00000000..9a24d272
+index 0000000000000000000000000000000000000000..9a24d27248bf08266c8ff7ef2e82ee5cdc1ea7ae
 --- /dev/null
 +++ b/app/src/auth/AuthProviderButton.tsx
 @@ -0,0 +1,26 @@
@@ -2893,10 +3413,10 @@ index 00000000..9a24d272
 +}
 diff --git a/app/src/auth/LinkSignInMethod.test.tsx b/app/src/auth/LinkSignInMethod.test.tsx
 new file mode 100644
-index 00000000..b5701d02
+index 0000000000000000000000000000000000000000..7ff5d0ac786c34a8780f3f054313c6b0d26dec98
 --- /dev/null
 +++ b/app/src/auth/LinkSignInMethod.test.tsx
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,79 @@
 +import { render, screen } from "@testing-library/react";
 +import userEvent from "@testing-library/user-event";
 +import { describe, expect, it, vi } from "vitest";
@@ -2913,6 +3433,7 @@ index 00000000..b5701d02
 +      google: true,
 +    },
 +    view,
++    targetAuthorizationBusy: false,
 +    destination: "/you/sign-in-methods",
 +    startSignIn: vi.fn(),
 +    confirmAccount: vi.fn(),
@@ -2977,10 +3498,10 @@ index 00000000..b5701d02
 +});
 diff --git a/app/src/auth/LinkSignInMethod.tsx b/app/src/auth/LinkSignInMethod.tsx
 new file mode 100644
-index 00000000..1f5af3cb
+index 0000000000000000000000000000000000000000..82ec3c503a1dd756e3b4e387a3672ae4db89dae6
 --- /dev/null
 +++ b/app/src/auth/LinkSignInMethod.tsx
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,79 @@
 +import type { AuthProvider } from "../../shared/auth";
 +import type { AuthFlowController } from "../adapters/authFlow";
 +import AuthProviderButton from "./AuthProviderButton";
@@ -3042,6 +3563,7 @@ index 00000000..1f5af3cb
 +        <div className="auth-actions">
 +          <AuthProviderButton
 +            provider={firstDone ? target : usual}
++            disabled={firstDone && auth.targetAuthorizationBusy}
 +            label={
 +              firstDone ? undefined : `Confirm with ${providerName(usual)}`
 +            }
@@ -3060,7 +3582,7 @@ index 00000000..1f5af3cb
 +  );
 +}
 diff --git a/app/src/index.css b/app/src/index.css
-index faa7e35a..cc3563e9 100644
+index faa7e35ab72cb88799f5561e535e09b45f3a9833..cc3563e95f4d7f057570b4c063953f134e2bee9d 100644
 --- a/app/src/index.css
 +++ b/app/src/index.css
 @@ -134,6 +134,263 @@ main {
@@ -3328,7 +3850,7 @@ index faa7e35a..cc3563e9 100644
    color: var(--ink-3);
    white-space: nowrap;
 diff --git a/app/src/native/signin.test.ts b/app/src/native/signin.test.ts
-index cab7870d..434e5da6 100644
+index cab7870d3bc883ecdf35cfd40e2b2df867327546..434e5da695fb7cd011f9e006904a638c62c18859 100644
 --- a/app/src/native/signin.test.ts
 +++ b/app/src/native/signin.test.ts
 @@ -4,10 +4,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -3389,10 +3911,10 @@ index cab7870d..434e5da6 100644
  describe("nativeSignOut: signing out ends the GOOGLE session, not just ours", () => {
    beforeEach(() => {
 diff --git a/app/src/native/signin.ts b/app/src/native/signin.ts
-index 6f31f5d7..4dcba1e0 100644
+index 6f31f5d7c179ed5e49632c4a737cb511dfef0d19..7a50811f7e951a46432f3a6365bb1325120b4c0c 100644
 --- a/app/src/native/signin.ts
 +++ b/app/src/native/signin.ts
-@@ -35,6 +35,22 @@ export async function nativeSignIn(): Promise<boolean> {
+@@ -35,6 +35,30 @@ export async function nativeSignIn(): Promise<boolean> {
    return true;
  }
 
@@ -3402,6 +3924,14 @@ index 6f31f5d7..4dcba1e0 100644
 +  nonce: string,
 +): Promise<{ idToken: string }> {
 +  await initNativeAuth();
++  return nativeGoogleProofAfterInit(nonce);
++}
++
++/** Runs the provider interaction after the auth-flow owner has initialized
++ * the plugin and rechecked that its operation is still current. */
++export async function nativeGoogleProofAfterInit(
++  nonce: string,
++): Promise<{ idToken: string }> {
 +  const res = await SocialLogin.login({
 +    provider: "google",
 +    options: { forcePrompt: true, nonce },
@@ -3416,7 +3946,7 @@ index 6f31f5d7..4dcba1e0 100644
 
  /**
 diff --git a/app/src/shell/AppRoutes.tsx b/app/src/shell/AppRoutes.tsx
-index 0657f7f1..71806319 100644
+index 0657f7f19902473fadbe7a8e269bf0fd4e505e75..7180631912a2d2ce37febeab3ce97fe24498f9bb 100644
 --- a/app/src/shell/AppRoutes.tsx
 +++ b/app/src/shell/AppRoutes.tsx
 @@ -39,6 +39,8 @@ import SettingsScreen from "../you/SettingsScreen";
@@ -3471,7 +4001,7 @@ index 0657f7f1..71806319 100644
                  /you like /you/concept2 and /you/diagnostics, and inside this
                  signed-in fragment because baselines are account data. NOT in
 diff --git a/app/src/theme/tokens.css b/app/src/theme/tokens.css
-index 7510727c..47aec998 100644
+index 7510727c6d181d4f8393de4248e12c65b02dc964..47aec99850b3dc919f771b2ff473325a70ac84cc 100644
 --- a/app/src/theme/tokens.css
 +++ b/app/src/theme/tokens.css
 @@ -30,6 +30,10 @@
@@ -3487,10 +4017,10 @@ index 7510727c..47aec998 100644
       echoes --type-o2 immediately below, but stays a SEPARATE token:
 diff --git a/app/src/you/SignInMethods.test.tsx b/app/src/you/SignInMethods.test.tsx
 new file mode 100644
-index 00000000..657b4a49
+index 0000000000000000000000000000000000000000..5ba2cd666a05dabcd4fcad9f0dbce01365893c42
 --- /dev/null
 +++ b/app/src/you/SignInMethods.test.tsx
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,201 @@
 +import { render, screen, waitFor } from "@testing-library/react";
 +import userEvent from "@testing-library/user-event";
 +import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -3514,6 +4044,7 @@ index 00000000..657b4a49
 +      google: true,
 +    },
 +    view,
++    targetAuthorizationBusy: false,
 +    destination: null,
 +    startSignIn: vi.fn(),
 +    confirmAccount: vi.fn(),
@@ -3576,6 +4107,44 @@ index 00000000..657b4a49
 +    expect(retryAuth.prepareLink).toHaveBeenCalledWith("apple");
 +  });
 +
++  it("refetches authoritative methods before showing an uncertain finalize result", async () => {
++    let reads = 0;
++    vi.mocked(api).mockImplementation(async () => {
++      reads += 1;
++      return new Response(
++        JSON.stringify(
++          reads === 1
++            ? { apple: false, google: true }
++            : { apple: true, google: true },
++        ),
++        { status: 200 },
++      );
++    });
++    const { rerender } = render(
++      <SignInMethods auth={controller({ kind: "idle" })} />,
++    );
++    expect(
++      await screen.findByRole("button", { name: "Add Apple" }),
++    ).toBeVisible();
++
++    rerender(
++      <SignInMethods
++        auth={controller({
++          kind: "error",
++          purpose: "link",
++          code: "signin_failed",
++          targetProvider: "apple",
++        })}
++      />,
++    );
++    expect(await screen.findByRole("alert")).toHaveTextContent(
++      "We couldn’t confirm the result. Check your sign-in methods and try again.",
++    );
++    await waitFor(() => expect(reads).toBe(2));
++    expect(screen.queryByRole("button", { name: "Add Apple" })).toBeNull();
++    expect(screen.getAllByText("CONNECTED")).toHaveLength(2);
++  });
++
 +  it.each([
 +    [
 +      {
@@ -3584,7 +4153,7 @@ index 00000000..657b4a49
 +        code: "attempt_expired",
 +        targetProvider: "google",
 +      },
-+      "This linking attempt expired. Nothing changed. Start linking again.",
++      "We couldn’t confirm the result. Check your sign-in methods and try again.",
 +    ],
 +    [
 +      {
@@ -3597,7 +4166,7 @@ index 00000000..657b4a49
 +    ],
 +    [
 +      { kind: "error", purpose: "link", code: "signin_failed" },
-+      "That linking attempt didn’t work. Nothing changed. Start linking again.",
++      "We couldn’t confirm the result. Check your sign-in methods and try again.",
 +    ],
 +  ] as const)("renders the bounded link terminal copy", async (view, copy) => {
 +    vi.mocked(api).mockImplementation(
@@ -3655,10 +4224,10 @@ index 00000000..657b4a49
 +});
 diff --git a/app/src/you/SignInMethods.tsx b/app/src/you/SignInMethods.tsx
 new file mode 100644
-index 00000000..56273610
+index 0000000000000000000000000000000000000000..db880e13ace15214b20413cf79c00c7332fbf38f
 --- /dev/null
 +++ b/app/src/you/SignInMethods.tsx
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,119 @@
 +import type { AuthProvider } from "../../shared/auth";
 +import type { AuthFlowController } from "../adapters/authFlow";
 +import { useAuthMethods } from "../api/useAuthMethods";
@@ -3686,18 +4255,19 @@ index 00000000..56273610
 +      </p>
 +    );
 +  }
-+  if (view.code === "attempt_expired") {
-+    return (
-+      <p className="notice auth-notice-error" role="alert">
-+        This linking attempt expired. Nothing changed. Start linking again.
-+      </p>
-+    );
-+  }
 +  if (view.code === "account_conflict" && view.targetProvider) {
 +    return (
 +      <p className="notice auth-notice-error" role="alert">
 +        That {name(view.targetProvider)} sign-in is already connected to another
 +        Ergomatic account. Nothing changed.
++      </p>
++    );
++  }
++  if (view.code === "signin_failed" || view.code === "attempt_expired") {
++    return (
++      <p className="notice auth-notice-error" role="alert">
++        We couldn’t confirm the result. Check your sign-in methods and try
++        again.
 +      </p>
 +    );
 +  }
@@ -3708,12 +4278,20 @@ index 00000000..56273610
 +  );
 +}
 +
++function methodsRefreshKey(view: AuthFlowController["view"]): string {
++  if (view.kind === "linked") return `linked-${view.targetProvider}`;
++  if (
++    view.kind === "error" &&
++    view.purpose === "link" &&
++    (view.code === "signin_failed" || view.code === "attempt_expired")
++  ) {
++    return `uncertain-${view.targetProvider ?? "unknown"}`;
++  }
++  return "current";
++}
++
 +export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
-+  const refreshKey =
-+    auth.view.kind === "linked"
-+      ? `linked-${auth.view.targetProvider}`
-+      : "current";
-+  const methods = useAuthMethods(refreshKey);
++  const methods = useAuthMethods(methodsRefreshKey(auth.view));
 +  const notice = linkNotice(auth);
 +  if (auth.options.state !== "ready" || !auth.options.frontDoorEnabled) {
 +    return null;
@@ -3724,8 +4302,11 @@ index 00000000..56273610
 +  const retryProvider =
 +    auth.view.kind === "error" &&
 +    auth.view.purpose === "link" &&
-+    (auth.view.code === "attempt_expired" ||
-+      auth.view.code === "account_changed")
++    (auth.view.code === "account_changed" ||
++      ((auth.view.code === "attempt_expired" ||
++        auth.view.code === "signin_failed") &&
++        auth.view.targetProvider !== undefined &&
++        !methods.methods[auth.view.targetProvider]))
 +      ? auth.view.targetProvider
 +      : undefined;
 +  return (

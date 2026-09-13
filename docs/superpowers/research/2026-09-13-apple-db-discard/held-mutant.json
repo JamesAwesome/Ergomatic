@@ -1,0 +1,44 @@
+{
+  "mutant": true,
+  "cases": [
+    {
+      "purpose": "signin",
+      "waits": [
+        {
+          "pid": 93,
+          "wait_event_type": "Lock",
+          "wait_event": "transactionid",
+          "query": "DELETE FROM auth_attempts WHERE id=$1 AND binding_hash=$2 AND surface=$3"
+        }
+      ],
+      "settledBeforeCommit": false,
+      "discardDeleted": true,
+      "winnerStage": "confirm",
+      "winnerVersion": 3,
+      "after": [],
+      "elapsedMs": 4.391834000000017
+    },
+    {
+      "purpose": "link",
+      "waits": [
+        {
+          "pid": 93,
+          "wait_event_type": "Lock",
+          "wait_event": "transactionid",
+          "query": "DELETE FROM auth_attempts WHERE id=$1 AND binding_hash=$2 AND surface=$3"
+        }
+      ],
+      "settledBeforeCommit": false,
+      "discardDeleted": true,
+      "winnerStage": "target_authorize",
+      "winnerVersion": 3,
+      "after": [],
+      "elapsedMs": 1.2658340000000408
+    }
+  ],
+  "parentLock": {
+    "childDeleted": true,
+    "timedOut": false,
+    "elapsedMs": 0.5472079999999551
+  }
+}

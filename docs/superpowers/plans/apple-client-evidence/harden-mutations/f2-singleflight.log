@@ -1,0 +1,46 @@
+$ node /tmp/apple-mechanism-probes/client.cjs
+{"whileProviderHeld":{"providerCalls":1,"secondOwner":false,"requests":[]}}
+{"afterCompletion":{"views":[],"requests":[]}}
+$ NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/adapters/authFlow.test.tsx -t "keeps one rendered native target action"
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/apple-client-plan-scratch/app
+
+ ❯ |client| src/adapters/authFlow.test.tsx (32 tests | 1 failed | 31 skipped) 1122ms
+     × keeps one rendered native target action in flight through provider, proof, and finalization 1120ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |client| src/adapters/authFlow.test.tsx > useAuthFlow > keeps one rendered native target action in flight through provider, proof, and finalization
+AssertionError: expected "vi.fn()" to be called once, but got 0 times
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<button>[39m
+        [0mAdd Apple[0m
+      [36m</button>[39m
+    [36m</div>[39m
+  [36m</body>[39m
+[36m</html>[39m
+ ❯ src/adapters/authFlow.test.tsx:213:53
+    211|       fireEvent.click(target);
+    212|     });
+    213|     await waitFor(() => expect(seam.appleAuthorize).toHaveBeenCalledOn…
+       |                                                     ^
+    214|     expect(target).toBeDisabled();
+    215|     expect(cancelCount).toBe(0);
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 31 skipped (32)
+   Start at  01:36:23
+   Duration  1.45s (transform 45ms, setup 40ms, import 52ms, tests 1.12s, environment 184ms)
+
+expected-failure-exit=1

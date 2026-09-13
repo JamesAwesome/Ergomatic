@@ -62,7 +62,7 @@ Candidate adoption uses the repository-approved inline-author shape: retain and 
 
 ### Task 4: Integrated release and review evidence
 
-**Files and executable content:** `2026-09-13-apple-deployment.md` beside this plan; `.env.example`, `compose.yml`, `docs/deploy.md`, `docs/RELEASING.md`, approved spec/review records and relevant standing-agent ledger proposals.
+**Files and executable content:** `app/src/adapters/linkFlow.test.ts` (queued empty-state regression; complete tested patch and mutation receipts in `apple-callback-evidence/`), `2026-09-13-apple-deployment.md` beside this plan; `.env.example`, `compose.yml`, `docs/deploy.md`, `docs/RELEASING.md`, approved spec/review records and relevant standing-agent ledger proposals.
 
 **Interfaces:** Consumes server configuration names and migration behavior. Produces deploy instructions that keep the feature dark, name Apple portal prerequisites and preserve Apple-only account access through an explicit rollback floor.
 

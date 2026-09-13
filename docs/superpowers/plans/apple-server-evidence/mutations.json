@@ -342,24 +342,6 @@
     ]
   },
   {
-    "name": "callback-cancel-erasure",
-    "source": "app/server/auth/frontDoorRoutes.ts",
-    "replacements": 1,
-    "command": [
-      "pnpm",
-      "test",
-      "--project",
-      "integration",
-      "server/auth/frontDoorRoutes.integration.test.ts"
-    ],
-    "exit": 1,
-    "head": "16b659f1a89e21698b3d515d44daecf28751c1a9",
-    "failed_summary": [
-      "Tests  1 failed | 15 passed (16)",
-      "Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af"
-    ]
-  },
-  {
     "name": "web-token-projection",
     "source": "app/server/auth/frontDoorRoutes.ts",
     "replacements": 1,
@@ -735,6 +717,132 @@
     "failed_summary": [
       "Tests  3 failed | 16 passed (19)",
       "Tests 3 \u23af\u23af\u23af\u23af\u23af\u23af\u23af"
+    ]
+  },
+  {
+    "name": "callback-cancel-erasure",
+    "source": "app/server/auth/frontDoorRoutes.ts",
+    "replacements": 1,
+    "command": [
+      "pnpm",
+      "test",
+      "--project",
+      "integration",
+      "server/auth/frontDoorRoutes.integration.test.ts"
+    ],
+    "exit": 1,
+    "head": "259882ba1087b6ad853159b19799b2358fbf3905",
+    "failed_summary": [
+      "Tests  5 failed | 29 passed (34)",
+      "Tests 5 \u23af\u23af\u23af\u23af\u23af\u23af\u23af"
+    ]
+  },
+  {
+    "name": "failure-id-only-cleanup",
+    "source": "app/server/auth/attempts.ts",
+    "replacements": 1,
+    "command": [
+      "pnpm",
+      "test",
+      "--project",
+      "integration",
+      "server/auth/frontDoorRoutes.integration.test.ts"
+    ],
+    "exit": 1,
+    "head": "259882ba1087b6ad853159b19799b2358fbf3905",
+    "failed_summary": [
+      "Tests  8 failed | 26 passed (34)",
+      "Tests 8 \u23af\u23af\u23af\u23af\u23af\u23af\u23af"
+    ]
+  },
+  {
+    "name": "failure-cleanup-error-cookie",
+    "source": "app/server/auth/frontDoorRoutes.ts",
+    "replacements": 1,
+    "command": [
+      "pnpm",
+      "test",
+      "--project",
+      "integration",
+      "server/auth/frontDoorRoutes.integration.test.ts"
+    ],
+    "exit": 1,
+    "head": "259882ba1087b6ad853159b19799b2358fbf3905",
+    "failed_summary": [
+      "Tests  1 failed | 33 passed (34)",
+      "Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af"
+    ]
+  },
+  {
+    "name": "failure-claimed-snapshot",
+    "source": "app/server/auth/frontDoorRoutes.ts",
+    "replacements": 1,
+    "command": [
+      "pnpm",
+      "test",
+      "--project",
+      "integration",
+      "server/auth/frontDoorRoutes.integration.test.ts"
+    ],
+    "exit": 1,
+    "head": "259882ba1087b6ad853159b19799b2358fbf3905",
+    "failed_summary": [
+      "Tests  1 failed | 33 passed (34)",
+      "Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af"
+    ]
+  },
+  {
+    "name": "failure-stale-cookie",
+    "source": "app/server/auth/frontDoorRoutes.ts",
+    "replacements": 1,
+    "command": [
+      "pnpm",
+      "test",
+      "--project",
+      "integration",
+      "server/auth/frontDoorRoutes.integration.test.ts"
+    ],
+    "exit": 1,
+    "head": "259882ba1087b6ad853159b19799b2358fbf3905",
+    "failed_summary": [
+      "Tests  9 failed | 25 passed (34)",
+      "Tests 9 \u23af\u23af\u23af\u23af\u23af\u23af\u23af"
+    ]
+  },
+  {
+    "name": "lost-response-grant",
+    "source": "app/server/auth/attempts.ts",
+    "replacements": 1,
+    "command": [
+      "pnpm",
+      "test",
+      "--project",
+      "integration",
+      "server/auth/frontDoorRoutes.integration.test.ts"
+    ],
+    "exit": 1,
+    "head": "259882ba1087b6ad853159b19799b2358fbf3905",
+    "failed_summary": [
+      "Tests  1 failed | 33 passed (34)",
+      "Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af"
+    ]
+  },
+  {
+    "name": "native-failure-cleanup",
+    "source": "app/server/auth/frontDoorRoutes.ts",
+    "replacements": 1,
+    "command": [
+      "pnpm",
+      "test",
+      "--project",
+      "integration",
+      "server/auth/frontDoorRoutes.integration.test.ts"
+    ],
+    "exit": 1,
+    "head": "259882ba1087b6ad853159b19799b2358fbf3905",
+    "failed_summary": [
+      "Tests  1 failed | 33 passed (34)",
+      "Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af"
     ]
   }
 ]

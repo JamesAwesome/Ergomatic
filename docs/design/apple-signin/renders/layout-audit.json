@@ -2482,6 +2482,128 @@
     ]
   },
   {
+    "name": "link-expired-restart-landscape",
+    "scrollWidth": 844,
+    "viewportWidth": 844,
+    "horizontalOverflow": false,
+    "screenScrollWidth": 844,
+    "screenClientWidth": 844,
+    "screenHorizontalOverflow": false,
+    "undersized": [],
+    "tappables": [
+      {
+        "text": "Compare",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Before",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Welcome",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "New Apple",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Missing email",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Usual login",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Google connected",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Apple connected",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Add Apple",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Add Google",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Success",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Conflict",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Expired",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Account changed",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Cancel",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Native",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Web",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "390 × 844",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "844 × 390",
+        "width": 0,
+        "height": 0
+      },
+      {
+        "text": "Sign out",
+        "width": 77.171875,
+        "height": 44
+      },
+      {
+        "text": "AppleAdd Apple ›",
+        "width": 480,
+        "height": 54
+      },
+      {
+        "text": "Start linking again",
+        "width": 480,
+        "height": 52
+      }
+    ]
+  },
+  {
     "name": "link-account-changed-restart",
     "scrollWidth": 390,
     "viewportWidth": 390,

@@ -4,7 +4,7 @@
 
 **Goal:** Add the first-party iOS bridge that sends a server-minted nonce and state to Sign in with Apple and returns Apple's transient proof to the native auth adapter.
 
-**Architecture:** A thin TypeScript `registerPlugin` declaration exposes one promise method. A first-party Swift `CAPPlugin` owns one `ASAuthorizationController`, its weak delegate/presentation provider, the pending Capacitor call, and an attempt token until one terminal callback clears all four. A source-contract test pins the Swift/TypeScript strings, Xcode membership, entitlement, single-flight fields, result keys, and absence of credential storage/logging; an unsigned simulator build proves the actual Swift source compiles in the App target at iOS 15.0.
+**Architecture:** A thin TypeScript `registerPlugin` declaration exposes one promise method. A first-party Swift `CAPPlugin` owns one `ASAuthorizationController`, its weak delegate/presentation provider, the pending Capacitor call, and an attempt token until one terminal callback clears all four. A source-contract test pins the Swift/TypeScript strings, Xcode membership, entitlement, single-flight fields, result keys, and absence of direct plugin storage/logging. Capacitor bridge logging is disabled at the app configuration owner; a separate privacy gate consumes the synced and built native configuration and drives a synthetic credential through the installed vendor bridge. An unsigned simulator build proves the actual Swift source compiles in the App target at iOS 15.0.
 
 **Tech Stack:** Capacitor 8, Swift 5, AuthenticationServices, UIKit, TypeScript 6, Vitest, Xcode
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - This module implements only the native Apple bridge. Server routes, the native auth-flow adapter, and all UI remain owned by the neighboring plans.
-- The exact bridge contract is `AppleAuth.authorize({nonce,state}) -> {idToken,authorizationCode,state,name?}`, where `name` is a formatted string when Apple supplies a first-authorization name. The caller keeps these values in the adapter operation only and sends them to the server proof route; no general screen state, preferences, analytics, or logs receive them.
+- The exact bridge contract is `AppleAuth.authorize({nonce,state}) -> {idToken,authorizationCode,state,name?}`, where `name` is a formatted string when Apple supplies a first-authorization name. The caller keeps these values in the adapter operation only and sends them to the server proof route; no general screen state, preferences, or analytics receive them. `loggingBehavior: "none"` prevents Capacitor's native serializer and JavaScript result logger from emitting plugin responses; application console diagnostics still traverse the separate Console plugin path.
 - Forward the server's nonce and state unchanged. Apple's iOS SDK says state is returned in the successful response and nonce can be verified in the identity token (`ASAuthorizationOpenIDRequest.h`, iPhoneOS 26.5 SDK, read 2026-09-12; approved spec, `Primary research and corrections`).
 - Request `.fullName` and `.email`. Return the formatted name only when it is nonblank; email stays inside the signed ID token and is verified by the server.
 - Reject absent or empty nonce/state before taking the in-flight claim. Reject an overlapping operation as `busy` without clearing the first operation.
@@ -34,19 +34,21 @@
 | `app/ios/App/App/App.entitlements` | Enable normal Sign in with Apple for the App target. |
 | `app/ios/App/App.xcodeproj/project.pbxproj` | Add the Swift file reference, App group entry, build-file entry, and Sources-phase membership. |
 | `app/scripts/apple-auth-contract.test.ts` | Cross-language/native-project contract gate, included in the existing unit project by `app/vitest.config.ts:19-23`. |
+| `app/capacitor.config.ts` | Disable Capacitor bridge logging in every build configuration while leaving application Console-plugin diagnostics intact. |
+| `app/scripts/apple-auth-privacy.test.mjs` | Consume synced or built native config, pin the installed native logging branch, and execute the installed JavaScript bridge with a synthetic Apple credential. |
 
 ## Native Lifetime Table
 
 | State | Minted | Cleared | WebView reload | App relaunch | Next authorize |
 | --- | --- | --- | --- | --- | --- |
-| `activeController` | Immediately before `performRequests()` | `clearActive()` before every terminal resolve/reject | The native authorization continues to its OS callback; no JS value can claim it | Process memory is discarded | A live controller rejects overlap as `busy`; a cleared controller admits one request |
+| `activeController` | Immediately before `performRequests()` | `clearActive()` before every terminal resolve/reject | The native authorization continues to its OS callback; its UUID still owns the native completion, while Capacitor callback-ID delivery does not prove document isolation | Process memory is discarded | A live controller rejects overlap as `busy`; a cleared controller admits one request |
 | `activeDelegate` | Beside controller; strongly held because controller's delegate/provider references are weak | Same `clearActive()` | Retained until the OS callback, then released | Discarded | Never reused |
-| `activeCall` | Beside controller after all input/window checks | Same `clearActive()` | Capacitor may no longer have a live JS receiver, but the native claim still clears at the terminal callback | Discarded | Never resolved by another attempt because token identity must match |
+| `activeCall` | Beside controller after all input/window checks | Same `clearActive()` | Capacitor may no longer have the originating JS receiver; the native claim still clears, but delivery into a later document is only probabilistically isolated by Capacitor's randomized callback ID | Discarded | The UUID prevents a later native Apple attempt from settling this call; it does not identify a JavaScript document |
 | `activeToken` | Fresh `UUID` captured by this delegate closure | Same `clearActive()` | Survives only until this authorization's terminal callback | Discarded | A late callback cannot resolve a later call |
 | delegate `completed` guard | `false` in the per-request delegate | Becomes `true` before invoking the plugin completion | Survives with that delegate until release | Discarded | A duplicate delegate callback is ignored |
 | nonce/state, identity token, authorization code, name | Nonce/state are local request inputs; proof values are local callback values | Function/delegate scope ends after resolve/reject | Never persisted | Never persisted | No value is reused |
 
-**Invariants:** at most one Apple authorization belongs to this bridge instance; exactly one terminal delegate callback may settle its call; a callback may settle only the attempt token it captured; all provider proof remains transient; every terminal path releases the plugin's strong references. On iOS 15 a WebView reload cannot programmatically cancel `ASAuthorizationController`, because the SDK's cancel API starts at iOS 16; the controller finishes through its OS callback and the bridge then releases the claim.
+**Invariants:** at most one Apple authorization belongs to this bridge instance; exactly one terminal delegate callback may settle its native call; a callback may settle only the native attempt token it captured; all provider proof remains transient; every terminal path releases the plugin's strong references. The UUID/SDK lifetime proves native-attempt isolation, not JavaScript-document isolation. On iOS 15 a WebView reload cannot programmatically cancel `ASAuthorizationController`, because the SDK's cancel API starts at iOS 16; the controller finishes through its OS callback and the bridge then releases the claim. Conditional callback-ID collision across documents remains hardening debt; the reviewer probe demonstrates delivery when equal IDs are injected, not a natural collision or device exploit.
 
 ---
 
@@ -627,6 +629,90 @@ NODE_OPTIONS=--no-experimental-webstorage pnpm --dir app exec vitest run --proje
 ```
 
 Expected: empty status and `6 passed`. Runtime cancellation, sheet presentation, first-authorization name, and overlap behavior still require the overall Apple plan's on-device gate; this module's desk proof stops at the compiled platform boundary.
+
+## Harden correction F3: disable credential-bearing bridge logs
+
+The mechanism review followed `call.resolve` beyond `AppleAuthPlugin.swift` and
+demonstrated that Capacitor 8.5.1's default Debug configuration logs the full
+Apple result in its JavaScript bridge. The installed native serializer also
+passes the result JSON prefix to `CAPLog`. The plugin-only forbidden-print scan
+therefore remains useful for direct plugin regressions but cannot establish the
+end-to-end no-credential-logs invariant.
+
+**Proof contract:**
+
+1. Provider credentials do not appear in Capacitor bridge logs in the shipped
+   Debug configuration.
+2. A successful Apple response is the supported producer; the gate delivers a
+   unique synthetic credential through the installed `native-bridge.js`.
+3. Captured bridge console output is the independent observable. A separate
+   assertion confirms ordinary application console diagnostics still reach the
+   native Console plugin.
+4. The deciding-source mutation changes `loggingBehavior: "none"` back to
+   `"debug"`, syncs native config, and must fail because the credential appears.
+5. This proves source-to-synced/built configuration delivery plus actual
+   JavaScript bridge behavior for the installed Capacitor version. Installed
+   native source establishes that the same `loggingEnabled` value gates
+   `CAPLog.print("⚡️  TO JS", resultJson.prefix(256))`; this is not a device
+   runtime observation.
+
+The configuration owner now contains:
+
+```ts
+// Debug bridge result logging serializes plugin responses, including transient
+// Apple credentials. Application console diagnostics use the Console plugin.
+loggingBehavior: "none",
+```
+
+The executable gate is `app/scripts/apple-auth-privacy.test.mjs`. Its complete
+source patch, including `app/capacitor.config.ts`, is archived as
+`apple-native-evidence/38-f3-source.patch`; the tested source commit is
+`81ce60409d78034bf2ceb62e4b9d0cfd1a19ca8b`.
+
+Executed from the retained candidate at that commit, with Node 26.5.0:
+
+```bash
+pnpm format:check
+NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project unit scripts/apple-auth-contract.test.ts
+node scripts/apple-auth-privacy.test.mjs
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm exec cap sync ios
+node scripts/apple-auth-privacy.test.mjs
+node scripts/apple-auth-privacy.test.mjs /tmp/ergomatic-apple-native-f3-dd.Onub4l/Build/Products/Debug-iphonesimulator/App.app/capacitor.config.json
+```
+
+The amended Step 8 block above was retained with `set -euo pipefail` and run
+against the corrected tree. The unsigned Debug simulator build succeeded;
+`AppleAuthPlugin.swift` and `MyViewController.swift` each appeared once in the
+arm64 compiler input list, the built app carried `loggingBehavior: "none"`, and
+the checked settings remained `IPHONEOS_DEPLOYMENT_TARGET = 15.0` and
+`CODE_SIGN_ENTITLEMENTS = App/App.entitlements`. Evidence is in
+`apple-native-evidence/20-f3-diff-check.log` through
+`apple-native-evidence/46-f3-final-head-typecheck.log`; the complete source patch is
+`38-f3-source.patch`, and the full Xcode output is
+`29-f3-xcode-build.log.gz`.
+
+For the required mutation, the committed config was changed to
+`loggingBehavior: "debug"` and synced. The original reviewer probe then
+reported `credentialLogged:true`, and the new privacy gate failed with
+`the installed JavaScript bridge logged the synthetic Apple credential`.
+Restoring the commit and resyncing produced `credentialLogged:false` in the
+reviewer probe adapted only with the actual synced logging value; both synced
+and built-config privacy runs passed. Receipts are
+`31-f3-reviewer-probe-debug.log`, `32-f3-mutation-privacy-red.log`,
+`34-f3-mutation-privacy-green.log`, `35-f3-built-config-privacy-green.log`, and
+`36-f3-reviewer-probe-none.log`.
+
+The original TDD red run preceded the configuration change and failed on the
+same credential observable; its compact receipt is `39-f3-tdd-red.log`.
+
+The reviewer probe's equal-random-seed document collision remains a
+nonblocking conditional hardening concern. It proves delivery to a later
+document when callback IDs are forced equal; it does not demonstrate a natural
+collision, attacker control, or a device exploit. No new document-lifecycle
+mechanism is introduced here.
 
 ## Plan-author Paste-Test Evidence
 

@@ -1,0 +1,15 @@
+81ce60409d78034bf2ceb62e4b9d0cfd1a19ca8b
+$ prettier --check .
+Checking formatting...
+All matched files use Prettier code style!
+
+ RUN  v4.1.11 /private/tmp/ergomatic-apple-native-paste/app
+
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  01:38:05
+   Duration  72ms (transform 9ms, setup 0ms, import 13ms, tests 2ms, environment 0ms)
+
+{"configPath":"/private/tmp/ergomatic-apple-native-paste/app/ios/App/App/capacitor.config.json","syncedLoggingBehavior":"none","nativeSerializationLoggingEnabled":false,"applicationDiagnosticForwarded":true,"credentialLogged":false}
+{"configPath":"/tmp/ergomatic-apple-native-f3-dd.Onub4l/Build/Products/Debug-iphonesimulator/App.app/capacitor.config.json","syncedLoggingBehavior":"none","nativeSerializationLoggingEnabled":false,"applicationDiagnosticForwarded":true,"credentialLogged":false}

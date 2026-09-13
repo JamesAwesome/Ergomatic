@@ -1,0 +1,73 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple-server-paste/app
+
+ ❯ |integration| server/auth/frontDoorRoutes.integration.test.ts (34 tests | 9 failed) 1964ms
+     × failed cleanup preserves the live attempt cookie 7ms
+     × stale signin callback (success) cannot erase the winning stage or clear its cookie 11ms
+     × stale signin callback (cancel) cannot erase the winning stage or clear its cookie 10ms
+     × stale signin callback (provider-error) cannot erase the winning stage or clear its cookie 9ms
+     × stale signin callback (malformed) cannot erase the winning stage or clear its cookie 9ms
+     × stale link callback (success) cannot erase the winning stage or clear its cookie 17ms
+     × stale link callback (cancel) cannot erase the winning stage or clear its cookie 16ms
+     × stale link callback (provider-error) cannot erase the winning stage or clear its cookie 16ms
+     × stale link callback (malformed) cannot erase the winning stage or clear its cookie 16ms
+
+ Test Files  1 failed (1)
+      Tests  9 failed | 25 passed (34)
+   Start at  01:22:23
+   Duration  2.40s (transform 106ms, setup 0ms, import 390ms, tests 1.96s, environment 0ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project integration server/auth/frontDoorRoutes.integration.test.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > failed cleanup preserves the live attempt cookie
+AssertionError: expected [ Array(1) ] to be undefined
+
+- Expected:
+undefined
+
++ Received:
+[
+  "erg_auth_attempt=; Max-Age=0; Path=/api/auth; HttpOnly; Secure; SameSite=None",
+]
+
+ ❯ server/auth/frontDoorRoutes.integration.test.ts:581:42
+    579|       .send({ state: b.state, error: "access_denied" });
+    580|     expect(failed.status).toBe(303);
+    581|     expect(failed.headers["set-cookie"]).toBeUndefined();
+       |                                          ^
+    582|     expect(
+    583|       (await pool.query("SELECT stage FROM auth_attempts")).rows,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale signin callback (success) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale signin callback (cancel) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale signin callback (provider-error) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale signin callback (malformed) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale link callback (success) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale link callback (cancel) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale link callback (provider-error) cannot erase the winning stage or clear its cookie
+ FAIL  |integration| server/auth/frontDoorRoutes.integration.test.ts > supported auth producers through Express and signed tokens > stale link callback (malformed) cannot erase the winning stage or clear its cookie
+AssertionError: expected [ Array(1) ] to be undefined
+
+- Expected:
+undefined
+
++ Received:
+[
+  "erg_auth_attempt=; Max-Age=0; Path=/api/auth; HttpOnly; Secure; SameSite=None",
+]
+
+ ❯ server/auth/frontDoorRoutes.integration.test.ts:753:42
+    751|         ).rows,
+    752|       ).toStrictEqual(snapshot);
+    753|       expect(lost.headers["set-cookie"]).toBeUndefined();
+       |                                          ^
+    754|       expect(lost.headers.location).toContain("authError=");
+    755|       const resume = await request(app)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+

@@ -10582,3 +10582,15 @@ counting the corpus a different way than the spec counted it.
 Evidence and disposition: `docs/superpowers/specs/2026-09-12-apple-signin-review.md`.
 The original verdict was BLOCKED; author corrections were folded without claiming
 an unrun PASS. James approved the corrected spec and rendered Gate 0 on 2026-09-12.
+
+### 2026-09-13 — Apple sign-in implementation-plan hardening
+
+
+**Mechanism lens BLOCKED** on server `0f4921d8`, native `202f6087`, client `0ca98495`; approved AUTH/stored-shape design, complete author paste-tests, no public activation. The original full report and probe artifacts are archived in `docs/superpowers/research/2026-09-13-apple-harden/`. Controller corrections and the separate code lens are pending; this is not a passing implementation verdict.
+
+- **Falsified:** stage/version CAS makes a stale callback harmless. Believed because the store rejects mismatched snapshots; two real mounted callbacks plus PostgreSQL showed the loser's unversioned catch cleanup delete the winner's `confirm` row and pending grant. Technique: hold both reads, commit the winner, then inspect after the loser finishes cleanup.
+- **Falsified:** native target authorization removes competing actions and all generation checks protect late results. The target view retained enabled controls; overlapping authorization's `busy` error canceled the live attempt. Holding cancellation across a newer generation changed the newer view to cancelled. Technique: enumerate enabled consumers of the shared operation and inspect authority after each await, including cleanup.
+- **Falsified:** scanning the Apple plugin for logging calls proves credentials are not logged. Default Debug Capacitor `fromNative` logged the complete synthetic proof. Technique: follow the credential through vendor serialization/logging and execute that actual bridge with build-derived configuration.
+- **Falsified:** a finalization transport failure proves nothing changed. The transaction commits before HTTP delivery, while generic failure copy asserted rollback. Technique: separate the database commit observable from the client's acknowledgement observable.
+- **Held:** subject-first identity, exact-current-session web finalization, transactional account/grant/session writes, server-selected audiences, native Google's forced nonce-bearing interactive branch, default-off activation and the Apple-only rollback floor. Google web PKCE's secret-derived per-stage verifier reproduced the actual authorization/redemption S256 match; its cryptographic construction remains labelled INFERENCE against RFC 7636.
+- **Limited:** injecting equal Capacitor document callback seeds delivered an old Apple result to a new unrelated callback. That demonstrates the conditional routing consequence and probabilistic isolation, not a natural collision or device exploit. Portal/device continuity and complete assembled gates remain owed.

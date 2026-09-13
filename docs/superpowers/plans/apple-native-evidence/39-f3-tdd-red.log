@@ -1,0 +1,10 @@
+Command: node scripts/apple-auth-privacy.test.mjs
+Tree: 202f60873823f8cff9c059b93eb19ba1190cbbdf plus the new test only
+Exit: 1
+
+AssertionError [ERR_ASSERTION]: the installed JavaScript bridge logged the synthetic Apple credential
+
+true !== false
+
+actual: true
+expected: false

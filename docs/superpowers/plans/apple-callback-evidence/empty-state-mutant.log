@@ -1,0 +1,38 @@
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/wave-a-apple/app
+
+ ❯ |client| src/adapters/linkFlow.test.ts (25 tests | 1 failed | 23 skipped) 15ms
+     × refuses to exchange when the callback carries mismatched state "", including empty state, and keeps values out of logs 3ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 23 skipped (25)
+   Start at  01:44:06
+   Duration  469ms (transform 32ms, setup 70ms, import 21ms, tests 15ms, environment 305ms)
+
+[ELIFECYCLE] Test failed. See above for more details.
+$ bash scripts/test-run.sh --project client src/adapters/linkFlow.test.ts -t 'including empty state'
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |client| src/adapters/linkFlow.test.ts > startLink on native > refuses to exchange when the callback carries mismatched state "", including empty state, and keeps values out of logs
+AssertionError: expected { kind: 'networkError', …(1) } to strictly equal { kind: 'stateMismatch' }
+
+- Expected
++ Received
+
+  {
+-   "kind": "stateMismatch",
++   "kind": "networkError",
++   "message": "exchange called but no response was staged",
+  }
+
+ ❯ src/adapters/linkFlow.test.ts:168:23
+    166|       const outcome = await startLink();
+    167|
+    168|       expect(outcome).toStrictEqual({ kind: "stateMismatch" });
+       |                       ^
+    169|       expect(api).toHaveBeenCalledExactlyOnceWith(
+    170|         "/api/concept2/connect",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

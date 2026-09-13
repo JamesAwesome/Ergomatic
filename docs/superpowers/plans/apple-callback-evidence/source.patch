@@ -1,0 +1,65 @@
+diff --git a/app/src/adapters/linkFlow.test.ts b/app/src/adapters/linkFlow.test.ts
+index c00c95c2..6677a053 100644
+--- a/app/src/adapters/linkFlow.test.ts
++++ b/app/src/adapters/linkFlow.test.ts
+@@ -147,33 +147,35 @@ describe("startLink on native", () => {
+     });
+   });
+ 
+-  it("refuses to exchange when the callback carries a DIFFERENT state, and says nothing about the two values", async () => {
+-    vi.doMock("../platform", () => ({ isNative: () => true }));
+-    const { api } = mockApi(MINT_OK);
+-    mockPlugin(
+-      vi.fn(async () => ({
+-        callbackUrl:
+-          "haus.waffle.ergomatic://oauth/callback?code=CODE3&state=NOTABC",
+-      })),
+-    );
+-    const error = vi
+-      .spyOn(console, "error")
+-      .mockImplementation(() => undefined);
+-    vi.resetModules();
+-    const { startLink } = await import("./linkFlow");
++  it.each(["NOTABC", ""])(
++    "refuses to exchange when the callback carries mismatched state %j, including empty state, and keeps values out of logs",
++    async (returnedState) => {
++      vi.doMock("../platform", () => ({ isNative: () => true }));
++      const { api } = mockApi(MINT_OK);
++      mockPlugin(
++        vi.fn(async () => ({
++          callbackUrl: `haus.waffle.ergomatic://oauth/callback?code=CODE3&state=${returnedState}`,
++        })),
++      );
++      const error = vi
++        .spyOn(console, "error")
++        .mockImplementation(() => undefined);
++      vi.resetModules();
++      const { startLink } = await import("./linkFlow");
+ 
+-    const outcome = await startLink();
++      const outcome = await startLink();
+ 
+-    expect(outcome).toStrictEqual({ kind: "stateMismatch" });
+-    expect(api).toHaveBeenCalledExactlyOnceWith(
+-      "/api/concept2/connect",
+-      expect.anything(),
+-    );
+-    const logged = String(error.mock.calls[0]?.[0] ?? "");
+-    expect(logged).toContain("[linkFlow]");
+-    expect(logged).not.toContain("NOTABC");
+-    expect(logged).not.toContain("abc");
+-  });
++      expect(outcome).toStrictEqual({ kind: "stateMismatch" });
++      expect(api).toHaveBeenCalledExactlyOnceWith(
++        "/api/concept2/connect",
++        expect.anything(),
++      );
++      const logged = String(error.mock.calls[0]?.[0] ?? "");
++      expect(logged).toContain("[linkFlow]");
++      expect(logged).not.toContain("NOTABC");
++      expect(logged).not.toContain("abc");
++    },
++  );
+ 
+   it("reports `declined` and never exchanges when Concept2 returns error=access_denied", async () => {
+     vi.doMock("../platform", () => ({ isNative: () => true }));

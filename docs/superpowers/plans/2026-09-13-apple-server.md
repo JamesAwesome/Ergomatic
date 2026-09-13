@@ -21,11 +21,12 @@
 - Anonymous admission is 120 starts/minute per service and 512 resident anonymous attempts across processes. One link attempt per original session. Sweep startup and every 60 seconds; failed cleanup denies new anonymous starts until a successful sweep.
 - Apple web is registered HTTPS `form_post`: only its exact callback receives the bounded flat parser before origin middleware. Ordinary session cookie remains Lax; separate attempt cookie is HttpOnly, Secure, SameSite=None.
 - Cross-site callback can stage linking proof only. The same-origin finalization POST must present the current resolved session whose exact ID equals the original live session.
+- Callback failure/cancellation cleanup uses `Attempts.discard(expected)` and clears cookies only when the exact snapshot was erased. After a successful exchange claim, cleanup owns that claimed snapshot. Explicit holder cancel remains operation-wide.
 - All implementation and mutation work stays in isolated worktrees. No device install/launch, live provider credentials, merge or push is prescribed here.
 
 ## Candidate and provenance
 
-The executable blocks below are the exact committed candidate at `0f4921d81d552747e0c48131412cd17c012f10f5` in `.claude/worktrees/wave-a-apple-server-paste`, based on `3cf849c7`. They are unified patches grouped by independently reviewable responsibility, including complete new test bodies. The candidate itself is retained for adoption after hardening; do not reimplement it from a prose outline. Later parent changes to deployment docs, native bridge and UI are separate ownership.
+The executable blocks below are the exact committed candidate at `259882ba1087b6ad853159b19799b2358fbf3905` in `.claude/worktrees/wave-a-apple-server-paste`, based on `3cf849c7`. They are unified patches grouped by independently reviewable responsibility, including complete new test bodies. The candidate itself is retained for adoption after hardening; do not reimplement it from a prose outline. Later parent changes to deployment docs, native bridge and UI are separate ownership.
 
 Measured commands, failure/restore logs, coverage HTML extraction and the requirement-to-test matrix live in `apple-server-evidence/report.md`. The DBA owns query/migration scale measurements and its deadlock receipt. This plan does not promote passing fake-provider tests into real Apple credential or native/web subject-continuity evidence.
 
@@ -712,7 +713,7 @@ index b0ff2801..e18114be 100644
 
 **Files:** `app/server/db/schema.ts`, `app/drizzle/0031_apple_front_door.sql`, `app/drizzle/meta/0031_snapshot.json`, `app/drizzle/meta/_journal.json`, `app/server/auth/attempts.ts`, `app/server/auth/attempts.integration.test.ts`, `app/server/auth/sessions.ts`, `app/server/auth/middleware.ts`, `app/server/auth/native.test.ts`, `app/server/auth/routes.test.ts`, `app/server/auth/testSignin.test.ts`.
 
-**Interfaces:** Consumes verified provider results only after exchange has finished. Produces `createAttempts(pool): Attempts`, `Attempt`, `AttemptResult`, and `ResolvedSession.sessionId` / `Request.sessionId`. `Attempts.begin/read/claim/accept/confirm/finalize/cancel/methods/sweep/legacyGoogle` signatures are in the complete implementation below. The original user is derived from the exact original live session; no user ID is duplicated in attempts.
+**Interfaces:** Consumes verified provider results only after exchange has finished. Produces `createAttempts(pool): Attempts`, `Attempt`, `AttemptResult`, and `ResolvedSession.sessionId` / `Request.sessionId`. `Attempts.begin/read/claim/accept/confirm/finalize/discard/cancel/methods/sweep/legacyGoogle` signatures are in the complete implementation below. The original user is derived from the exact original live session; no user ID is duplicated in attempts.
 
 - [ ] **Step 1: Install the complete test-file changes from this task's patch and run `pnpm test --project integration server/auth/attempts.integration.test.ts`.** For reproduction from the baseline, test-file imports fail until the prescribed implementation exists. Do not treat a module-load failure as behavioral mutation evidence.
 - [ ] **Step 2: Apply the complete implementation changes below to their named paths.** The generated migration journal, snapshot and SQL travel together. Before adoption, inspect competing migration indexes; regenerate from the merged base if another branch has occupied 0031. Never rewrite a migration already shipped to production.
@@ -2651,10 +2652,10 @@ index 00000000..76353271
 +});
 diff --git a/app/server/auth/attempts.ts b/app/server/auth/attempts.ts
 new file mode 100644
-index 00000000..365b6e24
+index 00000000..c1437de7
 --- /dev/null
 +++ b/app/server/auth/attempts.ts
-@@ -0,0 +1,469 @@
+@@ -0,0 +1,491 @@
 +import { randomBytes, randomUUID } from "node:crypto";
 +import type pg from "pg";
 +import type {
@@ -3087,6 +3088,28 @@ index 00000000..365b6e24
 +        await tx.query("DELETE FROM auth_attempts WHERE id=$1", [a.id]);
 +        return { linked: true };
 +      });
++    },
++    // Failure cleanup owns one snapshot, unlike an explicit holder cancel.
++    // A single conditional DELETE locks only the attempt and cannot erase a
++    // newer authorization stage after another callback wins its transition.
++    async discard(expected: Attempt): Promise<boolean> {
++      const result = await pool.query(
++        `DELETE FROM auth_attempts WHERE id=$1 AND binding_hash=$2 AND surface=$3 AND purpose=$4 AND target_provider=$5 AND existing_provider IS NOT DISTINCT FROM $6 AND stage=$7 AND version=$8 AND state=$9 AND nonce=$10 AND original_session_id IS NOT DISTINCT FROM $11`,
++        [
++          expected.id,
++          expected.bindingHash,
++          expected.surface,
++          expected.purpose,
++          expected.targetProvider,
++          expected.existingProvider,
++          expected.stage,
++          expected.version,
++          expected.state,
++          expected.nonce,
++          expected.originalSessionId,
++        ],
++      );
++      return result.rowCount === 1;
 +    },
 +    async cancel(
 +      id: string,
@@ -3580,12 +3603,21 @@ index 00000000..f1dfd990
 +export type FrontDoor = Awaited<ReturnType<typeof createFrontDoor>>;
 diff --git a/app/server/auth/frontDoorRoutes.integration.test.ts b/app/server/auth/frontDoorRoutes.integration.test.ts
 new file mode 100644
-index 00000000..2badf006
+index 00000000..dfb16bc2
 --- /dev/null
 +++ b/app/server/auth/frontDoorRoutes.integration.test.ts
-@@ -0,0 +1,564 @@
-+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+@@ -0,0 +1,860 @@
++import {
++  afterAll,
++  beforeAll,
++  beforeEach,
++  describe,
++  expect,
++  it,
++  vi,
++} from "vitest";
 +import request from "supertest";
++import type { Response as ExpressResponse } from "express";
 +import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
 +import { migrate } from "drizzle-orm/node-postgres/migrator";
 +import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
@@ -3608,6 +3640,13 @@ index 00000000..2badf006
 +  let rsa: Awaited<ReturnType<typeof generateKeyPair>>;
 +  let attempts: ReturnType<typeof createAttempts>;
 +  const codes = new Map<string, string>();
++  function signal() {
++    let resolve!: () => void;
++    const promise = new Promise<void>((done) => {
++      resolve = done;
++    });
++    return { promise, resolve };
++  }
 +  let exchangeOutsideLock = false;
 +  beforeAll(async () => {
 +    container = await startPostgres();
@@ -3699,6 +3738,7 @@ index 00000000..2badf006
 +    await container?.stop();
 +  });
 +  beforeEach(async () => {
++    vi.restoreAllMocks();
 +    await pool.query("TRUNCATE users,auth_attempts CASCADE");
 +    codes.clear();
 +    exchangeOutsideLock = false;
@@ -4116,6 +4156,285 @@ index 00000000..2badf006
 +      expect((await pool.query("SELECT id FROM users")).rowCount).toBe(0);
 +    },
 +  );
++  it("native owned failed exchange erases its claimed snapshot", async () => {
++    const begin = await request(app)
++      .post("/api/auth/native/attempts")
++      .send({ purpose: "signin", provider: "apple" });
++    const b = begin.body;
++    const failed = await request(app)
++      .post(`/api/auth/native/attempts/${b.attemptId}/proof`)
++      .send({
++        bindingSecret: b.bindingSecret,
++        state: b.state,
++        idToken: "invalid",
++        authorizationCode: "code",
++      });
++    expect(failed.status).toBe(401);
++    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
++  });
++  it("failed cleanup preserves the live attempt cookie", async () => {
++    const begin = await request(app)
++      .post("/api/auth/web/attempts")
++      .send({ purpose: "signin", provider: "apple" });
++    const b = begin.body;
++    const binding = begin.headers["set-cookie"][0].split(";")[0];
++    vi.spyOn(attempts, "discard").mockRejectedValue(
++      new Error("database unavailable"),
++    );
++    const failed = await request(app)
++      .post("/api/auth/apple/callback")
++      .set("Cookie", binding)
++      .type("form")
++      .send({ state: b.state, error: "access_denied" });
++    expect(failed.status).toBe(303);
++    expect(failed.headers["set-cookie"]).toBeUndefined();
++    expect(
++      (await pool.query("SELECT stage FROM auth_attempts")).rows,
++    ).toStrictEqual([{ stage: "authorize" }]);
++  });
++  it("finalize can commit identity and grant before its HTTP response is lost", async () => {
++    const google = {
++      sub: "legacy",
++      email: "original@test",
++      emailVerified: true,
++      name: "Original",
++    };
++    const signed = await attempts.legacyGoogle(google);
++    const sessionId = (await pool.query("SELECT id FROM sessions")).rows[0]
++      .id as string;
++    const b = await attempts.begin({
++      surface: "native",
++      purpose: "link",
++      targetProvider: "apple",
++      originalSessionId: sessionId,
++    });
++    const target = await attempts.accept(
++      await attempts.claim(b.attempt),
++      google,
++    );
++    await attempts.accept(await attempts.claim(target.attempt!), {
++      sub: "added-apple",
++      email: "relay@test",
++      emailVerified: true,
++      name: "Added",
++      grant: { clientId: "native.app", refreshToken: "retained-grant" },
++    });
++    // Suppress delivery only after the real route has awaited its real commit.
++    const json = app.response.json;
++    const delivery = vi
++      .spyOn(app.response, "json")
++      .mockImplementation(function (this: ExpressResponse, body: unknown) {
++        if ((body as { outcome?: string }).outcome === "linked") {
++          this.destroy();
++          return this;
++        }
++        return json.call(this, body);
++      });
++    const failure = await request(app)
++      .post(`/api/auth/native/attempts/${b.attempt.id}/finalize`)
++      .auth(signed.token!, { type: "bearer" })
++      .send({ bindingSecret: b.bindingSecret })
++      .then(
++        () => null,
++        (error: unknown) => error,
++      );
++    delivery.mockRestore();
++    expect(failure).toBeInstanceOf(Error);
++    expect((failure as Error).message).toMatch(/socket hang up|aborted/);
++    const methods = await request(app)
++      .get("/api/auth/methods")
++      .auth(signed.token!, { type: "bearer" });
++    expect(methods.body).toStrictEqual({ apple: true, google: true });
++    expect(
++      (await pool.query("SELECT refresh_token FROM apple_grants")).rows,
++    ).toStrictEqual([{ refresh_token: "retained-grant" }]);
++    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
++  });
++  it.each([
++    ["signin", "success"],
++    ["signin", "cancel"],
++    ["signin", "provider-error"],
++    ["signin", "malformed"],
++    ["link", "success"],
++    ["link", "cancel"],
++    ["link", "provider-error"],
++    ["link", "malformed"],
++  ] as const)(
++    "stale %s callback (%s) cannot erase the winning stage or clear its cookie",
++    async (purpose, loserKind) => {
++      let sessionToken = "";
++      if (purpose === "link") {
++        const start = (
++          await request(app)
++            .post("/api/auth/native/attempts")
++            .send({ purpose: "signin", provider: "apple" })
++        ).body;
++        const token = await jwt(start.nonce, "native.app");
++        codes.set("setup", token);
++        await request(app)
++          .post(`/api/auth/native/attempts/${start.attemptId}/proof`)
++          .send({
++            bindingSecret: start.bindingSecret,
++            state: start.state,
++            idToken: token,
++            authorizationCode: "setup",
++          });
++        sessionToken = (
++          await request(app)
++            .post(`/api/auth/native/attempts/${start.attemptId}/confirm`)
++            .send({ bindingSecret: start.bindingSecret })
++        ).body.token;
++      }
++      const beginRequest = request(app)
++        .post("/api/auth/web/attempts")
++        .send({ purpose, provider: purpose === "signin" ? "apple" : "google" });
++      if (sessionToken)
++        beginRequest.set("Cookie", `erg_session=${sessionToken}`);
++      const begin = await beginRequest;
++      expect(begin.status).toBe(200);
++      const b = begin.body;
++      const binding = begin.headers["set-cookie"][0].split(";")[0];
++      const token = await jwt(b.nonce, "web.app");
++      codes.set("winner", token);
++      const valid = { state: b.state, code: "winner", id_token: token };
++      const loserBody =
++        loserKind === "cancel"
++          ? { state: b.state, error: "access_denied" }
++          : loserKind === "provider-error"
++            ? { state: b.state, error: "provider_failed" }
++            : loserKind === "malformed"
++              ? { ...valid, code: "" }
++              : valid;
++      const firstRead = signal();
++      const bothRead = signal();
++      const releaseLoser = signal();
++      const read = attempts.read.bind(attempts);
++      let reads = 0;
++      const heldRead = vi
++        .spyOn(attempts, "read")
++        .mockImplementation(async (...args) => {
++          const snapshot = await read(...args);
++          reads++;
++          if (reads === 1) {
++            firstRead.resolve();
++            await bothRead.promise;
++          } else if (reads === 2) {
++            bothRead.resolve();
++            await releaseLoser.promise;
++          }
++          return snapshot;
++        });
++      const post = (body: typeof loserBody) =>
++        request(app)
++          .post("/api/auth/apple/callback")
++          .set("Origin", "https://appleid.apple.com")
++          .set("Cookie", binding)
++          .type("form")
++          .send(body)
++          .then((response) => response);
++      const winner = post(valid);
++      await firstRead.promise;
++      const loser = post(loserBody);
++      const won = await winner;
++      const snapshot = (
++        await pool.query(
++          "SELECT stage,version,apple_refresh_token IS NOT NULL AS grant FROM auth_attempts",
++        )
++      ).rows;
++      releaseLoser.resolve();
++      const lost = await loser;
++      heldRead.mockRestore();
++      expect(won.headers.location).toBe(`/?authAttempt=${b.attemptId}`);
++      expect(snapshot).toStrictEqual([
++        {
++          stage: purpose === "signin" ? "confirm" : "target_authorize",
++          version: 3,
++          grant: true,
++        },
++      ]);
++      expect(
++        (
++          await pool.query(
++            "SELECT stage,version,apple_refresh_token IS NOT NULL AS grant FROM auth_attempts",
++          )
++        ).rows,
++      ).toStrictEqual(snapshot);
++      expect(lost.headers["set-cookie"]).toBeUndefined();
++      expect(lost.headers.location).toContain("authError=");
++      const resume = await request(app)
++        .get(`/api/auth/web/attempts/${b.attemptId}`)
++        .set("Cookie", binding);
++      expect(resume.status).toBe(200);
++      if (purpose === "signin") {
++        const confirmed = await request(app)
++          .post(`/api/auth/web/attempts/${b.attemptId}/confirm`)
++          .set("Cookie", binding)
++          .set("Origin", "https://erg.test")
++          .send({});
++        sessionToken = (confirmed.headers["set-cookie"] as unknown as string[])
++          .find((value) => value.startsWith("erg_session="))!
++          .split(";")[0]
++          .split("=")[1];
++      } else {
++        codes.set(
++          "target",
++          await googleJwt(resume.body.nonce, "added-google", "google.web"),
++        );
++        await request(app)
++          .get("/api/auth/google/callback")
++          .set("Cookie", binding)
++          .query({ state: resume.body.state, code: "target" });
++        await request(app)
++          .post(`/api/auth/web/attempts/${b.attemptId}/finalize`)
++          .set("Cookie", binding)
++          .set("Origin", "https://erg.test")
++          .auth(sessionToken, { type: "bearer" })
++          .send({});
++      }
++      const methods = await request(app)
++        .get("/api/auth/methods")
++        .auth(sessionToken, { type: "bearer" });
++      expect(methods.status).toBe(200);
++      expect(methods.body).toStrictEqual({
++        apple: true,
++        google: purpose === "link",
++      });
++      expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(
++        0,
++      );
++    },
++  );
++  it.each(["cancel", "provider-error", "malformed", "exchange"])(
++    "owned callback %s erases only its failed operation and cookie",
++    async (kind) => {
++      const begin = await request(app)
++        .post("/api/auth/web/attempts")
++        .send({ purpose: "signin", provider: "apple" });
++      const b = begin.body;
++      const binding = begin.headers["set-cookie"][0].split(";")[0];
++      const body =
++        kind === "cancel"
++          ? { state: b.state, error: "access_denied" }
++          : kind === "provider-error"
++            ? { state: b.state, error: "provider_failed" }
++            : {
++                state: b.state,
++                code: kind === "malformed" ? "" : "code",
++                id_token: "invalid",
++              };
++      const failed = await request(app)
++        .post("/api/auth/apple/callback")
++        .set("Cookie", binding)
++        .type("form")
++        .send(body);
++      expect(failed.status).toBe(303);
++      expect(failed.headers["set-cookie"][0]).toContain("Max-Age=0");
++      expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(
++        0,
++      );
++      expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(0);
++    },
++  );
 +  it("wrong callback provider cannot consume valid operation; old callback cannot cancel confirmation", async () => {
 +    const begin = await request(app)
 +      .post("/api/auth/web/attempts")
@@ -4150,10 +4469,10 @@ index 00000000..2badf006
 +});
 diff --git a/app/server/auth/frontDoorRoutes.ts b/app/server/auth/frontDoorRoutes.ts
 new file mode 100644
-index 00000000..80965f7f
+index 00000000..1df5a349
 --- /dev/null
 +++ b/app/server/auth/frontDoorRoutes.ts
-@@ -0,0 +1,374 @@
+@@ -0,0 +1,377 @@
 +import { Router, type Request, type Response } from "express";
 +import { stringifySetCookie } from "cookie";
 +import { rateLimit } from "express-rate-limit";
@@ -4409,13 +4728,11 @@ index 00000000..80965f7f
 +    }
 +  });
 +  router.post("/api/auth/native/attempts/:id/proof", async (req, res) => {
-+    let claimedOperation = false;
-+    let owned: Attempt | undefined;
-+    let secret: string | undefined;
++    let claimed: Attempt | undefined;
 +    try {
 +      const body = record(req.body);
-+      secret = requestBinding(req, "native");
-+      owned = await attempts.read(id(req), secret, "native");
++      const secret = requestBinding(req, "native");
++      const owned = await attempts.read(id(req), secret, "native");
 +      const state = requiredText(body.state, 128);
 +      if (state !== owned.state) throw new AuthFailure("invalid_proof");
 +      const proof: ProviderProof = {
@@ -4430,15 +4747,13 @@ index 00000000..80965f7f
 +      };
 +      if (attemptProvider(owned) === "apple" && !proof.authorizationCode)
 +        throw new AuthFailure("invalid_request");
-+      const claimed = await attempts.claim(owned);
-+      claimedOperation = true;
++      claimed = await attempts.claim(owned);
 +      const identity = await providers.verify(context(claimed), proof);
 +      res.json(
 +        await result(res, await attempts.accept(claimed, identity), "native"),
 +      );
 +    } catch (error) {
-+      if (claimedOperation && owned && secret)
-+        await attempts.cancel(owned.id, secret, "native");
++      if (claimed) await discard(claimed);
 +      failure(res, error);
 +    }
 +  });
@@ -4449,6 +4764,14 @@ index 00000000..80965f7f
 +      failure(res, error);
 +    }
 +  });
++  // A cleanup failure must not clear the browser's still-live binding cookie.
++  async function discard(a: Attempt): Promise<boolean> {
++    try {
++      return await attempts.discard(a);
++    } catch {
++      return false;
++    }
++  }
 +  async function callback(req: Request, res: Response, provider: AuthProvider) {
 +    let owned: Attempt | undefined;
 +    let binding: { id: string; bindingSecret: string } | undefined;
@@ -4472,7 +4795,7 @@ index 00000000..80965f7f
 +          body.error !== "access_denied"
 +        )
 +          throw new AuthFailure("invalid_proof");
-+        await attempts.cancel(a.id, binding.bindingSecret, "web");
++        if (!(await discard(a))) throw new AuthFailure("attempt_expired");
 +        res.append("Set-Cookie", cookie("", 0));
 +        res.redirect(
 +          303,
@@ -4497,6 +4820,7 @@ index 00000000..80965f7f
 +        }
 +      }
 +      const claimed = await attempts.claim(a);
++      owned = claimed;
 +      const verified = await providers.verify(context(claimed), proof);
 +      const r = await attempts.accept(claimed, verified);
 +      if (r.signedIn) {
@@ -4508,10 +4832,8 @@ index 00000000..80965f7f
 +        res.redirect(303, `/?authAttempt=${a.id}`);
 +      }
 +    } catch (error) {
-+      if (owned && binding) {
-+        await attempts.cancel(owned.id, binding.bindingSecret, "web");
++      if (owned && (await discard(owned)))
 +        res.append("Set-Cookie", cookie("", 0));
-+      }
 +      const code = error instanceof AuthFailure ? error.code : "signin_failed";
 +      res.redirect(
 +        303,
