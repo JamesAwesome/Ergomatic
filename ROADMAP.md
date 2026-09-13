@@ -667,21 +667,23 @@ line naming it was struck by ruling 19), never corrected.
       because `test_history.session_log_id` is `ON DELETE SET NULL` on
       purpose; its caption says so), and the hover/tooltip layer — plus
       James's two notes of 2026-09-12, asked after build 977 was on his
-      phone, both OPEN design items behind a Gate 0 addendum (spec §5.1,
-      rulings 20-21 pending): (a) "experiment with how to indicate that
-      the row is clickable" — the hero is the door and signals nothing
-      tappable; the addendum renders two or three affordances (a chevron
-      aligned with the door rows, a card edge, a `STATS ›` label) for him
-      to pick on sight; (b) "the date range for a season visible when you
-      click on it — for consistency maybe all date ranges" — one mono-caps
-      range line under the filter bar in one of two shapes on the boards,
-      A `1 MAY 2026 TO 12 SEP 2026` (the days the filter selects —
-      `presetRange` sets `to = today`) or B `SEASON 2027 · 1 MAY 2026 TO
-      30 APR 2027 · TO DATE`; `14 AUG TO 12 SEP 2026` for 30 DAYS; ALL from
-      the first row's date; CUSTOM from the inputs), the one prose line
-      rulings 18-19 allow back, and whether every preset shows it is his
-      call on sight. Neither is implemented before the addendum is
-      approved.** Gates: the Gate 0 addendum for the two notes; antagonist
+      phone and RULED the same day on the addendum boards (spec §5.1, §14
+      rulings 20-21): (a) "experiment with how to indicate that the row is
+      clickable" — RULING 20: B1, a trailing `›` chevron aligned with the
+      door rows' chevrons in their own `--ink-3` mono style (6.69:1), the
+      hero still 140 px, plus the proposed faint `--surface-sunken`
+      pressed fill on `:active` (1.06:1 against the page — touch feedback,
+      not a mark; every text and mark on it clears its floor); the
+      accessible name stays exactly `Stats` by explicit `aria-label`;
+      (b) "the date range for a season visible when you click on it — for
+      consistency maybe all date ranges" — RULING 21: variant A on EVERY
+      preset, one mono-caps line under the filter bar naming the days the
+      totals cover: `ALL TIME · SINCE 8 NOV 2025` (first row's date),
+      `1 MAY TO 12 SEP 2026`, `1 JAN TO 12 SEP 2026`, `1 TO 12 SEP 2026`,
+      `14 AUG TO 12 SEP 2026`, CUSTOM the inputs' values in the same
+      shape — the one prose line rulings 18-19 allow back, hidden with the
+      filter bar at zero rows.** Gates: the Gate 0 addendum (RULED,
+      both notes); antagonist
       DELTA pass on the streak/avg-per-day/metres-per-week definitions
       only (watts and time by type ship in PR 1; the notes are copy and
       layout) — **RUN 2026-09-12: six mechanism breaks, folded into the
