@@ -11,10 +11,17 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-async function renderScreen(rows: readonly unknown[]) {
+// The screen makes TWO fetches per mount (rows, then test history); the
+// mock answers each by path.
+async function renderScreen(
+  rows: readonly unknown[],
+  tests: readonly unknown[] = [],
+) {
   vi.doMock("../../api", () => ({
-    api: vi.fn(
-      async () => new Response(JSON.stringify({ rows }), { status: 200 }),
+    api: vi.fn(async (path: string) =>
+      path === "/api/test-history"
+        ? new Response(JSON.stringify(tests), { status: 200 })
+        : new Response(JSON.stringify({ rows }), { status: 200 }),
     ),
   }));
   const { default: StatsScreen } = await import("./StatsScreen");
@@ -65,6 +72,8 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
     const from = screen.getByLabelText("FROM") as HTMLInputElement;
     const to = screen.getByLabelText("TO") as HTMLInputElement;
     expect([from.value, to.value]).toStrictEqual(["2026-08-14", "2026-09-12"]);
+    // A picker hint only (the domain clamps a future TO itself).
+    expect([from.max, to.max]).toStrictEqual(["2026-09-12", "2026-09-12"]);
     expect(rowValue("METRES", 1)).toBe("18,000");
     fireEvent.change(from, { target: { value: "2026-09-01" } });
     expect(rowValue("METRES", 1)).toBe("5,000");
@@ -238,7 +247,9 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
   it("a failed fetch renders the alert with Try again, and the retry fetches again", async () => {
     let calls = 0;
     vi.doMock("../../api", () => ({
-      api: vi.fn(async () => {
+      api: vi.fn(async (path: string) => {
+        if (path === "/api/test-history")
+          return new Response("[]", { status: 200 });
         calls += 1;
         return new Response("nope", { status: 500 });
       }),
@@ -288,5 +299,36 @@ describe("/you/stats — the Gate 0 seed, today = 2026-09-12 (spec §5, §8.5)",
     fireEvent.keyDown(chip("SEASON"), { key: "ArrowUp" });
     expect(chip("ALL")).toHaveAttribute("aria-checked", "true");
     expect(chip("ALL")).toHaveFocus();
+  });
+});
+
+// Phase PS PR 2 — the range line (§14 ruling 21), the page's order (§5) and
+// the two unfiltered groups (invariant 19).
+describe("/you/stats — PR 2: the range line, the groups in order, SEASON and TEST TREND unfiltered", () => {
+  const rangeLine = () => document.querySelector(".stats-range")?.textContent;
+
+  it("the range line reads the days each preset covers: ALL TIME · SINCE 8 NOV 2025, 1 MAY TO 12 SEP 2026, 1 JAN TO 12 SEP 2026, 1 TO 12 SEP 2026, 14 AUG TO 12 SEP 2026, and CUSTOM the inputs' values", async () => {
+    await renderScreen(GATE0_ROWS);
+    expect(rangeLine()).toBe("ALL TIME · SINCE 8 NOV 2025");
+    fireEvent.click(chip("SEASON"));
+    expect(rangeLine()).toBe("1 MAY TO 12 SEP 2026");
+    fireEvent.click(chip("YEAR"));
+    expect(rangeLine()).toBe("1 JAN TO 12 SEP 2026");
+    fireEvent.click(chip("MONTH"));
+    expect(rangeLine()).toBe("1 TO 12 SEP 2026");
+    fireEvent.click(chip("30 DAYS"));
+    expect(rangeLine()).toBe("14 AUG TO 12 SEP 2026");
+    fireEvent.click(chip("CUSTOM"));
+    expect(rangeLine()).toBe("14 AUG TO 12 SEP 2026");
+    fireEvent.change(screen.getByLabelText("FROM"), {
+      target: { value: "2025-11-08" },
+    });
+    expect(rangeLine()).toBe("8 NOV 2025 TO 12 SEP 2026");
+    // FROM > TO: the line names the range still APPLIED, like the totals.
+    fireEvent.change(screen.getByLabelText("FROM"), {
+      target: { value: "2026-09-13" },
+    });
+    expect(rangeLine()).toBe("8 NOV 2025 TO 12 SEP 2026");
+    expect(rowValue("METRES", 1)).toBe("56,752");
   });
 });

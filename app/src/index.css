@@ -11934,8 +11934,8 @@ section:not(.news-pinned) .news-row:last-of-type {
    (hero-heights.json). */
 .you-stats-hero {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
   margin-top: 12px;
   padding: 12px 2px;
   min-height: var(--tap);
@@ -11948,6 +11948,30 @@ section:not(.news-pinned) .news-row:last-of-type {
 .you-stats-hero:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
+}
+/* Phase PS PR 2 (§14 ruling 20, B1): the figures, bar and legend as one
+   column beside the doors' chevron (`.diag-row`: mono 12/0.08em --ink-3 on
+   --page, 6.69:1); the hero stays 140 px. Pressed, the whole control takes
+   --surface-sunken — 1.06:1 against --page, a touch cue and not a mark;
+   every text and segment on it clears its floor (--ink 14.5, --ink-3 6.3,
+   --ink-4 4.48; contrast.json). The house had no :active rule before this
+   one; it is the accepted proposal, not a transcription. */
+.you-stats-hero:active {
+  background: var(--surface-sunken);
+}
+.you-stats-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.you-stats-chevron {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
 }
 .you-stats-figures {
   display: flex;
@@ -12187,4 +12211,12 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 .stats-swatch-none {
   background: var(--ink-4);
+}
+
+/* Phase PS PR 2 — the range line (§14 ruling 21) and the three charts
+   (spec §5 items 3/5/6; build.mjs barsSvg / seasonSvg / trendSvg). Marks:
+   --ink 17.11:1 and --ink-4 5.29:1 on --surface (ruling 12), --type-o2
+   6.65:1; gridlines --rule-2 1.40:1 are decorative (contrast.json). */
+.stats-range {
+  margin-top: 8px;
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  earliestDate,
   rowsInRange,
   summarize,
   timeByType,
@@ -15,7 +16,7 @@ import {
 import type { DatedStatsRow } from "../../../domain/stats/statsRow.js";
 import { useStatsRows } from "../../api/useStatsRows";
 import BackLink from "../../shell/BackLink";
-import { fmtDate, parseDate } from "./format";
+import { fmtDate, fmtRangeLine, parseDate } from "./format";
 import StatsFilterBar, { type CustomProblem } from "./StatsFilterBar";
 import TimeByTypeGroup from "./TimeByTypeGroup";
 import TotalsGroup from "./TotalsGroup";
@@ -121,6 +122,10 @@ function Body({
       : presetRange(preset, today);
   const inRange = rowsInRange(rows, range);
   const summary = summarize(rows, range);
+  // §14 ruling 21: the ONE prose line — the days the totals cover. While a
+  // CUSTOM pair is unusable it names the range still applied, like the
+  // totals under it.
+  const rangeLine = fmtRangeLine(range, earliestDate(rows));
   return (
     <>
       <StatsFilterBar
@@ -129,7 +134,11 @@ function Body({
         custom={custom}
         onCustom={onCustom}
         customProblem={customProblem}
+        maxDate={fmtDate(today)}
       />
+      {rangeLine !== null && (
+        <p className="stats-caption stats-range">{rangeLine}</p>
+      )}
       {inRange.length === 0 ? (
         <p className="stats-caption">
           NO ROWS BETWEEN {range.from ? fmtDate(range.from) : "THE START"} AND{" "}
