@@ -1095,6 +1095,36 @@ describe("front-door transactions against Postgres", () => {
     ]);
     expect(result.appleRevoked).toBe(true);
   });
+  it("revokes a held grant even when the account's apple_sub is null", async () => {
+    // NO SUPPORTED WRITER PRODUCES THIS STATE TODAY: there is one grant
+    // writer, and `unlink` deletes every grant in the same statement that
+    // nulls `apple_sub`. It is seeded by raw SQL on purpose, because the
+    // thing under test is what happens WHEN THAT STOPS HOLDING — reading
+    // `apple_sub` first and skipping the DELETE would let the grant cascade
+    // away unrevoked while `revokeApple([])` answered `true`, and the rower
+    // would be told `appleRevoked` over a live credential at Apple. The
+    // schema permits the state (nullable column, no dependency between the
+    // two tables), so the guarantee is "whatever apple_sub says, a grant we
+    // hold is revoked".
+    const { revoke, seen } = recordingRevoke();
+    const deleting = makeAttempts(revoke);
+    const user = await seedUser({ googleSub: "g-orphan", appleSub: null });
+    await pool.query(
+      "INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'c-orphan','rt-orphan')",
+      [user.id],
+    );
+    const { ready, session } = await deleteReadyAttempt(
+      { id: user.id, provider: "google", sub: "g-orphan" },
+      undefined,
+      undefined,
+      deleting,
+    );
+    expect(await deleting.deleteAccount(ready, session.id)).toStrictEqual({
+      outcome: "deleted",
+      appleRevoked: true,
+    });
+    expect(seen.map((g) => g.refreshToken)).toStrictEqual(["rt-orphan"]);
+  });
   it("revokes the grant as it stands at DELETE time, not as it was read", async () => {
     // A concurrent grant() upsert refreshes the token while this transaction
     // is OPEN. `ON CONFLICT DO UPDATE` leaves the FK column unchanged, so
