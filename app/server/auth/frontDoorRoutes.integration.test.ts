@@ -17,6 +17,7 @@ import { createDb } from "../db/index.js";
 import { startPostgres } from "../testing/postgres.js";
 import { createApp } from "../app.js";
 import { baseDeps } from "../testDeps.js";
+import { recordingRevoke } from "../testing/fakes.js";
 import { createSessionStore } from "./sessions.js";
 import { createAccessPolicy, type AccessPolicy } from "./accessPolicy.js";
 import { createUserStore } from "./users.js";
@@ -30,10 +31,13 @@ describe("supported auth producers through Express and signed tokens", () => {
   let app: ReturnType<typeof createApp>;
   let freshApp: (
     policy?: AccessPolicy,
+    providers?: ReturnType<typeof createProviders>,
   ) => Promise<ReturnType<typeof createApp>>;
   let rsa: Awaited<ReturnType<typeof generateKeyPair>>;
   let attempts: ReturnType<typeof createAttempts>;
   let providers: ReturnType<typeof createProviders>;
+  let providerConfig: Parameters<typeof createProviders>[0];
+  let providerDeps: Parameters<typeof createProviders>[1];
   const codes = new Map<string, string>();
   function signal() {
     let resolve!: () => void;
@@ -57,50 +61,49 @@ describe("supported auth producers through Express and signed tokens", () => {
         { ...(await exportJWK(rsa.publicKey)), kid: "test", alg: "RS256" },
       ],
     });
-    providers = createProviders(
-      {
-        siteUrl: "https://erg.test",
-        apple: {
-          nativeClientId: "native.app",
-          webClientId: "web.app",
-          teamId: "TEAM",
-          keyId: "KEY",
-          key: ec.privateKey,
-        },
-        google: {
-          nativeClientId: "google.native",
-          webClientId: "google.web",
-          clientSecret: "secret",
-        },
+    providerConfig = {
+      siteUrl: "https://erg.test",
+      apple: {
+        nativeClientId: "native.app",
+        webClientId: "web.app",
+        teamId: "TEAM",
+        keyId: "KEY",
+        key: ec.privateKey,
       },
-      {
-        appleKeys: keys,
-        googleKeys: keys,
-        fetch: async (_url, init) => {
-          const code = new URLSearchParams(String(init?.body)).get("code")!;
-          const tx = await pool.connect();
-          try {
-            await tx.query("BEGIN");
-            await tx.query("SELECT id FROM auth_attempts FOR UPDATE NOWAIT");
-            await tx.query("ROLLBACK");
-            exchangeOutsideLock = true;
-          } finally {
-            tx.release();
-          }
-          return Response.json({
-            id_token: codes.get(code),
-            refresh_token: "private-refresh",
-          });
-        },
+      google: {
+        nativeClientId: "google.native",
+        webClientId: "google.web",
+        clientSecret: "secret",
       },
-    );
-    freshApp = async (policy = accessPolicy) => {
+    };
+    providerDeps = {
+      appleKeys: keys,
+      googleKeys: keys,
+      fetch: async (_url, init) => {
+        const code = new URLSearchParams(String(init?.body)).get("code")!;
+        const tx = await pool.connect();
+        try {
+          await tx.query("BEGIN");
+          await tx.query("SELECT id FROM auth_attempts FOR UPDATE NOWAIT");
+          await tx.query("ROLLBACK");
+          exchangeOutsideLock = true;
+        } finally {
+          tx.release();
+        }
+        return Response.json({
+          id_token: codes.get(code),
+          refresh_token: "private-refresh",
+        });
+      },
+    };
+    providers = createProviders(providerConfig, providerDeps);
+    freshApp = async (policy = accessPolicy, p = providers) => {
       const sessions = createSessionStore(c.db, policy);
-      attempts = createAttempts(pool, policy);
+      attempts = createAttempts(pool, policy, recordingRevoke().revoke);
       await attempts.sweep();
       const routes = createFrontDoorRoutes({
         attempts,
-        providers,
+        providers: p,
         sessions,
         siteUrl: "https://erg.test",
       });
@@ -109,7 +112,7 @@ describe("supported auth producers through Express and signed tokens", () => {
           siteUrl: "https://erg.test",
           sessions,
           users,
-          frontDoor: { ...routes, attempts, providers, close: () => {} },
+          frontDoor: { ...routes, attempts, providers: p, close: () => {} },
           oauth: {
             authorizationUrl: async () => ({
               url: "https://accounts.google.com/authorize",
@@ -955,7 +958,8 @@ describe("supported auth producers through Express and signed tokens", () => {
   it("a rejected LINK callback reports its own purpose and target, not signin", async () => {
     // The redirect's authPurpose is what routes the rower to a surface that can
     // show the failure. A signed-in rower never renders a signin-purpose error
-    // (`SignInMethods` returns null unless purpose === "link"), so reporting a
+    // (`SignInMethods` returns null unless the purpose is "link" or, since
+    // Wave A PR 1 Task 4, "delete"), so reporting a
     // link failure as signin bounces them silently to Today and makes the whole
     // recovery path — the notice, the methods refetch, "Start linking again" —
     // unreachable.
@@ -999,6 +1003,56 @@ describe("supported auth producers through Express and signed tokens", () => {
     expect(rejected.headers.location).toContain("authPurpose=link");
     expect(rejected.headers.location).toContain("authProvider=apple");
   });
+  it("a rejected DELETE callback reports its own purpose and target", async () => {
+    // RF24: the PRODUCER of `authPurpose=delete`. Everything that asserts the
+    // client's delete-failure surface types that query string by hand
+    // (`e2e/appleAuth.spec.ts`, `authFlow.test.tsx`), and server-side only
+    // the link purpose was asserted — so the one line that has to emit
+    // `delete` for any of it to be reachable had no test starting upstream
+    // of it. Break the redirect here and every downstream gate stays green
+    // while a rower who failed a delete re-auth is bounced to Today in
+    // silence, which is finding I1's defect arriving from the other end.
+    const start = await request(app)
+      .post("/api/auth/web/attempts")
+      .set("Origin", "https://erg.test")
+      .send({ purpose: "signin", provider: "google" });
+    const s = start.body;
+    const startCookie = start.headers["set-cookie"][0].split(";")[0];
+    codes.set(
+      "google-delete-purpose",
+      await googleJwt(s.nonce, "google-delete-purpose", "google.web"),
+    );
+    await request(app)
+      .get("/api/auth/google/callback")
+      .query({ state: s.state, code: "google-delete-purpose" })
+      .set("Cookie", startCookie);
+    const signed = await request(app)
+      .post(`/api/auth/web/attempts/${s.attemptId}/confirm`)
+      .set("Origin", "https://erg.test")
+      .set("Cookie", startCookie)
+      .send({});
+    const sessionCookie = (signed.headers["set-cookie"] as unknown as string[])
+      .find((c) => c.startsWith("erg_session="))!
+      .split(";")[0];
+    // A delete re-proves the SAME provider the rower already holds.
+    const begun = await request(app)
+      .post("/api/auth/web/attempts")
+      .set("Origin", "https://erg.test")
+      .set("Cookie", sessionCookie)
+      .send({ purpose: "delete", provider: "google" });
+    expect(begun.status).toBe(200);
+    const binding = begun.headers["set-cookie"][0].split(";")[0];
+
+    const rejected = await request(app)
+      .get("/api/auth/google/callback")
+      .set("Cookie", binding)
+      .query({ state: "not-the-state", code: "google-delete-purpose" });
+    expect(rejected.headers.location).toContain("authError=invalid_proof");
+    expect(rejected.headers.location).toContain("authPurpose=delete");
+    expect(rejected.headers.location).toContain("authProvider=google");
+    // And nothing was deleted: a rejected re-auth is not a deletion.
+    expect((await pool.query("SELECT id FROM users")).rowCount).toBe(1);
+  });
   it("wrong callback provider cannot consume valid operation; old callback cannot cancel confirmation", async () => {
     const begin = await request(app)
       .post("/api/auth/web/attempts")
@@ -1029,5 +1083,185 @@ describe("supported auth producers through Express and signed tokens", () => {
     expect(
       (await pool.query("SELECT stage FROM auth_attempts")).rows,
     ).toStrictEqual([{ stage: "confirm" }]);
+  });
+
+  // --- Wave A PR 1 Task 3: deletion through the mounted routes ------------
+  /** A signed-in Google rower on the native surface. */
+  async function nativeGoogleRower() {
+    const start = (
+      await request(app)
+        .post("/api/auth/native/attempts")
+        .send({ purpose: "signin", provider: "google" })
+    ).body;
+    await request(app)
+      .post(`/api/auth/native/attempts/${start.attemptId}/proof`)
+      .send({
+        bindingSecret: start.bindingSecret,
+        state: start.state,
+        idToken: await googleJwt(start.nonce),
+      });
+    return (
+      await request(app)
+        .post(`/api/auth/native/attempts/${start.attemptId}/confirm`)
+        .send({ bindingSecret: start.bindingSecret })
+    ).body as { token: string; user: { id: string } };
+  }
+  it("hands the rower a delete_ready step after a successful delete reauth, then deletes over HTTP", async () => {
+    // The seam test, at the route rather than at attempts.accept(): view()
+    // used to fall through delete_ready to its attempt_expired throw, so a
+    // reauth that SUCCEEDED was reported to the rower as expired and the
+    // catch's discard could not even clean up (the snapshot had moved).
+    const signed = await nativeGoogleRower();
+    const begin = await request(app)
+      .post("/api/auth/native/attempts")
+      .auth(signed.token, { type: "bearer" })
+      .send({ purpose: "delete", provider: "google" });
+    expect(begin.status).toBe(200);
+    expect(begin.body.outcome).toBe("authorize");
+    expect(begin.body.stage).toBe("reauth");
+    expect(begin.body.provider).toBe("google");
+    const b = begin.body;
+    const ready = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/proof`)
+      .send({
+        bindingSecret: b.bindingSecret,
+        state: b.state,
+        idToken: await googleJwt(b.nonce),
+      });
+    expect(ready.status).toBe(200);
+    expect(ready.body.outcome).toBe("delete_ready");
+    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(1);
+    const deleted = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/delete`)
+      .auth(signed.token, { type: "bearer" })
+      .send({ bindingSecret: b.bindingSecret });
+    expect(deleted.status).toBe(200);
+    expect(deleted.body).toStrictEqual({
+      outcome: "deleted",
+      appleRevoked: true,
+    });
+    expect((await pool.query("SELECT id FROM users")).rowCount).toBe(0);
+    expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(0);
+    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
+    // The credential the rower still holds now resolves to nothing.
+    expect(
+      (await request(app).get("/api/me").auth(signed.token, { type: "bearer" }))
+        .status,
+    ).toBe(401);
+  });
+  it("refuses to start a delete with no credential at all", async () => {
+    const response = await request(app)
+      .post("/api/auth/native/attempts")
+      .send({ purpose: "delete", provider: "google" });
+    expect(response.status).toBe(401);
+    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
+  });
+  it("refuses a native delete proved by a cookie rather than a bearer", async () => {
+    // The credential-class binding. A delete is more destructive than a link
+    // and gets the same check the link start has.
+    const signed = await nativeGoogleRower();
+    const response = await request(app)
+      .post("/api/auth/native/attempts")
+      .set("Cookie", `erg_session=${signed.token}`)
+      .send({ purpose: "delete", provider: "google" });
+    expect(response.status).toBe(409);
+    expect(response.body).toStrictEqual({ error: "account_changed" });
+    expect((await pool.query("SELECT id FROM auth_attempts")).rowCount).toBe(0);
+  });
+  it("starts a delete when the OPPOSITE provider is unconfigured, where a link cannot", async () => {
+    // The availability clause. A link needs both providers; a delete
+    // re-proves only the one the rower already holds, so an Apple-less build
+    // must still be able to delete a Google account.
+    app = await freshApp(
+      undefined,
+      createProviders(
+        {
+          ...providerConfig,
+          apple: { ...providerConfig.apple, nativeClientId: "" },
+        },
+        providerDeps,
+      ),
+    );
+    const signed = await nativeGoogleRower();
+    const linking = await request(app)
+      .post("/api/auth/native/attempts")
+      .auth(signed.token, { type: "bearer" })
+      .send({ purpose: "link", provider: "apple" });
+    expect(linking.status).toBe(503);
+    const removal = await request(app)
+      .post("/api/auth/native/attempts")
+      .auth(signed.token, { type: "bearer" })
+      .send({ purpose: "delete", provider: "google" });
+    expect(removal.status).toBe(200);
+    expect(removal.body.outcome).toBe("authorize");
+  });
+  it("deletes a web account and clears both the binding and the session cookie", async () => {
+    // The web half of view()'s delete_ready gap: the callback redirects to
+    // /?authAttempt=<id> and the client GETs the attempt, which threw
+    // attempt_expired before this task.
+    const start = await request(app)
+      .post("/api/auth/web/attempts")
+      .set("Origin", "https://erg.test")
+      .send({ purpose: "signin", provider: "google" });
+    const s = start.body;
+    const startCookie = start.headers["set-cookie"][0].split(";")[0];
+    codes.set(
+      "web-signup",
+      await googleJwt(s.nonce, "web-rower", "google.web"),
+    );
+    await request(app)
+      .get("/api/auth/google/callback")
+      .query({ state: s.state, code: "web-signup" })
+      .set("Cookie", startCookie);
+    const signed = await request(app)
+      .post(`/api/auth/web/attempts/${s.attemptId}/confirm`)
+      .set("Origin", "https://erg.test")
+      .set("Cookie", startCookie)
+      .send({});
+    const session = (signed.headers["set-cookie"] as unknown as string[])
+      .find((c) => c.startsWith("erg_session="))!
+      .split(";")[0];
+    const begin = await request(app)
+      .post("/api/auth/web/attempts")
+      .set("Origin", "https://erg.test")
+      .set("Cookie", session)
+      .send({ purpose: "delete", provider: "google" });
+    expect(begin.status).toBe(200);
+    const binding = begin.headers["set-cookie"][0].split(";")[0];
+    codes.set(
+      "web-delete",
+      await googleJwt(begin.body.nonce, "web-rower", "google.web"),
+    );
+    const callback = await request(app)
+      .get("/api/auth/google/callback")
+      .set("Cookie", binding)
+      .query({ state: begin.body.state, code: "web-delete" });
+    expect(callback.headers.location).toBe(
+      `/?authAttempt=${begin.body.attemptId}`,
+    );
+    const viewed = await request(app)
+      .get(`/api/auth/web/attempts/${begin.body.attemptId}`)
+      .set("Cookie", binding);
+    expect(viewed.status).toBe(200);
+    expect(viewed.body.outcome).toBe("delete_ready");
+    const deleted = await request(app)
+      .post(`/api/auth/web/attempts/${begin.body.attemptId}/delete`)
+      .set("Origin", "https://erg.test")
+      .set("Cookie", [session, binding].join("; "))
+      .send({});
+    expect(deleted.status).toBe(200);
+    expect(deleted.body).toStrictEqual({
+      outcome: "deleted",
+      appleRevoked: true,
+    });
+    const cleared = deleted.headers["set-cookie"] as unknown as string[];
+    expect(cleared.find((c) => c.startsWith("erg_auth_attempt="))).toContain(
+      "Max-Age=0",
+    );
+    expect(cleared.find((c) => c.startsWith("erg_session="))).toContain(
+      "Max-Age=0",
+    );
+    expect((await pool.query("SELECT id FROM users")).rowCount).toBe(0);
+    expect((await pool.query("SELECT id FROM sessions")).rowCount).toBe(0);
   });
 });

@@ -1,10 +1,20 @@
 # Account management — delete, unlink, and following through to a link
 
-> **Revision 2, 2026-09-13.** Revision 1 was hardened and came back NOT READY
-> with five blocking findings, three of them inside its own load-bearing
-> citations. This revision is a rewrite of the research, the confirmation
-> mechanism and the tombstone, not a patch. What changed and why is recorded at
-> the foot, because a spec that quietly absorbs a correction teaches nobody.
+> **Revision 3, 2026-09-14.** James withdrew the `apple_revocations` outbox on
+> 2026-09-13, mid-implementation, and replaced it with three rulings recorded
+> in the plan (`docs/superpowers/plans/2026-09-13-account-management-pr1.md`,
+> "Rulings that supersede the spec"). This revision folds those rulings in and
+> strikes every section the outbox left behind, so the record matches what
+> shipped rather than what PR1 opened with. Nothing else changed; revision 2's
+> corrections of revision 1, at the foot, still stand — item 2 there now also
+> notes revision 3's own correction.
+>
+> **Revision 2, 2026-09-13.** Revision 1 was hardened
+> and came back NOT READY with five blocking findings, three of them inside
+> its own load-bearing citations. This revision is a rewrite of the research,
+> the confirmation mechanism and the tombstone, not a patch. What changed and
+> why is recorded at the foot, because a spec that quietly absorbs a
+> correction teaches nobody.
 
 ## What and why
 
@@ -124,8 +134,10 @@ account-deletion page, verbatim:
 
 That is the licence for deleting now and revoking after. It also carries an
 obligation revision 1 did not have: **if deletion takes time, say so and confirm
-when it completes.** Our local deletion is immediate, so what "takes time" is the
-revocation; the copy must not claim the revocation is done when it is queued.
+when it completes.** Our local deletion is immediate; the revocation runs
+synchronously right after, inside the same request, so there is nothing left
+to confirm later — but the copy must still not claim it succeeded when it
+did not. See "Revocation is synchronous and best effort" below.
 
 **And failing to revoke has a product consequence, not only a compliance one.**
 TN3194:
@@ -145,16 +157,20 @@ a *successful* revoke does to a re-registered account, and the revoke endpoint's
 own wording is inconsistent — its abstract is plural ("Invalidate the tokens and
 associated user authorizations") while its `token` field is singular ("The user
 session associated with the token provided is revoked"). **We design for
-per-token**, the narrower reading, which makes one tombstone per credential
-mandatory rather than tidy.
+per-token**, the narrower reading: `revokeApple()` calls Apple once per grant
+rather than once per rower, so a phone-and-web account's two credentials are
+each revoked or each fail independently.
 
-**The re-registration hazard is DECIDABLE, and revision 1 made it undecidable.**
-Apple documents that the subject "doesn't change if the user stops using Sign in
-with Apple with your app and later starts using it again." So
-`SELECT 1 FROM users WHERE apple_sub = $1` answers exactly whether that Apple ID
-has re-registered. Revision 1 stripped the subject from the tombstone to claim
-anonymity, which foreclosed the only deterministic guard and replaced it with a
-bounded window — a heuristic wearing a number. The subject is retained.
+**The re-registration hazard is DECIDABLE in principle, and PR1 does not decide
+it.** Apple documents that the subject "doesn't change if the user stops using
+Sign in with Apple with your app and later starts using it again." So
+`SELECT 1 FROM users WHERE apple_sub = $1` would answer exactly whether that
+Apple ID has re-registered before a queued revoke runs. **James withdrew the
+queue this guard existed for (2026-09-13)** — see "Revocation is synchronous and
+best effort" below — so nothing stores the subject and nothing runs the check.
+The window the guard would have closed is now the `AbortSignal.timeout(3000)`
+the synchronous call already carries, not the queue's unbounded wait; narrowed,
+not closed, and Open Question 1 records what remains unknown about it.
 
 ### What the codebase provides, and what it refuses — PRIMARY, this repo
 
@@ -165,8 +181,8 @@ bounded window — a heuristic wearing a number. The subject is retained.
   "re-prove the one provider you hold" is unrepresentable. `attempts.ts`'s
   `begin()` refuses it twice more: it hardcodes `existing` as the opposite
   provider, and throws `account_conflict` unless the target subject is absent.
-  **Deletion's confirmation therefore requires a migration**, and that is a
-  SECOND stored shape — see Decisions.
+  **Deletion's confirmation therefore requires a migration**, and that
+  migration is the one stored shape this design carries — see Decisions.
 - **A delete attempt and a link attempt are mutually destructive.**
   `auth_attempts_link_session_unique` admits one attempt per session, and
   `begin()` for a link unconditionally deletes any attempt on that session.
@@ -187,13 +203,16 @@ bounded window — a heuristic wearing a number. The subject is retained.
   sessions then users.
 - **Revoke is idempotent, and per-token.** Retrieved from Apple's revoke-tokens
   documentation 2026-09-13. The 200 response: _"The request was successful; the
-  provided token has been revoked successfully or was previously invalid."_ So
-  at-least-once delivery is safe and the outbox needs no dedupe. The `token`
-  field settles the scope question the abstract muddies: _"The user session
-  associated with the token provided is revoked if the request is successful."_
-  Per-token, which is why one outbox row per grant is required rather than tidy.
-  (The abstract's plural — _"Invalidate the tokens and associated user
-  authorizations"_ — is the looser of the two; we design to the narrower.)
+  provided token has been revoked successfully or was previously invalid."_ A
+  duplicate revoke is therefore harmless and needs no dedupe of its own — the
+  property that let deletion and unlink both call `revokeApple()` synchronously
+  with no coordination between them. The `token` field settles the scope
+  question the abstract muddies: _"The user session associated with the token
+  provided is revoked if the request is successful."_ Per-token, which is why
+  `revokeApple()` takes a grants array and calls Apple once per grant rather
+  than once per rower. (The abstract's plural — _"Invalidate the tokens and
+  associated user authorizations"_ — is the looser of the two; we design to the
+  narrower.)
 
 ## Decisions
 
@@ -202,25 +221,33 @@ bounded window — a heuristic wearing a number. The subject is retained.
 | Duplicate accounts | Deletion only; no merge, no transfer | James, 2026-09-13 |
 | Confirmation strength | Graduated: reauth to delete, plain confirm otherwise | James, 2026-09-13 |
 | Deletion vs revocation | Delete immediately; revoke after, best effort | James, supported by the "manual or takes time" quote |
-| Revocation retry | Bounded, and guarded by a subject check | James + hardening |
+| Revocation retry | None. Synchronous, best effort, one attempt per grant | James, 2026-09-13, withdrawing the earlier outbox ruling |
 | Multiple containers | Designed for from the start | James, 2026-09-13 |
 | PR split | PR1 deletion + unlink + conflict copy; PR2 follow-through | James, 2026-09-13 |
 
 ## Design
 
-### Two stored shapes, both TRIAD
+### One stored shape, TRIAD
 
-Revision 1 declared one. There are two, and both need the DBA and antagonist
-gates:
+Revision 1 declared one and revision 2 declared two, adding the
+`apple_revocations` outbox below. **James withdrew the outbox on 2026-09-13**
+(see "Revocation is synchronous and best effort" below); PR1 carries only the
+`auth_attempts` purpose, which is what the DBA gate covers:
 
-1. **`auth_attempts` gains a `delete` purpose.** `auth_attempts_purpose_check`
-   widens to `('signin','link','delete')`, and `auth_attempts_session_check`
-   gains a `delete` arm: `original_session_id IS NOT NULL` (it rides the live
-   session) and `existing_provider IS NOT NULL` with **no** `<> target_provider`
-   requirement, because a delete re-proves a provider the rower already holds.
-   `begin()` and `accept()` gain a `delete` branch that resolves the subject via
-   the provider being re-proved rather than the opposite one.
-2. **`apple_revocations`**, the outbox, below.
+**`auth_attempts` gains a `delete` purpose**, widening three CHECK constraints,
+not two:
+
+- `auth_attempts_purpose_check` widens to `('signin','link','delete')`.
+- `auth_attempts_stage_check` widens to admit `'delete_ready'`, the terminal
+  stage a delete attempt reaches after reauth and before `deleteAccount()`
+  consumes it (`Stage` union, `attempts.ts`).
+- `auth_attempts_session_check` gains a `delete` arm: `original_session_id IS
+  NOT NULL` (it rides the live session) and `existing_provider IS NOT NULL`
+  with **no** `<> target_provider` requirement, because a delete re-proves a
+  provider the rower already holds.
+
+`begin()` and `accept()` gain a `delete` branch that resolves the subject via
+the provider being re-proved rather than the opposite one.
 
 ### Unlink
 
@@ -243,7 +270,8 @@ rower whose account is gone. The guard stays in the `WHERE`; a second read names
 the cause.
 
 Unlinking Apple also deletes that provider's `apple_grants` rows — **both of
-them, if the rower used phone and web** — and enqueues revocation.
+them, if the rower used phone and web** — and revokes them with Apple
+synchronously, after the commit.
 
 ### Deletion
 
@@ -252,69 +280,69 @@ them, if the rower used phone and web** — and enqueues revocation.
    steps to verify the identity of the person making the request" — with the
    caveat that apps making deletion "unnecessarily difficult" fail review, so the
    reauth needs a stated escape route when a provider is unavailable.
-2. **One transaction**, in this lock order: **sessions before users.** Read the
-   Apple grants, insert one `apple_revocations` row per grant, then delete the
-   user. Twelve tables lose rows. The order is prescribed because the reverse
-   deadlocks against `original()` — measured, with the auth transaction as the
-   victim, which surfaces to a rower as a mysterious sign-in failure.
-3. **Sign out** to Welcome, with copy that does not claim revocation is complete.
-4. **Later**, the outbox revokes.
+2. **One transaction**, in this lock order: **sessions before users.** Read and
+   delete the Apple grants rows, then delete the user. Twelve tables lose rows.
+   The order is prescribed because the reverse deadlocks against `original()` —
+   measured, with the auth transaction as the victim, which surfaces to a rower
+   as a mysterious sign-in failure.
+3. **After the commit**, revoke each held grant with Apple — synchronously,
+   best effort, one attempt, no retry. See "Revocation is synchronous and best
+   effort" below for why this replaced a queue.
+4. **Sign out** to Welcome, with copy that names Apple's own remedy when a
+   revoke failed rather than claiming the revocation succeeded.
 
-**Deletion never awaits Apple**, licensed by "if your process for account
-deletion is manual or otherwise takes time to complete, this is acceptable."
+**Deletion never awaits Apple's revoke succeeding**, licensed by "if your
+process for account deletion is manual or otherwise takes time to complete,
+this is acceptable" — though "takes time" here means a bounded synchronous
+call, not a queue.
 
-### `apple_revocations` — a transactional outbox
+### Revocation is synchronous and best effort (James, 2026-09-13)
 
-One row **per grant**, not per account. Columns: the refresh token, the client
-id, **the Apple subject**, an attempt count, and a next-attempt time.
+Revision 2's `apple_revocations` outbox — a table, a migration, a sweep arm, a
+retry cap, a backoff ladder, `FOR UPDATE SKIP LOCKED`, and the re-registration
+subject guard — is **withdrawn**. Three rulings replace it.
 
-**The subject is retained deliberately.** It is what makes the re-registration
-hazard decidable rather than guessed: before each attempt, if a live account now
-holds that subject, the Apple ID has re-registered — drop the row and do not
-revoke. Revision 1 stripped it to claim anonymity; the claim was false anyway,
-because a live refresh token is exchangeable at Apple for an `id_token` "that
-contains the user's identity information". The row is pseudonymous either way, so
-the honest position is to keep the field that buys a deterministic guard and
-justify the retention.
+**1. There is no queue.** The outbox bought retry, and retry's only payload was
+the TN3194 consequence: a rower who deletes and later re-registers gets no name
+from Apple and is `"Rower"` forever. The paragraph above already records that
+defect as reachable another way, so the machinery was lowering the odds of
+hitting an already-accepted bug. Apple's duty here is **should**, not must; the
+research above establishes that and it is the licence.
 
-**The retention argument, which is the defensible one:** these rows exist solely
-to discharge Apple's own documented revocation instruction, for a bounded period,
-and are deleted on success or at the deadline. That is a narrower and truer claim
-than anonymity.
+**The re-registration guard goes because the queue WIDENED the hazard from
+seconds to hours, not because it created it.** The hazard — a delete-then-
+re-register racing a *successful* revoke — is Open Question 1, on which Apple
+is silent, and it exists in any design. The queue stretched the window to
+however long a row waited to be drained; revoking inline narrows it to the
+`AbortSignal.timeout(3000)` budget. **Narrowed, not closed.** At a household
+cohort a rower deleting and re-registering inside three seconds is not a real
+case, which is why the ruling stands — but it stands on proportion, not on the
+hazard having been eliminated.
 
-**Owner: the sweep that already exists.** `createFrontDoor` runs a sweep at boot
-and every 60 s, in-process, `unref`'d, already sweeping expired attempts and
-sessions under independent error boundaries. Revocation becomes a third arm.
-**No cron, no new scheduler.**
+**2. A failed revoke never fails the deletion, and the ordering is why.** To
+fail the operation you would have to call Apple before committing. Then a
+commit that fails after a successful revoke leaves the credential destroyed at
+Apple while the account still exists, and no transaction can un-revoke a token.
+That asymmetry — our write rolls back, Apple's does not — is the whole reason to
+keep the external call after the commit. It also inverts Apple's own
+priorities: deletion is unconditional under 5.1.1(v), revocation is a *should*,
+so letting an Apple outage block a deletion defeats the requirement being
+served.
 
-**Multi-container from the first line**, because more than one container is a
-stated future goal. Claims are taken with:
+**3. A failed revoke tells the rower, and tells them Apple's own remedy.**
+TN3194's fallback for the case where you cannot revoke is verbatim: "Direct the
+user to manually revoke access for your client." So the delete response
+carries `appleRevoked: boolean` and Welcome renders a one-time notice when it is
+false. One boolean and one sentence, discharging a documented instruction.
 
-```sql
-SELECT ... FROM apple_revocations
- WHERE next_attempt_at <= now() AND attempts < $cap
- FOR UPDATE SKIP LOCKED LIMIT 10
-```
-
-`SKIP LOCKED` gives concurrent sweepers disjoint work by construction — correct
-at one container and at five, with no coordination. This matters because
-revocation is the **first non-idempotent side effect** in that loop: the existing
-arms are `DELETE`s, where duplicate work is waste; a duplicated revoke is an
-external call.
-
-**Lifetime table (RF27).**
-
-| State | Minted | Cleared | Survives |
-|---|---|---|---|
-| `apple_revocations` row | deletion/unlink transaction, one per grant | success; subject re-registered; attempts ≥ cap | process restart, container replacement |
-| Row claim (`FOR UPDATE SKIP LOCKED`) | sweep tick | transaction end | nothing — a dead process releases it |
-| `attempts` counter | incremented per attempt, in the claiming transaction | with the row | restart: a crash mid-attempt loses the increment, so the cap is a floor |
-| Sweep timer | `createFrontDoor` | `close()` | nothing; `unref`'d, never holds shutdown |
-
-**At the cap**, the row is dropped and the failure is logged. Per Apple's own
-conditional path the honest remainder is step 2 — direct the rower to revoke
-access themselves — but they are gone by then, so this is a known limit rather
-than a solved problem. Recorded, not hidden.
+**Not a scale compromise.** A delete request is handled end to end inside one
+process, so nothing is shared and nothing needs coordinating; the outbox is
+what *creates* the multi-container problem `SKIP LOCKED` then solves. Two
+concurrent deletes cannot double-revoke either — `FOR UPDATE` on sessions then
+users makes the second one find the account gone and throw `account_changed`
+— and Apple's 200 covers "revoked successfully **or was previously invalid**"
+regardless. Guaranteeing the revoke is the only thing that would justify an
+outbox, and Apple does not ask for that.
 
 ### The other two live credentials
 
@@ -322,9 +350,15 @@ The design's own principle — holding a live credential for a relationship the
 rower ended is the inconsistency this avoids — governs three, and revision 1
 touched one.
 
-- **`auth_attempts.apple_refresh_token`** cascades away through `sessions` on
-  deletion, never revoked. Every `cancel()` and `discard()` does the same. **PR1
-  enqueues these too** where a token is present, since the outbox now exists.
+- **`auth_attempts.apple_refresh_token`, when the delete attempt itself holds
+  one**, is revoked synchronously alongside the account's own grants —
+  `deleteAccount()` pushes it into the same `held` array before calling
+  `revokeApple()`. **A cancelled or discarded link attempt's token is not**:
+  `cancel()` and `discard()` only delete the `auth_attempts` row, so that
+  credential cascades away through `sessions` on the next deletion, unrevoked
+  and permanently so — the outbox would have enqueued this case too, and its
+  withdrawal narrows what PR1 revokes to the two paths that actually delete an
+  account (`deleteAccount`, `unlink`). Not fixed here.
 - **`concept2_links` tokens** cascade away with nothing revoked at Concept2, and
   there is no deauthorize path anywhere in the repo. **Out of scope for PR1**,
   and stated as a decision rather than an oversight: Concept2 is a different
@@ -372,9 +406,8 @@ cannot ship before deletion exists.
 - **The last-provider guard** gets a held-lock concurrency test, not a race.
 - **The lock order** gets a held-lock test proving sessions-before-users does not
   deadlock against a concurrent `original()`.
-- **The outbox claim** is tested for disjointness under two concurrent claimers.
-- **The subject guard** is tested: a re-registered subject drops the row unrevoked.
-- **Two grants produce two rows**, driven from a fixture with both client ids.
+- **Two grants are both revoked**, driven from a fixture with both client ids
+  (`revokeApple()`'s own test, plus the delete and unlink integration tests).
 - **A failed delete transaction tells the rower** — this codebase's recorded
   systemic failure is a caller proceeding as though a failed write succeeded.
 - **Revocation failure does not affect deletion.**
@@ -391,9 +424,10 @@ Fixing the two existing lockout paths (a row).
 ## Open questions for the next pass
 
 1. Whether a *successful* revoke harms a re-registered account. Apple documents
-   nothing across six pages searched. The subject guard now makes this moot in
-   the common case; it remains unknown in the case where the guard's read races
-   the re-registration.
+   nothing across six pages searched. PR1 carries no subject guard (withdrawn
+   2026-09-13, see "Revocation is synchronous and best effort"), so this is
+   unknown in the common case too, narrowed only to the
+   `AbortSignal.timeout(3000)` window a synchronous revoke call takes.
 2. Whether `/auth/revoke` is per-token or per-user — Apple contradicts itself.
    Designed for per-token.
 3. Whether the reauth escape route, when a provider is unavailable, can be built
@@ -405,7 +439,10 @@ Recorded because the corrections are the durable part.
 
 1. **"Deletion reuses the existing reauth stage"** — impossible under two CHECK
    constraints and refused twice more in code. Deletion needs a migration.
-2. **"The tombstone is the only new stored shape"** — there are two.
+2. **"The tombstone is the only new stored shape"** — there were two, in
+   revision 2. Revision 3 withdraws the second (the tombstone itself) on a
+   product ruling, not a correction — see "Revocation is synchronous and best
+   effort" above — so PR1 ships with one.
 3. **TN3194's "you must still fulfill"** — a conditional whose condition we do
    not meet, read as a general rule (RF16's third corollary), and quoted verbatim
    in a way that made it look verified. The conclusion survived on a different,

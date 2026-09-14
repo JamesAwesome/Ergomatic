@@ -3,6 +3,7 @@ import { type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { startPostgres } from "../testing/postgres.js";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { eq, sql } from "drizzle-orm";
+import { randomBytes } from "node:crypto";
 import {
   mkdtemp,
   mkdir,
@@ -19,6 +20,8 @@ import {
   concept2AuthAttempts,
   concept2Links,
   sessionLogs,
+  sessions,
+  users,
   workouts,
 } from "./schema.js";
 import type pg from "pg";
@@ -1900,5 +1903,96 @@ describe("migration 0030: users.google_sub becomes nullable, the unique constrai
       `select count(*)::text as n from users where google_sub is null`,
     );
     expect(nulls.rows[0].n).toBe("2");
+  });
+});
+
+describe("migration 0032: the delete purpose and the delete_ready stage", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+
+  beforeAll(async () => {
+    container = await startPostgres();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+    await migrate(db, { migrationsFolder: "drizzle" });
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  async function seedUser(user: { googleSub: string; appleSub: string }) {
+    const inserted = await db
+      .insert(users)
+      .values({
+        googleSub: user.googleSub,
+        appleSub: user.appleSub,
+        email: `${user.googleSub}@test`,
+        name: "Rower",
+      })
+      .returning({ id: users.id });
+    return inserted[0]!;
+  }
+
+  async function seedSession(userId: string) {
+    const inserted = await db
+      .insert(sessions)
+      .values({
+        tokenHash: randomBytes(32).toString("hex"),
+        userId,
+        expiresAt: new Date(Date.now() + 60_000),
+      })
+      .returning({ id: sessions.id });
+    return inserted[0]!;
+  }
+
+  it("admits a delete-purpose attempt that re-proves a provider the rower holds", async () => {
+    const user = await seedUser({ googleSub: "g-1", appleSub: "a-1" });
+    const session = await seedSession(user.id);
+    await pool.query(
+      `INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,expires_at)
+       VALUES('bh','native','delete','apple','apple','reauth_authorize',1,'s1','n1',$1,now()+interval '5 min')`,
+      [session.id],
+    );
+    const rows = await pool.query(
+      "SELECT purpose,stage FROM auth_attempts WHERE state='s1'",
+    );
+    expect(rows.rows[0].purpose).toBe("delete");
+  });
+
+  it("refuses a delete-purpose attempt with no session to ride", async () => {
+    await expect(
+      pool.query(
+        `INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,expires_at)
+         VALUES('bh','native','delete','apple','apple','reauth_authorize',1,'s2','n2',NULL,now()+interval '5 min')`,
+      ),
+    ).rejects.toThrow(/auth_attempts_session_check/);
+  });
+
+  it("still refuses a link whose existing provider equals its target", async () => {
+    const user = await seedUser({ googleSub: "g-9", appleSub: "a-9" });
+    const session = await seedSession(user.id);
+    await expect(
+      pool.query(
+        `INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,expires_at)
+         VALUES('bh','native','link','apple','apple','reauth_authorize',1,'s4','n4',$1,now()+interval '5 min')`,
+        [session.id],
+      ),
+    ).rejects.toThrow(/auth_attempts_session_check/);
+  });
+
+  it("admits the delete_ready stage", async () => {
+    const user = await seedUser({ googleSub: "g-2", appleSub: "a-2" });
+    const session = await seedSession(user.id);
+    await pool.query(
+      `INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,reauthenticated_at,expires_at)
+       VALUES('bh','native','delete','apple','apple','delete_ready',1,'s3','n3',$1,now(),now()+interval '5 min')`,
+      [session.id],
+    );
+    const rows = await pool.query(
+      "SELECT stage FROM auth_attempts WHERE state='s3'",
+    );
+    expect(rows.rows[0].stage).toBe("delete_ready");
   });
 });

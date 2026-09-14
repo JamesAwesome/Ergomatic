@@ -6,9 +6,11 @@ import type {
   AuthProvider,
   AuthPurpose,
   AuthStep,
+  DeleteOutcome,
   NativeBegin,
   NativeProof,
   SignedIn,
+  UnlinkOutcome,
 } from "../../shared/auth";
 import { api } from "../api";
 import { isNative } from "../platform";
@@ -40,6 +42,35 @@ export type AuthFlowView =
       provider: AuthProvider;
     }
   | { kind: "linked"; targetProvider: AuthProvider }
+  // Wave A PR 1 Task 3: the rower has re-proved their provider and the
+  // account may now be deleted. Task 4 gave it a screen (`you/DeleteAccount`)
+  // and `destinationFor` a route.
+  | { kind: "delete_ready" }
+  // THE SERVER ANSWERED. All four unlink outcomes are HTTP 200, so these two
+  // are discriminated on the BODY and never on the status.
+  //
+  // `unlinked` carries NO `appleRevoked`, deliberately: the server returns it
+  // vacuously `true` for a Google unlink, where no Apple call happens at all,
+  // so surfacing it would claim something about Apple that never occurred.
+  // Nothing here ever reports an unlink's Apple outcome; `deleted` below is
+  // the one place that flag reaches a rower.
+  | { kind: "unlinked"; provider: AuthProvider }
+  | {
+      kind: "unlink_refused";
+      provider: AuthProvider;
+      reason: "last_provider" | "not_connected" | "account_gone";
+    }
+  // WE DO NOT KNOW. A transport failure or a non-200: distinct from a
+  // refusal, because a refusal is a fact about the account and this is a fact
+  // about the request. Its own member rather than a fourth `reason` so the
+  // notice that renders it cannot borrow a refusal's copy, and its own member
+  // rather than an `error` view because a failed REMOVAL must not render copy
+  // written for a failed LINK proof.
+  | { kind: "unlink_failed"; provider: AuthProvider; code: AuthErrorCode }
+  // The account is gone. `appleRevoked: false` means we held at least one
+  // Apple grant and at least one revoke failed, which is the only case with
+  // anything left for the rower to do.
+  | { kind: "deleted"; appleRevoked: boolean }
   | {
       kind: "cancelled";
       purpose: AuthPurpose;
@@ -64,6 +95,9 @@ export interface AuthFlowController {
   prepareLink(provider: AuthProvider): Promise<void>;
   startPreparedLink(): Promise<void>;
   authorizeLinkTarget(): Promise<void>;
+  removeMethod(provider: AuthProvider): Promise<void>;
+  startDelete(provider: AuthProvider): Promise<void>;
+  confirmDelete(): Promise<void>;
   cancel(): Promise<void>;
   reset(): void;
   abandon(): void;
@@ -126,23 +160,37 @@ function isAuthOptions(value: unknown): value is AuthOptions {
 }
 
 /** Exported for its own unit gate: this is pure view->route mapping over
- * eight kinds, and it previously had no client coverage at all —
+ * every view kind, and it previously had no client coverage at all —
  * `return null` as its first line left the whole client suite green,
- * with two e2e cases reaching about three of the eight branches. Gating
+ * with two e2e cases reaching about three of its branches. Gating
  * pure logic exclusively through a browser inverts the pyramid. */
 export function destinationFor(
   view: AuthFlowView,
 ): "/" | "/you" | "/you/sign-in-methods" | null {
-  if (view.kind === "link_confirm" || view.kind === "link_authorize") {
+  // `delete_ready` joins the two link steps: all three are full-screen auth
+  // stages, and this route is the one holder for them (AppRoutes.tsx).
+  if (
+    view.kind === "link_confirm" ||
+    view.kind === "link_authorize" ||
+    view.kind === "delete_ready"
+  ) {
     return "/you/sign-in-methods";
   }
+  // A terminal outcome goes back to the surface that started it, and for a
+  // link OR a delete that surface is You — the only screen that renders
+  // either notice. Finding I1 is the cost of getting this wrong: a delete
+  // routed to "/" lands a signed-in rower somewhere that says nothing at all.
   if (
     view.kind === "linked" ||
-    (view.kind === "cancelled" && view.purpose === "link") ||
-    (view.kind === "error" && view.purpose === "link")
+    ((view.kind === "cancelled" || view.kind === "error") &&
+      (view.purpose === "link" || view.purpose === "delete"))
   ) {
     return "/you";
   }
+  // `unlinked`, `unlink_refused`, `unlink_failed` and `deleted` route
+  // NOWHERE. The first three are answered in place on the methods list the
+  // rower is already looking at; `deleted` hands over to the signed-out
+  // transition, which replaces the whole tree (App.tsx).
   if (
     view.kind === "confirm" ||
     view.kind === "usual" ||
@@ -152,6 +200,20 @@ export function destinationFor(
     return "/";
   }
   return null;
+}
+
+/** THE VIEWS `you/DeleteAccount` OWNS, in one place because two callers
+ *  need them and a disagreement between them is invisible: `AppRoutes`
+ *  decides whether the route renders the screen at all, and the screen
+ *  decides whether it draws. Drop `busy` from either and the confirm
+ *  screen vanishes mid-request — from the router it becomes a redirect to
+ *  `/you`, from the component a blank route. */
+export function ownsDeleteScreen(view: AuthFlowView): boolean {
+  return (
+    view.kind === "delete_ready" ||
+    view.kind === "deleted" ||
+    (view.kind === "busy" && view.purpose === "delete")
+  );
 }
 
 async function responseError(
@@ -415,6 +477,13 @@ async function acceptStep(
     await finalizeLink(context, active, generation);
     return;
   }
+  // BEFORE the `step.stage` read below: a delete_ready member carries no
+  // `.stage`, so without this early return that line is a TS2339 and the
+  // client build fails even though the server project type-checks.
+  if (step.outcome === "delete_ready") {
+    context.setView({ kind: "delete_ready" });
+    return;
+  }
   if (step.purpose === "link" && step.stage === "target") {
     context.setTargetAuthorizationBusy(false);
     context.setView({
@@ -575,7 +644,12 @@ function consumeReturnParams(): {
     ...(error === "access_denied" && rawEmail?.trim() && rawEmail.length <= 320
       ? { email: rawEmail.trim() }
       : {}),
-    purpose: rawPurpose === "link" ? "link" : "signin",
+    // EVERY purpose the server can put in this redirect, not just the one we
+    // happened to need first (finding I1). Coercing "delete" to "signin" here
+    // sent a failed delete re-auth to a screen a signed-in rower never sees,
+    // so the rower was bounced to Today with no message at all.
+    purpose:
+      rawPurpose === "link" || rawPurpose === "delete" ? rawPurpose : "signin",
     targetProvider:
       rawProvider === "apple" || rawProvider === "google"
         ? rawProvider
@@ -911,6 +985,135 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
       } else {
         releaseAuthorization(context, active, authorizationGeneration, owner);
       }
+    },
+    async removeMethod(provider) {
+      const removeGeneration = generation.current;
+      // `purpose: "link"` is the SURFACE's purpose, not the wire's: no
+      // attempt is minted here, so no `AuthPurpose` is literally true, and
+      // "link" is the one that keeps the busy view on the methods screen.
+      setView({ kind: "busy", purpose: "link" });
+      let body: UnlinkOutcome;
+      try {
+        const response = await api(
+          `/api/auth/methods/${encodeURIComponent(provider)}`,
+          { method: "DELETE" },
+        );
+        if (!response.ok) {
+          const { code } = await responseError(response);
+          if (generation.current !== removeGeneration) return;
+          setView({ kind: "unlink_failed", provider, code });
+          return;
+        }
+        body = (await response.json()) as UnlinkOutcome;
+      } catch {
+        // `api` rejects on a dropped connection, and an unhandled rejection
+        // here would leave the screen spinning on `busy` forever.
+        if (generation.current !== removeGeneration) return;
+        setView({ kind: "unlink_failed", provider, code: "signin_failed" });
+        return;
+      }
+      if (generation.current !== removeGeneration) return;
+      setView(
+        body.outcome === "unlinked"
+          ? // NOT `...body`: `appleRevoked` stops here. See the `unlinked`
+            // member's own comment.
+            { kind: "unlinked", provider }
+          : { kind: "unlink_refused", provider, reason: body.outcome },
+      );
+    },
+    async startDelete(provider) {
+      // A delete re-proves the SAME provider the rower already holds, so
+      // unlike `prepareLink` only that one provider's surface must be
+      // available (frontDoorRoutes.ts: "A link needs BOTH providers; a
+      // delete re-proves only the one the rower already holds").
+      if (
+        options.state !== "ready" ||
+        !options.frontDoorEnabled ||
+        !options[provider]
+      ) {
+        return;
+      }
+      await start(provider, "delete");
+    },
+    async confirmDelete() {
+      const active = operation.current;
+      if (!active || active.step.outcome !== "delete_ready") return;
+      const deleteGeneration = generation.current;
+      const surface = native ? "native" : "web";
+      // A SECOND TAP IS NOT A SECOND DELETION, and unlike a removal this one
+      // cannot be taken back. Nothing here bumps `generation` (only
+      // `start`, `prepareLink` and `cancel` do), so two calls would share a
+      // generation and both would reach `setView`: the first commits the
+      // deletion, the second finds no session and answers `account_changed`,
+      // and the rower ends on a Welcome screen that says NOTHING — not even
+      // the Apple remedy `appleRevoked: false` exists to deliver. `busy`
+      // closes it at the source rather than at the button: it is what
+      // `DeleteAccount` disables both controls on, and `ownsDeleteScreen`
+      // above is what keeps the screen mounted while it is set. It also
+      // takes Cancel out of reach for the length of the request, which is
+      // the other reachable loss — `cancel()` bumps the generation, so a
+      // cancel mid-flight made this method swallow its own success and tell
+      // a rower whose account was gone that nothing had happened.
+      setView({ kind: "busy", purpose: "delete" });
+      // THE TOKEN MUST STILL BE LIVE FOR THIS CALL — the route is behind
+      // requireUser. `nativeSignOut` clears first on purpose, because there
+      // the network call is best-effort cleanup; here it is the operation
+      // itself, and clearing first would 401 the deletion.
+      let response: Response;
+      try {
+        response = await api(
+          `/api/auth/${surface}/attempts/${encodeURIComponent(active.step.attemptId)}/delete`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              native ? { bindingSecret: active.bindingSecret } : {},
+            ),
+          },
+        );
+      } catch {
+        if (generation.current !== deleteGeneration) return;
+        setView({ kind: "error", purpose: "delete", code: "signin_failed" });
+        return;
+      }
+      if (!response.ok) {
+        // The SERVER's code, never a hardcoded one: `account_changed` and
+        // `rate_limited` are not the same event as a bad proof, and the
+        // record has to be able to tell them apart later.
+        const { code } = await responseError(response);
+        if (generation.current !== deleteGeneration) return;
+        operation.current = null;
+        setView({ kind: "error", purpose: "delete", code });
+        return;
+      }
+      // THE ACCOUNT IS ALREADY GONE — the server answered 200 and the
+      // deletion commits before the response is written. A body we cannot
+      // read costs us only `appleRevoked`, and it is not a reason to tell
+      // the rower nothing happened. `false` is the honest default of the
+      // two: it shows the Apple remedy, which is wrong-but-harmless for a
+      // Google-only account (a list the rower looks at and finds nothing
+      // in) where `true` would silently leave a real grant standing.
+      let body: DeleteOutcome;
+      try {
+        body = (await response.json()) as DeleteOutcome;
+      } catch {
+        body = { outcome: "deleted", appleRevoked: false };
+      }
+      if (generation.current !== deleteGeneration) return;
+      // Only AFTER the server confirms. The account is gone; this device's
+      // copy of the credential goes with it.
+      if (native) {
+        const { clearToken } = await import("../native/session");
+        await clearToken();
+        if (generation.current !== deleteGeneration) return;
+      }
+      operation.current = null;
+      setTargetAuthorizationBusy(false);
+      setView({ kind: "deleted", appleRevoked: body.appleRevoked });
+      // The session this document holds no longer resolves to anything. A
+      // re-read of /api/me is how the app learns that: it 401s, `useMe`
+      // becomes signed out, and the Welcome screen renders the notice.
+      onSignedInRef.current();
     },
     async cancel() {
       const purpose =

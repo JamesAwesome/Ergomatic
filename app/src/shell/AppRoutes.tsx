@@ -33,13 +33,17 @@ import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
 import BaselinesScreen from "../you/BaselinesScreen";
+import DeleteAccount from "../you/DeleteAccount";
 import Diagnostics from "../you/Diagnostics";
 import Concept2Screen from "../you/Concept2Screen";
 import SettingsScreen from "../you/SettingsScreen";
 import StatsScreen from "../you/stats/StatsScreen";
 import MonitorLogs from "../you/MonitorLogs";
 import type { Me } from "../useMe";
-import type { AuthFlowController } from "../adapters/authFlow";
+import {
+  ownsDeleteScreen,
+  type AuthFlowController,
+} from "../adapters/authFlow";
 import LinkSignInMethod from "../auth/LinkSignInMethod";
 import TabBar from "./TabBar";
 
@@ -268,12 +272,23 @@ export default function AppRoutes({
               }
             />
             {authFlow && (
+              /* The one full-screen holder for an auth stage that is not
+                 sign-in: the two link steps, and — Wave A PR 1 Task 4 — the
+                 delete confirm. The set is `ownsDeleteScreen`, shared with
+                 the screen itself so the two cannot disagree: `deleted`
+                 keeps rendering DeleteAccount because it owns the handover
+                 to the signed-out state and routing it away would unmount
+                 the effect that performs it, and a `busy` delete keeps it
+                 because the request is in flight and a redirect to `/you`
+                 would take the screen out from under it. */
               <Route
                 path="/you/sign-in-methods"
                 element={
                   authFlow.view.kind === "link_confirm" ||
                   authFlow.view.kind === "link_authorize" ? (
                     <LinkSignInMethod auth={authFlow} />
+                  ) : ownsDeleteScreen(authFlow.view) ? (
+                    <DeleteAccount auth={authFlow} onDeleted={onSignedOut} />
                   ) : (
                     <Navigate to="/you" replace />
                   )

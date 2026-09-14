@@ -753,7 +753,7 @@ export const authAttempts = pgTable(
     check("auth_attempts_surface_check", sql`${t.surface} in ('native','web')`),
     check(
       "auth_attempts_purpose_check",
-      sql`${t.purpose} in ('signin','link')`,
+      sql`${t.purpose} in ('signin','link','delete')`,
     ),
     check(
       "auth_attempts_provider_check",
@@ -761,11 +761,15 @@ export const authAttempts = pgTable(
     ),
     check(
       "auth_attempts_stage_check",
-      sql`${t.stage} in ('authorize','exchanging','confirm','reauth_authorize','reauth_exchanging','target_authorize','target_exchanging','link_ready')`,
+      sql`${t.stage} in ('authorize','exchanging','confirm','reauth_authorize','reauth_exchanging','target_authorize','target_exchanging','link_ready','delete_ready')`,
     ),
+    // The `delete` arm deliberately carries no `<> target_provider` clause:
+    // a delete re-proves a provider the rower already holds, so existing
+    // and target are equal by design (task-1-brief.md Step 3). The `link`
+    // arm's clause stays untouched — widening for delete must not loosen it.
     check(
       "auth_attempts_session_check",
-      sql`(${t.purpose}='signin' and ${t.originalSessionId} is null and ${t.existingProvider} is null) or (${t.purpose}='link' and ${t.originalSessionId} is not null and ${t.existingProvider} is not null and ${t.existingProvider}<>${t.targetProvider})`,
+      sql`(${t.purpose}='signin' and ${t.originalSessionId} is null and ${t.existingProvider} is null) or (${t.purpose}='link' and ${t.originalSessionId} is not null and ${t.existingProvider} is not null and ${t.existingProvider}<>${t.targetProvider}) or (${t.purpose}='delete' and ${t.originalSessionId} is not null and ${t.existingProvider} is not null)`,
     ),
     check("auth_attempts_expiry_check", sql`${t.expiresAt}>${t.createdAt}`),
     check("auth_attempts_version_check", sql`${t.version}>0`),

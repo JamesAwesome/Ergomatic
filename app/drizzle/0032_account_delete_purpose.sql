@@ -1,0 +1,6 @@
+ALTER TABLE "auth_attempts" DROP CONSTRAINT "auth_attempts_purpose_check";--> statement-breakpoint
+ALTER TABLE "auth_attempts" DROP CONSTRAINT "auth_attempts_stage_check";--> statement-breakpoint
+ALTER TABLE "auth_attempts" DROP CONSTRAINT "auth_attempts_session_check";--> statement-breakpoint
+ALTER TABLE "auth_attempts" ADD CONSTRAINT "auth_attempts_purpose_check" CHECK ("auth_attempts"."purpose" in ('signin','link','delete'));--> statement-breakpoint
+ALTER TABLE "auth_attempts" ADD CONSTRAINT "auth_attempts_stage_check" CHECK ("auth_attempts"."stage" in ('authorize','exchanging','confirm','reauth_authorize','reauth_exchanging','target_authorize','target_exchanging','link_ready','delete_ready'));--> statement-breakpoint
+ALTER TABLE "auth_attempts" ADD CONSTRAINT "auth_attempts_session_check" CHECK (("auth_attempts"."purpose"='signin' and "auth_attempts"."original_session_id" is null and "auth_attempts"."existing_provider" is null) or ("auth_attempts"."purpose"='link' and "auth_attempts"."original_session_id" is not null and "auth_attempts"."existing_provider" is not null and "auth_attempts"."existing_provider"<>"auth_attempts"."target_provider") or ("auth_attempts"."purpose"='delete' and "auth_attempts"."original_session_id" is not null and "auth_attempts"."existing_provider" is not null));

@@ -2,6 +2,7 @@ import { vi } from "vitest";
 import type { WeightClassFailure } from "../concept2/mapping.js";
 import { isFreeRow } from "../../domain/types.js";
 import type { SessionStore } from "../auth/sessions.js";
+import type { AppleGrant, RevokeApple } from "../auth/appleRevoke.js";
 import type { UserStore } from "../auth/users.js";
 import type { WorkoutInput, WorkoutType } from "../../domain/types.js";
 import { type Stores } from "../routes/data.js";
@@ -1283,4 +1284,25 @@ export function makeFakeUsers(overrides: Partial<UserStore> = {}): UserStore {
     updateProfile: vi.fn(async () => {}),
     ...overrides,
   } as unknown as UserStore;
+}
+
+/**
+ * Records what would have been revoked; resolves the value the test wants.
+ * Wave A PR1 Task 2 (finding, brief Step 4b): `createAttempts`'s `revokeApple`
+ * is a REQUIRED third parameter (RF25 — a defaulted no-op would silently
+ * report a revoke that never happened), so every construction site needs
+ * one. Shared here rather than 12+ inline lambdas so a later change to
+ * `RevokeApple`'s shape has one edit site, and so two call sites can never
+ * silently drift into two different fakes of the same contract. Used by
+ * `attempts.integration.test.ts`, `frontDoorRoutes.integration.test.ts` and
+ * `accountRoutes.integration.test.ts`; Task 3's delete-account tests import
+ * it too.
+ */
+export function recordingRevoke(succeeds = true) {
+  const seen: AppleGrant[] = [];
+  const revoke: RevokeApple = async (grants) => {
+    seen.push(...grants);
+    return succeeds;
+  };
+  return { revoke, seen };
 }

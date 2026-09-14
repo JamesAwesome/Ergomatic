@@ -423,6 +423,152 @@ button.auth-method-row {
   margin-top: 12px;
 }
 
+/* -- Removing a method, and deleting the account (Wave A PR 1 Task 4;
+   Gate 0 approved 2026-09-14) ------------------------------------------
+   CONTRAST, computed rather than judged (RF6). The method rows carry no
+   fill of their own, so their pairing is --accent on `--page` (`body`'s
+   ground) = 5.35:1, which clears AA's 4.5:1 for the labels and 3:1 for the
+   borders. THE QUARANTINE BOX IS THE EXCEPTION and is filled — see its own
+   rule below for why, and for its own two ratios. Every pairing on the
+   rows was already in the approved table. */
+/* The notice sits above BOTH columns, not inside the list. `.auth-methods`
+   loses its own top margin when the notice supplies one, so the portrait
+   spacing is unchanged from before this task. */
+.auth-account-notice {
+  margin-top: 16px;
+}
+
+.auth-account-notice + .auth-methods {
+  margin-top: 0;
+}
+
+.auth-method-tail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-method-remove {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.auth-method-remove:hover {
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+
+.auth-method-remove:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* THE QUARANTINE BOX. James ruled that a rule was not enough separation
+   (2026-09-14): the border is the containment — it says this block is not
+   part of the list above it.
+
+   IT IS FILLED, and with the SUNKEN ground rather than `--surface`. On the
+   uncertain-link path an error notice sits directly above it, and
+   `.notice` already carries `background: var(--surface)` with
+   `.notice.auth-notice-error` overriding its border to `--accent` — so a
+   `--surface` fill here would make the two rectangles identical in BOTH
+   fill and border, which is the opposite of what ruling 1 asks the border
+   to do. `--surface-sunken` reads as a recessed block against the notice's
+   raised card, and the accent border is untouched.
+
+   CONTRAST, computed (RF6): `--accent` on `--surface-sunken` = 5.03:1,
+   `--accent-hover` (the hover/press label) = 6.28:1. Both clear AA's
+   4.5:1 for the label and 3:1 for the border. The box's own edge against
+   the page is the existing `--accent` on `--page`, 5.35:1. */
+.auth-danger-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-top: 24px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  gap: 12px;
+}
+
+.auth-danger-zone h2 {
+  margin: 0;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+}
+
+.auth-delete-account {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.auth-delete-account:hover {
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+
+.auth-delete-account:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* `button:disabled` already recolours the label to --ink-5; the accent
+   border has to follow it, or a dead control still reads as armed. */
+.auth-delete-account:disabled,
+.auth-delete-account:disabled:hover {
+  border-color: var(--rule-3);
+  color: var(--ink-5);
+}
+
+/* THE CONFIRM SCREEN's two lines. `--ink-2` on `--page` = 9.74:1,
+   `--ink-3` on `--page` = 6.69:1. The first is the one pairing this task
+   adds that the Gate 0 table did not already list (it carried --ink-2 on
+   --surface, 10.81:1); both clear AA. */
+.auth-delete-copy {
+  max-width: 42ch;
+}
+
+.auth-delete-scope {
+  margin: 0 0 10px;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.auth-delete-aside {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
 .tagline {
   color: var(--ink-3);
   white-space: nowrap;
@@ -12636,4 +12782,85 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 .stats-trend-swatch-6k {
   background: var(--type-o2);
+}
+
+/* -- Wave A PR 1 Task 4, landscape (Gate 0 approved 2026-09-14) ---------
+   BARE `@media (orientation: landscape)`, this file's only landscape idiom
+   (see the Concept2 block's own header for the survey).
+
+   RULING 1, James 2026-09-14: the quarantine box sits BESIDE the methods
+   list in landscape, never below it. Below, on a landscape phone, it falls
+   off — which is the RC-24 failure, shipped once already. 844x390 is the
+   frame the gate uses: the SHORTEST landscape frame this repo tests, and
+   77 of the 85 landscape viewport declarations under `e2e/` (measured
+   2026-09-14; the other three heights are 393, 420 and 430).
+
+   The confirm screen takes two columns for the same reason, and here are
+   the numbers rather than an assertion that it does not fit. Measured at
+   844x390 on the real stack, with `.auth-delete-screen`'s row rule
+   disabled and then restored: STACKED, the screen is 442px tall against a
+   390px viewport and Cancel's bottom edge sits at 421.6 — 31.6px below the
+   fold, so the escape hatch on the one screen that most needs one has to
+   be scrolled to. TWO COLUMNS, the screen is exactly 390 and Cancel's
+   bottom is at 302. No tab bar is involved either way: this route is in
+   `AppRoutes.tsx`'s HIDDEN_TABBAR_PREFIXES, and the probe confirmed
+   `.tabbar` absent in both layouts. What the two columns do NOT fix is a
+   44px document-level dead scroll present in both (scrollHeight 434 vs
+   clientHeight 390, from `.auth-flow-screen`'s own `min-height: 100dvh`
+   plus outer padding) — pre-existing, unrelated, and not claimed here.
+
+   LAYOUT ONLY — no `color`, no `background`, no `border` — so every ratio
+   stated on the block above still holds here. */
+@media (orientation: landscape) {
+  .auth-account-block {
+    display: grid;
+    align-items: start;
+    gap: 20px;
+    grid-template-columns: 1fr 216px;
+  }
+
+  /* THE NOTICE RIDES INSIDE THE LIST COLUMN, not across both. Spanning
+     both columns shifts the action column down by the notice's own
+     height, and on a 390px-tall screen that takes the bottom off the
+     quarantine box — the same fall-off-the-screen failure ruling 1
+     exists to prevent, arriving by a different route. Placed explicitly
+     at row 1 so the list auto-places beneath it. */
+  .auth-account-notice {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .auth-account-block .auth-methods {
+    grid-column: 1;
+  }
+
+  /* Spanning every row keeps the box's TOP level with the column beside
+     it whether or not a notice is present, so its position does not move
+     under the rower when one appears. */
+  .auth-danger-zone {
+    margin-top: 0;
+    grid-row: 1 / -1;
+    grid-column: 2;
+  }
+
+  .auth-delete-account {
+    width: 100%;
+  }
+
+  .auth-delete-screen .auth-flow-body {
+    flex-direction: row;
+    align-items: center;
+    gap: 30px;
+  }
+
+  .auth-delete-screen .auth-delete-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .auth-delete-screen .auth-actions {
+    margin-top: 0;
+    padding-top: 0;
+    flex: 0 0 200px;
+  }
 }

@@ -20,7 +20,7 @@ import {
   record,
   requiredText,
 } from "./frontDoorErrors.js";
-import { getCookie, sessionCookie } from "./cookies.js";
+import { clearSessionCookie, getCookie, sessionCookie } from "./cookies.js";
 import { requireUser } from "./middleware.js";
 import type { SessionStore } from "./sessions.js";
 import type { Providers, ProviderProof } from "./providers.js";
@@ -66,7 +66,7 @@ function requestBinding(req: Request, surface: Surface) {
   }
   return requiredText(record(req.body).bindingSecret, 128);
 }
-function failure(res: Response, error: unknown) {
+export function failure(res: Response, error: unknown) {
   const code = error instanceof AuthFailure ? error.code : "signin_failed";
   res.status(authStatus[code]).json({
     error: code,
@@ -119,6 +119,7 @@ export function createFrontDoorRoutes(deps: {
         profile: { email: a.verifiedEmail!, name: a.verifiedName! },
       };
     if (a.stage === "link_ready") return { ...base, outcome: "link_ready" };
+    if (a.stage === "delete_ready") return { ...base, outcome: "delete_ready" };
     if (
       !["authorize", "reauth_authorize", "target_authorize"].includes(a.stage)
     )
@@ -164,7 +165,10 @@ export function createFrontDoorRoutes(deps: {
       admission,
       async (req, res, next) => {
         try {
-          if (record(req.body).purpose === "link") {
+          // Without this `req.sessionId` is undefined and begin()'s own
+          // `if (!input.originalSessionId)` answers account_changed.
+          const purpose = record(req.body).purpose;
+          if (purpose === "link" || purpose === "delete") {
             await requireUser(sessions)(req, res, next);
           } else next();
         } catch (error) {
@@ -176,10 +180,15 @@ export function createFrontDoorRoutes(deps: {
           const body = record(req.body);
           if (
             (body.provider !== "apple" && body.provider !== "google") ||
-            (body.purpose !== "signin" && body.purpose !== "link")
+            (body.purpose !== "signin" &&
+              body.purpose !== "link" &&
+              body.purpose !== "delete")
           )
             throw new AuthFailure("invalid_request");
           if (
+            // A link needs BOTH providers; a delete re-proves only the one
+            // the rower already holds, so the opposite-provider clause must
+            // NOT apply to it.
             !providers.available(body.provider, surface) ||
             (body.purpose === "link" &&
               !providers.available(
@@ -188,8 +197,10 @@ export function createFrontDoorRoutes(deps: {
               ))
           )
             throw new AuthFailure("unavailable");
+          // A delete is MORE destructive than a link, so it gets the same
+          // credential-class binding rather than none.
           if (
-            body.purpose === "link" &&
+            (body.purpose === "link" || body.purpose === "delete") &&
             req.authVia !== (surface === "native" ? "bearer" : "cookie")
           )
             throw new AuthFailure("account_changed");
@@ -222,10 +233,12 @@ export function createFrontDoorRoutes(deps: {
         }
       },
     );
-    for (const action of ["confirm", "finalize", "cancel"] as const)
+    for (const action of ["confirm", "finalize", "delete", "cancel"] as const)
       router.post(
         `${prefix}/:id/${action}`,
-        ...(action === "finalize" ? [requireUser(sessions)] : []),
+        ...(action === "finalize" || action === "delete"
+          ? [requireUser(sessions)]
+          : []),
         async (req, res) => {
           try {
             const secret = requestBinding(req, surface);
@@ -237,6 +250,20 @@ export function createFrontDoorRoutes(deps: {
               return;
             }
             const a = await attempts.read(attemptId, secret, surface);
+            if (action === "delete") {
+              // Any throw from deleteAccount propagates to the catch below and
+              // becomes a failure response; it is never caught into a success.
+              const outcome = await attempts.deleteAccount(a, req.sessionId!);
+              if (surface === "web") {
+                res.append("Set-Cookie", cookie("", 0));
+                // The account's sessions are already gone with the cascade;
+                // clearing the cookie stops the browser sending a token that
+                // now resolves to nothing.
+                res.append("Set-Cookie", clearSessionCookie());
+              }
+              res.json(outcome);
+              return;
+            }
             const r =
               action === "confirm"
                 ? await attempts.confirm(a)
@@ -316,8 +343,9 @@ export function createFrontDoorRoutes(deps: {
       // after the state/stage checks below. They only feed the failure
       // redirect's query string, and that string is what routes the rower to
       // a surface able to render the failure: `SignInMethods` returns null
-      // unless the purpose is "link", and a signed-in rower never renders a
-      // signin-purpose error at all. Assigning these later made every
+      // unless the purpose is "link" or (since Wave A PR 1 Task 4) "delete",
+      // and a signed-in rower never renders a signin-purpose error at all.
+      // Assigning these later made every
       // rejection at those two checks report a link failure as `signin`, so
       // the rower was bounced silently to Today with the whole recovery path
       // — notice, methods refetch, "Start linking again" — unreachable.

@@ -10830,3 +10830,89 @@ Per-token. The spec carries Apple's wording, not the relayed one.
 **Could not establish.** Whether a successful revoke harms a re-registered
 account. Which `CredentialState` follows a successful developer revoke. Whether
 the natural deletion race is reachable in production. No repo gates run.
+
+## 2026-09-13 — Wave A PR1 (account delete/unlink), `/harden` both lenses, `73bfde47`..`b0bda3f2`
+
+TRIAD (one stored shape + auth). ONE entry for the run, per the skill. Lens 1
+(antagonist, full) returned **NOT READY**: 5 blocking, 9 non-blocking. Lens 2
+(prescribed code read as code, Sonnet) returned 4 blocking, 4 non-blocking, all
+in the client half lens 1 never opened. Paste-test was a precondition and was
+spent before either dispatch; it caught 2 compile-level gaps itself.
+
+**Falsified, measured on a throwaway postgres:18.4 with the repo's real schema:**
+
+- *"The destructive transaction locks sessions before users … because the
+  reverse order deadlocks."* **Inert.** `bound()` -> `original()` takes `users`
+  first. With TWO sessions both orders end `40P01`, auth as victim. The author's
+  own supporting measurement had seeded ONE session — it ran, and measured
+  something the argument did not need (RF11's second half). Fix measured: learn
+  the owner unlocked, lock every session `ORDER BY id FOR UPDATE`, THEN `bound()`.
+  Technique 52.
+- *"Read the credentials while they still exist — they cascade away below."*
+  **Stale-able.** `grant()`'s `ON CONFLICT DO UPDATE` does not modify the FK
+  column, so no RI check and no parent lock; the concurrent write sailed past
+  `users FOR UPDATE`. SELECT returned `rt-OLD` while the row held `rt-NEW`. The
+  revoke would have sent a dead token, taken Apple's 200 ("or was previously
+  invalid") as success, and left a LIVE credential at Apple for a deleted
+  account — the precise outcome the revoke design exists to prevent. The plan's
+  own `unlink`, three tasks earlier, already used `DELETE ... RETURNING` and was
+  immune. Two siblings, two shapes; diff them. Technique 53.
+- *The RF25 gate.* A CHECK on a child table does not fire on a cascade DELETE;
+  `DELETE FROM users` returned rowCount=1 with no error. The plan's headline
+  invariant shipped with a gate red on correct code. `BEFORE DELETE` trigger
+  measured as the replacement. Technique 54.
+
+**Found by reading the CONSUMER, not the producer (RF24's mirror), four times:**
+
+- The delete flow could not START: the attempt-creation route refuses any
+  purpose but signin/link, runs `requireUser` only for link (so `req.sessionId`
+  is undefined), gives a delete no credential-class check at all, and would
+  apply the link's opposite-provider availability clause. `BeginAuth` had no
+  delete member.
+- The delete flow could not FINISH: `view()` throws `attempt_expired` on
+  `delete_ready`, so a SUCCESSFUL reauth reports as expired on both surfaces —
+  and on native the catch's `discard()` compares a stale snapshot, matches
+  nothing, and leaves the row. Every prescribed test called `accept()` directly.
+- Widening `AuthStep` broke the CLIENT build (`TS2339` in `acceptStep`), which
+  the server-only paste-test structurally could not see. Technique 55.
+- `createFrontDoor` returns one router and `app.ts` mounts exactly that; the new
+  `accountRoutes` was constructed and never merged — 404 in production, every
+  test green, because no prescribed test went over HTTP. Technique 56.
+- Client seam: `methodsRefreshKey()` returns "current" for both new views, so
+  `useAuthMethods` never refetches and a removed method keeps rendering
+  CONNECTED. The fixture-rendered tests could not catch it.
+
+**Two of the author's own claims corrected, both load-bearing:**
+
+- The `FROM users old` self-join recovering the pre-update subject worked and had
+  NO READER — it existed for the withdrawn outbox's `apple_sub`. Deleted.
+- *"The queue created the hazard the subject guard solves."* Backwards. The
+  hazard (delete-then-re-register racing a successful revoke) is the spec's Open
+  Question 1 and exists in any design; the queue WIDENED it from ~3 s to hours.
+  The ruling to drop the guard stands on proportion, not elimination. A false
+  reason is what a future reader inherits.
+- A stale instruction would have turned ROADMAP's accurate "**ELEVEN** FKs
+  cascade" into a wrong "twelve". Eleven (direct FKs) and twelve (tables losing
+  rows, incl. `auth_attempts` transitively) are both right about different
+  things. Find the file that owns the fact before prescribing the edit.
+
+**Attacked and HELD — the phase's vetted ground:** one stored shape, not two; the
+`delete` arm cannot loosen the `link` arm (structural — an added disjunct, and no
+`purpose='link'` row satisfies `purpose='delete'`); Task 1's constraint mutation
+bites; the "never calls Apple while the transaction is still open" probe bites
+(measured false after commit, true inside); the delete-vs-unlink race is sound
+both ways (`unlink` takes no sessions lock, so no cycle); twelve tables / eleven
+direct cascades; exactly 13 `createAttempts` call sites; `frontDoorConfig`
+guarantees a complete `config.apple`; no self-comparing test; no em-dash or
+"PM5" in any prescribed copy string.
+
+**Could not establish:** Apple's revoke-tokens page is JS-rendered and returned
+an empty body to `WebFetch`; the 200 semantics rest on the spec's PRIMARY
+verbatim quote plus SECONDARY forum corroboration. Whether a *successful* revoke
+harms a re-registered account remains open (spec Open Question 1), and the
+ruling that deleted the subject guard turns on it.
+
+**Process note:** the harden skill's ordering earned its keep — lens 1 rewrote
+the blocks lens 2 then gated, and lens 2's four blocking findings were all in the
+client half a mechanism pass does not reach. Neither lens would have found the
+other's set.

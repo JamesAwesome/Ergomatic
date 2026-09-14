@@ -7885,6 +7885,89 @@ test("apple-link-confirm-landscape", async ({ page }) => {
   await captureAppleMethods(page, "apple-link-confirm-landscape.png", true);
 });
 
+/** Wave A PR 1 Task 4 (Gate 0 approved 2026-09-14). Both providers
+ *  connected is the ONLY shape that offers Remove at all — the
+ *  one-provider capture above is the other half of the same ruling, where
+ *  the control is absent rather than greyed out. The landscape pair proves
+ *  ruling 1: the quarantine box sits BESIDE the list, never below it,
+ *  where a landscape phone's height would push it off (the RC-24
+ *  failure). */
+async function captureAccountBlock(
+  page: Page,
+  fileName: string,
+): Promise<void> {
+  await page.route("**/api/auth/options", (route) =>
+    route.fulfill({ status: 200, json: APPLE_AUTH_OPTIONS }),
+  );
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({ status: 200, json: { apple: true, google: true } }),
+  );
+  await signInViaBackdoor(page, {
+    email: "screenshots-apple-remove@e2e.test",
+    name: "Maya Chen",
+  });
+  await page.goto("/you");
+  await expect(
+    page.getByRole("button", { name: "Remove Apple" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Delete account" }),
+  ).toBeVisible();
+  await expect(page.getByText(/^LIFETIME · /)).toBeVisible();
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, fileName) });
+}
+
+test("apple-signin-methods-remove", async ({ page }) => {
+  await captureAccountBlock(page, "apple-signin-methods-remove.png");
+});
+
+test("apple-signin-methods-remove-landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await captureAccountBlock(page, "apple-signin-methods-remove-landscape.png");
+});
+
+async function captureDeleteConfirm(
+  page: Page,
+  fileName: string,
+): Promise<void> {
+  await page.route("**/api/auth/options", (route) =>
+    route.fulfill({ status: 200, json: APPLE_AUTH_OPTIONS }),
+  );
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({ status: 200, json: { apple: true, google: true } }),
+  );
+  await page.route("**/api/auth/web/attempts/capture-delete", (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        outcome: "delete_ready",
+        attemptId: "capture-delete",
+        purpose: "delete",
+        targetProvider: "apple",
+        expiresAt: "2026-09-14T00:05:00.000Z",
+      },
+    }),
+  );
+  await signInViaBackdoor(page, {
+    email: "screenshots-apple-delete@e2e.test",
+    name: "Maya Chen",
+  });
+  await page.goto("/?authAttempt=capture-delete");
+  await expect(
+    page.getByRole("heading", { name: "Delete this account?" }),
+  ).toBeVisible();
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, fileName) });
+}
+
+test("apple-delete-confirm", async ({ page }) => {
+  await captureDeleteConfirm(page, "apple-delete-confirm.png");
+});
+
+test("apple-delete-confirm-landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await captureDeleteConfirm(page, "apple-delete-confirm-landscape.png");
+});
+
 async function captureAppleUncertainResult(
   page: Page,
   fileName: string,

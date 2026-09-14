@@ -474,3 +474,46 @@ is exactly what happened: every section in this file stopped growing on
     for a provider the rower just detached is the inconsistency this avoids"
     governed three credentials and the spec touched one. RF34 applied to a
     sentence rather than a function.
+52. **A lock-ORDER claim is about the whole transaction, so read its FIRST
+    statement, not the commented one.** A prescribed "sessions before users"
+    was inert: `bound()` -> `original()` runs an unqualified `FOR UPDATE` over
+    `sessions INNER JOIN users` before either ordered statement, so `users` was
+    already held. Measured on postgres:18.4 with TWO live sessions: both orders
+    deadlock a concurrent `original()`, auth as victim (40P01) — and the plan's
+    swap-the-order mutation therefore could not go red (RF21). Build the
+    acquisition list from the CALL GRAPH, and check whether the prescribed
+    test's holder takes a lock the subject already holds, or no cycle is
+    possible in either direction. **A concurrency test seeded with ONE of the
+    thing it contends over proves nothing.**
+53. **`ON CONFLICT DO UPDATE` that leaves the FK column unchanged takes NO lock
+    on the parent, so `FOR UPDATE` on the parent does not serialize writes to
+    the child.** Postgres skips the RI check when the referencing key is
+    unmodified. Measured: a concurrent `grant()` refreshed
+    `apple_grants.refresh_token` straight through a delete transaction's
+    `users FOR UPDATE`; the post-commit revoke then sent the STALE token, Apple
+    answered 200 ("or was previously invalid"), and the success flag reported
+    true over a live credential. For any "read it under the parent lock, the
+    cascade cleans up" claim, replace the read with `DELETE ... RETURNING` and
+    measure — the delete blocks and returns the NEW value, the SELECT does not.
+54. **A CHECK constraint cannot fail a cascade DELETE, so it cannot inject the
+    write failure an RF25 gate needs.** A prescribed test added
+    `CHECK (token_hash <> 'x')` to a child table to make a delete transaction
+    fatal; `DELETE FROM users` cascaded cleanly (rowCount=1) and
+    `assert.rejects` got no rejection. Use a `BEFORE DELETE` trigger that
+    RAISEs. Run any fault-injection block as written before the plan ships it:
+    a gate that cannot go GREEN sends the implementer to invent an unreviewed
+    substitute for the invariant the plan headlines.
+55. **Widening a SHARED union type breaks consumers a scoped typecheck cannot
+    see.** Adding a member to `AuthStep` in `shared/` compiled clean under
+    `tsc -p tsconfig.server.json`, and broke the CLIENT: `acceptStep()` reads
+    `step.stage` on a union narrowed only by earlier early-returns, so a member
+    without `.stage` is `TS2339`. When a paste-test covers one project of a
+    multi-project build, its silence covers only that project — say which one
+    ran, and run the others over any `shared/` edit.
+56. **"Mount the router" is a claim about which OBJECT is mounted.** A factory
+    returning `{...routes, attempts, close}` exposes exactly one `router`, and
+    the app mounts that one value; a second router constructed beside it and
+    never merged is a 404 in production with every unit test green. Follow the
+    value from the factory's return to the `app.use()` call before believing
+    any route exists — and require ONE test that reaches it over HTTP, because
+    tests calling the store directly cannot see the gap.

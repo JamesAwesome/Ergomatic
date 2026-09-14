@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
+import type { AuthErrorCode, AuthProvider } from "../shared/auth";
+import type { AuthFlowController, AuthFlowView } from "./adapters/authFlow";
 import SignIn from "./SignIn";
 
 afterEach(() => {
@@ -8,6 +10,51 @@ afterEach(() => {
   vi.resetModules();
   vi.doUnmock("./adapters/auth");
 });
+
+function controller(view: AuthFlowView): AuthFlowController {
+  return {
+    options: {
+      state: "ready",
+      frontDoorEnabled: true,
+      legacyGoogle: false,
+      apple: true,
+      google: true,
+    },
+    view,
+    targetAuthorizationBusy: false,
+    destination: null,
+    startSignIn: vi.fn(),
+    confirmAccount: vi.fn(),
+    useUsualSignIn: vi.fn(),
+    prepareLink: vi.fn(),
+    startPreparedLink: vi.fn(),
+    authorizeLinkTarget: vi.fn(),
+    removeMethod: vi.fn(),
+    startDelete: vi.fn(),
+    confirmDelete: vi.fn(),
+    cancel: vi.fn(),
+    reset: vi.fn(),
+    abandon: vi.fn(),
+  };
+}
+
+/** A `signin`-purpose error is what `Welcome` renders; the target
+ *  provider drives which sign-in the copy names. */
+function renderSignIn({
+  error,
+}: {
+  error?: { code: AuthErrorCode; targetProvider?: AuthProvider };
+} = {}) {
+  const view: AuthFlowView = error
+    ? {
+        kind: "error",
+        purpose: "signin",
+        code: error.code,
+        targetProvider: error.targetProvider,
+      }
+    : { kind: "idle" };
+  render(<SignIn auth={controller(view)} />);
+}
 
 describe("SignIn", () => {
   it("shows the heading, tagline, and a Google sign-in link with no notice", () => {
@@ -72,5 +119,14 @@ describe("SignIn", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "b@y.com isn't invited",
     );
+  });
+
+  it("tells a rower how to recover from a duplicate account", async () => {
+    renderSignIn({
+      error: { code: "account_conflict", targetProvider: "apple" },
+    });
+    const notice = await screen.findByRole("alert");
+    expect(notice).toHaveTextContent(/sign in to that account/i);
+    expect(notice).toHaveTextContent(/delete it/i);
   });
 });

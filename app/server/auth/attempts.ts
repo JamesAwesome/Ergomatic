@@ -4,12 +4,15 @@ import type {
   AuthProvider,
   AuthPurpose,
   AuthUser,
+  DeleteOutcome,
   SignedIn,
+  UnlinkOutcome,
 } from "../../shared/auth.js";
 import { AuthFailure } from "./frontDoorErrors.js";
 import type { VerifiedIdentity } from "./providers.js";
 import { hashToken, SESSION_TTL_MS } from "./sessions.js";
 import type { AccessPolicy } from "./accessPolicy.js";
+import type { AppleGrant, RevokeApple } from "./appleRevoke.js";
 
 export type Surface = "native" | "web";
 export type Stage =
@@ -20,7 +23,8 @@ export type Stage =
   | "reauth_exchanging"
   | "target_authorize"
   | "target_exchanging"
-  | "link_ready";
+  | "link_ready"
+  | "delete_ready";
 export interface Attempt {
   id: string;
   bindingHash: string;
@@ -77,12 +81,33 @@ function consistent(a: Attempt) {
     (verified &&
       (!a.verifiedSubject || a.verifiedEmail === null || !a.verifiedName)) ||
     Boolean(a.appleClientId) !== Boolean(a.appleRefreshToken) ||
+    ((a.stage.startsWith("target_") ||
+      a.stage === "link_ready" ||
+      a.stage === "delete_ready") &&
+      !a.reauthenticatedAt) ||
+    // A PURPOSE-TERMINAL STAGE BELONGS TO ITS PURPOSE. `accept()`'s tail
+    // reads `a.purpose === "signin" ? "confirm" : "link_ready"`, so a delete
+    // arriving there would be stamped `link_ready` — and every clause above
+    // would accept it, because the tail fills every `verified_*` column. It
+    // is unreachable today only because `claim()`'s `next` map has no
+    // `delete_ready` entry, so a delete can never reach `target_exchanging`;
+    // that is an invariant held up by the current call graph with nothing
+    // naming it (RF18). This names it, and closes the mirror case too
+    // rather than the one counterexample (RF34). The signin-only stages are
+    // already covered by the `signup` rule at the top.
     ((a.stage.startsWith("target_") || a.stage === "link_ready") &&
-      !a.reauthenticatedAt)
+      a.purpose !== "link") ||
+    (a.stage === "delete_ready" && a.purpose !== "delete")
   )
     throw new AuthFailure("attempt_expired");
 }
-export function createAttempts(pool: pg.Pool, accessPolicy: AccessPolicy) {
+export function createAttempts(
+  pool: pg.Pool,
+  accessPolicy: AccessPolicy,
+  // Required, not defaulted (RF25): a defaulted no-op would silently report
+  // a revoke that never happened.
+  revokeApple: RevokeApple,
+) {
   let healthy = false;
   function requireAccess(email: string): void {
     if (!accessPolicy.allows(email))
@@ -258,19 +283,37 @@ export function createAttempts(pool: pg.Pool, accessPolicy: AccessPolicy) {
           await tx.query("DELETE FROM auth_attempts WHERE expires_at<=now()");
         }
         let existing: AuthProvider | null = null;
-        if (input.purpose === "link") {
+        if (input.purpose === "link" || input.purpose === "delete") {
           if (!input.originalSessionId)
             throw new AuthFailure("account_changed");
           const session = await original(tx, input.originalSessionId, true);
-          existing = input.targetProvider === "apple" ? "google" : "apple";
+          // A link re-proves the OPPOSITE provider; a delete re-proves the
+          // SAME one. `auth_attempts_session_check`'s delete arm carries no
+          // `<> target_provider` clause, so this line is the ONLY thing
+          // keeping existing and target equal for a delete — the database
+          // does not enforce it (DBA gate, 2026-09-13).
+          existing =
+            input.purpose === "delete"
+              ? input.targetProvider
+              : input.targetProvider === "apple"
+                ? "google"
+                : "apple";
           const user = (
             await tx.query<{ existing: string | null; target: string | null }>(
               `SELECT ${subjectColumn(existing)} AS existing,${subjectColumn(input.targetProvider)} AS target FROM users WHERE id=$1`,
               [session.userId],
             )
           ).rows[0];
-          if (!user?.existing || user.target)
+          if (input.purpose === "link") {
+            if (!user?.existing || user.target)
+              throw new AuthFailure("account_conflict");
+          } else if (!user?.existing)
+            // A delete must name a provider the rower actually holds; there
+            // is nothing to re-prove otherwise.
             throw new AuthFailure("account_conflict");
+          // `auth_attempts_link_session_unique` is keyed on
+          // original_session_id ALONE, so it collides across purposes: this
+          // sweep is what lets the insert below succeed at all.
           await tx.query(
             "DELETE FROM auth_attempts WHERE original_session_id=$1",
             [input.originalSessionId],
@@ -308,7 +351,7 @@ export function createAttempts(pool: pg.Pool, accessPolicy: AccessPolicy) {
               input.purpose === "signin" ? "authorize" : "reauth_authorize",
               random(),
               random(),
-              input.purpose === "link" ? input.originalSessionId : null,
+              input.purpose === "signin" ? null : input.originalSessionId,
               now,
               new Date(now.getTime() + ttl),
             ],
@@ -362,6 +405,18 @@ export function createAttempts(pool: pg.Pool, accessPolicy: AccessPolicy) {
           const user = await find(tx, a.existingProvider!, identity.sub);
           if (user?.id !== session.userId)
             throw new AuthFailure("account_changed");
+          // A delete has no second provider to authorize: the reauth IS the
+          // whole proof, so it lands on delete_ready with its state and nonce
+          // untouched (nothing more will be exchanged against them).
+          if (a.purpose === "delete")
+            return {
+              attempt: await save(tx, {
+                ...a,
+                stage: "delete_ready",
+                reauthenticatedAt: now,
+                expiresAt: new Date(now.getTime() + ttl),
+              }),
+            };
           return {
             attempt: await save(tx, {
               ...a,
@@ -481,6 +536,176 @@ export function createAttempts(pool: pg.Pool, accessPolicy: AccessPolicy) {
       );
       if (!result.rows[0]) throw new AuthFailure("account_changed");
       return result.rows[0];
+    },
+    async unlink(
+      userId: string,
+      provider: AuthProvider,
+    ): Promise<UnlinkOutcome> {
+      const settled = await transaction(
+        async (
+          tx,
+        ): Promise<
+          UnlinkOutcome | { outcome: "unlinked"; grants: AppleGrant[] }
+        > => {
+          const column = subjectColumn(provider);
+          const other = subjectColumn(
+            provider === "apple" ? "google" : "apple",
+          );
+          // The guard lives in the WHERE clause, not a read-then-write. The
+          // database enforces the invariant, so two tabs unlinking different
+          // providers cannot both pass.
+          const updated = await tx.query(
+            `UPDATE users SET ${column}=NULL
+            WHERE id=$1 AND ${column} IS NOT NULL AND ${other} IS NOT NULL`,
+            [userId],
+          );
+          if (!updated.rowCount) {
+            // Zero rows has three causes and a rower whose account is gone
+            // must not be told they cannot remove their last sign-in method.
+            // A second read names the cause; it cannot change the outcome,
+            // only describe it.
+            const row = (
+              await tx.query<{ mine: string | null }>(
+                `SELECT ${column} AS mine FROM users WHERE id=$1`,
+                [userId],
+              )
+            ).rows[0];
+            if (!row) return { outcome: "account_gone" };
+            if (!row.mine) return { outcome: "not_connected" };
+            return { outcome: "last_provider" };
+          }
+          if (provider !== "apple") return { outcome: "unlinked", grants: [] };
+          // BOTH grants, if the rower used phone and web. `frontDoor.ts`
+          // refuses to boot if the native and web client ids are equal, so
+          // these are distinct.
+          const grants = await tx.query<AppleGrant>(
+            `DELETE FROM apple_grants WHERE user_id=$1
+            RETURNING client_id AS "clientId", refresh_token AS "refreshToken"`,
+            [userId],
+          );
+          return { outcome: "unlinked", grants: grants.rows };
+        },
+      );
+      if (!("grants" in settled)) return settled;
+      // AFTER the commit, never inside it. Our copy of the credential is
+      // already destroyed; this only asks Apple to forget too, and a
+      // failure cannot and must not undo the unlink. The try/catch is what
+      // makes that true: the type says `Promise<boolean>`, which cannot
+      // forbid a rejection, and any injected revoker can reject.
+      let appleRevoked = false;
+      try {
+        appleRevoked = await revokeApple(settled.grants);
+      } catch {
+        console.warn(JSON.stringify({ event: "apple_revoke_threw" }));
+      }
+      return { outcome: "unlinked", appleRevoked };
+    },
+    async deleteAccount(
+      expected: Attempt,
+      currentSessionId: string,
+    ): Promise<DeleteOutcome> {
+      const grants = await transaction(async (tx) => {
+        // LOCK ORDER, AND IT MUST HAPPEN BEFORE bound(). Putting the ordered
+        // locks below bound() is inert: bound() -> original() runs an
+        // unqualified FOR UPDATE over `sessions INNER JOIN users` and takes
+        // the users row there. With TWO live sessions (phone + web, the
+        // normal case) that order deadlocks a concurrent original() on the
+        // other session -- "a sign-in that fails for no reason", the exact
+        // outcome the ordering exists to buy off.
+        //
+        // Learning the owner WITHOUT a lock, then taking every session of
+        // that user in a deterministic order, puts this transaction on the
+        // same sessions-then-users path original() uses, so no cycle exists.
+        const owner = (
+          await tx.query<{ userId: string }>(
+            `SELECT user_id AS "userId" FROM sessions WHERE id=$1`,
+            [currentSessionId],
+          )
+        ).rows[0];
+        if (!owner) throw new AuthFailure("account_changed");
+        await tx.query(
+          "SELECT id FROM sessions WHERE user_id=$1 ORDER BY id FOR UPDATE",
+          [owner.userId],
+        );
+        const a = await bound(tx, expected);
+        if (
+          a.stage !== "delete_ready" ||
+          !a.reauthenticatedAt ||
+          Date.now() - a.reauthenticatedAt.getTime() >= ttl
+        )
+          throw new AuthFailure("attempt_expired");
+        if (currentSessionId !== a.originalSessionId)
+          throw new AuthFailure("account_changed");
+        const session = await original(tx, currentSessionId, true);
+        const row = (
+          await tx.query<{ id: string }>(
+            `SELECT id FROM users WHERE id=$1 FOR UPDATE`,
+            [session.userId],
+          )
+        ).rows[0];
+        if (!row) throw new AuthFailure("account_changed");
+        // DELETE ... RETURNING, NOT a SELECT. A plain read can be STALE:
+        // grant()'s `ON CONFLICT DO UPDATE` leaves the FK column unchanged,
+        // so Postgres runs no RI check and takes no lock on the parent, and a
+        // concurrent sign-in refreshes the token straight past this
+        // transaction's users lock. Apple's 200 covers "previously invalid",
+        // so a stale revoke reports SUCCESS while a live credential survives
+        // at Apple -- the precise outcome this design exists to prevent.
+        // `unlink` already had this shape.
+        // UNCONDITIONAL, never gated on `users.apple_sub`. That gate would
+        // rest on a cross-table invariant nothing enforces: it holds today
+        // (one writer, and `unlink` deletes every grant in the same
+        // transaction that nulls `apple_sub` — two statements, committed
+        // together), but the day it stops, the grants cascade away
+        // unrevoked and `revokeApple([])` returns `true` — the rower is told
+        // `appleRevoked: true` over a live credential, exactly what the
+        // paragraph above says this design exists to prevent. The statement
+        // costs nothing: the `DELETE FROM users` below issues it by cascade
+        // regardless.
+        const held = (
+          await tx.query<AppleGrant>(
+            `DELETE FROM apple_grants WHERE user_id=$1
+            RETURNING client_id AS "clientId", refresh_token AS "refreshToken"`,
+            [session.userId],
+          )
+        ).rows;
+        // The attempt's own credential, which would otherwise cascade away
+        // through sessions with nothing revoked. Guarded on the grant's own
+        // fields rather than on apple_sub, which an unlink can null between
+        // accept() and here.
+        if (a.appleClientId && a.appleRefreshToken)
+          held.push({
+            clientId: a.appleClientId,
+            refreshToken: a.appleRefreshToken,
+          });
+        const deleted = await tx.query("DELETE FROM users WHERE id=$1", [
+          session.userId,
+        ]);
+        // RF25's owner is the THROW, not this line: anything raised inside
+        // this transaction propagates past the route, which must not catch it
+        // into a success, and the trigger test gates exactly that.
+        //
+        // This particular guard CANNOT fire today and no mutation makes it —
+        // `original()` and the `apple_sub` read above both hold this row
+        // FOR UPDATE, so the DELETE is guaranteed one row. It stays as the
+        // tripwire for the day either lock moves: without it, a DELETE that
+        // silently matched nothing would be reported to the rower as a
+        // completed deletion. Measured 2026-09-14: removing it leaves the
+        // whole integration suite green.
+        if (!deleted.rowCount) throw new AuthFailure("account_changed");
+        return held;
+      });
+      // AFTER the commit. The account is gone and cannot come back, so this
+      // call can only add latency. The try/catch is what makes that true: the
+      // type says `Promise<boolean>`, which cannot forbid a rejection, and any
+      // injected revoker can reject.
+      let appleRevoked = false;
+      try {
+        appleRevoked = await revokeApple(grants);
+      } catch {
+        console.warn(JSON.stringify({ event: "apple_revoke_threw" }));
+      }
+      return { outcome: "deleted", appleRevoked };
     },
     async legacyGoogle(identity: VerifiedIdentity): Promise<SignedIn> {
       // `access_denied`, not `invalid_proof`: this is the SAME refusal
