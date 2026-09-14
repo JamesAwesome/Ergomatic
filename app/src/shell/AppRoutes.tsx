@@ -39,6 +39,8 @@ import SettingsScreen from "../you/SettingsScreen";
 import StatsScreen from "../you/stats/StatsScreen";
 import MonitorLogs from "../you/MonitorLogs";
 import type { Me } from "../useMe";
+import type { AuthFlowController } from "../adapters/authFlow";
+import LinkSignInMethod from "../auth/LinkSignInMethod";
 import TabBar from "./TabBar";
 
 const monitorInstrumentEnabled =
@@ -61,6 +63,7 @@ const HIDDEN_TABBAR_PREFIXES = [
   // screen a rower would navigate to directly.
   "/session/log",
   "/justrow/observe",
+  "/you/sign-in-methods",
   // Phase BL PR C: the three onboarding doors' flow screens (canvas
   // Question1/Question2/Recommendation/Experienced/RowPath draw no tab
   // bar — a setup flow, entered from Today's doors card and exited by
@@ -144,9 +147,11 @@ export function CompleteRedirect() {
 export default function AppRoutes({
   user,
   onSignedOut,
+  authFlow,
 }: {
   user?: Me;
   onSignedOut?: () => void;
+  authFlow?: AuthFlowController;
 } = {}) {
   const location = useLocation();
   const keyboardOpen = useKeyboardOpen();
@@ -254,8 +259,27 @@ export default function AppRoutes({
           <>
             <Route
               path="/you"
-              element={<You user={user} onSignedOut={onSignedOut} />}
+              element={
+                <You
+                  user={user}
+                  onSignedOut={onSignedOut}
+                  authFlow={authFlow}
+                />
+              }
             />
+            {authFlow && (
+              <Route
+                path="/you/sign-in-methods"
+                element={
+                  authFlow.view.kind === "link_confirm" ||
+                  authFlow.view.kind === "link_authorize" ? (
+                    <LinkSignInMethod auth={authFlow} />
+                  ) : (
+                    <Navigate to="/you" replace />
+                  )
+                }
+              />
+            )}
             {/* The baselines door (Gate 0, 2026-09-05). Flat, a sibling of
                 /you like /you/concept2 and /you/diagnostics, and inside this
                 signed-in fragment because baselines are account data. NOT in

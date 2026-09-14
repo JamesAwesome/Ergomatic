@@ -1,0 +1,154 @@
+{
+  "formula": "WCAG 2.x relative luminance",
+  "checks": [
+    {
+      "name": "Primary text on page",
+      "foreground": "#1b1a17",
+      "background": "#f4f1e8",
+      "ratio": 15.41,
+      "role": "text"
+    },
+    {
+      "name": "Supporting text on page",
+      "foreground": "#57544c",
+      "background": "#f4f1e8",
+      "ratio": 6.69,
+      "role": "text"
+    },
+    {
+      "name": "Primary text on surface",
+      "foreground": "#1b1a17",
+      "background": "#fffdf7",
+      "ratio": 17.11,
+      "role": "text"
+    },
+    {
+      "name": "Supporting text on surface",
+      "foreground": "#57544c",
+      "background": "#fffdf7",
+      "ratio": 7.43,
+      "role": "text"
+    },
+    {
+      "name": "Secondary text on sunken",
+      "foreground": "#3f3c35",
+      "background": "#efeade",
+      "ratio": 9.16,
+      "role": "text"
+    },
+    {
+      "name": "Google/Create label on accent",
+      "foreground": "#fffdf7",
+      "background": "#b5341f",
+      "ratio": 5.94,
+      "role": "text"
+    },
+    {
+      "name": "Google/Create hover label",
+      "foreground": "#fffdf7",
+      "background": "#9c2c19",
+      "ratio": 7.41,
+      "role": "text"
+    },
+    {
+      "name": "Apple label/logo on black",
+      "foreground": "#ffffff",
+      "background": "#000000",
+      "ratio": 21,
+      "role": "text"
+    },
+    {
+      "name": "Apple label/logo on hover",
+      "foreground": "#ffffff",
+      "background": "#1b1b1b",
+      "ratio": 17.22,
+      "role": "text"
+    },
+    {
+      "name": "Outline button label",
+      "foreground": "#1b1a17",
+      "background": "#fffdf7",
+      "ratio": 17.11,
+      "role": "text"
+    },
+    {
+      "name": "Connected status on page",
+      "foreground": "#49624f",
+      "background": "#f4f1e8",
+      "ratio": 5.92,
+      "role": "text"
+    },
+    {
+      "name": "Error border on page",
+      "foreground": "#b5341f",
+      "background": "#f4f1e8",
+      "ratio": 5.35,
+      "role": "ui"
+    },
+    {
+      "name": "Success border on page",
+      "foreground": "#49624f",
+      "background": "#f4f1e8",
+      "ratio": 5.92,
+      "role": "ui"
+    },
+    {
+      "name": "Outline button border on page",
+      "foreground": "#1b1a17",
+      "background": "#f4f1e8",
+      "ratio": 15.41,
+      "role": "ui"
+    },
+    {
+      "name": "Apple button edge on page",
+      "foreground": "#000000",
+      "background": "#f4f1e8",
+      "ratio": 18.59,
+      "role": "ui"
+    },
+    {
+      "name": "Google button edge on page",
+      "foreground": "#b5341f",
+      "background": "#f4f1e8",
+      "ratio": 5.35,
+      "role": "ui"
+    },
+    {
+      "name": "Focus ring beside page",
+      "foreground": "#1b1a17",
+      "background": "#f4f1e8",
+      "ratio": 15.41,
+      "role": "focus",
+      "note": "Reconciled to what shipped. The implementation uses `outline: 2px solid var(--ink)` (#1b1a17); #1d4e89 was measured here but is not a token in tokens.css and never reached the code. Ink is the HIGHER ratio, so the gate's conclusion is unchanged - only its stated colour was wrong."
+    },
+    {
+      "name": "Focus ring beside surface",
+      "foreground": "#1b1a17",
+      "background": "#fffdf7",
+      "ratio": 17.11,
+      "role": "focus",
+      "note": "Reconciled to what shipped. The implementation uses `outline: 2px solid var(--ink)` (#1b1a17); #1d4e89 was measured here but is not a token in tokens.css and never reached the code. Ink is the HIGHER ratio, so the gate's conclusion is unchanged - only its stated colour was wrong."
+    },
+    {
+      "name": "Decorative card rule on page",
+      "foreground": "#d8d3c4",
+      "background": "#f4f1e8",
+      "ratio": 1.32,
+      "role": "decorative"
+    },
+    {
+      "name": "Meaningful ink-4 rule on page",
+      "foreground": "#6f6a5f",
+      "background": "#f4f1e8",
+      "ratio": 4.76,
+      "role": "ui"
+    },
+    {
+      "name": "Meaningful ink-4 rule on sunken",
+      "foreground": "#6f6a5f",
+      "background": "#efeade",
+      "ratio": 4.48,
+      "role": "ui"
+    }
+  ]
+}

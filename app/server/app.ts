@@ -1,4 +1,5 @@
 import express from "express";
+import type { FrontDoor } from "./auth/frontDoor.js";
 import { noStore, originCheck, requireUser } from "./auth/middleware.js";
 import { createAuthRouter } from "./auth/routes.js";
 import { createTestSigninRouter } from "./auth/testSignin.js";
@@ -11,14 +12,16 @@ import { createConcept2Router } from "./routes/concept2.js";
 import { createDataRouter, type Stores } from "./routes/data.js";
 import { createStatsRouter } from "./routes/stats.js";
 import type { Concept2Store } from "./stores/concept2.js";
+import type { AccessPolicy } from "./auth/accessPolicy.js";
 
 export interface AppDeps {
+  frontDoor?: FrontDoor | null;
   checkDb: () => Promise<boolean>;
   sessions: SessionStore;
   users: UserStore;
   oauth: OAuthProvider | null;
   nativeVerifier: NativeTokenVerifier | null;
-  allowlist: Set<string>;
+  accessPolicy: AccessPolicy;
   siteUrl: string;
   // Backing stores for the per-user data API. Null in auth-only tests: the
   // data router is mounted only when present, so those tests stay untouched.
@@ -76,6 +79,13 @@ export function createApp(deps: AppDeps) {
   // `express.json()` below runs as a no-op pass-through for a body this
   // one already consumed — every other route is untouched, still gated at
   // the default 100 KB.
+  if (deps.frontDoor)
+    app.post(
+      "/api/auth/apple/callback",
+      noStore,
+      express.urlencoded({ extended: false, limit: "32kb", parameterLimit: 8 }),
+      deps.frontDoor.appleCallback,
+    );
   app.post("/api/logs", express.json({ limit: "1mb" }));
   app.use(express.json());
   app.use("/api", noStore);
@@ -96,6 +106,51 @@ export function createApp(deps: AppDeps) {
     }
   });
 
+  app.get("/api/auth/options", (_req, res) => {
+    // ONE SOURCE OF TRUTH. This used to answer from `deps.frontDoor`,
+    // `deps.nativeVerifier` and `deps.oauth` while ENFORCEMENT in
+    // `frontDoorRoutes` asked `providers.available(provider, surface)` —
+    // two independent answers to one question, agreeing today only by the
+    // coincidence that `frontDoorConfig` validates the same env vars those
+    // three objects are built from. Deriving both from `available()` means a
+    // provider can never be advertised to the client and then refused by the
+    // route. (It does NOT make the handler provider-agnostic: the literal
+    // below still enumerates apple and google by hand, as does `AuthOptions`,
+    // so a third provider is still an edit here. An earlier draft of this
+    // comment claimed otherwise.) Output is byte-identical under
+    // every configuration reachable today; the legacy arm below still answers
+    // when no front door exists at all.
+    const front = deps.frontDoor;
+    res.json({
+      frontDoorEnabled: Boolean(front),
+      apple: {
+        native: Boolean(front?.providers.available("apple", "native")),
+        web: Boolean(front?.providers.available("apple", "web")),
+      },
+      google: {
+        native: front
+          ? front.providers.available("google", "native")
+          : Boolean(deps.nativeVerifier),
+        web: front
+          ? front.providers.available("google", "web")
+          : Boolean(deps.oauth),
+      },
+    });
+  });
+  if (deps.frontDoor) app.use(deps.frontDoor.router);
+  else
+    app.use(
+      [
+        "/api/auth/native/attempts",
+        "/api/auth/web/attempts",
+        "/api/auth/methods",
+        "/api/auth/apple/callback",
+        "/api/auth/google/callback",
+      ],
+      (_req, res) => {
+        res.status(503).json({ error: "unavailable" });
+      },
+    );
   app.use(createAuthRouter(deps));
 
   if (deps.testAuthSecret) {

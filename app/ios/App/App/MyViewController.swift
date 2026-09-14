@@ -16,6 +16,8 @@ import UIKit
 class MyViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         super.capacitorDidLoad()
+        bridge?.registerPluginInstance(ErgomaticConsolePlugin())
         bridge?.registerPluginInstance(WebAuthPlugin())
+        bridge?.registerPluginInstance(AppleAuthPlugin())
     }
 }

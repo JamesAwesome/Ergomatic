@@ -6798,3 +6798,63 @@ pin landed in #345 at `derivedHeartRate.replay.test.ts:113`); and the
 candidates, six of them outside this phase, had existed only in the session
 that produced them, which made the phase's own provenance a dangling citation
 (RF16) and the walk a second backlog.
+
+## 2026-09-12 — Wave A Apple-first opening
+
+Recommend native and web Apple login, shared open signup and explicit linking
+in both directions so an existing rower reaches the same account and history.
+Relay email cannot supply account continuity. First-account confirmation avoids
+silently creating the wrong account. Fresh proof of the existing provider adds
+friction and belongs in the rendered approval, including cancellation/recovery.
+James approved new account creation, the corrected spec and rendered two-proof
+linking flow on 2026-09-12. Deletion remains the next implementation slice and
+an external-availability dependency; Apple-first code stays dark until then.
+
+Evidence: `docs/superpowers/specs/2026-09-12-apple-signin-review.md` and its
+approved design/captures. No implementation or release verdict is claimed.
+
+## 2026-09-13 — Wave A Apple AUTH correction final gate
+
+- **Corrected function ACCEPTED at `c7fce223`; merge NOT READY; public/TestFlight release NOT READY.** The approved two-provider continuity, first-account confirmation, no-email-join, shared saved-email admission, both-proof linking, invitation denial, cancellation recovery, independent cleanup, and native diagnostic boundaries survive the fixes. Final local validation passed 8,895 tests in 351 files with one existing skip, 98.23/96.52/99.01/98.96 coverage, all static/build/dist gates, and the final browser recheck; scoped spec and quality reviews pass. The original whole-PR code-lens review remains incomplete after its platform block, so the scoped PASS cannot establish merge readiness. A merge auto-deploys the configured staging front door: confirm restricted mode and tester allowlist first. External TestFlight still waits for account deletion, real native/web Apple continuity, and physical-device log collection. No new ROADMAP filing.
+
+## 2026-09-13 — Wave A Apple AUTH final gate, re-run at `4f9b8d66` (TRIAD: auth + stored shape)
+
+- **Function ACCEPTED. Merge NOT READY. Release NOT RECOMMENDED, separately.**
+- **The incomplete code lens is NOT the blocker** — six later lenses discharge
+  it for code coverage. Its unfinished remainder was `expiry.ts`, a DATABASE
+  TIMING probe with no durable result, which is DBA ground. **The binding
+  blocker was the DBA PR gate**, which migration 0031 (two tables, a column,
+  two indexes, a unique constraint) triggers under the stored-shape override,
+  whose spec pass was a FAIL with no rerun, and which `dba-ledger.md` recorded
+  as outstanding in its own words. It was dispatched and returned PASS WITH
+  ROWS the same day.
+- **Condition 1 (host `ACCESS_MODE` + allowlist) binds harder than at
+  `1a0e92c4` and is now a BOOT-SAFETY condition.** `sessions.ts` adds an
+  allowlist check to session resolution that main does not have, so
+  `ALLOWED_EMAILS` changes meaning from "gates new sign-in" to "gates every
+  request from every client, old builds included" — a stale host list signs out
+  live testers at deploy. And `frontDoor.ts` throws on a PARTIAL `APPLE_*` set
+  with no catch, so a mispasted `.p8` takes the whole API down, not just Apple.
+  Two host commands close it. Conditions 2 (deletion), 3 (real Apple auth +
+  native/web subject continuity) and 4 (device diagnostics) stay on RELEASE.
+- **One fold recommended and DECLINED by the controller, correctly:** removing
+  the legacy doors from the shared admission bucket. The shared 120/min budget
+  is the APPROVED SPEC ("a shared admission limit") and is explicitly tested
+  across all three doors, so reversing it is a Gate 0 decision, not a fix. The
+  concern is real and was escalated to James rather than actioned.
+- **The other fold landed:** the `!frontDoor` boot warning counted nothing
+  while the allowlist warning already counted orphaned accounts — same
+  invariant, one of two governed sites (RF34).
+- **A macOS CI job is a ROW, re-scoped.** A compile-only job cannot see the
+  logic hang the plugin documents, and a compile error already fails
+  `ios:release` before any tester. The real gap is 164 lines of Swift unit
+  tests that nothing runs; the row buys RUNNING them.
+- **Apple's once-only name is a ROW with a MANDATORY disclosure.** The name is
+  destroyed three ways and only one is a failure — the proof POST failing,
+  tapping "I already have an account" (a normal button), or 300 s idle. The
+  account is then named "Rower" permanently: the only `UPDATE users SET` never
+  writes `name`, Google self-heals on every sign-in and Apple cannot, and there
+  is no name editor. The right row is "let a rower set their own display name".
+- **What improved most is detectability, and the body did not say so:** eight
+  of the eleven review defects were gates that could not go red, not behaviour
+  bugs. `safeAreaCensus.test.ts` is the branch's best artefact.

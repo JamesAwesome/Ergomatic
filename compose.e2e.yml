@@ -32,6 +32,7 @@ services:
   api:
     environment:
       TEST_AUTH_SECRET: ${TEST_AUTH_SECRET:?TEST_AUTH_SECRET is required for the e2e override}
+      ACCESS_MODE: public
       SITE_URL: http://127.0.0.1:${APP_PORT:-8081}
   web:
     build:

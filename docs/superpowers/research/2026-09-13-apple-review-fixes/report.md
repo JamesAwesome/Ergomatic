@@ -1,0 +1,45 @@
+# Apple review corrections — PR #425
+
+Status: accepted corrections implemented; local validation and scoped reviews complete. The PR remains draft, with exact-head CI recorded on the PR after publication. This round begins at `86ed0636fd37c5969bdd369813534c4690de964d`; historical checks for that head are not checks for the changed source.
+
+## Approved scope and dispositions
+
+James authorized one coordinated fix round with “Handle them” after Claude's comments and the independent static review were reconciled. One subagent owns the app changes; the controller owns documentation and integrates review/evidence. The existing two-provider architecture, global admission policy, access policy and rendered wording/layout are retained. The disabled Add label now inherits the existing disabled text token so the unavailable action is visibly unavailable.
+
+| Feedback | Accepted correction |
+| --- | --- |
+| [Denied access loses its meaning](https://github.com/JamesAwesome/Ergomatic/pull/425#discussion_r4000137564) | Preserve `access_denied` and the verified/saved account email in JSON and web returns. Use the existing invitation notice; relay addresses are actionable. Consume and scrub the added `authEmail` return field. |
+| [Native diagnostics disabled](https://github.com/JamesAwesome/Ergomatic/pull/425#discussion_r4000137601) | Keep generic credential-result logging disabled and restore application `console.*` through the public native Console override. Require a compiled WKWebView-to-native-stdout gate; historical JavaScript forwarding alone was insufficient. |
+| [Idle linking route is blank](https://github.com/JamesAwesome/Ergomatic/pull/425#discussion_r4000137644) | Recover an idle/direct linking route to You while preserving active linking and consumed terminal navigation. Browser Back/BFCache/native eviction were not established by the source finding. |
+| [Expired session rows accumulate](https://github.com/JamesAwesome/Ergomatic/pull/425#discussion_r4000137674) | Run existing session expiry cleanup from the front-door startup/minute owner, independently of attempt-cleanup failures. No new timer, index or migration. |
+| [Unavailable methods still offer Add](https://github.com/JamesAwesome/Ergomatic/pull/425#discussion_r4000137709) | Keep method rows visible and disable Add unless both required proof providers are available on the current surface. Apply the same invariant to controller entry and retry. |
+| [Unused native Google wrapper](https://github.com/JamesAwesome/Ergomatic/pull/425#discussion_r4000137764) | Remove the uncalled wrapper and wrapper-only tests; retain the initialized production proof path. No unmeasured bundle-size claim. |
+| [Constant limiter key](https://github.com/JamesAwesome/Ergomatic/pull/425#discussion_r4000137822) | Explain the intentional global key beside its declaration; keep the approved 120/minute and 512 resident anonymous-attempt limits. |
+| Independent static finding: failed cancel reports success | Retain only cleanup authority after an unacknowledged cancel, show the existing failure notice, and permit retry before advancing. Keep generation/operation ownership across asynchronous completions. Explicit local teardown relies on the existing server expiry bound. |
+| Independent static finding: obsolete operative plans | Replace superseded native/deployment replacement blocks with current contracts and immutable historical links; remove active instructions for the retired environment switch and label historical results by source. |
+
+Claude's [design comment](https://github.com/JamesAwesome/Ergomatic/pull/425#issuecomment-5654475759) also proposes provider extensibility work. A generic identity/provider architecture is outside the approved two-provider slice. The documented API/HTTP-local limitations remain deliberate. Apple's primary contract scopes user identifiers and private relay addresses to a developer team; grouping alone is not a documented reason to predict a new subject/address. [Deployment guidance](../../../deploy.md#apple-sign-in-setup) cites that contract and retains the real native/web continuity gate.
+
+## Native mechanism and database evidence
+
+[Native source research](native-logging-fix-research.md) and the single [mechanism pass plus controller disposition](native-logging-harden.md) establish the public registration seam and required oracle. The proposed arbitrary 4,068-character truncation was declined; preserve vendor full-message behavior. No executable implementation blocks were prescribed, so the prescribed-code lens is skipped for this delta. The [implementation report](implementation-report.md) records the compiled Debug and production-default Release bridge gates. Release initially failed because the prebuilt Capacitor simulator slice classifies itself as Debug; evaluating the same documented rule in the app build context corrected the default. The prior forced-false test instance is historical injected-branch evidence only. Reinstating the vendor getter makes the real Release gate fail.
+
+The corrected [DBA schedule measurement](db-cost/cascade/report.md) passes without an additional index or migration: the complete DELETE through the actual migrated schema, including 10,000 indexed auth-attempt cascades, took 29.290 ms median at 100,000 sessions; the subsequent 90,000-live-session scan took 2.628 ms per minute. The original parent-table-only fixture omitted those cascades and is retained solely as historical isolation evidence. Exact fixtures, plans, lock probes and commands are alongside that report. The isolated synthetic database was stopped after measurement. Production host performance is unmeasured.
+
+## Review boundary
+
+This is a separately authorized correction round. The original broad implementation review was interrupted by a platform cybersecurity-risk block and remains incomplete. Its unfinished execution was not resumed, reassigned or rephrased, and its archived probe was not run. A new scoped fix review or passing tests cannot clear that verdict. The PR remains draft; no merge, deployment, phone installation, live provider login or upload is part of this round.
+
+## Scoped review and validation
+
+The [spec review](spec-review.md) passed at `970fb10e` after denial plus lost cleanup acknowledgement was covered. The [quality review](quality-review.md) passed at `15f99cc1` after the production-default native environment oracle was corrected. The subsequent `c7fce223` delta changes only disabled-child color inheritance and its real-browser style regression; controller inspection confirmed the existing text, row geometry and behavior remain. No broad review execution was resumed.
+
+At final app source `c7fce22337bb03b486a7c2fd074c1fb1c7f96385` (app tree `624e2f423e532e19897f4c3d67056196f1b83f32`), `pnpm test:coverage` passed **351 files, 8,895 tests and one existing skip**. HTML coverage is **98.23% statements, 96.52% branches, 99.01% functions, 98.96% lines**; [changed-file gaps](final-validation/coverage.md) are reported individually. Full lint, format, typecheck (including E2E membership 25/25), production build and `dist:grep` all passed; [commands/results](final-validation/results.json) and raw logs are preserved. No local full-E2E claim is made: the named Apple suite passed 7/7, the two design cases passed, and the final disabled-style case passed independently at the final source. The full browser suite belongs to exact-head CI after push.
+
+Native compiled gates passed Debug 4/4 and production-default Release 1/1. The corrected DBA schedule gate passed on the actual cascading schema without another index. The normal commit hooks ran throughout; the final evidence commit and normal push gates are part of publication, with their outcome reported on the PR. [Artifact hashes and extraction](artifacts.md) preserve raw implementation logs and the complete HTML report.
+
+The [browser report](browser/report.md) preserves all eight original synthetic-state captures, and its final disabled-Add follow-up records the corrected appearance in both orientations. The controller inspected the captures. The existing You page's missing `h1` is an incidental Axe best-practice finding; it is not introduced by this auth delta and no heading redesign was added.
+
+The [PM final gate](pm-review.md) accepts the corrected function at the final app source and separately marks whole-PR merge and public/TestFlight release **NOT READY**. The original incomplete review remains open. Since merging triggers deployment to the configured staging host, `ACCESS_MODE=restricted` and the intended tester allowlist must be confirmed before merge. Account deletion, actual Apple authorization/native-web continuity, and physical-device diagnostic collection remain release conditions. No new operator session was started.
+
+The original static callback-isolation observation remains a proposed ROADMAP handback, not a filed row or a claim of a natural collision or exploit. The 2026-09-13 scan found 25 `dies` stamps and no overdue dates; no existing row was removed or re-dated.

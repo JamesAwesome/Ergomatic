@@ -50,6 +50,27 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   that split.
 
 ## Patterns that recur (check for these every time)
+- **The gate that blocks is often the one nobody enumerated.** Wave A #425
+  (2026-09-13) asked whether an incomplete code-review lens should block a
+  merge. It should not — six later lenses discharged it for code. The binding
+  constraint was the **DBA PR gate**, which `dba-ledger.md` disclaimed
+  completing IN ITS OWN PASS ENTRY, whose earlier spec pass was a FAIL with "No
+  rerun PASS claimed", and which nobody had counted. **At every final gate,
+  enumerate the REQUIRED gates from CLAUDE.md's triad paragraph and open each
+  named agent's own ledger for a self-disclaimed incomplete verdict** — an
+  agent that fails honestly writes it down, and nothing else reads it. The
+  blocked lens's residue was a DATABASE TIMING probe, so it was never the code
+  reviewer's question in the first place.
+- **A hand-back that shows one row of ten reads as a complete list.** #425
+  deferred ten items and put ONE in front of James under "Proposed to add",
+  while its body said "three lower-severity items are in the handback list" and
+  a commit message claimed a row that `grep ROADMAP.md` could not find.
+  **Count the rows the PR's own commits and reports say they filed, and diff
+  that against the hand-back list** — the shortfall is invisible by
+  construction.
+
+
+- **A scoped correction review can accept the named fixes, but it cannot discharge an incomplete whole-PR review.** Report corrected-function acceptance, merge readiness, and release readiness separately; otherwise strong local evidence silently turns a bounded PASS into approval of code the reviewer never covered. (Wave A Apple AUTH correction, 2026-09-13.)
 
 - **Filing as deferral.** 2026-08-13 audit: 24 unchecked items across 8 phases,
   5 phases not started, 13 triggered follow-ons, and two new phases filed in two
@@ -158,12 +179,27 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   before the phase is finished.
 
 ## Recommendations that turned out wrong
+- **2026-09-13 — the disabled-button contrast fold (#425).** I measured the
+  disabled provider button at 2.16:1 (`--ink-5 #a09a8c` on `--accent #b5341f`)
+  and the disabled method row at 2.48:1 on `--page`, and was going to FOLD both
+  against this repo's "WCAG AA is a hard requirement". **Wrong: WCAG 2.2 SC
+  1.4.3's incidental clause exempts "text … that is part of an inactive user
+  interface component",** and `index.css` already reasons that way. Before
+  folding a contrast finding, check whether the element is INACTIVE — the
+  repo's blanket AA phrasing does not carry the exemption and will mislead the
+  next reader.
+
 
 - **2026-08-13 — the CR2 item 0 hypothesis and its oracle.** Both written into
   the ROADMAP with confidence, both measured false within a day (work→rest never
   drops the clock; the prescribed boundary-sum oracle fails a correct fold).
   Lesson: a written hypothesis in a roadmap is load-bearing — an investigator
   will follow it and stop. Mark speculation as speculation, or measure first.
+
+- **A second login provider owes account continuity.** Check that an existing
+  rower can reach the same history through either door. Relay email cannot join
+  those accounts; explicit linking and its extra proof must be visible in the
+  rendered design. (Wave A Apple-first, approved 2026-09-12.)
 
 ## Where the dated record lives
 

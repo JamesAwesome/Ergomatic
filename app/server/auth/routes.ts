@@ -14,13 +14,16 @@ import type { NativeTokenVerifier } from "./nativeVerify.js";
 import { signInWithClaims } from "./signin.js";
 import type { SessionStore } from "./sessions.js";
 import type { UserStore } from "./users.js";
+import type { AccessPolicy } from "./accessPolicy.js";
+import { AuthFailure } from "./frontDoorErrors.js";
 
 export interface AuthDeps {
+  frontDoor?: import("./frontDoor.js").FrontDoor | null;
   sessions: SessionStore;
   users: UserStore;
   oauth: OAuthProvider | null;
   nativeVerifier: NativeTokenVerifier | null;
-  allowlist: Set<string>;
+  accessPolicy: AccessPolicy;
   siteUrl: string;
 }
 
@@ -29,10 +32,42 @@ export function createAuthRouter({
   users,
   oauth,
   nativeVerifier,
-  allowlist,
+  accessPolicy,
   siteUrl,
+  frontDoor,
 }: AuthDeps): Router {
   const router = Router();
+  async function login(
+    claims: import("./google.js").Claims,
+  ): Promise<import("./signin.js").SignInResult> {
+    if (!frontDoor)
+      return signInWithClaims({ sessions, users, accessPolicy }, claims);
+    let signed;
+    try {
+      signed = await frontDoor.attempts.legacyGoogle(claims);
+    } catch (error) {
+      if (error instanceof AuthFailure && error.code === "access_denied") {
+        return { outcome: "denied", email: error.email ?? claims.email };
+      }
+      throw error;
+    }
+    return {
+      outcome: "ok",
+      user: signed.user,
+      token: signed.token!,
+      expiresAt: new Date(signed.expiresAt),
+    };
+  }
+
+  // THE LEGACY DOORS ARE DELIBERATELY NOT RATE-LIMITED (James, 2026-09-13,
+  // reversing this spec's own bound on the PM gate's finding). They used to
+  // carry `frontDoor.admission` whenever Apple was configured, which meant
+  // merging this PR put a GLOBALLY keyed 120/min bucket in front of the Google
+  // door every tester uses today — main has no limiter on these paths at all,
+  // and `express-rate-limit` is new here. 121 unauthenticated requests from
+  // anywhere would have locked out every rower's sign-in for the rest of the
+  // window, on a path this PR has no business changing. The new front-door
+  // routes keep their bucket; this restores main's behaviour on the old ones.
 
   router.get("/api/auth/signin", async (_req, res) => {
     if (!oauth) {
@@ -78,10 +113,7 @@ export function createAuthRouter({
     }
 
     try {
-      const result = await signInWithClaims(
-        { sessions, users, allowlist },
-        claims,
-      );
+      const result = await login(claims);
       if (result.outcome === "denied") {
         res.setHeader("Set-Cookie", clear);
         res.redirect(`/?denied=${encodeURIComponent(result.email)}`);
@@ -119,10 +151,7 @@ export function createAuthRouter({
       return;
     }
     try {
-      const result = await signInWithClaims(
-        { sessions, users, allowlist },
-        claims,
-      );
+      const result = await login(claims);
       if (result.outcome === "denied") {
         res.status(403).json({ error: "denied", email: result.email });
         return;

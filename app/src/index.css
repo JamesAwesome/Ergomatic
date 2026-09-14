@@ -126,12 +126,301 @@ main {
   padding: 6px 20px 20px;
 }
 
+/* SAFE AREA, and it is not optional (Phase SB, the 2026-09-06 capture of
+   `← BACK` under the clock — see the status-backdrop note further down).
+   These two are bare <main> elements, so they take `main`'s flat
+   `6px 20px 20px` and NOT `.screen`'s inset padding, which is what every
+   other route in the app uses. With `viewport-fit=cover` that put the 44px
+   `← BACK` / `← CANCEL` button at y=6 in portrait, under the status bar and
+   beneath `.status-backdrop`'s blur strip, and ran the header under the
+   notch and the rounded corners in landscape. The approved Gate 0 renders
+   (docs/design/apple-signin/renders/) show the inset; the implementation
+   dropped it. No gate here can see this: the Playwright captures are desktop
+   Chromium, where every env(safe-area-inset-*) resolves to 0. */
 .signin {
   display: flex;
   min-height: 90vh;
   flex-direction: column;
+  padding: calc(6px + env(safe-area-inset-top, 0px))
+    calc(20px + env(safe-area-inset-right, 0px)) 20px
+    calc(20px + env(safe-area-inset-left, 0px));
   justify-content: center;
   gap: 12px;
+}
+
+.auth-stack,
+.auth-actions {
+  display: grid;
+  gap: 12px;
+}
+
+/* RESERVE THE SPACE THE BUTTONS WILL OCCUPY. Both provider buttons are gated
+   on `auth.options.state === "ready"`, i.e. on a network round-trip, inside a
+   grid that collapses to zero height until they arrive — so the first screen
+   a tester sees paints a heading, a tagline and nothing, then pops two 52px
+   buttons in and shifts the page. On `main` the sign-in button rendered
+   unconditionally with no network dependency, so this is new here. Two 52px
+   controls plus the 12px gap; reserving it is not a design choice, it is the
+   height the approved Gate 0 render already shows. #418's layout-shift
+   lesson, on the one screen every rower meets first. */
+.signin .auth-stack {
+  min-height: 116px;
+}
+
+.auth-provider-button {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-provider-apple {
+  border: 1px solid var(--auth-apple);
+  background: var(--auth-apple);
+  color: var(--auth-apple-label);
+}
+
+.auth-provider-apple:hover {
+  background: var(--auth-apple-hover);
+}
+
+.auth-provider-apple img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: auto;
+  height: 100%;
+}
+
+.auth-provider-google {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--on-color);
+}
+
+.auth-provider-google:hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.auth-provider-button:focus-visible,
+.auth-back:focus-visible,
+.auth-method-row:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.auth-flow-screen {
+  display: flex;
+  max-width: 520px;
+  min-height: 100dvh;
+  flex-direction: column;
+  /* Same inset as `.signin` above, and for the same reason. */
+  padding: calc(6px + env(safe-area-inset-top, 0px))
+    calc(20px + env(safe-area-inset-right, 0px)) 20px
+    calc(20px + env(safe-area-inset-left, 0px));
+}
+
+.auth-flow-header {
+  margin-bottom: 18px;
+}
+
+.auth-flow-header h1 {
+  margin: 4px 0 8px;
+  line-height: 1.1;
+}
+
+.auth-intro {
+  max-width: 38ch;
+  margin: 0 0 8px;
+  color: var(--ink-3);
+  line-height: 1.45;
+}
+
+.auth-back {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.auth-flow-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.auth-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.auth-identity-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.auth-identity-name {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.auth-identity-email {
+  overflow: hidden;
+  margin: 3px 0 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-explain {
+  margin: 16px 0;
+  padding: 14px 14px 14px 16px;
+  border-left: 3px solid var(--ink-4);
+  background: var(--surface-sunken);
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.auth-explain p {
+  margin: 0;
+}
+
+.auth-actions {
+  margin-top: auto;
+  padding-top: 18px;
+}
+
+.auth-steps {
+  margin: 8px 0 18px;
+  border-top: 1px solid var(--rule);
+}
+
+.auth-step {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 9px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.auth-step-index {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.auth-step-done .auth-step-index {
+  color: var(--success);
+}
+
+.auth-step strong,
+.auth-step small {
+  display: block;
+}
+
+.auth-step strong {
+  font-size: 14px;
+}
+
+.auth-step small {
+  margin-top: 3px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.auth-methods {
+  margin-top: 16px;
+}
+
+.auth-methods h2 {
+  margin: 0 2px 7px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+}
+
+.auth-method-list {
+  border-top: 1px solid var(--rule);
+}
+
+.auth-method-row {
+  display: flex;
+  width: 100%;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+
+button.auth-method-row {
+  cursor: pointer;
+}
+
+.auth-method-name {
+  font-weight: 500;
+}
+
+.auth-method-action {
+  color: var(--ink-2);
+}
+
+.auth-method-connected {
+  color: var(--success);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+
+.notice.auth-notice-success {
+  border-color: var(--success);
+}
+
+.notice.auth-notice-error {
+  border-color: var(--accent);
+}
+
+.auth-link-retry {
+  width: 100%;
+  margin-top: 12px;
 }
 
 .tagline {
@@ -183,6 +472,10 @@ main {
 button:disabled {
   cursor: not-allowed;
   color: var(--ink-5);
+}
+
+button.auth-method-row:disabled .auth-method-action {
+  color: inherit;
 }
 
 .button-primary:disabled,

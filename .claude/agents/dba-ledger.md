@@ -8,6 +8,30 @@ the history of a table you are about to judge again. Every number here
 carries the command that produced it; a section without commands is not a
 DBA entry.
 
+## 2026-09-13 — Apple account-access policy query and lock gate
+
+**PASS, new policy scope only.** Five synthetic users/25 sessions ruled:
+every path remains a point lookup. At 100k synthetic users/1m sessions,
+session resolution measured 0.011 ms, baseline vs widened original-session
+lookup 0.008 vs 0.006 ms, Google/Apple subject lookups 0.008/0.009 ms,
+and the saved-email-preserving legacy upsert 0.020 ms. These are medians
+of five warm PostgreSQL execution times, discarding run 1. Existing unique
+and primary-key indexes served every stress query; no schema, migration,
+new index, bulk API or workout-log scan was added.
+
+Postgres 18.4 Debian aarch64; Docker Desktop 29.4.1, 10 CPUs/8.32 GB;
+Apple M5 host, 10 CPUs/16 GiB. Settings: shared buffers 128 MB, work memory
+4 MB, JIT off, parallel gather workers 0. The widened unqualified
+`FOR UPDATE` locks one matched user in addition to its session; 250 ms
+lock-timeout probes blocked writes to that user/session while another user
+remained writable. A held-user probe showed the session was locked first.
+Production scale, throughput and whole-transaction lock duration are untested.
+
+Commands, exact SQL, measurements and limitations are in the
+[report](../../docs/superpowers/research/2026-09-13-access-mode/db-cost.md)
+and its linked evidence archive. This does not complete the original Apple
+implementation's outstanding DBA PR gate.
+
 ## 2026-09-12 — PR #412, Phase MD PR 3 "one Sample shape" (gate, TRIAD: stored shape)
 
 **Verdict: PASS.** No migration, no schema change, no SQL change, zero stored
@@ -325,3 +349,122 @@ swamped it) — use `explain (analyze, wal)` with `full_page_writes` off.
 **Not measured:** prod host shape; concurrency; serialisation to a phone
 over a real link (psql timings include a local socket only); whether Phase
 PS aggregates these four numbers at all.
+
+## 2026-09-12 — Wave A Apple-auth spec pass
+
+**FAIL on the draft.** Provider columns held, but grant/attempt columns,
+predicates, indexes, atomic completion, cleanup and rollback were underdefined.
+Anonymous attempts grow with public requests rather than users; TTL bounded
+authority but neither row count nor physical retention. Required exact named
+constraints, atomic create/link consumption, no network I/O under DB locks,
+admission and resident-row bounds, and separate validity/deletion lifetimes.
+No prescribed SQL existed, so latency, locks, WAL and index size were unmeasured.
+The author folded these contracts into the corrected spec; the implementation
+plan owes measurement of auth tables, not unrelated session-log volume.
+
+Evidence: `docs/superpowers/specs/2026-09-12-apple-signin-review.md`; corrected
+spec and rendered Gate 0 approved by James on 2026-09-12. No rerun PASS claimed.
+
+## 2026-09-13 — Wave A Apple sign-in plan measurement
+
+**PASS on corrected `299a31d3`; original `82fb92cb` FAILED held-lock concurrency.**
+Source fingerprints and every command are in
+`docs/superpowers/research/2026-09-13-apple-db-measurement/report.md`; original
+and corrected source snapshots, raw JSON plans, scripts and an archive manifest
+live beside it. Follow that directory's README for the pinned replay inputs.
+
+PostgreSQL 18.4 Debian/aarch64 on Apple M5, 10 logical CPUs, 16 GiB RAM;
+work_mem 4 MB, shared_buffers 128 MB, JIT on, parallel gather 0. WAL comparisons
+used full-page images off and restored them on; the capped-row trial kept the
+default. Synthetic scales: 5/1k/100k/1M users, sessions, grants and links, each
+with 511 live anonymous attempts. Household plus the anonymous cap decides the
+cost ruling; production traffic/hardware remain unmeasured.
+
+The actual query capture found admission COUNT also scans links (0.040 to
+36.958 ms). Identity queries use their unique/PK indexes at scale. Original
+claim versus same-session link replacement deadlocked with 40P01 after
+1018.197 ms; session-first `bound()` made the identical held-order probe's two
+operations fulfill in 12.431 ms. Held session revocation rejects; a concurrent
+subject winner retains its exact ID/profile; slot 512 makes a competing begin
+reject `rate_limited` with exactly 512 rows.
+
+Migration 0031 users-lock bracket: 80.556–80.928 ms at 1M users. The prior
+server booted against the migrated schema and an Apple-only row with health200,
+which does not remove the activation-dependent authentication floor. No competing
+open PRs were observed. At the deciding scale, begin+cancel was 2.122 ms and
+returning begin→claim→accept 4.747 ms; no additional index was recommended.
+The full 512 pending-confirmation cap with 8192-character synthetic refresh
+tokens occupied 5,177,344 B total relation. No ROADMAP row proposed. This is the
+plan gate; the final PR still owes measurement against its shipped source.
+
+## 2026-09-13 — Apple failure-discard plan delta
+
+**PASS for the plan delta, not final-PR signoff**, committed candidate259882ba1087b6ad853159b19799b2358fbf3905; attempts SHA256d8df3812f5b4bb6e29256f3ced465616f3b0cf3b9d51582b6a90657772a88980. Diff from prior299a31d3 is exactly one new conditional DELETE; prior migration/schema/index and session-first query measurements remain inherited by byte identity.
+
+| Environment | Value |
+|---|---|
+| Container / PG | apple-dba-discard-pg / PostgreSQL18.4 Debian aarch64 |
+| Host | Apple M5,10CPUs,16GiB |
+| Query settings | work_mem4MB,shared_buffers128MB,jit on,parallel gather0,WAL FPI off then restored |
+| Scale | 5users;512anonymous attempts plus5/1k/100k/1M links with matching sessions; smallest full-anonymous-cap fixture rules |
+
+Real discard-call medians under benchmark rollback transactions: matching signup0.310/0.276/0.351/0.290ms; matching link0.281/0.261/0.358/0.261ms. The actual index is state_unique, despite a PK predicate. Matched/stale WAL54/0B; warm matching buffers4–5, stale3–4. Held real accept→COMMIT protects confirm/version3+grant and target_authorize/version3 from stale discard; the old id/hash/surface cleanup fails the exact gate; pinned original rerun passes. Holding the parent session does not block child discard (0.569ms), and the original claim-versus-replacement deadlock reproducer still fulfills both operations (13.048ms).
+
+Commands and complete SQL/EXPLAIN/held outputs are in `docs/superpowers/research/2026-09-13-apple-db-discard/report.md`, `measure.ts`→`measure.json`, `held.ts`→`held.json`/`held-mutant.json`, and `original-deadlock-replay.ts`→JSON. Run with Node26 `pnpm exec tsx /tmp/apple-dba-discard/<script>.ts` from candidate app, using the report's isolated postgres:18.4 command and the pinned source snapshot. The original scripts and raw artifacts are archived beside the report with a SHA256 manifest and replay prerequisites. No ROADMAP row; final integrated-head fingerprint, caller/gate and migration-competition checks remain owed.
+
+## 2026-09-13 — Session expiry sweep review fix
+
+**PASS after correcting the fixture; no index or migration.** PostgreSQL 18.4 Debian/aarch64, dedicated 2 CPU/1 GiB container, Apple M5 host; all 32 migrations applied; query JIT off/parallel gather 0. The original 6.421 ms fixture omitted `auth_attempts.original_session_id ON DELETE CASCADE` and remains parent-core evidence only. Actual schema, median of 5 warm: household 5 expired/25 sessions +25 links +511 anonymous attempts **0.170 ms**; sensitivity 10k expired/100k sessions +100k links +511 anonymous **29.290 ms**, including one `auth_attempts_link_session_unique` child probe per deleted parent (committed trigger 22.082 ms/10k calls; total WAL 1,124,048 B by LSN). The next 90k-live minute scan was 2.628 ms/1,819 pages. Committed deletion retained all live parents/links and anonymous rows, removed every expired parent's link, and left zero orphans. Held parent DELETE locked both tables/indexes; retained parent/child/anonymous updates succeeded, deleted parent/child updates timed out at 250 ms. A single concurrent-owner 100k probe completed both sweeps with zero expired/orphan rows and no observed deadlock. Full evidence: `docs/superpowers/research/2026-09-13-apple-review-fixes/db-cost/cascade/`. Production and >100k remain unmeasured; no ROADMAP row.
+
+## 2026-09-13 — Apple front door, PR #425 `wave-a-apple` @ `4f9b8d66` (stored-shape PR gate)
+
+**PASS WITH ROWS. The household fixture decided it.** Closes the gate the
+spec-stage entry left FAILing ("neither row count nor physical retention") and
+the access-policy entry explicitly did not complete.
+
+Environment: `postgres:18.4` in Docker, `PostgreSQL 18.4 (Debian) aarch64`,
+`work_mem=4096kB`, `statement_timeout=0`, `lock_timeout=0`, autovacuum on /
+naptime 60 s; `set jit=off; set max_parallel_workers_per_gather=0` per session;
+all 32 `app/drizzle/*.sql` applied in order; medians of 5 after discarding run 1.
+
+**Hot paths, household → 100k → 1M.** `begin()` serialised section
+**0.344 → 13.601 → 221.351 ms**; resident cap `count(*) … purpose='signin'`
+0.086 → 9.136 → 63.092 ms (**Seq Scan at every scale** — no index on
+`purpose`); attempt sweep 0.069 → 5.494 → 151.667 ms. At 1M: `load()` 0.049 ms,
+`save()` 0.195 ms, link delete 0.140 ms (the PARTIAL index is used),
+`resolveSession` 0.126 ms. The new allowlist check is IN PROCESS and adds zero
+queries. `auth_attempts_state_unique` is never queried in SQL.
+
+**Retention.** Structurally bounded: 512 live signin rows + one link row per
+live session + one sweep window. 3 × 20,000 real cycles: heap truncated to
+**0 bytes**, and round 3 added **zero** index bytes — the earlier growth was
+btree recycling lag. Plateau ~13 MB. Autovacuum needs no tuning.
+
+**Migration 0031.** Additive, one drizzle transaction (so CONCURRENTLY is
+unavailable): total **3.312–6.074 ms at 5 users**, 90 ms at 1M, of which the
+unique index build is 0.138–0.267 / 87 ms. `ADD COLUMN apple_sub` is
+metadata-only. Holds `AccessExclusiveLock` on `users` for the transaction; a
+concurrent `resolveSession`-shape read hit a 2 s `lock_timeout`. Older image
+boots against the migrated DB. `users_apple_sub_unique` is NULLS DISTINCT.
+
+**Statement census against the SHIPPED store** (`log_statement='all'`): new
+account 15 data statements / 4 pooled transactions; returning account 12 / 3.
+**No N+1.** Full integration suite green: 28 files, 469 tests, exit 0.
+
+**Three rows proposed.** R1: the cap scans link rows under the global advisory
+lock, trigger ~1.4M rows. R2: a 3 s pool timeout disables sign-in for up to
+60 s after recovery and `healthy()` has no consumer, so `/api/health` stays 200
+— reproduced end to end. R3: the boot diagnostic gated the health port with no
+statement timeout — **fixed in this PR rather than filed**, together with a
+node-postgres defect the fix itself exposed (a multi-statement `SET LOCAL`
+string returns an array, so the bounded query read `undefined` and reported a
+silent zero; corrected to an explicit transaction and verified against a real
+container: timeout fires at 5004 ms, pool survives).
+
+Handed to other agents: plaintext `apple_refresh_token` at rest (antagonist /
+code review) and `original()`'s `FOR UPDATE` with no `OF` clause locking
+`users` (code review).
+
+**Unmeasured:** production host CPU/RAM, real production row counts (these
+tables have never held one), the Apple provider round trip, and whether a real
+Apple refresh token approaches the 8192-char bound.

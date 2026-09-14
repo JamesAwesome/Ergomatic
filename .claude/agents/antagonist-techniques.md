@@ -8,6 +8,8 @@ toolkit, not a history.
 
 ## Falsified claims, and how
 
+- **A native logger unit test can prove the sink while missing the bridge that selects it.** For a Console override, drive `console.*` inside the loaded production WKWebView and capture process stdout; in the same host, send a forbidden synthetic result through native `toJs` and JavaScript `fromNative`. Read the no-callback error branch too: it can call patched `console.warn` even when generic logging is disabled. A prebuilt framework’s `#if DEBUG` was evaluated when that framework was built; changing the app configuration cannot change it. Inspect the exact platform slice and built app plist before using that getter as an app-build oracle.
+
 - **"The paused derivation depends on seeing zero stroke rates."** Believed
   because a long comment discussed `spm === 0` at length. False: that passage is
   the epitaph of a DELETED predicate, and the live guard is on
@@ -174,6 +176,14 @@ toolkit, not a history.
   hardware session on them.
 
 ## Techniques that keep paying
+
+- **An access check after session resolution can refresh the credential it denies.** Put policy before expiry extension; enumerate direct resolver consumers and the losing credential in bearer/cookie precedence.
+- **A pending-new identity can become an existing account at conflict resolution.** Check the candidate before creation and the canonical row returned by the conflict path before grants or sessions. The pending provider email no longer owns access once a subject winner exists.
+- **A live original-session foreign key proves liveness, not current entitlement.** Trace every attempt transition through its original-session resolver and apply current account policy before advancement.
+- **Boot proves configuration shape, not provider registration.** Presence, syntax and bounds are locally checkable; account-console association and credential acceptance require a real provider exchange.
+
+- **A failed CAS can still erase the winner in its catch.** Hold two supported callbacks after they read the same authorization stage; let one commit, then release the loser and inspect the real row after cleanup. Apple auth's version guard rejected correctly while ID-only failure cleanup deleted the winner's pending credential. Trace ownership through the exception path, and through every await in client cancellation.
+- **A plugin with no logging calls can still log its whole credential through the bridge.** Follow `call.resolve` into native serialization and JavaScript `fromNative`, then run the vendor bridge with the actual build's logging configuration; a plugin-only forbidden-string test cannot gate that producer. Native authorization identity also does not prove JavaScript document identity.
 
 1. **Replay the committed captures.** Most wire questions are already answered in
    `docs/monitor/sessions/*.log.gz`. No hardware, no speculation.
@@ -397,6 +407,16 @@ toolkit, not a history.
   acknowledgement.
 - One judgement call site, enforced by a census test, held across seven phases.
 - The view layer deriving everything and storing nothing.
+
+- **A live stored session does not prove the callback browser still holds it.**
+  Apple `form_post` crosses sites while the ordinary session is `SameSite=Lax`.
+  Trace credentials across each redirect method; require same-origin finalization
+  to compare the current session with the original operation's session.
+- **An exact callback route can still be unreachable.** Trace middleware order
+  and parser selection before the handler: a global foreign-origin rejection and
+  JSON-only parsing stop Apple's form POST before any state check can run.
+
+- **A navigation request is not a permanent route invariant.** After an auth result, click the next ordinary tab through the real router. A terminal `/you` destination coupled to pathname changes sent Library straight back to You; a test stopping at the result screen missed it. This is the confirmed ordinary finding from the interrupted Apple code lens (2026-09-13); no completed review PASS is implied.
 
 ## Where the dated record lives
 

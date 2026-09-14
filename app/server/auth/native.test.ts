@@ -3,10 +3,15 @@ import request from "supertest";
 import { createApp } from "../app.js";
 import { baseDeps } from "../testDeps.js";
 import { makeFakeSessions, makeFakeUsers } from "../testing/fakes.js";
+import { createAccessPolicy } from "./accessPolicy.js";
+import { AuthFailure } from "./frontDoorErrors.js";
+import { Router, type RequestHandler } from "express";
+import type { FrontDoor } from "./frontDoor.js";
 
 const claims = { sub: "s1", email: "a@x.com", emailVerified: true, name: "A" };
 const dbUser = {
   id: "u1",
+  appleSub: null,
   googleSub: "s1",
   email: "a@x.com",
   name: "A",
@@ -24,7 +29,7 @@ function nativeDeps(overrides: Record<string, unknown> = {}) {
     users: makeFakeUsers({
       createUser: vi.fn(async () => dbUser),
     }),
-    allowlist: new Set(["a@x.com"]),
+    accessPolicy: createAccessPolicy("restricted", "a@x.com"),
     nativeVerifier: async () => claims,
     ...overrides,
   });
@@ -32,6 +37,21 @@ function nativeDeps(overrides: Record<string, unknown> = {}) {
 
 const post = (deps = nativeDeps(), body: object = { idToken: "jwt" }) =>
   request(createApp(deps)).post("/api/auth/native").send(body);
+
+function deniedFrontDoor(email: string): FrontDoor {
+  const appleCallback: RequestHandler = (_req, res) => res.status(503).end();
+  const admission: RequestHandler = (_req, _res, next) => next();
+  return {
+    router: Router(),
+    appleCallback,
+    admission,
+    attempts: {
+      legacyGoogle: vi.fn(async () => {
+        throw new AuthFailure("access_denied", email);
+      }),
+    },
+  } as unknown as FrontDoor;
+}
 
 describe("POST /api/auth/native", () => {
   it("mints a bearer session for an allowlisted new user", async () => {
@@ -46,18 +66,44 @@ describe("POST /api/auth/native", () => {
     expect(res.headers["cache-control"]).toBe("no-store");
   });
 
-  it("signs in an existing sub without the allowlist and upserts", async () => {
-    const d = nativeDeps({ allowlist: new Set() });
+  it("signs in an existing subject only when its saved email is allowed", async () => {
+    const d = nativeDeps();
     (d.users.findByGoogleSub as ReturnType<typeof vi.fn>).mockResolvedValue(
       dbUser,
     );
     const res = await post(d);
     expect(res.status).toBe(200);
-    expect(d.users.updateProfile).toHaveBeenCalledWith("u1", "a@x.com", "A");
+    expect(d.users.updateProfile).toHaveBeenCalledWith("u1", "A");
+  });
+
+  it("403s an existing subject whose saved email is no longer allowed", async () => {
+    const d = nativeDeps({
+      accessPolicy: createAccessPolicy("restricted", "other@x.com"),
+    });
+    (d.users.findByGoogleSub as ReturnType<typeof vi.fn>).mockResolvedValue(
+      dbUser,
+    );
+    const res = await post(d);
+    expect(res.status).toBe(403);
+    expect(res.body).toStrictEqual({ error: "denied", email: "a@x.com" });
+    expect(d.sessions.createSession).not.toHaveBeenCalled();
+  });
+
+  it("keeps the legacy native denial body when the combined auth flow enforces access", async () => {
+    const res = await post(
+      nativeDeps({ frontDoor: deniedFrontDoor("saved-outside@test") }),
+    );
+    expect(res.status).toBe(403);
+    expect(res.body).toStrictEqual({
+      error: "denied",
+      email: "saved-outside@test",
+    });
   });
 
   it("403s a non-allowlisted new user with the email, creating nothing", async () => {
-    const d = nativeDeps({ allowlist: new Set(["other@x.com"]) });
+    const d = nativeDeps({
+      accessPolicy: createAccessPolicy("restricted", "other@x.com"),
+    });
     const res = await post(d);
     expect(res.status).toBe(403);
     expect(res.body).toStrictEqual({ error: "denied", email: "a@x.com" });

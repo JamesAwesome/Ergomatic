@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Me } from "./useMe";
+import type { AuthFlowController } from "./adapters/authFlow";
 import { signOut as authSignOut } from "./adapters/auth";
 import BaselinesRow from "./you/BaselinesRow";
 import { clearConcept2Seen } from "./you/concept2Seen";
 import Concept2Row from "./you/Concept2Row";
 import YouStatsHero from "./you/stats/YouStatsHero";
+import SignInMethods from "./you/SignInMethods";
 
 function initials(name: string): string {
   return name
@@ -19,9 +21,11 @@ function initials(name: string): string {
 export default function You({
   user,
   onSignedOut,
+  authFlow,
 }: {
   user: Me;
   onSignedOut: () => void;
+  authFlow?: AuthFlowController;
 }) {
   // AUD-014's unmet half. The DANGEROUS state was never reachable — the
   // transition below runs AFTER the await, so a failed sign-out leaves the
@@ -80,6 +84,7 @@ export default function You({
               setSignOutFailed(true);
               return;
             }
+            authFlow?.abandon();
             onSignedOut();
           }}
         >
@@ -92,6 +97,7 @@ export default function You({
           covers. It IS the door to /you/stats; `.you-doors` below gains no
           STATS row. */}
       <YouStatsHero />
+      {authFlow && <SignInMethods auth={authFlow} />}
       {/* THE DOORS (Wave E PR A, spec 2026-09-04-concept2-walk-fixes §5.1,
           Gate 0 amendment §8 approved 2026-09-04; THIRD ROW added by the
           baselines-subpage Gate 0, 2026-09-05): the foot of You is one

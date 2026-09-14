@@ -45,6 +45,12 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID:-}
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
+      ACCESS_MODE: ${ACCESS_MODE:-restricted}
+      APPLE_NATIVE_CLIENT_ID: ${APPLE_NATIVE_CLIENT_ID:-}
+      APPLE_WEB_CLIENT_ID: ${APPLE_WEB_CLIENT_ID:-}
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
+      APPLE_KEY_ID: ${APPLE_KEY_ID:-}
+      APPLE_PRIVATE_KEY: ${APPLE_PRIVATE_KEY:-}
       # Wave E PR1: default-off passthrough (empty on every host that doesn't
       # set them, which is every stack today — dev, e2e, and prod).
       # AVAILABILITY is env-gated; ACTIVATION on a real cohort additionally

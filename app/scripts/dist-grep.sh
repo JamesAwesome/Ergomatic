@@ -86,6 +86,11 @@
 #   checks `pm5-recording` (the runtime module's own content) rather than
 #   `__pm5Recording__` (the always-present property name) — this needle
 #   follows that same precedent rather than inventing a new one.
+# - `APPLE_PRIVATE_KEY` — the Sign in with Apple .p8 signing key's ENV VAR
+#   NAME (`server/auth/frontDoor.ts`, read only on the server). Identical
+#   case to `C2_CLIENT_SECRET` below and added for the same stated reason:
+#   nothing under `src/` is meant to reference the name at all, so the needle
+#   is green today and goes red the moment a client module names it.
 # - `C2_CLIENT_SECRET` — Concept2's OAuth client secret's ENV VAR NAME
 #   (`server/index.ts:119`, `process.env.C2_CLIENT_SECRET`), a
 #   server-only value read exclusively there (plus the standalone
@@ -155,7 +160,7 @@ fi
 # rename that updates the other three and not this list leaves the needle
 # hunting a string that no longer exists: green forever, proving nothing.
 # True of all ten needles, not just the newest. Filed in ROADMAP.
-NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)" "C2_CLIENT_SECRET" "C2 link probe (dev harness)" "scripted start failure" "app-settings door (dev override)")
+NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)" "Just Row observer (instrument)" "C2_CLIENT_SECRET" "APPLE_PRIVATE_KEY" "C2 link probe (dev harness)" "scripted start failure" "app-settings door (dev override)")
 FAILED=0
 
 for needle in "${NEEDLES[@]}"; do

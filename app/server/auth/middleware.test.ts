@@ -152,6 +152,21 @@ describe("requireUser bearer mode", () => {
     expect(res.status).toBe(200);
     expect(store.resolveSession).toHaveBeenCalledWith("bearer-tok");
   });
+
+  it("does not fall back to an allowed cookie when the bearer is denied", async () => {
+    const store = {
+      resolveSession: vi.fn(async (token: string) =>
+        token === "cookie-tok" ? resolved : null,
+      ),
+    } as unknown as SessionStore;
+    const res = await request(guardedApp(store))
+      .get("/whoami")
+      .set("Authorization", "Bearer denied-bearer")
+      .set("Cookie", `${SESSION_COOKIE}=cookie-tok`);
+    expect(res.status).toBe(401);
+    expect(store.resolveSession).toHaveBeenCalledTimes(1);
+    expect(store.resolveSession).toHaveBeenCalledWith("denied-bearer");
+  });
 });
 
 // Wave E PR1.75a (2026-09-02-concept2-pr175-app-bind-design.md §1): which

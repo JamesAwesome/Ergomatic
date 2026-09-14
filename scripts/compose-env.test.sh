@@ -53,6 +53,27 @@ check "$(grep -c '^ *C2_CLIENT_SECRET: dummy-secret$' <<<"$lit")" "1" "C2_CLIENT
 check "$(grep -c '^ *C2_LINK_ENABLED: "1"$' <<<"$lit")" "1" "C2_LINK_ENABLED passes through"
 check "$(grep -c '^ *C2_ALLOWED_EMAILS: one@dummy.test,two@dummy.test$' <<<"$lit")" "1" "C2_ALLOWED_EMAILS passes through (a comma list survives intact)"
 
+# 2b. Wave A: the six auth vars compose.yml gained, dark and lit. ACCESS_MODE
+#     is the one that fails QUIETLY and so is the reason this block exists:
+#     drop or rename that passthrough and a host .env carrying
+#     ACCESS_MODE=public silently falls back to `restricted`, which now blocks
+#     EXISTING sessions as well as new accounts — everyone locked out, health
+#     still 200. The five APPLE_* fail loudly instead (a partial set throws in
+#     frontDoorConfig and the container never becomes healthy), so they are the
+#     cheaper half; they are here because the seam is the same one.
+check "$(grep -c '^ *ACCESS_MODE: restricted$' <<<"$dark")" "1" "ACCESS_MODE defaults to restricted when unset (fail closed)"
+for v in APPLE_NATIVE_CLIENT_ID APPLE_WEB_CLIENT_ID APPLE_TEAM_ID APPLE_KEY_ID APPLE_PRIVATE_KEY; do
+  check "$(grep -c "^ *$v: \"\"$" <<<"$dark")" "1" "$v empty when unset (Apple stays dark)"
+done
+
+applelit=$(POSTGRES_PASSWORD=dummy ACCESS_MODE=public APPLE_NATIVE_CLIENT_ID=dummy.native APPLE_WEB_CLIENT_ID=dummy.web APPLE_TEAM_ID=DUMMYTEAM APPLE_KEY_ID=DUMMYKEY APPLE_PRIVATE_KEY=dummy-pem docker compose config 2>/dev/null)
+check "$(grep -c '^ *ACCESS_MODE: public$' <<<"$applelit")" "1" "ACCESS_MODE passes through"
+check "$(grep -c '^ *APPLE_NATIVE_CLIENT_ID: dummy.native$' <<<"$applelit")" "1" "APPLE_NATIVE_CLIENT_ID passes through"
+check "$(grep -c '^ *APPLE_WEB_CLIENT_ID: dummy.web$' <<<"$applelit")" "1" "APPLE_WEB_CLIENT_ID passes through"
+check "$(grep -c '^ *APPLE_TEAM_ID: DUMMYTEAM$' <<<"$applelit")" "1" "APPLE_TEAM_ID passes through"
+check "$(grep -c '^ *APPLE_KEY_ID: DUMMYKEY$' <<<"$applelit")" "1" "APPLE_KEY_ID passes through"
+check "$(grep -c '^ *APPLE_PRIVATE_KEY: dummy-pem$' <<<"$applelit")" "1" "APPLE_PRIVATE_KEY passes through"
+
 # 3. compose.e2e.yml adds no C2_* keys — the e2e stack must never light the
 #    flag by way of the override layering, only by way of never setting it.
 e2e=$(POSTGRES_PASSWORD=dummy TEST_AUTH_SECRET=dummy docker compose -f compose.yml -f compose.e2e.yml config 2>/dev/null)

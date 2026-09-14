@@ -5,7 +5,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import request from "supertest";
 import type pg from "pg";
 import { createApp } from "../app.js";
-import { baseDeps } from "../testDeps.js";
+import { baseDeps, TEST_ACCESS_POLICY } from "../testDeps.js";
 import { createDb, type Db } from "../db/index.js";
 import { createSessionStore } from "../auth/sessions.js";
 import { createUserStore } from "../auth/users.js";
@@ -52,9 +52,8 @@ describe("POST/GET /api/logs: optional targetSplit and paired actuals round-trip
 
     app = createApp(
       baseDeps({
-        sessions: createSessionStore(db),
+        sessions: createSessionStore(db, TEST_ACCESS_POLICY),
         users: createUserStore(db),
-        allowlist: new Set(["amend@log.test"]),
         nativeVerifier: async () => ({
           sub: "amend-sub",
           email: "amend@log.test",

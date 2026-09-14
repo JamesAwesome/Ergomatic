@@ -97,13 +97,15 @@ Two things that bite here:
 
 1. Google Cloud Console → APIs & Services → Credentials → Create credentials
    → OAuth client ID → type **Web application**, name `ergomatic`.
-2. Authorized redirect URIs — add BOTH:
+2. Authorized redirect URIs — preserve the existing callbacks and add the
+   confirmed-signup callback:
    - `https://ergomatic.waffle.haus/api/auth/callback`
+   - `https://ergomatic.waffle.haus/api/auth/google/callback` (combined provider flow)
    - `http://localhost:5173/api/auth/callback` (local dev)
 3. Configure the consent screen if prompted (External, app name Ergomatic;
    publish it or add your rowers as test users).
 4. Put `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in the host `.env`, plus
-   `ALLOWED_EMAILS=you@example.com,other@example.com`.
+   `ACCESS_MODE=restricted` and `ALLOWED_EMAILS=you@example.com,other@example.com`.
 5. **iOS native sign-in (Phase 3+)**: Google Cloud Console → Credentials →
    Create credentials → OAuth client ID → type **iOS**, bundle ID
    `haus.waffle.ergomatic`. iOS clients have no secret. Put its client ID in
@@ -111,18 +113,144 @@ Two things that bite here:
 6. `docker compose up -d` to recreate the app with the new env.
 
 Notes:
-- The allowlist is an **admission gate, not revocation**: removing an email
-  does not sign out an existing account. To off-board someone, delete their
-  row in `users` (sessions cascade):
-  `docker exec -it ergomatic-postgres psql -U ergomatic -c "delete from users where email='x@y.com'"`.
-  **The container name is not fixed:** `compose.yml` names it
-  `${ERGO_STACK:-ergomatic}-postgres`, and `app/scripts/stack-env.sh` derives a
-  per-worktree `ERGO_STACK` for local e2e stacks. The line above is correct on
-  the production host, where `ERGO_STACK` is unset. Anywhere else, run
-  `docker ps` first.
-- `ALLOWED_EMAILS` changes take effect on container recreate, not live.
+- `ACCESS_MODE` accepts `restricted` or `public`, trimming surrounding
+  whitespace. Missing or blank defaults to `restricted`; any other value
+  rejects startup. Restricted mode checks `ALLOWED_EMAILS` for both Apple and
+  Google, for new and existing accounts. An empty list admits nobody. Public
+  mode allows signup and login without the list.
+- The account's saved email is the access key after provider-subject lookup.
+  Returning sign-ins and linking preserve that email. Removing it blocks
+  existing cookie and bearer sessions on their next protected server request
+  after configuration reload, and blocks later sign-ins through either
+  linked provider. Account and workout data remain stored. Reallowing the
+  account can restore access with a still-unexpired session.
+- `ACCESS_MODE` and `ALLOWED_EMAILS` changes take effect on container
+  recreate, not live. Requests already admitted may finish. This is server
+  access control; it does not wipe cached client data.
 - If sign-in breaks after a deploy, check the app logs for the boot warning
   about missing Google env before debugging anything else.
+
+## Apple sign-in setup
+
+Apple is available when its complete valid configuration is present. All
+five Apple values absent or blank keeps Google-only operation, including
+HTTP localhost. Partial or invalid Apple configuration rejects startup.
+`ACCESS_MODE` controls account access independently of which providers are
+configured. (An earlier draft of this page told you to delete an obsolete
+`FRONT_DOOR_ENABLED` assignment from the host `.env`. That variable has never
+existed on `main` — `git grep FRONT_DOOR_ENABLED main` is empty — so there is
+nothing to delete unless you set it by hand while this branch was in
+progress.)
+
+**Check the boot log after any `ALLOWED_EMAILS` change.** In `restricted`
+mode the API now reports how many existing accounts the list excludes, because
+an incomplete list signs those accounts out at their next request while the
+container still reports healthy. The log gives a count, never the addresses —
+Apple-first accounts are private-relay addresses. To see which:
+
+```sh
+docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select email from users;"'
+```
+
+The service is `postgres`, not `db`, and the role and database both default to
+`ergomatic`, not `postgres` (`compose.yml`) — an earlier version of this block
+got both wrong. Expanding `$POSTGRES_USER`/`$POSTGRES_DB` INSIDE the container
+means the command works whatever the host `.env` sets them to, and needs no
+editing.
+
+**Before a deploy that changes access, check the whole condition at once.**
+This reads only the api container's own environment, prints counts rather than
+addresses, and applies the same trim-and-lowercase normalization the server
+uses, so it answers what the server will actually decide:
+
+```sh
+docker compose exec api node -e '
+const {Pool}=require("pg");
+const p=new Pool({connectionString:process.env.DATABASE_URL});
+const allow=new Set((process.env.ALLOWED_EMAILS||"").split(",").map(s=>s.trim().toLowerCase()).filter(Boolean));
+p.query("select email from users").then(r=>{
+const miss=r.rows.filter(x=>!allow.has(x.email.trim().toLowerCase())).length;
+console.log("ACCESS_MODE :",process.env.ACCESS_MODE||"(unset -> restricted)");
+console.log("accounts    :",r.rowCount);
+console.log("allowlist   :",allow.size);
+console.log("LOCKED OUT  :",miss,miss?"<-- FIX BEFORE DEPLOY":"(none)");
+return require("jose").importPKCS8(process.env.APPLE_PRIVATE_KEY||"","ES256").then(()=>console.log("PEM         : OK"),e=>console.log("PEM         : BAD -",e.message));
+}).then(()=>p.end());'
+```
+
+`LOCKED OUT: 0` and `PEM: OK` is the passing state. A bad PEM reads
+`Found a character that cannot be part of a valid base64 string` when the
+escaped `\n` was never decoded, and `"pkcs8" must be PKCS#8 formatted string`
+when the value is missing — and a partial `APPLE_*` set fails the boot outright
+rather than disabling Apple, so the whole API is down, not just sign-in. Both
+forms were measured against a real container on 2026-09-13.
+
+The current deployment at `ergomatic.waffle.haus` is staging. Use
+`ACCESS_MODE=restricted` and explicitly list tester account emails. Future
+production will have its own domain and web Services ID; those values are
+not yet chosen. The existing CI environment is still named `production`;
+this access-policy change does not split deployment infrastructure. Public
+access and external TestFlight still require in-app deletion and the Wave A
+release gates.
+
+For an HTTPS deployment:
+
+1. Enable Sign in with Apple for the primary App ID `haus.waffle.ergomatic`.
+   Refresh provisioning for the native entitlement; an unsigned simulator
+   build does not verify provisioning or an actual Apple authorization.
+2. Register a distinct Services ID and associate it with that primary App ID.
+   Staging uses `haus.waffle.ergomatic.web.staging`. Register the deployment
+   domain and exact return URL
+   `https://ergomatic.waffle.haus/api/auth/apple/callback` (substitute the
+   configured `SITE_URL` origin for another deployment). Grouping and shared
+   subject identity still require the real native/web continuity check.
+3. Create a Sign in with Apple private key associated with the primary App ID.
+   Put its Team ID, Key ID and downloaded PKCS8 `.p8` key in the server-only
+   `APPLE_TEAM_ID`, `APPLE_KEY_ID` and `APPLE_PRIVATE_KEY` values. This is a
+   Sign in with Apple service key, separate from an App Store upload key.
+4. Set `APPLE_NATIVE_CLIENT_ID=haus.waffle.ergomatic` and
+   `APPLE_WEB_CLIENT_ID` to the registered Services ID. Neither is a secret;
+   the private key must never be a `VITE_` value or enter the app bundle.
+5. Add `https://ergomatic.waffle.haus/api/auth/google/callback` to the Google
+   web client's redirect URLs, preserving `/api/auth/callback` for installed
+   clients. For a different deployment use that HTTPS `SITE_URL` origin.
+
+With any Apple value present, the server rejects missing or invalid Apple
+configuration at boot, including a non-HTTPS site or identical native/web
+audiences. Changes require container recreation. Compose's double-quoted
+`.env` values decode `\n` to
+actual line breaks, so the PEM can occupy one quoted assignment. Do not print
+a resolved compose configuration containing real credentials.
+
+Keep the native App ID, web Services ID and service key associated with the
+intended Apple developer team. Apple states: “The user identifier remains
+unique and static for your developer team.” Its relay documentation also
+scopes private addresses to the developer team. Separate app groups alone
+are not a documented reason to expect new subjects or relay addresses;
+a developer-team transfer needs Apple's explicit migration process. Keep
+separate environment Services IDs/callbacks, and verify real native/web
+account continuity before public activation. These are configuration
+requirements, not a claim that the live continuity check has passed.
+[Identity-token contract](https://developer.apple.com/documentation/signinwithapple/receiving-a-users-identity-token)
+· [relay scope](https://developer.apple.com/documentation/signinwithapple/communicating-using-the-private-email-relay-service)
+· [team transfer](https://developer.apple.com/documentation/signinwithapple/transferring-your-apps-and-users-to-another-team).
+
+Hide My Email works through the Apple subject. In restricted mode, an
+Apple-first account needs its actual relay address in `ALLOWED_EMAILS`.
+Apple linked to an existing Google account uses that account's saved email
+for access, so adding the relay address is unnecessary. If an Apple-first
+tester's relay address is not yet listed, they can retrieve it from their
+Apple Account's Sign in with Apple → Apps and Websites details for Ergomatic,
+then give that address to the operator for the allowlist. After the API
+configuration reloads, they can retry sign-in. Apple's
+[relay guide](https://developer.apple.com/documentation/signinwithapple/communicating-using-the-private-email-relay-service)
+documents where users can view and manage the address. Sending mail to relay
+addresses is a separate configuration: register outgoing email sources with Apple's relay service
+before adding an email-sending feature. This login slice adds no email sender.
+
+PRIMARY setup references: [web association](https://developer.apple.com/help/account/capabilities/configure-sign-in-with-apple-for-the-web),
+[service key](https://developer.apple.com/help/account/capabilities/create-a-sign-in-with-apple-private-key),
+and [relay mail sources](https://developer.apple.com/help/account/capabilities/configure-private-email-relay-service).
 
 ## Concept2 logbook (optional, currently dark)
 
@@ -144,25 +272,25 @@ a fifth picks which Concept2 it talks to:
   does; nothing else has to change.
 
 Notes:
-- The two lists are independent, and both must admit a rower: `ALLOWED_EMAILS`
-  decides who gets an Ergomatic account at all, `C2_ALLOWED_EMAILS` who sees
-  the Concept2 card once they have one. Being on the second alone gets you
-  nowhere.
+- The two lists are independent. In restricted mode, `ALLOWED_EMAILS`
+  controls account access through either provider. `C2_ALLOWED_EMAILS`
+  controls the Concept2 card in either access mode
+  and does not create an Ergomatic account.
 - A rower off the C2 list reads exactly what a flag-off server sends
   (`{available:false}`), so the card is simply absent — there is no error to
   explain.
 - Like the sign-in allowlist, changes take effect on container recreate.
-- **Removing an email DOES take the surface away**, unlike `ALLOWED_EMAILS`
-  (which gates admission only): that rower's card disappears and their sends
-  are refused at the next recreate. Their stored link and its Concept2 tokens
+- **Removing an email takes the Concept2 surface away**: that rower's card
+  disappears and their sends are refused at the next recreate. Their stored link and its Concept2 tokens
   are NOT deleted by the removal — but they can still disconnect it
-  themselves, because unlink is deliberately not per-user gated (a capability
-  gate closes use, not a rower's way out). To revoke it FOR them, delete the
+  themselves while they retain Ergomatic account access, because unlink is
+  deliberately not per-user gated (a capability gate closes use, not a rower's
+  way out). To revoke it FOR them, delete the
   row; the account and its rows are untouched:
   `docker exec -it ergomatic-postgres psql -U ergomatic -c "delete from concept2_links where user_id=(select id from users where email='x@y.com')"`.
-  The same container-name caveat as the sign-in section applies — run
-  `docker ps` first anywhere but the production host. Revoking Ergomatic's
-  access at Concept2's end is the rower's own action, in their Concept2
+  The container name is `${ERGO_STACK:-ergomatic}-postgres`; local worktree
+  stacks set their own prefix. Run `docker ps` first to find it. Revoking
+  Ergomatic's access at Concept2's end is the rower's own action, in their Concept2
   account settings; we have no revocation endpoint (spec V5).
 - **Read the boot log after any change to the list.** With the flag on, the
   app prints `Concept2 per-user gate: N allowed email(s) configured`, or

@@ -5,7 +5,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import request from "supertest";
 import type pg from "pg";
 import { createApp } from "../app.js";
-import { baseDeps } from "../testDeps.js";
+import { baseDeps, TEST_ACCESS_POLICY } from "../testDeps.js";
 import { createDb, type Db } from "../db/index.js";
 import { createSessionStore } from "../auth/sessions.js";
 import { createUserStore } from "../auth/users.js";
@@ -53,9 +53,8 @@ describe("POST /api/logs: the full 14,400-sample worst-case series, through the 
 
     app = createApp(
       baseDeps({
-        sessions: createSessionStore(db),
+        sessions: createSessionStore(db, TEST_ACCESS_POLICY),
         users: createUserStore(db),
-        allowlist: new Set(["series@log.test"]),
         nativeVerifier: async () => ({
           sub: "series-sub",
           email: "series@log.test",

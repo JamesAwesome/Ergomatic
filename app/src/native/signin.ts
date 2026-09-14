@@ -35,6 +35,21 @@ export async function nativeSignIn(): Promise<boolean> {
   return true;
 }
 
+/** Runs the provider interaction after the auth-flow owner has initialized
+ * the plugin and rechecked that its operation is still current. */
+export async function nativeGoogleProofAfterInit(
+  nonce: string,
+): Promise<{ idToken: string }> {
+  const res = await SocialLogin.login({
+    provider: "google",
+    options: { forcePrompt: true, nonce },
+  });
+  const idToken =
+    res.result.responseType === "online" ? res.result.idToken : null;
+  if (!idToken) throw new Error("Google proof returned no token");
+  return { idToken };
+}
+
 /* v8 ignore stop */
 
 /**

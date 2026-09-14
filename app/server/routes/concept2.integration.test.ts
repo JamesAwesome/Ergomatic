@@ -14,7 +14,7 @@ import { eq } from "drizzle-orm";
 import request from "supertest";
 import type pg from "pg";
 import { createApp } from "../app.js";
-import { baseDeps } from "../testDeps.js";
+import { baseDeps, TEST_ACCESS_POLICY } from "../testDeps.js";
 import { createDb, type Db } from "../db/index.js";
 import { concept2AuthAttempts } from "../db/schema.js";
 import { createSessionStore } from "../auth/sessions.js";
@@ -254,13 +254,12 @@ describe("Concept2 broker: the RF24 seam (real Postgres, real router, real C2 cl
       },
       fetchMock,
     );
-    sessions = createSessionStore(db);
+    sessions = createSessionStore(db, TEST_ACCESS_POLICY);
 
     app = createApp(
       baseDeps({
         sessions,
         users: createUserStore(db),
-        allowlist: SEAM_EMAILS,
         // Keyed on the idToken itself (see `signIn` below) so each test
         // gets its own isolated user/rows without a real JWKS.
         nativeVerifier: async (idToken: string) => ({

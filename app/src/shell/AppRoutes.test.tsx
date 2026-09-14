@@ -5,6 +5,7 @@ import AppRoutes, { CompleteRedirect, hidesTabBar } from "./AppRoutes";
 import { buildDraft, saveDraft, startDraft } from "../session/draft";
 import { buildFreeRowRun, buildRun } from "../session/engine";
 import { saveRun } from "../session/run";
+import type { AuthFlowController } from "../adapters/authFlow";
 
 vi.mock("../library/Library", () => ({
   default: () => <h1>Library</h1>,
@@ -63,6 +64,30 @@ vi.mock("../you/MonitorLogs", () => ({
 beforeEach(() => {
   localStorage.clear();
 });
+
+function idleAuthFlow(): AuthFlowController {
+  return {
+    options: {
+      state: "ready",
+      frontDoorEnabled: true,
+      legacyGoogle: false,
+      apple: true,
+      google: true,
+    },
+    view: { kind: "idle" },
+    targetAuthorizationBusy: false,
+    destination: null,
+    startSignIn: vi.fn(),
+    confirmAccount: vi.fn(),
+    useUsualSignIn: vi.fn(),
+    prepareLink: vi.fn(),
+    startPreparedLink: vi.fn(),
+    authorizeLinkTarget: vi.fn(),
+    cancel: vi.fn(),
+    reset: vi.fn(),
+    abandon: vi.fn(),
+  };
+}
 
 describe("AppRoutes", () => {
   it("keeps an invalid selected review at its honest unavailable state rather than redirecting to Today", async () => {
@@ -351,6 +376,21 @@ describe("AppRoutes", () => {
     ).toBeVisible();
   });
 
+  it("redirects a signed-in idle remount of /you/sign-in-methods through the router to You", async () => {
+    const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
+    render(
+      <MemoryRouter initialEntries={["/you/sign-in-methods"]}>
+        <AppRoutes
+          user={user}
+          onSignedOut={() => {}}
+          authFlow={idleAuthFlow()}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "You" })).toBeVisible();
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
+
   // Phase JC (Gate 0, 2026-09-08): the judged-colour settings screen behind
   // You's SETTINGS row, behind the same signed-in guard. Mounted for REAL
   // rather than stubbed like Diagnostics/Concept2Screen above — the screen
@@ -587,6 +627,10 @@ describe("hidesTabBar", () => {
     "/session/complete",
     "/session/log",
     "/justrow/observe",
+    // Wave A: the linking flow is the same full-bleed holder pattern, and it
+    // was added to HIDDEN_TABBAR_PREFIXES with no row here — so deleting the
+    // string was green.
+    "/you/sign-in-methods",
     // Sub-paths of a hidden prefix stay hidden too (a future param/query
     // string on any of these routes never needs its own opt-out).
     "/session/run/foo",

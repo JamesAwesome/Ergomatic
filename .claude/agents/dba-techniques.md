@@ -60,6 +60,14 @@ every engagement asks. Read whole by the `dba` agent; bounded on purpose
 
 ## Reading an EXPLAIN (ANALYZE, BUFFERS)
 
+- **An unqualified `FOR UPDATE` on a join locks matching rows in every joined
+  table.** Widening an original-session lookup to include the account email
+  added a user-row lock: same-user and same-session updates exceeded a 250 ms
+  `lock_timeout`, while another user remained writable. Hold one joined row
+  on a second connection, start the join, then probe each relation; `LockRows`
+  alone does not identify which write now contends. Measured in the
+  [2026-09-13 access-policy report](../../docs/superpowers/research/2026-09-13-access-mode/db-cost.md).
+
 - **`rows=` estimated vs actual** — a 10× gap is stale stats (`analyze`) or
   a predicate the planner cannot see through (a jsonb path).
 - **`Seq Scan on session_logs` under a `user_id` filter** is a FAIL at 100k+
@@ -104,6 +112,37 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
    And does a competing open PR mint the same migration index?
 
 ## Measured facts that keep paying (2026-09-07 unless dated otherwise)
+- **(2026-09-13, PR #425) A btree over churning random keys looks unbounded for
+  two vacuum cycles and then plateaus.** 20,000 sign-in cycles grew
+  `auth_attempts_state_unique` 5128 → 10136 kB across two rounds and then
+  **exactly zero** on the third: a page deleted by one VACUUM only becomes
+  recyclable at a later one. Heap truncated to 0 bytes. **Never call index
+  growth unbounded from two samples — run a third round with two manual
+  VACUUMs between.**
+- **(2026-09-13) A `FOR UPDATE` on a join with no `OF` clause locks a row in
+  EVERY table in the join.** `sessions INNER JOIN users … FOR UPDATE` takes a
+  row lock on `users`: a concurrent `UPDATE users` on that row hit a 2 s
+  `lock_timeout`; a different row finished in 3.591 ms.
+- **(2026-09-13) A unique CONSTRAINT that no query reads still costs on every
+  write.** `auth_attempts_state_unique` (compared in process, never in SQL) is
+  93 MB at 1M rows and adds +1 WAL record / +104 B per INSERT (527 vs 423 B).
+- **(2026-09-13) `connectionTimeoutMillis` is not a statement timeout.** It
+  governs connection ACQUISITION only; `statement_timeout` and `lock_timeout`
+  default to 0, so a query behind an ACCESS EXCLUSIVE lock waits forever and a
+  `try/catch` cannot fire (measured 6209 ms against a held lock).
+- **(2026-09-13) `SET LOCAL` needs a transaction, and a multi-statement string
+  returns an ARRAY of results.** `pool.query("SET LOCAL statement_timeout=…;
+  SELECT …")` reads `undefined` off `.rows`, throws, and a caller's catch turns
+  it into a silent zero — a bounded diagnostic that never fires. Take a client,
+  BEGIN, SET LOCAL, query. Measured against a real container, both the broken
+  and the working form.
+- **(2026-09-13) A sweep's own error handling can be the outage.** A 3 s pool
+  timeout made `attempts.sweep()` throw, setting `healthy=false`, which refused
+  every sign-in for up to 60 s AFTER the pool recovered. When a boolean gates a
+  user-facing path, ask what ELSE can set it.
+
+
+- **(2026-09-13, corrected session cleanup) Measure FK cascades from the migrated schema, not a hand-built parent table.** The sessions expiry DELETE uses a parent Seq Scan plus indexed child cascades through `auth_attempts_link_session_unique`. With 10k expired/100k sessions and one bound link each, complete median was 29.290 ms (committed trigger 22.082 ms, total WAL 1,124,048 B by LSN); the next 90k-live minute scan was 2.628 ms/1,819 pages. Household 5/25 plus 511 anonymous attempts was 0.170 ms. No new index is justified at this scale. The earlier 6.421 ms/540,000 B were parent-core measurements only. Keep cleanup error boundaries independent; run the harness in its dedicated container if host `psql` is absent.
 
 - **jsonb aggregation costs ~0.6 µs per row scanned**; indexed reads are
   identical between jsonb and columns (≤ 0.36 ms at 1M).
@@ -182,6 +221,27 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
   30-day half-life. Constant per request (no N+1), but a "one query per
   request" claim about any route under `requireUser` is about the route's
   own query only — say which.
+
+- **Expiry and secret deletion have different lifetimes.** An expiry predicate
+  denies authority immediately; only a named DELETE trigger removes the row. A
+  sweep on later traffic has no idle-time retention bound. State both lifetimes
+  and their owners. (Wave A Apple-auth spec, 2026-09-12.)
+
+- **Measure the populations an auth query scans.** The anonymous cap does not
+  bound live link attempts. With 511 anonymous attempts and 5/1k/100k/1M links,
+  admission COUNT took 0.040/0.064/2.597/36.958 ms in PostgreSQL 18.4; those
+  links are sensitivity fixtures, not a traffic claim. A reverse lock order
+  needed only one session and attempt: claim→session versus replacement
+  session→attempt reproduced 40P01. The same held-order probe passed after
+  session-first locking. Include parent FK-cascade order in the analysis.
+  (2026-09-13 Apple plan; commands/raw plans in the archived report.)
+- **Bracket lock ownership, not startup time.** Timestamp around acquisition
+  and transaction completion. Migration 0031's users lock bracket was
+  80.556–80.928 ms at 1M synthetic users on the measured laptop. Old-server
+  health200 after migration proves boot/schema compatibility, not access for
+  Apple-only rowers. (2026-09-13 Apple plan.)
+
+- **(2026-09-13, Apple discard delta) A PK predicate does not mean a PK plan.** The snapshot-conditional failure DELETE includes id, binding, provider intent, stage/version, state/nonce and original session; PostgreSQL18.4 chose `auth_attempts_state_unique` at517–1,000,512 attempts. Matching deletion cost54WAL B; stale stage/version/binding cost0; captured warm execution0.005–0.019ms. Hold the real winner after its UPDATE and before COMMIT, issue stale cleanup on another connection, observe its lock wait, then commit: the conditional delete returnedfalse and retained the winner. The former id/hash/surface predicate deleted it and failed the same gate. Read the actual Index Cond and test failure cleanup independently of successful transitions.
 
 ## Where the dated record lives
 

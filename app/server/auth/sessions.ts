@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { eq, lt } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { sessions, users } from "../db/schema.js";
+import type { AccessPolicy } from "./accessPolicy.js";
 
 export const SESSION_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
 
@@ -22,12 +23,13 @@ export interface SessionUser {
 }
 
 export interface ResolvedSession {
+  sessionId: string;
   user: SessionUser;
   expiresAt: Date;
   refreshed: boolean;
 }
 
-export function createSessionStore(db: Db) {
+export function createSessionStore(db: Db, accessPolicy: AccessPolicy) {
   return {
     async createSession(
       userId: string,
@@ -49,6 +51,7 @@ export function createSessionStore(db: Db) {
         .where(eq(sessions.tokenHash, hashToken(token)));
       const row = rows[0];
       if (!row || row.session.expiresAt <= now) return null;
+      if (!accessPolicy.allows(row.user.email)) return null;
       let expiresAt = row.session.expiresAt;
       let refreshed = false;
       if (shouldRefresh(expiresAt, now)) {
@@ -60,6 +63,7 @@ export function createSessionStore(db: Db) {
         refreshed = true;
       }
       return {
+        sessionId: row.session.id,
         user: { id: row.user.id, email: row.user.email, name: row.user.name },
         expiresAt,
         refreshed,

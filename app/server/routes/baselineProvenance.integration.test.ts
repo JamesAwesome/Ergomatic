@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import request from "supertest";
 import type pg from "pg";
 import { createApp } from "../app.js";
-import { baseDeps } from "../testDeps.js";
+import { baseDeps, TEST_ACCESS_POLICY } from "../testDeps.js";
 import { createDb, type Db } from "../db/index.js";
 import { baselines, users } from "../db/schema.js";
 import { createSessionStore } from "../auth/sessions.js";
@@ -66,9 +66,8 @@ describe("PUT /api/baselines provenance against real Postgres (Phase BL PR A)", 
 
     app = createApp(
       baseDeps({
-        sessions: createSessionStore(db),
+        sessions: createSessionStore(db, TEST_ACCESS_POLICY),
         users: createUserStore(db),
-        allowlist: new Set(["provenance@baseline.test"]),
         nativeVerifier: async () => ({
           sub: "provenance-sub",
           email: "provenance@baseline.test",

@@ -20,5 +20,5 @@
     "noUncheckedSideEffectImports": true,
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src", "domain", "scripts"]
+  "include": ["shared", "src", "domain", "scripts"]
 }

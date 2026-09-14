@@ -11,6 +11,7 @@ export type AuthVia = "bearer" | "cookie";
 declare module "express-serve-static-core" {
   interface Request {
     user?: SessionUser;
+    sessionId?: string;
     authVia?: AuthVia;
   }
 }
@@ -130,6 +131,7 @@ export function requireUser(store: SessionStore): RequestHandler {
       }
     }
     req.user = resolved.user;
+    req.sessionId = resolved.sessionId;
     req.authVia = authVia;
     next();
   };

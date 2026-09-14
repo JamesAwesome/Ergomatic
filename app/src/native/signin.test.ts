@@ -4,10 +4,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 // `nativeSignOut` is the ONLY function under test here: it is the one this
 // change gives real behaviour to, and the one whose ORDERING can be wrong.
 const logout = vi.fn<(o: { provider: string }) => Promise<void>>();
+const login = vi.fn();
+const initialize = vi.fn();
 vi.mock("@capgo/capacitor-social-login", () => ({
   SocialLogin: {
-    initialize: vi.fn(),
-    login: vi.fn(),
+    initialize,
+    login,
     logout: (o: { provider: string }) => logout(o),
   },
 }));

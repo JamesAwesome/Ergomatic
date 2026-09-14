@@ -1,0 +1,37 @@
+{
+  "source": "c7fce22337bb03b486a7c2fd074c1fb1c7f96385",
+  "app_tree": "624e2f423e532e19897f4c3d67056196f1b83f32",
+  "started_utc": "2026-09-13T17:53:04.030295+00:00",
+  "commands": [
+    {
+      "command": "pnpm test:coverage",
+      "exit_code": 0,
+      "log": "test-coverage.log"
+    },
+    {
+      "command": "pnpm lint",
+      "exit_code": 0,
+      "log": "lint.log"
+    },
+    {
+      "command": "pnpm format:check",
+      "exit_code": 0,
+      "log": "format-check.log"
+    },
+    {
+      "command": "pnpm typecheck",
+      "exit_code": 0,
+      "log": "typecheck.log"
+    },
+    {
+      "command": "pnpm build",
+      "exit_code": 0,
+      "log": "build.log"
+    },
+    {
+      "command": "pnpm dist:grep",
+      "exit_code": 0,
+      "log": "dist-grep.log"
+    }
+  ]
+}

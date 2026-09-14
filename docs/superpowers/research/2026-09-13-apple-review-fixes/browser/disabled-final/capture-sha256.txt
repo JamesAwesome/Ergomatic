@@ -1,0 +1,2 @@
+2c407f5db37c65232949f0561ec071886a4a395881e76c505f0ed9ece0287792  ../.superpowers/sdd/2026-09-13-apple-review-fixes/browser/disabled-final/captures/unavailable-add-landscape-844x390.png
+7a52f934ab27176d4aa7c585027cc5a97d5920bcc0e1753beccdd43209f18a0b  ../.superpowers/sdd/2026-09-13-apple-review-fixes/browser/disabled-final/captures/unavailable-add-portrait-390x844.png

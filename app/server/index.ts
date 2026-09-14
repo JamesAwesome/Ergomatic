@@ -1,5 +1,8 @@
+import type pg from "pg";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { createFrontDoor, frontDoorConfig } from "./auth/frontDoor.js";
 import { createApp } from "./app.js";
+import { createAccessPolicy } from "./auth/accessPolicy.js";
 import { parseAllowlist } from "./auth/allowlist.js";
 import { createGoogleProvider, type OAuthProvider } from "./auth/google.js";
 import { createNativeVerifier } from "./auth/nativeVerify.js";
@@ -84,11 +87,81 @@ if (!nativeVerifier) {
   );
 }
 
-const allowlist = parseAllowlist(process.env.ALLOWED_EMAILS);
-if (allowlist.size === 0) {
-  console.warn(
-    "WARNING: ALLOWED_EMAILS is empty — nobody can create an account",
-  );
+/**
+ * A boot-time diagnostic read, bounded so it can never be the thing that stops
+ * the server from listening.
+ *
+ * Two measured facts shape this, both from the DBA gate on PR #425. First,
+ * `connectionTimeoutMillis` governs connection ACQUISITION only —
+ * `statement_timeout` and `lock_timeout` are both 0 — so an unbounded read
+ * waits as long as anything holds ACCESS EXCLUSIVE on the table (measured at
+ * 6209 ms against a held lock) and a `try/catch` around it cannot fire,
+ * because blocking is not an error. Second, `SET LOCAL` only binds inside a
+ * transaction, and node-postgres returns an ARRAY of results for a
+ * multi-statement string — so the obvious one-liner
+ * (`pool.query("SET LOCAL …; SELECT …")`) reads `undefined` off `.rows`,
+ * throws, gets swallowed by the caller's catch, and reports a silent zero.
+ * That was measured against a real container, not reasoned about.
+ */
+async function bootQuery<T extends pg.QueryResultRow>(
+  sql: string,
+): Promise<T[]> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    return (await client.query<T>(sql)).rows;
+  } finally {
+    await client.query("ROLLBACK").catch(() => undefined);
+    client.release();
+  }
+}
+
+const accessPolicy = createAccessPolicy(
+  process.env.ACCESS_MODE,
+  process.env.ALLOWED_EMAILS,
+);
+if (accessPolicy.mode === "restricted") {
+  if (parseAllowlist(process.env.ALLOWED_EMAILS).size === 0) {
+    console.warn(
+      "WARNING: ALLOWED_EMAILS is empty — all account access is blocked",
+    );
+  } else {
+    // THE PARTIAL LIST IS THE DANGEROUS ONE, and it used to boot silently.
+    // `resolveSession` now refuses a session whose saved email is not on the
+    // list, so an incomplete list signs those accounts out at their next
+    // protected request — and the docs before this branch explicitly invited a
+    // pruned list ("removing an email does not sign out an existing user"), so
+    // an incomplete list is the EXPECTED host state after an upgrade. The
+    // empty-list warning above cannot see it: 3 of 5 boots clean.
+    //
+    // The count, never the addresses. Apple-first accounts are private-relay
+    // addresses and these logs are read over shoulders and pasted into chat
+    // (the standing minimal-PII rule). A number is enough to send the
+    // operator to `select email from users;` on the host, which docs/deploy.md
+    // now says.
+    try {
+      const rows = await bootQuery<{ email: string }>(
+        "SELECT email FROM users",
+      );
+      const excluded = rows.filter(
+        (row) => !accessPolicy.allows(row.email),
+      ).length;
+      if (excluded > 0)
+        console.warn(
+          `WARNING: ${excluded} of ${rows.length} existing accounts are NOT in ALLOWED_EMAILS — they are signed out at their next request and cannot sign back in. Their data is retained. List them with: select email from users;`,
+        );
+      else
+        console.log(
+          `access: restricted, and all ${rows.length} existing accounts are admitted`,
+        );
+    } catch {
+      // A boot-time diagnostic must never be the thing that stops the server.
+      console.warn(
+        "WARNING: could not check existing accounts against ALLOWED_EMAILS",
+      );
+    }
+  }
 }
 
 const testAuthSecret = process.env.TEST_AUTH_SECRET || null;
@@ -187,13 +260,52 @@ const concept2 = {
 };
 
 const port = Number(process.env.PORT ?? 8080);
-createApp({
+const sessionStore = createSessionStore(db, accessPolicy);
+const frontConfig = await frontDoorConfig(process.env, siteUrl);
+const frontDoor = frontConfig
+  ? await createFrontDoor(pool, sessionStore, frontConfig, accessPolicy)
+  : null;
+// Every other optional integration says so at boot (Google above, the iOS
+// client above that, Concept2's bootLines below). Apple said nothing, which
+// made an all-five-blank or misspelled `APPLE_*` set indistinguishable from a
+// healthy deploy: `frontDoorConfig` returns null, the front-door routes 503,
+// `/api/health` still answers 200, and the app quietly serves the legacy
+// Google-only screen. A PARTIAL set throws and fails the boot loudly; only
+// the silent case needs this line. docs/deploy.md tells the operator to check
+// the log for it.
+if (!frontDoor) {
+  // Same invariant as the allowlist counter above — a config change that
+  // silently orphans accounts says so at boot — applied to the second of the
+  // two places it governs rather than one (RF34). Removing APPLE_* from a
+  // host that already has Apple-only accounts leaves those rowers with no way
+  // in at all: their `google_sub` is NULL, so the legacy door cannot match
+  // them either. The count, never the addresses.
+  let orphaned: number;
+  try {
+    const rows = await bootQuery<{ count: string }>(
+      "SELECT count(*)::text AS count FROM users WHERE apple_sub IS NOT NULL AND google_sub IS NULL",
+    );
+    orphaned = Number(rows[0]?.count ?? 0);
+  } catch {
+    // A boot diagnostic never stops the boot.
+    orphaned = 0;
+  }
+  console.warn(
+    "WARNING: APPLE_* not set — Apple sign-in is DISABLED and the combined auth routes will 503 (legacy Google sign-in only)",
+  );
+  if (orphaned > 0)
+    console.warn(
+      `WARNING: ${orphaned} existing account(s) can ONLY sign in with Apple, which is now disabled — they have no way in. Their data is retained. List them with: select email from users where apple_sub is not null and google_sub is null;`,
+    );
+}
+const httpServer = createApp({
+  frontDoor,
   checkDb: () => checkDb(pool),
-  sessions: createSessionStore(db),
+  sessions: sessionStore,
   users: createUserStore(db),
   oauth,
   nativeVerifier,
-  allowlist,
+  accessPolicy,
   siteUrl,
   stores,
   testAuthSecret,
@@ -201,3 +313,11 @@ createApp({
 }).listen(port, () => {
   console.log(`ergomatic api listening on :${port}`);
 });
+
+for (const signal of ["SIGINT", "SIGTERM"] as const)
+  process.once(signal, () => {
+    frontDoor?.close();
+    httpServer.close(() => {
+      void pool.end();
+    });
+  });

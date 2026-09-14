@@ -6,6 +6,16 @@ engagement. **Not read up front** — the bounded, always-read half is
 for the detail behind a technique, or for the history of a phase you are about
 to touch.
 
+## Account-access amendment hardening, 2026-09-13 (AUTH, lens 1)
+
+- **BROKEN:** one protected-route guard could enforce removal. Session resolution refreshes before middleware can reject and has direct consumers; the losing cookie can also refresh during bearer precedence. The corrected contract puts the saved-email decision inside resolution before refresh and forbids fallback from a denied winning credential.
+- **BROKEN:** rechecking a pending provider email at confirmation was sufficient. Conflict resolution can return a concurrently created subject, making that account's saved email authoritative. The corrected contract checks both the candidate and returned canonical row before grant/session side effects.
+- **BROKEN:** an in-flight link's live original session implied continued access. Every read/claim/accept/finalize transition must recheck the current process policy.
+- **BROKEN:** boot could establish valid Apple registration. It establishes only local configuration shape; registration, association and credential acceptance remain real-provider release gates.
+- **HELD:** restricted/public is deterministic; restricted defaults closed, empty admits nobody, public ignores the list, normalized saved email owns access, denial preserves stored data and unexpired session rows, and provider availability remains independent.
+- **DISPOSITION:** controller folded the findings once, explicitly named both legacy Google email writers and added the policy/session/attempt lifetime table. No prescribed blocks; lens 2 skipped.
+- **LIMIT:** no live host, provider authorization, runtime probe or original Apple implementation review was performed. The prior broad code lens remains INCOMPLETE.
+
 ## Phase PS PR 2 plan — /harden lens 2, 2026-09-13 (prescribed code read as code)
 
 Plan at `dd34e025`; the sources reinstated at their real paths — tsc
@@ -10691,3 +10701,49 @@ counting the corpus a different way than the spec counted it.
   exploration's six test-only exports and 38 `useRef` declarations, both
   exact; the replay exploration's 36 files and its filename-hardcoded path
   surgery, both exact.
+
+## Wave A Apple sign-in anchor pass, 2026-09-12 (AUTH + stored shape)
+
+- **BROKEN:** Apple's cross-site POST cannot prove possession of the original
+  Lax session; a live database session survives account switching. The corrected
+  spec requires a same-origin exact-session finalization hop before linking.
+- **BROKEN:** global origin middleware and JSON-only parsing reject Apple's
+  URL-encoded POST before the proposed callback. The corrected mount is exact,
+  bounded and before the global origin check.
+- **BROKEN:** one mutable provider field does not distinguish link proofs and
+  pending signup. The corrected attempt has immutable intent, stage/version
+  comparison and fresh nonce/state per authorization stage.
+- **BROKEN:** native Google's restore branch bypasses nonce. Fresh proof uses
+  the interactive branch and server nonce verification.
+- **HELD:** provider subject identity, no email merge, named uniqueness, a
+  custom Apple bridge, per-client grant retention and no unsupported Apple PKCE.
+
+Evidence and disposition: `docs/superpowers/specs/2026-09-12-apple-signin-review.md`.
+The original verdict was BLOCKED; author corrections were folded without claiming
+an unrun PASS. James approved the corrected spec and rendered Gate 0 on 2026-09-12.
+
+### 2026-09-13 — Apple sign-in implementation-plan hardening
+
+
+**Mechanism lens BLOCKED** on server `0f4921d8`, native `202f6087`, client `0ca98495`; approved AUTH/stored-shape design, complete author paste-tests, no public activation. The original full report and probe artifacts are archived in `docs/superpowers/research/2026-09-13-apple-harden/`. The mechanism fix round is recorded in that archive’s `fix-disposition.md`. The separate code lens was interrupted by a platform cybersecurity-risk block; its partial evidence is in `code-lens/`. No completed code-lens or implementation PASS is claimed.
+
+- **Falsified:** stage/version CAS makes a stale callback harmless. Believed because the store rejects mismatched snapshots; two real mounted callbacks plus PostgreSQL showed the loser's unversioned catch cleanup delete the winner's `confirm` row and pending grant. Technique: hold both reads, commit the winner, then inspect after the loser finishes cleanup.
+- **Falsified:** native target authorization removes competing actions and all generation checks protect late results. The target view retained enabled controls; overlapping authorization's `busy` error canceled the live attempt. Holding cancellation across a newer generation changed the newer view to cancelled. Technique: enumerate enabled consumers of the shared operation and inspect authority after each await, including cleanup.
+- **Falsified:** scanning the Apple plugin for logging calls proves credentials are not logged. Default Debug Capacitor `fromNative` logged the complete synthetic proof. Technique: follow the credential through vendor serialization/logging and execute that actual bridge with build-derived configuration.
+- **Falsified:** a finalization transport failure proves nothing changed. The transaction commits before HTTP delivery, while generic failure copy asserted rollback. Technique: separate the database commit observable from the client's acknowledgement observable.
+- **Held:** subject-first identity, exact-current-session web finalization, transactional account/grant/session writes, server-selected audiences, native Google's forced nonce-bearing interactive branch, default-off activation and the Apple-only rollback floor. Google web PKCE's secret-derived per-stage verifier reproduced the actual authorization/redemption S256 match; its cryptographic construction remains labelled INFERENCE against RFC 7636.
+- **Limited:** injecting equal Capacitor document callback seeds delivered an old Apple result to a new unrelated callback. That demonstrates the conditional routing consequence and probabilistic isolation, not a natural collision or device exploit. Portal/device continuity and complete assembled gates remain owed.
+
+- **Code lens, confirmed ordinary defect:** terminal auth destination was treated as a continuing route invariant. Real Chromium clicked LIBRARY after a cancelled-link return, navigated to `/library`, then immediately back to `/you`. Technique: after a terminal result, exercise the next ordinary navigation; reaching the result screen alone cannot prove the rower can leave it. Corrected by client `089a4bfb`, integrated as `9f9276a9`: the terminal destination is consumed once; the original Chromium script remains on `/library`, the named browser regression passes, and removing the consumption assignment reproduces the failure.
+- **Evidence limit:** the old lifecycle test called `abandon()` directly while its report claimed real You sign-out. The corrected `089a4bfb` report labels the old direct-call gate accurately, adds the rendered You sign-out producer, and records a failing mutation at the actual `authFlow?.abandon()` call site with restored green. The interrupted code lens supplied no completed database timing finding and its unfinished probes were not resumed. Task/whole-branch, DBA PR, PM final-PR and live-provider checks remain separately owed. Integrated ordinary verification is recorded separately in the implementation evidence.
+
+### 2026-09-13 — Native logging correction mechanism (AUTH privacy, lens 1)
+
+- **HELD:** the app-owned Console override uses Capacitor 8.5.1 public `capacitorDidLoad`/`registerPluginInstance`; its instance survives navigation reset and its shim runs in each document.
+- **HELD:** `loggingBehavior: none` disables native result serialization and JavaScript `logFromNative`; a dev-only `Swift.print` sink restores application `console.*`, not internal CAPLog diagnostics.
+- **CORRECTED:** sink seams are immutable instance state; return-none never resolves/rejects; absent/non-string message follows vendor empty-string behavior. The controller declined a proposed 4,068-character truncation because no cited requirement justified the number; preserve full messages.
+- **CORRECTED:** direct plugin invocation does not prove bridge dispatch. The deciding gate must drive the loaded production WKWebView to captured native stdout and return a synthetic native credential through the same compiled bridge while asserting that credential absent.
+- **LIMIT:** unmatched native errors can still call `console.warn` independently of the logging flag. Apple rejection payloads must remain credential-free. Real device log collection is unproved.
+- **DISPOSITION:** one mechanism pass, no prescribed executable blocks so lens 2 skipped, no runtime work in this pass and no original blocked execution resumption. Source references and complete report: `docs/superpowers/research/2026-09-13-apple-review-fixes/native-logging-harden.md`.
+
+- **IMPLEMENTATION CORRECTION, same native logging engagement:** Capacitor 8.5.1’s prebuilt simulator getters return constant true in both architectures, even when the app’s Release plist has empty `CAPACITOR_DEBUG` and its compilation has no `DEBUG`. The device slice reads the expected plist fallback. The app-owned evaluator therefore uses that same source rule at app compile time. A Release test that replaced the production plugin with a forced-false test instance proved only its injected branch and was rejected as the default-host oracle. The correction removes that override and requires real default Debug/Release hosted gates; exact binary/configuration evidence is in the review-fix implementation record.

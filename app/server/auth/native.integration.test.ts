@@ -9,6 +9,7 @@ import { baseDeps } from "../testDeps.js";
 import { createDb, type Db } from "../db/index.js";
 import { createSessionStore } from "./sessions.js";
 import { createUserStore } from "./users.js";
+import { createAccessPolicy } from "./accessPolicy.js";
 
 describe("native sign-in lifecycle against real Postgres", () => {
   let container: StartedPostgreSqlContainer;
@@ -20,11 +21,12 @@ describe("native sign-in lifecycle against real Postgres", () => {
     container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
     await migrate(db, { migrationsFolder: "drizzle" });
+    const accessPolicy = createAccessPolicy("restricted", "n@x.com");
     app = createApp(
       baseDeps({
-        sessions: createSessionStore(db),
+        sessions: createSessionStore(db, accessPolicy),
         users: createUserStore(db),
-        allowlist: new Set(["n@x.com"]),
+        accessPolicy,
         nativeVerifier: async () => ({
           sub: "native-1",
           email: "n@x.com",
