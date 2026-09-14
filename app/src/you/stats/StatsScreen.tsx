@@ -148,10 +148,28 @@ function Body({
   // one line, never a second caption in ISO (PR 2 review, item 2). A
   // bounded range always has both ends here: ALL is never empty while
   // the page renders at all (ruling 16).
+  // Gate 0A appendix (James, 2026-09-14): on CUSTOM the line goes when it
+  // is an ECHO — with a usable pair it printed exactly what the two date
+  // inputs directly above it already show. It is NOT dropped flat, because
+  // invariant I5's other half governs the same line: a caption carrying a
+  // state the control cannot show is kept. Two such states exist here and
+  // both are silent without it — a TO typed past today is CLAMPED (the
+  // input reads 31 DEC while the totals cover 12 SEP), and an out-of-order
+  // pair leaves the LAST VALID range in force. The comparison below is the
+  // whole rule: identical to the inputs means redundant, anything else
+  // means the inputs are not what is being counted.
+  const customEchoesItsInputs =
+    preset === "custom" &&
+    range.from !== null &&
+    range.to !== null &&
+    fmtDate(range.from) === custom.from &&
+    fmtDate(range.to) === custom.to;
   const rangeLine =
     inRange.length === 0 && range.from !== null && range.to !== null
       ? `NO ROWS · ${fmtRange(range.from, range.to)}`
-      : fmtRangeLine(range, earliestDate(rows));
+      : customEchoesItsInputs
+        ? null
+        : fmtRangeLine(range, earliestDate(rows));
   return (
     <>
       <StatsFilterBar

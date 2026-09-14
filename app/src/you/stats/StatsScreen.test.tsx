@@ -378,18 +378,57 @@ describe("/you/stats — PR 2: the range line, the groups in order, SEASON and T
     expect(rangeLine()).toBe("1 TO 12 SEP 2026");
     fireEvent.click(chip("30 DAYS"));
     expect(rangeLine()).toBe("14 AUG TO 12 SEP 2026");
+    // Gate 0A appendix (James, 2026-09-14: drop the echo, keep NO ROWS).
+    // On CUSTOM with a usable pair the line printed exactly what the two
+    // date inputs directly above it already showed, so it goes — but only
+    // then. Invariant I5's other half is load-bearing here and the two
+    // cases below are what it protects: a caption carrying a state the
+    // CONTROL CANNOT SHOW stays.
     fireEvent.click(chip("CUSTOM"));
-    expect(rangeLine()).toBe("14 AUG TO 12 SEP 2026");
+    expect(rangeLine()).toBeUndefined();
     fireEvent.change(screen.getByLabelText("FROM"), {
       target: { value: "2025-11-08" },
     });
-    expect(rangeLine()).toBe("8 NOV 2025 TO 12 SEP 2026");
-    // FROM > TO: the line names the range still APPLIED, like the totals.
+    expect(rangeLine()).toBeUndefined();
+    // FROM > TO: the inputs read a pair that is not the pair in force, and
+    // the line names the range still APPLIED, like the totals.
     fireEvent.change(screen.getByLabelText("FROM"), {
       target: { value: "2026-09-13" },
     });
     expect(rangeLine()).toBe("8 NOV 2025 TO 12 SEP 2026");
     expect(rowValue("METRES", 1)).toBe("56,752");
+  });
+
+  // The other state the inputs cannot show, and the reason the drop is
+  // conditional rather than flat: a TO typed past today is CLAMPED, so the
+  // input reads 31 DEC while the totals cover 12 SEP. Dropping the line
+  // unconditionally would have left that silent on the one screen where it
+  // matters — found by this test, not by reading the design.
+  it("a CUSTOM TO past today keeps the line, because the input and the applied range no longer agree", async () => {
+    await renderScreen(GATE0_ROWS);
+    fireEvent.click(chip("CUSTOM"));
+    expect(rangeLine()).toBeUndefined();
+    fireEvent.change(screen.getByLabelText("TO"), {
+      target: { value: "2026-12-31" },
+    });
+    expect(rangeLine()).toBe("14 AUG TO 12 SEP 2026");
+    expect(screen.getByLabelText("TO")).toHaveValue("2026-12-31");
+  });
+
+  // Presets are the other side of the same rule: there the caption is the
+  // ONLY place the dates appear, so every one of them keeps its line.
+  it("every preset keeps its range line", async () => {
+    await renderScreen(GATE0_ROWS);
+    for (const [name, line] of [
+      ["ALL", "ALL TIME · SINCE 8 NOV 2025"],
+      ["SEASON", "1 MAY TO 12 SEP 2026"],
+      ["YEAR", "1 JAN TO 12 SEP 2026"],
+      ["MONTH", "1 TO 12 SEP 2026"],
+      ["30 DAYS", "14 AUG TO 12 SEP 2026"],
+    ] as const) {
+      fireEvent.click(chip(name));
+      expect(rangeLine()).toBe(line);
+    }
   });
 
   it("the groups run TOTALS · METRES PER WEEK · TIME BY TYPE · SEASON 2027 · TEST TREND (§5's order) and the range line is the ONE .stats-caption above them", async () => {
@@ -470,18 +509,69 @@ describe("/you/stats — PR 2: the range line, the groups in order, SEASON and T
     expect(rowValue("METRES", 1)).toBe("5,000");
     expect(season.getByText("43,012 TODAY")).toBeInTheDocument();
     // The x geometry, as INDEPENDENT literals (review item 3): the season
-    // spans May 1 2026 … Apr 30 2027 = 364 days over the 264 px plot
-    // (44 … 308). Today is day 134 → 44 + 134/364·264 = 141.19; the APR
-    // tick is Apr 1 2027, day 335 → 286.97. Probes that survived without
+    // spans May 1 2026 … Apr 30 2027 = 364 days over the 272 px plot
+    // (36 … 308). Today is day 134 → 36 + 134/364·272 = 136.13; the APR
+    // tick is Apr 1 2027, day 335 → 286.33. Probes that survived without
     // this: the month labels' year swapped, todayX six days late.
+    // The plot starts at 36, not the old hand-tuned 44, because the gutter
+    // is now derived from the widest tick the axis can print (Gate 0A).
     const svg = season.getByRole("img");
     expect(
       Number(svg.querySelector(".stats-today-line")?.getAttribute("x1")),
-    ).toBeCloseTo(141.19, 1);
+    ).toBeCloseTo(136.13, 1);
     const apr = Array.from(svg.querySelectorAll("text.stats-tick")).find(
       (el) => el.textContent === "APR",
     );
-    expect(Number(apr?.getAttribute("x"))).toBeCloseTo(286.97, 1);
+    expect(Number(apr?.getAttribute("x"))).toBeCloseTo(286.33, 1);
+  });
+
+  // Gate 0A, member M8 and rulings 1 and 3 (James, 2026-09-14). The defect:
+  // past 100,000 a grouped tick needs a seventh glyph, the gutter held six,
+  // and a rower's phone rendered `L00,000`. Two halves to the fix and this
+  // pins both — the tick ROUNDS (`60k`), and the exact figure beside it in
+  // the same frame does NOT (`43,012 TODAY`), because one is a scale marker
+  // and the other is a reading.
+  //
+  // The gutter is asserted as an INDEPENDENT literal (RF21): 30 is where a
+  // derived `PAD_L` of 36 puts an end-anchored label, computed by hand from
+  // `ceil(5 glyphs x 5.94) + 6`, never by importing the constant. Restoring
+  // the hand-tuned 44 moves this to 38 and the test goes red.
+  it("SEASON: metres ticks round to k in a derived gutter, while the TODAY figure keeps its grouping", async () => {
+    await renderScreen(GATE0_ROWS, GATE0_TEST_ROWS);
+    const season = within(screen.getByRole("region", { name: "SEASON 2027" }));
+    const svg = season.getByRole("img");
+    const gridTicks = Array.from(
+      svg.querySelectorAll("text.stats-tick"),
+    ).filter((t) => t.getAttribute("text-anchor") === "end");
+    expect(gridTicks.map((t) => t.textContent)).toStrictEqual([
+      "0",
+      "20k",
+      "40k",
+      "60k",
+    ]);
+    for (const tick of gridTicks) expect(tick.getAttribute("x")).toBe("30");
+    expect(season.getByText("43,012 TODAY")).toBeInTheDocument();
+  });
+
+  it("METRES PER WEEK: the same derived gutter and rounded ticks, and the bar keeps its exact figure", async () => {
+    await renderScreen(GATE0_ROWS, GATE0_TEST_ROWS);
+    const mpw = within(screen.getByRole("region", { name: "METRES PER WEEK" }));
+    const svg = mpw.getByRole("img");
+    const gridTicks = Array.from(
+      svg.querySelectorAll("text.stats-tick"),
+    ).filter((t) => t.getAttribute("text-anchor") === "end");
+    expect(gridTicks.length).toBeGreaterThan(1);
+    for (const tick of gridTicks) {
+      expect(tick.textContent).toMatch(/^(0|\d+k)$/);
+      expect(tick.getAttribute("x")).toBe("30");
+    }
+    // The bar's own label is the week's real total, grouped in full.
+    expect(
+      Array.from(
+        svg.querySelectorAll("text.stats-bar-label"),
+        (t) => t.textContent,
+      ).every((t) => /^\d{1,3}(,\d{3})*$/.test(t ?? "")),
+    ).toBe(true);
   });
 
   it("a CUSTOM range with no rows still renders SEASON and TEST TREND under the NO ROWS line", async () => {

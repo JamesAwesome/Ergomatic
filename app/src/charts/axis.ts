@@ -5,7 +5,6 @@
  * same file).
  */
 
-import { fmtMeters, fmtSplit } from "../../domain/format.js";
 import { fmtDuration } from "../../domain/duration.js";
 
 /**
@@ -66,14 +65,20 @@ export function chooseTicks(domain: [number, number], count: number): number[] {
   return ticks;
 }
 
-export type TickKind = "pace" | "rate" | "hr" | "time" | "split" | "metres";
+// `"pace"` (tenths, `fmtSplit`) was removed at Gate 0A: its only caller
+// was `TraceChart`'s y axis, which now prints whole seconds like the stats
+// charts, and an arm no production path can reach is dead code with no row
+// (RF29). `fmtSplit` itself is untouched and still formats every pace a
+// rower READS; this type is only about gridlines.
+export type TickKind = "rate" | "hr" | "time" | "split" | "metres";
 
 /**
- * Format a single axis tick value. Pace ALWAYS goes through the house
- * `fmtSplit` (`domain/format.ts`) — never a bespoke formatter (the spec's
- * own cautionary tale is spec 1's `fmtDuration`-takes-minutes trap). Rate
- * and hr are whole-number counts (stroke rate, beats per minute) with no
- * house formatter of their own to delegate to.
+ * Format a single axis tick value. Every kind that has a house formatter
+ * delegates to it and never hand-rolls one (the spec's own cautionary tale
+ * is spec 1's `fmtDuration`-takes-minutes trap): a pace gridline is
+ * `"split"`, through `fmtDuration`. Rate and hr are whole-number counts
+ * (stroke rate, beats per minute) with no house formatter of their own to
+ * delegate to.
  *
  * `"time"` (trace-truth Task 3, spec §4) is the one deliberate exception
  * to "every other kind takes its own real unit": it takes TENTHS OF A
@@ -81,16 +86,14 @@ export type TickKind = "pace" | "rate" | "hr" | "time" | "split" | "metres";
  * the recorder emits `Math.round(workClockSeconds * 10)`
  * (`seriesRecorder.ts`), so a caller building x-axis ticks off a
  * `domainX` already in real seconds multiplies back by 10 before calling
- * this, rather than this function silently assuming seconds like `pace`'s
- * `fmtSplit` does. Routed through the house `fmtDuration`
+ * this, rather than this function silently assuming seconds the way every
+ * other kind here does. Routed through the house `fmtDuration`
  * (`domain/duration.ts`), never a bespoke `m:ss` formatter — the same
  * cautionary tale this doc comment already names, `fmtDuration` takes
  * MINUTES, so tenths convert via `/600` (10 tenths/s * 60 s/min).
  */
 export function formatTick(value: number, kind: TickKind): string {
   switch (kind) {
-    case "pace":
-      return fmtSplit(value);
     case "rate":
     case "hr":
       return String(Math.round(value));
@@ -103,9 +106,17 @@ export function formatTick(value: number, kind: TickKind): string {
     // bespoke `m:ss`.
     case "split":
       return fmtDuration(value / 60);
-    // A metres gridline: the house thousands grouping, `0` at the floor.
+    // A metres GRIDLINE, shortened to `150k` (James, Gate 0A 2026-09-14):
+    // the house grouping needs a seventh glyph past 100,000 and every
+    // gutter here was hand-tuned against six, which is how a production
+    // frame came to read `L00,000`. Safe at the low end because `niceMax`
+    // floors its ladder at `base = 1000`, so every tick above zero is a
+    // whole thousand and no `0k` is reachable. The exact figures beside
+    // these — a bar's own value, the season's `<n> TODAY` — keep their
+    // grouping (same gate, ruling 3): a scale marker rounds, a reading
+    // does not.
     case "metres":
-      return fmtMeters(value);
+      return value === 0 ? "0" : `${Math.round(value / 1000)}k`;
   }
 }
 
@@ -133,4 +144,31 @@ export function niceMax(
       if (max / step <= maxLines) return { max, step };
     }
   }
+}
+
+/**
+ * Invariant I4 (number-provenance spec §6, Gate 0A ruling 1): the space a
+ * set of formatted labels actually needs, from the MEASURED per-glyph
+ * advance of the class that draws them — never a constant chosen by looking
+ * at a chart. Four charts hand-tuned four gutters against a guess of
+ * roughly 5.67 and three of them were wrong; one shipped `L00,000` to a
+ * rower's phone.
+ *
+ * Advances measured in Chromium 2026-09-14 (`app/e2e/axisProbe.spec.ts`):
+ * `spaced` is 9 px IBM Plex Mono at `letter-spacing: 0.06em` (`.stats-tick`)
+ * and advances 5.94 user units; `plain` is the same face with no
+ * letter-spacing (`.trace-tick-label`, `.stats-point-label`,
+ * `.stats-bar-label`) and advances 5.40.
+ */
+export const ADVANCE = { spaced: 5.94, plain: 5.4 } as const;
+
+/** The gutter those labels need: the widest one, plus the gap between the
+ *  label's anchor and the plot's own edge. */
+export function labelRoom(
+  labels: readonly string[],
+  advance: number,
+  gap: number,
+): number {
+  const widest = labels.reduce((m, s) => Math.max(m, s.length), 0);
+  return Math.ceil(widest * advance) + gap;
 }

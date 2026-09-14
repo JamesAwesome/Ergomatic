@@ -252,3 +252,31 @@ section it fits; the engagement record belongs there, as its own dated section.
 An entry that lands only in the record is invisible to the next agent — which
 is exactly what happened: every section in this file stopped growing on
 2026-08-15, while the record beneath it reached 6413 lines.
+
+- **A PR map cannot price a risk model that a design gate has not yet ruled.**
+  The number-provenance slate (2026-09-14) mapped PR 4 as TRIAD while its own
+  members read "agrees when one of them changes, OR both are labelled" — copy
+  and number-change are different risk classes, and the gate picks which. **At
+  phase open, mark any PR whose risk model depends on a Gate 0 ruling as
+  PROVISIONAL, and re-rule the map in the gate record before the first
+  implementation task.** A map that reads settled is quoted as settled at the
+  final gate.
+- **"One Gate 0" is a ruling about SCREEN coherence, not about one sitting.**
+  James's 2026-08-31 words are "rather than approving a third of a screen at a
+  time". Two gates that each approve a WHOLE screen satisfy it; one gate
+  spanning two screens satisfies it no better and costs more. Count the frames
+  a gate owes (options × before/after × two orientations, each option's cost
+  measured per RF30) before accepting it is a single sitting — the
+  number-provenance gate came to ~27 frames and 7 priced options, on a pass
+  whose own history is a 10-day stall while it accreted members.
+- **An exit criterion verified "by reading each board" is verified against the
+  DESIGN, not the build.** Boards are Gate 0 artefacts; a criterion that reads
+  them duplicates the gate that drew them and gives the close gate nothing to
+  quote. Replace it with a census derived from the shipped tree — one row per
+  user-visible figure, its arithmetic owner, and the on-screen text that says
+  so, or the dated ruling that it needs none. (RF24's wrong-layer tell.)
+- **A criterion written against a defect's SHAPE can be retired by its own
+  fix.** "A gate fails on a seven-glyph tick" stops having an input once the
+  approved fix shortens the ticks. Write the criterion as the invariant (the
+  widest tick a chart can produce fits its reserved space), not as the
+  counterexample.

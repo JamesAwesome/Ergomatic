@@ -232,6 +232,78 @@ describe("TraceChart — rendering from a REAL capture", () => {
     expect(labels.at(-1)!.textContent).toMatch(/^\d+:\d\d$/);
   });
 
+  // Gate 0A (number-provenance spec, member M8). A CENTRED four-glyph
+  // label on a tick sitting at the plot's right edge hangs 2.80 units past
+  // the viewBox and its final glyph is cut — measured in Chromium
+  // 2026-09-14, visible in the committed before-capture as `0:4(`.
+  //
+  // The rule is DERIVED FROM THE LABEL, not from its index, and review
+  // caught the difference: a tick only lands on the edge when the trace's
+  // duration is an exact multiple of the chosen step, and the first tick
+  // (`chooseTicks` always emits `0`) never reaches an edge at all. Keying
+  // on `i === 0 || i === length - 1` therefore pulled labels off their own
+  // marks on every OTHER trace, including this PR's own committed
+  // `log-detail.png`, to prevent a clip that was not happening.
+  //
+  // Both halves are asserted here, with INDEPENDENT literals (5.4 is
+  // `.trace-tick-label`'s measured advance, 320 the viewBox width; neither
+  // is imported, RF21): nothing escapes, AND nothing that fits leaves the
+  // centre. The browser gate that can see real geometry is
+  // `e2e/stats.spec.ts`.
+  it("anchors an x label inward only when a centred one would leave the viewBox, and leaves every other label over its own tick", async () => {
+    const series = await realSeries();
+    render(<TraceChart series={series} />);
+    const labels = screen.getAllByTestId("trace-x-tick");
+    expect(labels.length).toBeGreaterThanOrEqual(3);
+    const boxes = labels.map((label) => {
+      const x = Number(label.getAttribute("x"));
+      const anchor = label.getAttribute("text-anchor");
+      const width = (label.textContent ?? "").length * 5.4;
+      const left =
+        anchor === "start" ? x : anchor === "end" ? x - width : x - width / 2;
+      return {
+        text: label.textContent,
+        anchor,
+        inside: left >= 0 && left + width <= 320,
+        centredFits: x - width / 2 >= 0 && x + width / 2 <= 320,
+      };
+    });
+    // Nothing escapes the viewBox, whatever anchor it ended up with.
+    expect(boxes.filter((b) => !b.inside)).toStrictEqual([]);
+    // And nothing that FITS centred was moved off its own mark — the half
+    // the index rule got wrong.
+    expect(
+      boxes.filter((b) => b.centredFits && b.anchor !== "middle"),
+    ).toStrictEqual([]);
+    // This fixture's duration is not a multiple of its tick step, so every
+    // label here is in that second population: the assertion above is not
+    // vacuous on it.
+    expect(boxes.filter((b) => !b.centredFits)).toStrictEqual([]);
+    // WHICH HALF THIS TEST GUARDS, said out loud (RF21). Exactly because
+    // every label here fits centred, this test PASSES against a flat
+    // `anchor = "middle"` — measured, not assumed. It catches the rule
+    // anchoring MORE than it needs to, which is what the first draft did.
+    // The other half — the clip itself, where a tick lands on the plot's
+    // right edge — needs real geometry and a duration that is a multiple
+    // of the step, and lives in `e2e/stats.spec.ts`'s viewBox gate, where
+    // the flat-`middle` mutation reports `"0:40" x: 301.2 width: 21.6`
+    // against a 320 viewBox.
+  });
+
+  // Same gate, ruling 4: a gridline never needed the tenth. `1:50`, not
+  // `1:50.0` — the `split` tick kind Phase PS added to the stats charts for
+  // exactly this reason. It is what lets this chart's gutter come down from
+  // a hand-tuned 42 to a derived 28.
+  it("prints whole-second pace ticks on the y axis", async () => {
+    const series = await realSeries();
+    const { container } = render(<TraceChart series={series} />);
+    const ticks = Array.from(
+      container.querySelectorAll(".trace-tick-label-y"),
+    ).map((t) => t.textContent);
+    expect(ticks.length).toBeGreaterThan(0);
+    for (const tick of ticks) expect(tick).toMatch(/^\d+:\d\d$/);
+  });
+
   it("tapping the Stroke rate toggle switches the drawn trace to rate's own model (different summary, different segment count)", async () => {
     const user = userEvent.setup();
     const series = await realSeries();

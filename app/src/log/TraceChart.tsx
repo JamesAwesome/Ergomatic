@@ -37,7 +37,7 @@
 import { useId, useMemo, useState } from "react";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
 import { linearScale, decimate } from "../charts/scale.js";
-import { chooseTicks, formatTick } from "../charts/axis.js";
+import { ADVANCE, chooseTicks, formatTick, labelRoom } from "../charts/axis.js";
 import {
   buildTrace,
   type Measure,
@@ -54,14 +54,28 @@ const MEASURE_LABEL: Record<Measure, { visible: string; spoken: string }> = {
 };
 
 const CHART_WIDTH = 320;
-/** Bumped from 36 (trace-truth Task 3): the y-axis label anchor sat at
- *  `LEFT_PAD - 6` = 30, and the widest real label (`1:40.0`/`1:50.0`, 6
- *  monospace glyphs) overhung that anchor far enough left to clip against
- *  the SVG's own x=0 edge — confirmed on both committed captures, where
- *  the clipped "1" reads as "L" (`L:40.0`). The extra 6 units of anchor
- *  room removes the overhang; ordinary digits (`2:00.0` etc.) were never
- *  clipped, so this is sized for the widest case, not the common one. */
-const LEFT_PAD = 42;
+/** DERIVED (invariant I4, Gate 0A rulings 1 and 4), and smaller because the
+ *  labels are shorter. The y ticks now print whole seconds (`1:50`, the
+ *  `split` kind Phase PS added for exactly this reason), so the widest
+ *  label any measure can produce is four glyphs — pace tops out at `1:50`
+ *  scale, rate at `28`, heart rate at `152`:
+ *  `labelRoom(["1:50"], ADVANCE.plain, 6)` = ceil(4 x 5.40) + 6 = 28.
+ *  The 42 it replaces was a hand bump from 36 after a clipped `1` read as
+ *  `L` (`L:40.0`) on two committed captures.
+ *
+ *  THE BOUND, STATED RATHER THAN ASSUMED (review finding). Four glyphs is
+ *  not a property of the format, it is a property of the DATA: nothing
+ *  clamps pace, and `traceModel` builds `domainY` from any non-zero work
+ *  reading, so a light-paddle stretch slower than 9:59 per 500 m puts a
+ *  five-glyph `10:00` on this axis and clips it by ~1 unit. **Not a
+ *  regression** — the 42 this replaces broke at the identical 600 s
+ *  threshold, with `fmtSplit`'s seven-glyph `10:00.0`. Left fixed rather
+ *  than derived per render because the y gutter sets the plot's left edge
+ *  and Gate 0A approved that frame; a per-render gutter is PR 3's to
+ *  propose, where the axis is already being reopened. Rate tops out at two
+ *  glyphs and heart rate at three, so pace is the only measure that can
+ *  reach this bound at all. */
+const LEFT_PAD = labelRoom(["1:50"], ADVANCE.plain, 6);
 const RIGHT_PAD = 8;
 const TOP_PAD = 10;
 const BOTTOM_PAD = 10;
@@ -327,7 +341,7 @@ export default function TraceChart({
                 textAnchor="end"
                 dominantBaseline="middle"
               >
-                {formatTick(tick, selected)}
+                {formatTick(tick, selected === "pace" ? "split" : selected)}
               </text>
             </g>
           );
@@ -345,6 +359,24 @@ export default function TraceChart({
             that both exist. */}
         {ticksX.map((tick) => {
           const x = xScale(tick);
+          const label = formatTick(tick * 10, "time");
+          // Gate 0A, member M8: a tick sitting ON the plot's right edge
+          // carries a CENTRED label that overhangs the viewBox by 2.80
+          // units and loses its final glyph (`0:4(` — measured 2026-09-14,
+          // and visible in this branch's own before-capture). The mark
+          // never moves; only the text hangs the other way, and ONLY when
+          // it has to.
+          //
+          // DERIVED FROM THE LABEL, not from its index (invariant I4, and
+          // review caught the first draft doing the latter). A tick lands
+          // on the edge only when the trace's duration is an exact
+          // multiple of the chosen step, and the first tick — `chooseTicks`
+          // always emits `0` — never reaches an edge at all, so anchoring
+          // by index pulled labels off their own marks on every other
+          // trace to prevent a clip that was not happening there.
+          const half = (label.length * ADVANCE.plain) / 2;
+          const anchor =
+            x - half < 0 ? "start" : x + half > CHART_WIDTH ? "end" : "middle";
           return (
             <g key={tick}>
               <line
@@ -359,10 +391,10 @@ export default function TraceChart({
                 data-testid="trace-x-tick"
                 x={x}
                 y={X_TICK_LABEL_Y}
-                textAnchor="middle"
+                textAnchor={anchor}
                 dominantBaseline="hanging"
               >
-                {formatTick(tick * 10, "time")}
+                {label}
               </text>
             </g>
           );
