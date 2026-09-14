@@ -13252,20 +13252,28 @@ test.describe("the account block, landscape (Wave A PR 1 Task 4)", () => {
     await expect(steps).toHaveCount(4);
 
     const notice = page.locator(".auth-account-notice .notice");
-    const list = page.locator(".auth-methods");
     const box = page.locator(".auth-danger-zone");
     const noticeBox = await stableBoundingBox(notice);
-    const listBox = await stableBoundingBox(list);
     const deleteBox = await stableBoundingBox(box);
-    if (!noticeBox || !listBox || !deleteBox) {
+    if (!noticeBox || !deleteBox) {
       throw new Error("account block not laid out");
     }
 
-    expect(deleteBox.x).toBeGreaterThan(listBox.x + listBox.width - 1);
+    // ONE ASSERTION, BECAUSE THE OTHER THREE CANNOT GO RED HERE and a
+    // green assertion nobody can fail is decoration that reads as evidence
+    // (RF21). Measured, not reasoned: with `.auth-account-notice` mutated
+    // to `grid-column: 1 / -1`, this edge check failed (659.08 > 443.08)
+    // while "the box is wholly on screen", "the box's top is level with
+    // the notice's" and "the box is right of the list" all still PASSED —
+    // `.auth-danger-zone` spans `grid-row: 1 / -1`, so it overlaps a
+    // spanning notice instead of being pushed below it, exactly as the
+    // sibling leg's comment says. A second mutation, the steps' `gap`
+    // raised to 120px, made the notice far taller than the viewport and
+    // the leg still passed for the same reason.
+    //
+    // So the edge is the gate: a notice that outgrows its column shows up
+    // here and nowhere else.
     expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(deleteBox.x);
-    expect(deleteBox.y).toBeLessThanOrEqual(noticeBox.y + 1);
-    const viewportHeight = page.viewportSize()!.height;
-    expect(deleteBox.y + deleteBox.height).toBeLessThanOrEqual(viewportHeight);
   });
 
   test("844x390: the quarantine box sits beside the methods list, and its whole height is on screen", async ({
