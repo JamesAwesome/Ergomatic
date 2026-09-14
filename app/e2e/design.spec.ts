@@ -13229,6 +13229,45 @@ test.describe("the account block, landscape (Wave A PR 1 Task 4)", () => {
     expect(grounds.box).not.toBe(grounds.notice);
   });
 
+  // THE SAME GATE, AGAINST THE TALLEST NOTICE THIS SCREEN CAN DRAW (the
+  // copy bundle, 2026-09-14). The leg above uses `signin_failed`, which is
+  // two lines. `account_conflict` is now a lead sentence, a cue line and a
+  // four-step ordered list — roughly three times the height — and height is
+  // the whole of what RC-24 got wrong. A notice that rides inside the list
+  // column may grow freely; one that ever spans both columns takes the
+  // bottom off the box, and only a real browser can tell which is happening.
+  test("844x390 with the TALLEST notice: the four-step conflict recovery does not push the box off screen", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto(
+      "/?authError=account_conflict&authPurpose=link&authProvider=apple",
+    );
+    await expect(page).toHaveURL(/\/you$/);
+
+    // The steps are what makes it tall, so assert they are actually there
+    // before concluding anything from the geometry: without this the test
+    // passes on a two-line notice and proves nothing (RF41's shape).
+    const steps = page.locator(".auth-notice-steps li");
+    await expect(steps).toHaveCount(4);
+
+    const notice = page.locator(".auth-account-notice .notice");
+    const list = page.locator(".auth-methods");
+    const box = page.locator(".auth-danger-zone");
+    const noticeBox = await stableBoundingBox(notice);
+    const listBox = await stableBoundingBox(list);
+    const deleteBox = await stableBoundingBox(box);
+    if (!noticeBox || !listBox || !deleteBox) {
+      throw new Error("account block not laid out");
+    }
+
+    expect(deleteBox.x).toBeGreaterThan(listBox.x + listBox.width - 1);
+    expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(deleteBox.x);
+    expect(deleteBox.y).toBeLessThanOrEqual(noticeBox.y + 1);
+    const viewportHeight = page.viewportSize()!.height;
+    expect(deleteBox.y + deleteBox.height).toBeLessThanOrEqual(viewportHeight);
+  });
+
   test("844x390: the quarantine box sits beside the methods list, and its whole height is on screen", async ({
     page,
   }) => {
