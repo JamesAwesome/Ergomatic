@@ -232,6 +232,39 @@ describe("TraceChart — rendering from a REAL capture", () => {
     expect(labels.at(-1)!.textContent).toMatch(/^\d+:\d\d$/);
   });
 
+  // Gate 0A (number-provenance spec, member M8). The last x tick lands ON
+  // the plot's right edge, so a CENTRED four-glyph label hangs 2.80 units
+  // past the viewBox and its final glyph is cut — measured in Chromium
+  // 2026-09-14 and visible in the committed before-capture as `0:4(`.
+  // Anchoring the two extremes inward costs no layout: the tick MARK stays
+  // where it was, only the text hangs the other way. The browser gate that
+  // can see the geometry is `e2e/stats.spec.ts`; this one pins the rule.
+  it("anchors the first and last x-axis labels inward, so neither hangs past the viewBox", async () => {
+    const series = await realSeries();
+    render(<TraceChart series={series} />);
+    const labels = screen.getAllByTestId("trace-x-tick");
+    expect(labels.length).toBeGreaterThanOrEqual(3);
+    expect(labels.at(0)).toHaveAttribute("text-anchor", "start");
+    expect(labels.at(-1)).toHaveAttribute("text-anchor", "end");
+    for (const middle of labels.slice(1, -1)) {
+      expect(middle).toHaveAttribute("text-anchor", "middle");
+    }
+  });
+
+  // Same gate, ruling 4: a gridline never needed the tenth. `1:50`, not
+  // `1:50.0` — the `split` tick kind Phase PS added to the stats charts for
+  // exactly this reason. It is what lets this chart's gutter come down from
+  // a hand-tuned 42 to a derived 28.
+  it("prints whole-second pace ticks on the y axis", async () => {
+    const series = await realSeries();
+    const { container } = render(<TraceChart series={series} />);
+    const ticks = Array.from(
+      container.querySelectorAll(".trace-tick-label-y"),
+    ).map((t) => t.textContent);
+    expect(ticks.length).toBeGreaterThan(0);
+    for (const tick of ticks) expect(tick).toMatch(/^\d+:\d\d$/);
+  });
+
   it("tapping the Stroke rate toggle switches the drawn trace to rate's own model (different summary, different segment count)", async () => {
     const user = userEvent.setup();
     const series = await realSeries();

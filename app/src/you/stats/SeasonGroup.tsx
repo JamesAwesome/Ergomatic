@@ -1,6 +1,12 @@
 import { toDayNumber } from "../../../domain/stats/calendar.js";
 import type { SeasonSummary } from "../../../domain/stats/season.js";
-import { chooseTicks, formatTick, niceMax } from "../../charts/axis";
+import {
+  ADVANCE,
+  chooseTicks,
+  formatTick,
+  labelRoom,
+  niceMax,
+} from "../../charts/axis";
 import { polylinePoints } from "../../charts/line";
 import { linearScale } from "../../charts/scale";
 import { seasonLabel } from "./chartLabels";
@@ -9,15 +15,19 @@ import { TWO_ROWS_MAKE_A_CHART } from "./TimeByTypeGroup";
 
 const W = 320;
 const H = 140;
-/** 44, not A3's 40 — see `WeekBarsGroup`'s `PAD_L`: `60,000` is six glyphs. */
-const PAD_L = 44;
+/** DERIVED (invariant I4, Gate 0A ruling 1) — see `WeekBarsGroup`'s
+ *  `PAD_L`, the same widest-ever tick (`1000k`) and the same arithmetic. */
+const PAD_L = labelRoom(["1000k"], ADVANCE.spaced, 6);
 const PAD_R = 12;
 const PAD_T = 14;
 const PAD_B = 18;
 const PLOT_BOTTOM = H - PAD_B;
-// `43,012 TODAY` is 12 glyphs of 9 px Plex Mono at 0.06 em ≈ 70 px, plus the
-// 8 px gap the label leaves beside its dot.
-const LABEL_ROOM = 78;
+// DERIVED per render (invariant I4, Gate 0A ruling 1) from the label this
+// season actually prints, at `.stats-point-label`'s own measured advance —
+// the comment this replaces priced 12 glyphs "at 0.06 em ≈ 70 px", but that
+// class carries NO letter-spacing (5.40, not 5.83), and 78 was 0.22 short
+// at the worst placement its own rule allowed.
+const labelRoomFor = (label: string) => labelRoom([label], ADVANCE.plain, 8);
 
 export const NO_ROWS_THIS_SEASON = "NO ROWS THIS SEASON YET";
 export const STREAK_UNIT = "WEEKS · ERGOMATIC";
@@ -110,7 +120,8 @@ export function SeasonChart({ summary }: { summary: SeasonSummary }) {
   // The same overrun rule TestTrendGroup uses: the label sits to the right of
   // the dot unless it would leave the viewBox. A share of the width (60 %)
   // flipped labels that still fitted, for two months of every season.
-  const labelRight = tx + LABEL_ROOM <= W;
+  const pointLabel = `${fmtMeters(total)} TODAY`;
+  const labelRight = tx + labelRoomFor(pointLabel) <= W;
   return (
     <svg
       className="stats-chart"
@@ -165,7 +176,7 @@ export function SeasonChart({ summary }: { summary: SeasonSummary }) {
         textAnchor={labelRight ? "start" : "end"}
         dominantBaseline="middle"
       >
-        {fmtMeters(total)} TODAY
+        {pointLabel}
       </text>
     </svg>
   );

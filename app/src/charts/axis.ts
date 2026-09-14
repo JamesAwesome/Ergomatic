@@ -5,7 +5,7 @@
  * same file).
  */
 
-import { fmtMeters, fmtSplit } from "../../domain/format.js";
+import { fmtSplit } from "../../domain/format.js";
 import { fmtDuration } from "../../domain/duration.js";
 
 /**
@@ -103,9 +103,17 @@ export function formatTick(value: number, kind: TickKind): string {
     // bespoke `m:ss`.
     case "split":
       return fmtDuration(value / 60);
-    // A metres gridline: the house thousands grouping, `0` at the floor.
+    // A metres GRIDLINE, shortened to `150k` (James, Gate 0A 2026-09-14):
+    // the house grouping needs a seventh glyph past 100,000 and every
+    // gutter here was hand-tuned against six, which is how a production
+    // frame came to read `L00,000`. Safe at the low end because `niceMax`
+    // floors its ladder at `base = 1000`, so every tick above zero is a
+    // whole thousand and no `0k` is reachable. The exact figures beside
+    // these — a bar's own value, the season's `<n> TODAY` — keep their
+    // grouping (same gate, ruling 3): a scale marker rounds, a reading
+    // does not.
     case "metres":
-      return fmtMeters(value);
+      return value === 0 ? "0" : `${Math.round(value / 1000)}k`;
   }
 }
 
@@ -133,4 +141,31 @@ export function niceMax(
       if (max / step <= maxLines) return { max, step };
     }
   }
+}
+
+/**
+ * Invariant I4 (number-provenance spec §6, Gate 0A ruling 1): the space a
+ * set of formatted labels actually needs, from the MEASURED per-glyph
+ * advance of the class that draws them — never a constant chosen by looking
+ * at a chart. Four charts hand-tuned four gutters against a guess of
+ * roughly 5.67 and three of them were wrong; one shipped `L00,000` to a
+ * rower's phone.
+ *
+ * Advances measured in Chromium 2026-09-14 (`app/e2e/axisProbe.spec.ts`):
+ * `spaced` is 9 px IBM Plex Mono at `letter-spacing: 0.06em` (`.stats-tick`)
+ * and advances 5.94 user units; `plain` is the same face with no
+ * letter-spacing (`.trace-tick-label`, `.stats-point-label`,
+ * `.stats-bar-label`) and advances 5.40.
+ */
+export const ADVANCE = { spaced: 5.94, plain: 5.4 } as const;
+
+/** The gutter those labels need: the widest one, plus the gap between the
+ *  label's anchor and the plot's own edge. */
+export function labelRoom(
+  labels: readonly string[],
+  advance: number,
+  gap: number,
+): number {
+  const widest = labels.reduce((m, s) => Math.max(m, s.length), 0);
+  return Math.ceil(widest * advance) + gap;
 }

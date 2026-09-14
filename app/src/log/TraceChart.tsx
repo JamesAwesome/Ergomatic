@@ -37,7 +37,7 @@
 import { useId, useMemo, useState } from "react";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
 import { linearScale, decimate } from "../charts/scale.js";
-import { chooseTicks, formatTick } from "../charts/axis.js";
+import { ADVANCE, chooseTicks, formatTick, labelRoom } from "../charts/axis.js";
 import {
   buildTrace,
   type Measure,
@@ -54,14 +54,15 @@ const MEASURE_LABEL: Record<Measure, { visible: string; spoken: string }> = {
 };
 
 const CHART_WIDTH = 320;
-/** Bumped from 36 (trace-truth Task 3): the y-axis label anchor sat at
- *  `LEFT_PAD - 6` = 30, and the widest real label (`1:40.0`/`1:50.0`, 6
- *  monospace glyphs) overhung that anchor far enough left to clip against
- *  the SVG's own x=0 edge — confirmed on both committed captures, where
- *  the clipped "1" reads as "L" (`L:40.0`). The extra 6 units of anchor
- *  room removes the overhang; ordinary digits (`2:00.0` etc.) were never
- *  clipped, so this is sized for the widest case, not the common one. */
-const LEFT_PAD = 42;
+/** DERIVED (invariant I4, Gate 0A rulings 1 and 4), and smaller because the
+ *  labels are shorter. The y ticks now print whole seconds (`1:50`, the
+ *  `split` kind Phase PS added for exactly this reason), so the widest
+ *  label any measure can produce is four glyphs — pace tops out at `1:50`
+ *  scale, rate at `28`, heart rate at `152`:
+ *  `labelRoom(["1:50"], ADVANCE.plain, 6)` = ceil(4 x 5.40) + 6 = 28.
+ *  The 42 it replaces was a hand bump from 36 after a clipped `1` read as
+ *  `L` (`L:40.0`) on two committed captures. */
+const LEFT_PAD = labelRoom(["1:50"], ADVANCE.plain, 6);
 const RIGHT_PAD = 8;
 const TOP_PAD = 10;
 const BOTTOM_PAD = 10;
@@ -327,7 +328,7 @@ export default function TraceChart({
                 textAnchor="end"
                 dominantBaseline="middle"
               >
-                {formatTick(tick, selected)}
+                {formatTick(tick, selected === "pace" ? "split" : selected)}
               </text>
             </g>
           );
@@ -343,8 +344,17 @@ export default function TraceChart({
             is this axis's own selector — the shared `.trace-tick-label`
             class alone can't distinguish an x-label from a y-label now
             that both exist. */}
-        {ticksX.map((tick) => {
+        {ticksX.map((tick, i) => {
           const x = xScale(tick);
+          // Gate 0A, member M8: the last tick lands ON the plot's right
+          // edge and a CENTRED four-glyph label overhangs the viewBox by
+          // 2.80 units there, cutting its final glyph (`0:4(` — measured
+          // 2026-09-14, `axisProbe.spec.ts`, and visible in the committed
+          // before-capture). Anchoring the two extremes inward costs no
+          // layout: the mark stays where it was, only the text hangs the
+          // other way.
+          const anchor =
+            i === 0 ? "start" : i === ticksX.length - 1 ? "end" : "middle";
           return (
             <g key={tick}>
               <line
@@ -359,7 +369,7 @@ export default function TraceChart({
                 data-testid="trace-x-tick"
                 x={x}
                 y={X_TICK_LABEL_Y}
-                textAnchor="middle"
+                textAnchor={anchor}
                 dominantBaseline="hanging"
               >
                 {formatTick(tick * 10, "time")}

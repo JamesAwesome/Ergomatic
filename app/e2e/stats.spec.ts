@@ -213,3 +213,142 @@ test("You's hero prints the seed's LIFETIME and SEASON, is the one control named
   await page.goto("/you/stats");
   await expect(row("METRES").getByRole("cell").nth(1)).toHaveText("34,752");
 });
+
+// Invariant I4's browser gate (number-provenance spec §7, Gate 0A). No
+// assertion in `client` can see this: jsdom 30 leaves `getBBox` undefined
+// and every rect zero, so the defect it exists to catch — a label wider
+// than the room reserved for it — was invisible to every gate this repo
+// owned, and shipped to a rower's phone as `L00,000`.
+//
+// It asserts the general invariant rather than a named label: EVERY text
+// node in EVERY chart lies inside its own viewBox. That is what makes it
+// survive the fix. Pinning "a seven-glyph tick fits" would have been a
+// gate that cannot go red (RF21), because the approved `150k` form makes
+// a seven-glyph tick unreachable.
+//
+// Mutations that make it fail, run 2026-09-14 and quoted in the PR body:
+// restoring `formatTick`'s full grouping (the season's ticks then need
+// 41.59 into 30 and report x = -11.59), and restoring the trace chart's
+// centred anchor on the last x tick (right overflow 2.80).
+async function assertNoChartLabelEscapesItsViewBox(
+  page: Page,
+  where: string,
+): Promise<void> {
+  const escapes = await page.evaluate(() => {
+    const bad: {
+      chart: string;
+      text: string;
+      x: number;
+      width: number;
+      vbWidth: number;
+      side: string;
+    }[] = [];
+    for (const svg of Array.from(document.querySelectorAll("svg"))) {
+      const vb = svg.viewBox.baseVal;
+      if (vb.width === 0) continue;
+      for (const t of Array.from(svg.querySelectorAll("text"))) {
+        const box = (t as SVGGraphicsElement).getBBox();
+        const left = box.x < vb.x;
+        const right = box.x + box.width > vb.x + vb.width;
+        if (!left && !right) continue;
+        bad.push({
+          chart: svg.getAttribute("aria-label")?.slice(0, 40) ?? "(unlabelled)",
+          text: t.textContent ?? "",
+          x: Number(box.x.toFixed(2)),
+          width: Number(box.width.toFixed(2)),
+          vbWidth: vb.width,
+          side: left ? "left" : "right",
+        });
+      }
+    }
+    return bad;
+  });
+  expect(escapes, `${where}: chart labels outside their own viewBox`).toEqual(
+    [],
+  );
+}
+
+test("no chart label escapes its own viewBox, on a season past 100,000 m (invariant I4)", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.clock.install({ time: CLOCK });
+  await signInViaBackdoor(page, {
+    email: `stats-i4-${RUN_ID}@e2e.test`,
+    name: "I4 Gate",
+  });
+  const ids = await seedGate0(page);
+  await seedGate0Tests(page, ids, (d) => `${d}T16:00:00Z`);
+  // The seed's own season tops out at 43,012 — six glyphs grouped, which
+  // is the width every gutter here was hand-tuned for and the reason the
+  // real defect lived beyond our captures rather than beyond our
+  // assertions. This row pushes both metres axes past 100,000, where the
+  // grouped form grows a seventh glyph. Backdated INSIDE the season
+  // window: `rowsInRange` reads the BROWSER's clock, so a row left at
+  // server-now lands after today and is excluded.
+  const bigId = await page.evaluate(async () => {
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workoutId: null,
+        workoutTitle: "Long season row",
+        workoutType: null,
+        steps: [],
+        source: "manual",
+        timeSeconds: 36000,
+        distanceMeters: 120000,
+      }),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text);
+    return (JSON.parse(text) as { id: string }).id;
+  });
+  await backdateLog(bigId, "2026-09-10T16:00:00Z");
+
+  await page.goto("/you/stats");
+  await expect(page.getByRole("heading", { name: "Stats" })).toBeVisible();
+  await page.getByText("2K 1:54.0").waitFor();
+  await page.evaluate(() => document.fonts.ready);
+  // The fixture reaches the arm this gate exists for: without the
+  // shortened tick these labels are the ones that clip.
+  await expect(page.getByText("150k").first()).toBeVisible();
+  await assertNoChartLabelEscapesItsViewBox(page, "You to Stats");
+
+  // The other screen the invariant governs, and the one that carried the
+  // newly-found right-edge clip: the trace chart's last x tick lands on
+  // the plot's own right edge whenever a gridline falls on the end of the
+  // data, which this series is built to do (0 s … 400 s, ticks every 100).
+  const logId = await page.evaluate(async () => {
+    const samples = Array.from({ length: 41 }, (_, i) => ({
+      t: i * 10,
+      d: i * 4,
+      p: (140 - Math.round(i * 0.7)) * 10,
+      spm: 22 + Math.round(i / 7),
+      hr: 128 + Math.round(i * 0.6),
+    }));
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workoutId: null,
+        workoutTitle: "I4 Trace",
+        workoutType: null,
+        deviceName: "PM5 432331249",
+        source: "pm5",
+        steps: [],
+        distanceMeters: 5000,
+        timeSeconds: 1500,
+        series: { samples },
+      }),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text);
+    return (JSON.parse(text) as { id: string }).id;
+  });
+  await page.goto(`/today/log/${logId}`);
+  await expect(page.getByRole("heading", { name: "I4 Trace" })).toBeVisible();
+  await expect(page.getByTestId("trace-x-tick").last()).toHaveText("0:40");
+  await page.evaluate(() => document.fonts.ready);
+  await assertNoChartLabelEscapesItsViewBox(page, "the trace chart");
+});
