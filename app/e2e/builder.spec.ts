@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { signInViaBackdoor } from "./helpers";
+import { signInViaBackdoor, WORKOUT_DETAIL_URL } from "./helpers";
 
 // The authoring loop: /library/new -> save -> /library/:id, plus bulk paste,
 // edit, and delete. Against the real compose stack (nginx + api + postgres —
@@ -125,7 +125,7 @@ test.describe("authoring loop", () => {
 
     await page.getByRole("button", { name: "Save to library" }).click();
 
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
     // WorkoutDetail's own resolved-target class (StepRow.tsx) — untouched by
     // the builder redesign.
@@ -246,7 +246,7 @@ test.describe("authoring loop", () => {
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
     await page.getByRole("button", { name: "Save to library" }).click();
 
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(
       originalTitle,
     );
@@ -260,7 +260,7 @@ test.describe("authoring loop", () => {
     await titleInput.fill(renamedTitle);
     await page.getByRole("button", { name: "Save to library" }).click();
 
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(
       renamedTitle,
     );
@@ -350,7 +350,7 @@ test.describe("new controls this phase introduced", () => {
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
     await page.getByRole("button", { name: "Save to library" }).click();
 
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
 
     await page.goto("/library");
@@ -381,7 +381,7 @@ test.describe("new controls this phase introduced", () => {
     await expect(durationField).toHaveValue("0:45");
     await page.getByRole("button", { name: "Save to library" }).click();
 
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
 
     // Reappears: opening the saved workout for edit round-trips the same
@@ -471,7 +471,7 @@ test.describe("new controls this phase introduced", () => {
       await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
       await page.getByRole("button", { name: "Save to library" }).click();
 
-      await expect(page).toHaveURL(/\/library\/[^/]+$/);
+      await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
       await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
 
       await page.goto("/library/new");
@@ -673,7 +673,7 @@ test.describe("new controls this phase introduced", () => {
 
     await page.getByRole("button", { name: "Save to library" }).click();
 
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     // One row, 1 minute, ×5, no warm-up/rest bookends — five work phases'
     // worth of duration is 5 minutes total (domain/expand.ts's
     // estimateMinutes), asserted here as a hardcoded literal rather than
@@ -779,7 +779,7 @@ test.describe("new controls this phase introduced", () => {
     expect(body.steps).toHaveLength(1);
     expect(body.steps.some((s) => s.k === "wu")).toBe(false);
 
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await cleanupByTitle(page, title);
   });
 
@@ -833,7 +833,7 @@ test.describe("new controls this phase introduced", () => {
     // The bug's symptom: Save silently no-ops (an inline validation error
     // appears, not a navigation) because `toSteps` can't parse "NaN" as a
     // rest duration. A successful save navigates back to the detail screen.
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
 
     await cleanupByTitle(page, title);
@@ -920,7 +920,7 @@ test.describe("effort refs (Phase 5G)", () => {
 
     await page.getByRole("button", { name: "Save to library" }).click();
 
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
     // StepRow.tsx: the visible left label composes as "<duration> @ <chip
     // word>" (refLabel), and the right-hand range slot renders the effort

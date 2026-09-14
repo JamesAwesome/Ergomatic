@@ -10,6 +10,7 @@ import {
   seedGate0Tests,
   signInViaBackdoor,
   stubBluetoothScanFailure,
+  WORKOUT_DETAIL_URL,
 } from "./helpers";
 import { GATE0_LOG_BODIES } from "../src/test/gate0LogBodies";
 import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
@@ -1921,7 +1922,7 @@ test("library", async ({ page }) => {
   await page.getByRole("button", { name: "Effort 3" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
   await page.getByRole("button", { name: "Save to library" }).click();
-  await expect(page).toHaveURL(/\/library\/[^/]+$/);
+  await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
 
   await page.goto("/library");
   // Library shows "LOADING…" until the workouts/baselines fetches resolve;
@@ -2201,7 +2202,7 @@ test("workout-detail", async ({ page }) => {
   await row2SpmUp.click();
 
   await page.getByRole("button", { name: "Save to library" }).click();
-  await expect(page).toHaveURL(/\/library\/[^/]+$/);
+  await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
   await page.locator(".workout-detail-title").waitFor();
   await expect(page.getByText("ALL OUT")).toBeVisible();
   await page.screenshot({
@@ -2236,7 +2237,7 @@ test("workout-detail-no-baseline", async ({ page }) => {
   await page.getByRole("button", { name: "Effort 3" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
   await page.getByRole("button", { name: "Save to library" }).click();
-  await expect(page).toHaveURL(/\/library\/[^/]+$/);
+  await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
   await page.locator(".workout-detail-title").waitFor();
   await expect(page.getByRole("button", { name: "Start Timer" })).toBeEnabled();
   await expect(page.locator(".step-row-range").first()).toHaveText("MODERATE");
@@ -2273,7 +2274,7 @@ test("workout-detail-half-baseline", async ({ page }) => {
   await page.getByRole("button", { name: "Effort 3" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
   await page.getByRole("button", { name: "Save to library" }).click();
-  await expect(page).toHaveURL(/\/library\/[^/]+$/);
+  await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
   await page.locator(".workout-detail-title").waitFor();
   await expect(page.locator(".workout-detail-caption")).toContainText(
     "Your 2k is set.",
@@ -7603,7 +7604,7 @@ async function captureWorkoutDetailNfc(
   await nfcRow2SpmUp.click();
   await nfcRow2SpmUp.click();
   await page.getByRole("button", { name: "Save to library" }).click();
-  await expect(page).toHaveURL(/\/library\/[^/]+$/);
+  await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
   await page.locator(".workout-detail-title").waitFor();
   await expect(page.getByText("ALL OUT")).toBeVisible();
   const scanNfc = page.getByRole("button", { name: "Scan NFC" });

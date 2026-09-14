@@ -122,9 +122,26 @@ test("opening the baselines article marks it read, and the read survives BACK an
   const baselinesRow = page.locator('a.news-row[href="/news/baselines"]');
   await expect(baselinesRow).toHaveAttribute("data-read", "false");
 
+  // WAIT FOR THE MARK-READ PUT, the same idiom this file already uses for
+  // effort-scale below (2026-09-14 flake hunt). `markRead`
+  // (`api/useArticleReads.ts:104`) is deliberately fire-and-forget — it
+  // publishes the optimistic count and lets the PUT fly — so the reader's
+  // title, the "6 UNREAD" below and `data-read="true"` are all the LOCAL
+  // publish, not the server. The hook's own `settlePendingWrites` barrier
+  // keeps the same-document assertions honest; the `page.reload()` at the
+  // end of this test destroys the module and that barrier with it, and
+  // then reads a cold GET that says "7 UNREAD" if the PUT never landed.
+  // There is no UI transition owned by this write's success, which is why
+  // this is the one case in the suite that waits on the network instead.
+  const markedRead = page.waitForResponse(
+    (r) =>
+      r.request().method() === "PUT" &&
+      r.url().endsWith("/api/article-reads/baselines"),
+  );
   await baselinesRow.click();
   await expect(page).toHaveURL(/\/news\/baselines$/);
   await expect(page.locator(".reader-title")).toHaveText(BASELINES_TITLE);
+  expect((await markedRead).ok()).toBe(true);
   // The serif prose body — the point of the reader, not a stub.
   await expect(page.locator(".reader-body")).toBeVisible();
   const firstParagraph = page.locator(".reader-body p").first();
@@ -207,56 +224,57 @@ test("/news/releases lists every version, newest first", async ({ page }) => {
   // deliberately fails here — that is this pin's job, and it is why the
   // title no longer names a number that goes stale every tag.
   const versions = page.locator(".news-release-version");
-  await expect(versions).toHaveCount(49);
+  await expect(versions).toHaveCount(50);
   await expect(versions.nth(0)).toContainText(NEWEST_RELEASE_VERSION);
-  await expect(versions.nth(1)).toContainText("v0.45.0");
-  await expect(versions.nth(2)).toContainText("v0.44.0");
-  await expect(versions.nth(3)).toContainText("v0.43.0");
-  await expect(versions.nth(4)).toContainText("v0.42.0");
-  await expect(versions.nth(5)).toContainText("v0.41.0");
-  await expect(versions.nth(6)).toContainText("v0.40.0");
-  await expect(versions.nth(7)).toContainText("v0.39.2");
-  await expect(versions.nth(8)).toContainText("v0.39.1");
-  await expect(versions.nth(9)).toContainText("v0.39.0");
-  await expect(versions.nth(10)).toContainText("v0.38.1");
-  await expect(versions.nth(11)).toContainText("v0.38.0");
-  await expect(versions.nth(12)).toContainText("v0.37.0");
-  await expect(versions.nth(13)).toContainText("v0.36.1");
-  await expect(versions.nth(14)).toContainText("v0.36.0");
-  await expect(versions.nth(15)).toContainText("v0.35.0");
-  await expect(versions.nth(16)).toContainText("v0.34.0");
-  await expect(versions.nth(17)).toContainText("v0.33.0");
-  await expect(versions.nth(18)).toContainText("v0.32.0");
-  await expect(versions.nth(19)).toContainText("v0.31.0");
-  await expect(versions.nth(20)).toContainText("v0.30.0");
-  await expect(versions.nth(21)).toContainText("v0.29.0");
-  await expect(versions.nth(22)).toContainText("v0.28.0");
-  await expect(versions.nth(23)).toContainText("v0.27.0");
-  await expect(versions.nth(24)).toContainText("v0.26.0");
-  await expect(versions.nth(25)).toContainText("v0.25.0");
-  await expect(versions.nth(26)).toContainText("v0.24.0");
-  await expect(versions.nth(27)).toContainText("v0.23.0");
-  await expect(versions.nth(28)).toContainText("v0.22.0");
-  await expect(versions.nth(29)).toContainText("v0.21.0");
-  await expect(versions.nth(30)).toContainText("v0.20.0");
-  await expect(versions.nth(31)).toContainText("v0.19.1");
-  await expect(versions.nth(32)).toContainText("v0.19.0");
-  await expect(versions.nth(33)).toContainText("v0.18.1");
-  await expect(versions.nth(34)).toContainText("v0.18.0");
-  await expect(versions.nth(35)).toContainText("v0.17.0");
-  await expect(versions.nth(36)).toContainText("v0.16.0");
-  await expect(versions.nth(37)).toContainText("v0.15.0");
-  await expect(versions.nth(38)).toContainText("v0.14.0");
-  await expect(versions.nth(39)).toContainText("v0.13.0");
-  await expect(versions.nth(40)).toContainText("v0.12.0");
-  await expect(versions.nth(41)).toContainText("v0.11.0");
-  await expect(versions.nth(42)).toContainText("v0.10.0");
-  await expect(versions.nth(43)).toContainText("v0.9.0");
-  await expect(versions.nth(44)).toContainText("v0.8.0");
-  await expect(versions.nth(45)).toContainText("v0.7.0");
-  await expect(versions.nth(46)).toContainText("v0.5.1");
-  await expect(versions.nth(47)).toContainText("v0.5.0");
-  await expect(versions.nth(48)).toContainText("v0.4.0");
+  await expect(versions.nth(1)).toContainText("v0.46.0");
+  await expect(versions.nth(2)).toContainText("v0.45.0");
+  await expect(versions.nth(3)).toContainText("v0.44.0");
+  await expect(versions.nth(4)).toContainText("v0.43.0");
+  await expect(versions.nth(5)).toContainText("v0.42.0");
+  await expect(versions.nth(6)).toContainText("v0.41.0");
+  await expect(versions.nth(7)).toContainText("v0.40.0");
+  await expect(versions.nth(8)).toContainText("v0.39.2");
+  await expect(versions.nth(9)).toContainText("v0.39.1");
+  await expect(versions.nth(10)).toContainText("v0.39.0");
+  await expect(versions.nth(11)).toContainText("v0.38.1");
+  await expect(versions.nth(12)).toContainText("v0.38.0");
+  await expect(versions.nth(13)).toContainText("v0.37.0");
+  await expect(versions.nth(14)).toContainText("v0.36.1");
+  await expect(versions.nth(15)).toContainText("v0.36.0");
+  await expect(versions.nth(16)).toContainText("v0.35.0");
+  await expect(versions.nth(17)).toContainText("v0.34.0");
+  await expect(versions.nth(18)).toContainText("v0.33.0");
+  await expect(versions.nth(19)).toContainText("v0.32.0");
+  await expect(versions.nth(20)).toContainText("v0.31.0");
+  await expect(versions.nth(21)).toContainText("v0.30.0");
+  await expect(versions.nth(22)).toContainText("v0.29.0");
+  await expect(versions.nth(23)).toContainText("v0.28.0");
+  await expect(versions.nth(24)).toContainText("v0.27.0");
+  await expect(versions.nth(25)).toContainText("v0.26.0");
+  await expect(versions.nth(26)).toContainText("v0.25.0");
+  await expect(versions.nth(27)).toContainText("v0.24.0");
+  await expect(versions.nth(28)).toContainText("v0.23.0");
+  await expect(versions.nth(29)).toContainText("v0.22.0");
+  await expect(versions.nth(30)).toContainText("v0.21.0");
+  await expect(versions.nth(31)).toContainText("v0.20.0");
+  await expect(versions.nth(32)).toContainText("v0.19.1");
+  await expect(versions.nth(33)).toContainText("v0.19.0");
+  await expect(versions.nth(34)).toContainText("v0.18.1");
+  await expect(versions.nth(35)).toContainText("v0.18.0");
+  await expect(versions.nth(36)).toContainText("v0.17.0");
+  await expect(versions.nth(37)).toContainText("v0.16.0");
+  await expect(versions.nth(38)).toContainText("v0.15.0");
+  await expect(versions.nth(39)).toContainText("v0.14.0");
+  await expect(versions.nth(40)).toContainText("v0.13.0");
+  await expect(versions.nth(41)).toContainText("v0.12.0");
+  await expect(versions.nth(42)).toContainText("v0.11.0");
+  await expect(versions.nth(43)).toContainText("v0.10.0");
+  await expect(versions.nth(44)).toContainText("v0.9.0");
+  await expect(versions.nth(45)).toContainText("v0.8.0");
+  await expect(versions.nth(46)).toContainText("v0.7.0");
+  await expect(versions.nth(47)).toContainText("v0.5.1");
+  await expect(versions.nth(48)).toContainText("v0.5.0");
+  await expect(versions.nth(49)).toContainText("v0.4.0");
 });
 
 test("item 1 / round 4: opening an article from a scrolled News feed lands the reader at the top of its OWN scroller, and ← BACK now restores News's own scroll position (CL item: News scroll memory)", async ({
