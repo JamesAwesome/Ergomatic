@@ -464,7 +464,22 @@ requirements).
     - **Proposed to add** — every row this work wants to file, one line each:
       title, `dies` date, and the clause saying why it is a row and not a fix.
     - **Now overdue** — every row ANYWHERE in `ROADMAP.md` whose `dies` date
-      has passed, one line each, oldest first.
+      has passed, one line each, oldest first. **Find them with THIS, not
+      with a bare `grep`:**
+
+      ```
+      tr '\n' ' ' < ROADMAP.md | grep -oE "dies +20[0-9]{2}-[0-9]{2}-[0-9]{2}" | sort -u
+      ```
+
+      **The `tr` is the whole point.** A stamp that WRAPS across two lines —
+      `· dies` ending one line and `2026-10-13 ·` starting the next — is
+      invisible to `grep "dies 20"`, and `ROADMAP.md` is hand-wrapped, so
+      this is common rather than exotic. Measured 2026-09-14: the naive grep
+      saw 33 of 37 stamps, and **three of the four it missed were rows filed
+      that same day** — so the sweep was silently blind to the newest work,
+      which is exactly the population it exists to catch. This is not
+      hypothetical drift; it was found twice in one day, once in the morning
+      sweep and once when re-counting a row's own date after filing it.
 
     He rules keep / kill / re-date on each. **Nothing is struck without him**
     (RF30: striking an item is a decision he does not get to make again). A row
@@ -1173,6 +1188,22 @@ describes.
     existed to catch — and all three e2e legs passed; on an empty timeline the
     same mutation fails both. It hit twice in one day in two different
     harnesses._
+
+42. **Counting how often a test fails by looking at FAILED CI RUNS.**
+    `playwright.config.ts:21` is `retries: process.env.CI ? 1 : 0`, so a
+    test that fails once and passes on the retry leaves the job GREEN and
+    prints `1 flaky` — invisible to `gh run list`, to `gh pr checks`, and
+    to anyone reading the red runs. **The count lives in the JOB LOG, not
+    the run list: fetch the `e2e` log for every ATTEMPT of every run and
+    grep Playwright's own summary lines.** The report artifact is not the
+    substitute it looks like — `ci.yml:146` keeps it only 14 days.
+    **And never write "it passes on re-run" without pointing at the
+    attempt that passed.** RF39 is this one's sibling — there the run is
+    ABSENT, here it is green and lying. _A ROADMAP row said a flake had
+    happened TWICE; the log sweep found NINE, seven of them retry-saved
+    greens. Of nineteen occurrences across two tests, SEVENTEEN were never
+    re-run at all, because the job was already green — so "it passes on
+    re-run" was never a statement about them._
 
 ## Commands
 

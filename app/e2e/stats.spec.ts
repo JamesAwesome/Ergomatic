@@ -172,6 +172,21 @@ test("You's hero prints the seed's LIFETIME and SEASON, is the one control named
     .locator(".log-delete-confirm")
     .getByRole("button", { name: "Delete session" })
     .click();
+  // WAIT FOR THE DELETE'S OWN POST-WRITE NAVIGATION (2026-09-14 flake
+  // hunt). `confirmDelete` (`log/FromTheLog.tsx:428`) navigates to
+  // `backTarget` only after `await api(DELETE)` resolves, and this screen
+  // was entered from Today (`Today.tsx:1623` sets `state={{from:"/today"}}`
+  // -> `resolveLogBack` -> `/today`), so landing on `/today` is proof the
+  // row is gone. Without it, tapping YOU with the DELETE still in flight
+  // let You's one-shot stats GET read the PRE-delete figure — the hero
+  // then says 56,752, which is exactly the number this test asserts has
+  // moved. It also removes a second race: `navigate(backTarget)` firing
+  // AFTER the test reached /you would yank the page to /today mid-
+  // assertion. This is a client-side navigate, so leg 1 stays SAME-
+  // DOCUMENT and the sentinel below still means what it says.
+  // Its three siblings already did this — `log.spec.ts:1668` waits on
+  // `/\/plan$/`, `log.spec.ts:1765` on `/\/today\/log$/` (RF34).
+  await expect(page).toHaveURL(/\/today$/);
   await page
     .getByRole("navigation", { name: "Main" })
     .getByRole("link", { name: "YOU" })

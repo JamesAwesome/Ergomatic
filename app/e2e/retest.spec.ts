@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { RUN_ID, signInViaBackdoor } from "./helpers";
+import { RUN_ID, signInViaBackdoor, WORKOUT_DETAIL_URL } from "./helpers";
 
 // Phase BL PR B's re-test shortcut, reshaped by James's tester feedback
 // (2026-08-22), against the real stack: one tap from the baseline fields
@@ -56,7 +56,7 @@ test.describe("Phase BL: the You re-test shortcut", () => {
 
     // The detail screen, not the timer (the feedback verbatim: "It should
     // take me to the connect/start timer/log it after screen").
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(K6_TITLE);
     await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
     await expect(

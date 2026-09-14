@@ -1,5 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
-import { signInViaBackdoor, stubBluetoothScanFailure } from "./helpers";
+import {
+  signInViaBackdoor,
+  stubBluetoothScanFailure,
+  WORKOUT_DETAIL_URL,
+} from "./helpers";
 
 // Phase 6B Task 4's own proof: a tiny bulk-imported workout driven all the
 // way through completion (flows.spec.ts's own Phase 6A/6B describe block
@@ -1108,7 +1112,7 @@ test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a pr
     // one hop away now that ConfirmTargets no longer sits in between) —
     // the run record itself is simply untouched, not "recovered" by a
     // redirect.
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     const runAfter = await page.evaluate(() =>
       localStorage.getItem("ergomatic.sessionRun"),
     );
@@ -1270,7 +1274,7 @@ test.describe("Phase 7B Task 2: Start over a connected session's record (the F5 
         /Review and save (?:it|them) from Today\.Starting a new one discards (?:it|them)\./,
       ),
     ).toBeVisible();
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     expect(await monitorRunRaw(page)).toBe(before);
 
     await page.getByRole("button", { name: "Cancel" }).click();

@@ -1116,20 +1116,82 @@ while we are in here.
       `noPropertyAccessFromIndexSignature` without a real failure class; its
       current volume is mostly access style. **M**
 - [ ] **Two more order-dependent flakes, both seen during Phase JC's release
-      (2026-09-08/09), both filed here rather than shrugged at.** Neither
+      (2026-09-08/09), both filed here rather than shrugged at.** · dies
+      2026-11-14 · dated on the way past (campsite rule) by the 2026-09-14
+      flake hunt, which refuted (a)'s stated mechanism but did not reproduce
+      any of the three; the trigger below is real but a trigger is not a
+      schedule. Neither
       reproduced alone or on a re-run of the same command, so both are
       ORDER-dependent rather than broken tests, and both were observed by
       different agents in different worktrees.
       (a) `e2e/connected.spec.ts`'s genuine-`QuotaExceededError` leg failed
       once in a full run (550/551), passed alone, then passed 551/551 twice.
-      The test fills origin storage to a real quota error, which is exactly
-      the shape that makes a suite order-sensitive — a neighbour that writes
-      to the same origin afterwards would see a full store.
+      **Its stated mechanism is REFUTED, measured 2026-09-14.** This row
+      said the test "fills origin storage to a real quota error, which is
+      exactly the shape that makes a suite order-sensitive — a neighbour
+      that writes to the same origin afterwards would see a full store".
+      A neighbour cannot: `playwright.config.ts` sets no `storageState` and
+      reuses no context, so every test gets a fresh one and localStorage is
+      partitioned per test. Proved with a throwaway two-test probe in one
+      serial file — A wrote `zz.probe.key` and read it back (so the write
+      genuinely happened), B on the next test read `null`. Whatever is
+      order-dependent about this leg, **it is not the origin store it
+      fills**, and a hunt that starts from leaked localStorage starts in the
+      wrong place.
+      **A real robustness gap it did surface, FIXED in the same pass:**
+      `fillOriginStorage` was called OUTSIDE the `try` whose `finally` cleans
+      the junk up, so a throw in the headroom-freeing block between them left
+      the store full with no cleanup at all. The fill and the freeing now sit
+      inside the `try`, with `added` declared above it so the `finally` can
+      still see it.
       (b) `src/news/Releases.test.tsx`'s "renders each release's version,
       date, and every item" failed once in a full `--project client --project
       unit` run and passed both alone (6/6) and on an immediate full re-run
       (286 files, 7937). Client-project only, so unrelated to (a)'s origin
       storage.
+      **SIGHTED A SECOND TIME 2026-09-14** (PR #434's `app` job, run
+      `34845000865` attempt 1, head `08eac824`) — **the trigger this row
+      names has now FIRED.** Same file, same test. The branch touched ZERO
+      files under `app/src/` (its diff is e2e specs and markdown), so it
+      cannot be a regression, and there is no signal-death signature in the
+      log: no `Allocation failed`, no 137/134 (RF40 checked before the
+      re-run, not after).
+      **THE NEW FACT, and it narrows the hunt more than the second sighting
+      does: the failure is `Test timed out in 5000ms` on a SYNCHRONOUS
+      test.** `Releases.test.tsx:32` is `it("…", () => {` with no `async`
+      and a plain `renderReleases()` — there is nothing in it to await. A
+      synchronous render exceeding five seconds is not a statement about
+      the test's logic; it is the worker not being scheduled. The run's own
+      numbers agree: 8,940 tests, `Duration 292.55s` of which
+      `environment 210.12s`.
+      **That makes (b) evidence for FLAKE 2's runner hypothesis rather than
+      a separate puzzle** — and unlike (a), whose stated mechanism was
+      refuted, this one has a mechanism nobody has argued against yet.
+      **AND IT PASSED ON A WHOLE-SUITE RE-RUN OF THE IDENTICAL COMMIT** —
+      run `34845000865` attempt 2, all seven jobs green at head
+      `08eac824`. Stated with the attempt named, because RF42's whole point
+      is that "green on re-run" is a claim about a specific attempt or it
+      is nothing; and re-run in the WHOLE-SUITE form, never
+      `gh run rerun --failed`, which would have run a different population
+      and could not have answered the question (the trap FLAKES 1-3 share).
+      So (b) is now: two sightings, one sourced re-run, and a mechanism.
+      **THE OPEN QUESTION, scheduled before the order (Phase OD's rule),
+      and it took one read to find:** `vitest.config.ts:11` is
+      `maxWorkers: isCI() ? undefined : workerCap(…, 4)`. The cap that
+      exists to protect a laptop is **INERT IN CI BY DESIGN** — vitest
+      falls back to its CPU-derived default there. Combine that with the
+      fact already recorded under the integration-flake row below (the
+      `maxWorkers` key sits on the ROOT `test` block, so unit, client and
+      integration files share ONE pool, and each integration file starts
+      its own `PostgreSqlContainer`) and CI runs an uncapped pool against
+      containers on a two-core runner. **That is a concrete, testable
+      mechanism for a synchronous render missing a 5 s deadline, and it
+      costs one config line to test.**
+      **Deliberately NOT changed here.** Capping CI workers is a claim
+      about a cost nobody has measured (RF30), it would slow every run,
+      and it belongs with a before/after measurement rather than riding an
+      e2e PR. What this row now owes is that measurement, not another
+      sighting.
       (c) A third, on the SAME release run: `pnpm e2e` returned `553 passed`
       with exit 1, and the two immediately following full runs both returned
       `554 passed`. **Which test failed was not captured** — the tail showed
@@ -1184,11 +1246,32 @@ while we are in here.
         context and origin partition and browser storage cannot survive into a
         later run. Whatever fails a warm-stack sign-in, it is not this test's
         leftover `localStorage`. Same RF16 shape as SR-13's falsified premise.
+        **MEASURED 2026-09-14, not just grepped** — a throwaway two-test
+        serial probe wrote a key in A and read `null` in B — and the (a) row
+        above now carries that receipt, so nobody re-derives this a third
+        time. That pass also moved `fillOriginStorage` inside its own `try`.
       - **`stableBoundingBox` stands alone.** It polls the real box and throws
         after 20 rAF, so it has no proxy-signal defect; what fails is its settle
         budget against genuine layout work. Load is an amplifier, not a
         producer — the research doc's §4 measured the same unchanged build at
         73% then 95%, moving the metric the WRONG way.
+        **HUNTED 2026-09-14 AND NOT SOLVED, said plainly rather than
+        closed.** The sighted test (`design.spec.ts`, "picking a effort level
+        does not shift the chips below it") was read end to end and its
+        screen's async inputs enumerated: `Builder.tsx` early-returns on
+        `baselinesState` loading, so the chips do not exist until baselines
+        are ready, and the only other async input, `useWorkouts`, feeds AUTO
+        NAME alone and moves no layout. **No late-arriving element above the
+        chips was found**, which is what a settle-budget story needs. That
+        leaves the mechanism unestablished, and fixing it on a guess is how
+        the wrong layer gets chased.
+        **What DID land: the helper now throws with the whole frame-by-frame
+        trajectory, not only the last box.** A box still travelling in one
+        direction is layout that had not finished; one that jumped once and
+        held is a different bug. The instrument was proved to fire both ways
+        (a zero-frame budget reports 1 entry, a never-satisfied settle
+        condition reports 21) — so the next sighting names the mechanism
+        instead of adding a datapoint. **The row stays open until it does.**
       - **The integration/container-contention class stands alone.** Different
         runner, different pool: `vitest.config.ts`'s `maxWorkers` sits on the
         ROOT `test` block, so unit and client files share one pool with the
@@ -3311,29 +3394,67 @@ Each needs erg time or a deliberate recording session.
   standard. What both signatures share is a request seeing state that some
   other test owns.
 - **FLAKE 1 — `design.spec.ts`'s doors-back test fails on CI and passes
-  everywhere else. TWICE, and it is the same test both times.** · dies
-  2026-10-14 · a row and not a fix now because the two failures are three
-  weeks apart with no local reproduction, and the next step is a hunt
-  someone has to sit with rather than a change anyone can make.
+  everywhere else. NINE times across seven branches, not twice.** · dies
+  2026-10-14 · a row and not a fix now because the failures had no local
+  reproduction, and the next step was a hunt someone had to sit with
+  rather than a change anyone could make. (Both halves of that clause are
+  now spent — see the diagnosis below.)
   **The test:** `the stored skip (Phase RW PR C) › resetting the baselines
-  brings the doors back`. Both failures are the same assertion —
-  `.doorscard` never appears.
-  - **2026-09-12, #419's main run.** Recorded at the time as
-    "design.spec:12728 doors-back". Green on re-run.
-  - **2026-09-13, PR #430's combined head** (`3d4cde1b`), at
-    `design.spec.ts:12883` — the same test, the line having shifted. 580
-    passed beside it. A full-suite re-run of the same commit passed, and so
-    did the test in isolation locally.
+  brings the doors back`. Every failure is the same assertion —
+  `.doorscard` never appears, `element(s) not found`, 5000 ms.
+  **THIS ROW SAID "TWICE" AND WAS WRONG BY SEVEN, FOR A REASON WORTH
+  KEEPING.** `playwright.config.ts:21` sets `retries: 1` under CI, so a
+  test that fails once and passes on the retry leaves the job GREEN and
+  prints `1 flaky`. Seven of the nine were exactly that — invisible to
+  `gh run list`, visible only inside the logs of runs that passed. The two
+  this row knew about were simply the two that went red. **Counting CI
+  failures by looking at failed runs undercounts a retried flake by
+  however often the retry saves it** — measured here at 7 of 9. The count
+  came from grepping the `e2e` job log of every attempt of every CI run in
+  the repo's history — 1,359 runs, 1,318 `e2e` job entries — not from the
+  run list.
+  - Nine occurrences, 2026-09-08 to 2026-09-14, since the test landed in
+    `4daeff32` (2026-09-07): seven `flaky` (job green), two `failed`.
+    Seven distinct branches, `main` twice. Roughly 9 in 264 e2e jobs since
+    the test existed (~3.4%, denominator slightly inflated by branches cut
+    before it).
+  - **2026-09-13, #419's main run** (`ae4d8df2`) — one of the two hard
+    failures. **This row previously said "Green on re-run". That is
+    FALSE:** that run has `attempts=1` and no other run exists for that
+    SHA. It was never re-run, and it stands red on `main` to this day.
+  - **2026-09-14, PR #430's combined head** (`3d4cde1b`) — the other hard
+    failure, 580 passed beside it. Attempt 2 of the same run passed
+    581/581 at the identical SHA. **This is the ONLY one of the nine where
+    "green on re-run" is a sourced claim**; for the seven flaky ones there
+    was nothing to re-run, because the job was already green.
+  - **Most recent: 2026-09-14 on `main`**, the merge of #430 (`d4550305`)
+    — flaky, so it left a green job and nobody saw it.
   **What that pattern means, stated because it is the useful half:** it
-  passes alone, it passes on a re-run, and it has only ever failed inside a
-  full CI suite. That is the signature of an ORDER- or TIMING-dependent
-  test, not a broken one — and it is why "it passed when I ran it" is not
-  evidence here. Whoever picks this up should reproduce it by running the
-  FULL suite in CI's own worker configuration, not by running the test.
-  **The cheap first move:** `.doorscard` is rendered after a baselines
-  reset, so the suspicion worth testing first is that the reset's write has
-  not landed when the assertion starts — i.e. a missing wait on the store,
-  not a missing element. **S**
+  passes alone and has only ever failed inside a full CI suite. That is
+  the signature of an ORDER- or TIMING-dependent test, not a broken one —
+  and it is why "it passed when I ran it" is not evidence here. The repo
+  has almost no re-run habit (6 runs in its whole history have
+  `run_attempt > 1`), so any claim of the form "it always passes on
+  re-run" cannot be sourced from CI data at all.
+  **DIAGNOSED AND FIXED 2026-09-14, and the suspicion this row recorded was
+  right.** `handleReset` (`you/ResetBaselineSetup.tsx`) awaits
+  `DELETE /api/baselines`; the test clicked confirm and went straight to
+  `page.goto("/today")` with that write still in flight, so Today could
+  still read the old baselines and no doors card rendered. Fire-and-forget
+  click, then navigate.
+  **Proved both directions rather than inferred**, by injecting a 2.5 s
+  delay into the reset: with the fix the test passes (4.0 s, it waited);
+  with the fix removed and the same delay, it fails `.doorscard` —
+  `element(s) not found`, the identical failure CI saw twice.
+  **The fix waits on the reset's own UI, not on the network:** the confirm
+  panel closes only when the DELETE resolves OK — `handleReset` clears
+  `armed` on success and leaves the panel open with `.baseline-error` on
+  failure — so an absent panel proves the write both completed and
+  succeeded. The error's absence is asserted too, or a panel that vanished
+  for another reason would read the same (RF38).
+  **This row stays open until a full CI suite has run green on it more than
+  once**, because the whole point of its history is that one green run
+  proves nothing here. **S**
 
 - **FLAKE 2 — one CI run failed four tests across four unrelated specs at
   once.** · dies 2026-10-14 · a row and not a fix now because a single run
@@ -3347,30 +3468,161 @@ Each needs erg time or a deliberate recording session.
   only the log detail's two components plus a comments-only edit to
   `fake.ts` — verified by filtering that diff to non-comment lines, which
   returned nothing.
+  **ONE OF THE FOUR IS NOW ACCOUNTED FOR, and it was not the runner.**
+  `stats.spec.ts:46` (`LIFETIME · 54,752 M`) is the delete-then-read race
+  closed under FLAKE 4 on 2026-09-14 — a real, reproducible bug in the
+  test, not load. That leaves three, and it weakens the inference below
+  rather than refuting it: a row that reads "four unrelated specs at once"
+  is a weaker signal once one of the four has its own cause.
   **Four unrelated specs in one run reads like the RUNNER, not like any one
   test** — the axe timeout is the most suggestive single data point, being
   the heaviest step in the suite. But one run is not a population, and this
   row deliberately does not open a hunt.
-  **The cheap way to get a count without instrumenting anything:** the
-  `playwright-report` artifact is already uploaded on every red run
-  (occurrence 2's is `10311637594`), so CI history holds the data.
+  **THE COUNTING METHOD, SETTLED 2026-09-14 — and this row's own
+  description of the artifact was wrong in BOTH directions.** It said the
+  `playwright-report` artifact is "already uploaded on every red run".
+  `ci.yml:141` is `if: always()`, so it uploads on GREEN runs too — which
+  matters enormously, because `playwright.config.ts:21` sets
+  `retries: 1` under CI and a test saved by its retry leaves the job green
+  (2 of 9 FLAKE 1 occurrences went red; 0 of 10 for FLAKE 3). So the
+  artifact is not blind to flakes. **THREE of FLAKE 3's ten are
+  unreachable anyway, for two different reasons:** two expired out of the
+  `retention-days: 14` window (`ci.yml:146`), and the 2026-08-15 one
+  predates `196d817e` (2026-08-22, the #152 flake hunt), when the step was
+  still `if: failure()` and a flake's report was never written at all.
+  Artifacts alone would have found 7 of 10.
+  **What works, and what was actually used here:** fetch the `e2e` JOB LOG
+  for every attempt of every CI run (1,359 runs, 1,318 `e2e` job entries)
+  and grep the Playwright summary lines. Logs currently reach the first CI
+  run (2026-07-27) where artifacts do not — though that is this repo being
+  younger than GitHub's 90-day log retention, not a property of logs, and
+  it expires around 2026-10-25.
+  **Two traps, and the first write-up of this paragraph got both wrong.**
+  `gh run list` has no `--paginate` flag and errors `unknown flag`; the
+  1,000-result cap belongs to the Actions run-list API and applies only
+  when you FILTER (by `actor`, `branch`, `check_suite_id`, `created`,
+  `event`, `head_sha` or `status`) — unfiltered enumeration returned all
+  1,396. Date-windowing works, but `created` is itself a capped parameter,
+  so keep each window under 1,000. And the log API's failure is LOUD, not
+  silent: without `--allow-escape-sequences` `gh` writes zero bytes and
+  **exits 1** naming the flag on stderr. A pipe is what hides it.
   **Local context worth recording:** this machine was measured at ~750 MB
   free with swap at 3.7 of 5.1 GB while two sessions ran full suites at
   once, and two CI watchers were killed for memory the same day. Whether
   GitHub's runners are under comparable pressure is unknown and is exactly
   what a count would show. **S**
 
-  **THE TRAP BOTH ROWS SHARE, and it bit during this very investigation:**
+- **FLAKE 3 — `library.spec.ts`'s SOURCE filter test read the library
+  before the workout it had just authored was committed.** · dies
+  2026-10-14 · a row and not a fix now only in the bookkeeping sense: the
+  FIX is in this PR, and the row exists because one green CI run proves
+  nothing about a flake, exactly as FLAKE 1's history shows.
+  **The test:** `SOURCE filter › selecting MY WORKOUTS narrows to an
+  authored workout, and CLEAR ALL restores the full library`. Every
+  failure was the same assertion and the same shape — `toHaveCount`,
+  `Expected: 303 / Received: 302` on nine of the ten and `301 / 300` on
+  the oldest (before the library grew) — always exactly one row short, the
+  authored workout missing from the list read.
+  **Ten occurrences, and it never once turned a CI job red.** Six under
+  the current title (2026-09-06 to 2026-09-13, five branches) and four
+  more under the title it carried before `8da1e710` renamed it on
+  2026-09-04 (`selecting CUSTOM narrows…` — same file, same describe, same
+  test), the oldest 2026-08-15. Eight distinct branches, `main` three
+  times. **All ten were `flaky`: Playwright's single CI retry saved every
+  one**, so this bug lived a month in green builds and would never have
+  surfaced from the failed-run list. Same measurement as FLAKE 1's — the
+  `e2e` job log of every attempt of every CI run.
+  **THE CAUSE WAS A GATE THAT COULD NOT GO RED (RF21), and it was hiding in
+  a regex.** After clicking "Save to library" the test waited with
+  `await expect(page).toHaveURL(/\/library\/[^/]+$/)`. That pattern also
+  matches `/library/new` — one of the two non-id segments under
+  `/library/` — which is the page the test was ALREADY STANDING ON. So the
+  wait was satisfied on tick zero, before the POST it existed to await had
+  even been issued, and the `page.goto("/library")` on the next line raced
+  the in-flight write.
+  **Why the fixed gate is sound:** `Builder.tsx:466` navigates to
+  `/library/<savedId>` strictly AFTER `await api(...)` resolves, so
+  reaching a real detail url is proof the row is committed. `/library/new`
+  proves nothing.
+  **Fixed by narrowing, not by waiting harder.** `WORKOUT_DETAIL_URL` in
+  `e2e/helpers.ts` excludes exactly `new` and `import`, so a call site that
+  was already sound is unchanged and a dead one becomes live. Applied at
+  ALL 25 sites across eight specs, not only the flaking one (RF34) — the
+  invariant governs every one of them.
+  **Proved red, through the real served path, not by reading the regex.**
+  `Builder.tsx` was mutated to navigate to `/library/new` after a
+  successful save and the stack rebuilt: the test failed at the URL gate
+  with `Received: "http://127.0.0.1:8171/library/new"`, never reaching the
+  count. The old pattern matches that string; the new one does not.
+  Unmutated, `library`, `builder`, `retest` and `onboarding` ran 44/44.
+  **This row stays open until a full CI suite has run green on it more than
+  once.** **S**
+
+  **THE TRAP ALL THREE ROWS SHARE, and it bit during this very
+  investigation:**
   a re-run with `gh run rerun --failed` runs those specs in a DIFFERENT
   population than the full suite did. A green `--failed` re-run cannot
   distinguish flaky from order-dependent — the obvious next move is the one
   that cannot answer the question. Re-run the WHOLE suite.
 
-  **Why these are two rows and not one.** They were filed as one on
+- **FLAKE 4 — the read-after-write class, censused and CLOSED 2026-09-14.**
+  · dies 2026-10-14 · a row and not a fix now only as bookkeeping: the two
+  remaining sites are fixed in the same PR, and this row exists to hold the
+  census result so nobody re-derives it.
+  **FLAKES 1 and 3 turned out to be one class:** a test mutates server
+  state through the UI, then reads that state across a navigation, with
+  nothing in between that proves the write landed. 1 had no wait; 3 had a
+  wait that could not go red. **A census of all 23 files in `app/e2e/`**
+  (422 navigation sites, 245 `toHaveURL` sites across 45 patterns,
+  cross-matched against every mutating call in `src/` traced to its
+  component; 74 candidates hand-read) **found the class is exactly two
+  sites wider, and both are now closed.**
+  - **`stats.spec.ts`** deleted a log then tapped YOU with the DELETE in
+    flight. **Not hypothetical — this one had already fired:** FLAKE 2's
+    row records `stats.spec.ts:46` failing on `LIFETIME · 54,752 M`, which
+    is this test. So one of FLAKE 2's four "unrelated specs in one run" was
+    never a runner symptom, which weakens that row's own inference.
+  - **`news.spec.ts`** marked an article read through a deliberately
+    fire-and-forget PUT, then reloaded — destroying the in-module barrier
+    that made its earlier assertions honest — and read a cold GET. **This
+    site had never been observed failing**; it is latent, and is recorded
+    as such rather than as a sighting.
+  **THE STRUCTURAL FACT THAT MAKES THIS CLASS BITE, worth more than either
+  fix:** none of the data hooks poll or refetch — `useWorkouts`,
+  `useBaselines`, `usePlan`, `usePreferences` each fetch once in a mount
+  effect keyed on a generation counter. **A stale one-shot fetch never
+  becomes fresh, so Playwright's auto-retry cannot rescue any read in this
+  class** — it only converts an instant failure into a timeout failure.
+  The intuition that "asserting visibility is safe because it auto-retries,
+  only exact counts are dangerous" is FALSE here, and FLAKE 1 is the
+  counterexample: it is a `toBeVisible` and it went red on CI twice.
+  **Proved in both directions, per site, by delaying the write.** Stats: a
+  2.5 s hold on the DELETE fails without the fix (`toContainText` gets the
+  pre-delete hero) and passes with it. News needed a 10 s hold to fail —
+  at 2.5 s the unfixed test still passed, so the window is wide, which is
+  consistent with it never having been seen. Its assertion was separately
+  shown non-vacuous by ABORTING the PUT: `Expected "6 UNREAD" / Received
+  "7 UNREAD"`.
+  **NO GENERIC HELPER, deliberately.** The suite's dominant idiom — assert
+  the app's own post-write transition — is strictly STRONGER than a network
+  wait, because it proves the write landed AND that the app did the right
+  thing with it. ~70 other mutation-then-navigate sites already use it and
+  were left alone. Only a fire-and-forget write has no transition to wait
+  on, and today that is one hook (`useArticleReads`). **That hook's barrier
+  protects same-document navigation only, by design** — so any future e2e
+  that marks-read then reloads reintroduces this with no gate to catch it.
+  **S**
+
+  **Why these are separate rows and not one.** 1 and 2 were filed as one on
   2026-09-13 and split on 2026-09-14 once the doors-back repeat was
   spotted. A named order-dependent test and a loaded-runner flake are
   different hunts with different first moves, and holding them in one row
-  meant each one's evidence argued against the other's diagnosis.
+  meant each one's evidence argued against the other's diagnosis. 3 was
+  filed the same day it was diagnosed. **1 and 3 turned out to be the same
+  BUG CLASS from opposite directions** — a test reading state across a
+  write it never actually waited for — which is an argument for keeping
+  them separate, not folding them: neither was findable from the other's
+  symptom, and the shared shape only became visible once both had causes.
 
 - **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
   `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null

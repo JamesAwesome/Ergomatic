@@ -122,9 +122,26 @@ test("opening the baselines article marks it read, and the read survives BACK an
   const baselinesRow = page.locator('a.news-row[href="/news/baselines"]');
   await expect(baselinesRow).toHaveAttribute("data-read", "false");
 
+  // WAIT FOR THE MARK-READ PUT, the same idiom this file already uses for
+  // effort-scale below (2026-09-14 flake hunt). `markRead`
+  // (`api/useArticleReads.ts:104`) is deliberately fire-and-forget — it
+  // publishes the optimistic count and lets the PUT fly — so the reader's
+  // title, the "6 UNREAD" below and `data-read="true"` are all the LOCAL
+  // publish, not the server. The hook's own `settlePendingWrites` barrier
+  // keeps the same-document assertions honest; the `page.reload()` at the
+  // end of this test destroys the module and that barrier with it, and
+  // then reads a cold GET that says "7 UNREAD" if the PUT never landed.
+  // There is no UI transition owned by this write's success, which is why
+  // this is the one case in the suite that waits on the network instead.
+  const markedRead = page.waitForResponse(
+    (r) =>
+      r.request().method() === "PUT" &&
+      r.url().endsWith("/api/article-reads/baselines"),
+  );
   await baselinesRow.click();
   await expect(page).toHaveURL(/\/news\/baselines$/);
   await expect(page.locator(".reader-title")).toHaveText(BASELINES_TITLE);
+  expect((await markedRead).ok()).toBe(true);
   // The serif prose body — the point of the reader, not a stub.
   await expect(page.locator(".reader-body")).toBeVisible();
   const firstParagraph = page.locator(".reader-body p").first();
