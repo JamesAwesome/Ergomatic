@@ -550,7 +550,7 @@ that PR; the probe itself does not survive the branch, and neither does
 | Gate 0 split (James) | 2026-09-14 | 0A first, PR 2 ships off it |
 | Antagonist anchor | 2026-09-14 | findings folded in; vetted ground below |
 | PM open | 2026-09-14 | APPROVED with four amendments, all folded in |
-| Gate 0A | — | owed |
+| Gate 0A | presented 2026-09-14 | owed — artifact `MZsVEJ1rSsxYLFQRuCrbtS` rev 1, boards at `docs/design/number-provenance/gate0a/` |
 | Gate 0B | — | owed |
 
 **The phase's VETTED GROUND** (attacked and held, so later specs inherit it

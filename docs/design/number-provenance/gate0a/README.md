@@ -7,6 +7,9 @@ every other directory is the throwaway prototype branch `gate0a-prototype`
 at `628f799f`, which is never merged.** The harness and the probe are
 deleted by PR 2 (spec §10).
 
+**Presented as artifact `MZsVEJ1rSsxYLFQRuCrbtS` (rev 1), 2026-09-14.**
+Verdict: owed.
+
 Boards for members **M7** (the MACHINE column's two populations), **M8**
 (charts clipping their own labels) and the **appendix** (the CUSTOM echo).
 M1-M6 and M9 are Gate 0B's and are not here.
