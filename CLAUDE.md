@@ -67,6 +67,18 @@ requirements).
 - `pnpm dev` / `pnpm dev:server` — Vite client :5173 (proxies /api) / API :8080
 - `pnpm lint` · `pnpm format` / `pnpm format:check` · `pnpm typecheck` · `pnpm test` ·
   `pnpm test:coverage` (90% gate) · `pnpm build`
+- **`--` SCOPES NEITHER `pnpm test` NOR `pnpm e2e`, and for two DIFFERENT
+  reasons** — debugging the second from the first's explanation sends you to
+  the wrong layer. `pnpm e2e -- <file>` does not swallow the `--`: it forwards
+  it literally, `e2e.sh`'s `playwright test … "$@"` passes it through, and
+  Playwright then declines to filter while `--list` keeps working, which is why
+  it fails as a SILENT full-suite run rather than an error. Measured
+  2026-09-14 on `news.spec.ts`: **12** tests listed with the file bare,
+  **1764** — the entire suite — with `--` in front of it. **Pass the file bare
+  to both.** Reproduce with
+  `pnpm exec playwright test --project=chromium <spec> --list | grep -c '›'`,
+  once with and once without; the counts are what they are on the day, and the
+  ratio is the point.
 - Single Vitest project: `pnpm test --project unit|client|integration`.
   `integration` needs Docker. **Two footguns:**
   `pnpm test --project client -- <pattern>` **silently runs the full suite**
@@ -1204,6 +1216,20 @@ describes.
     greens. Of nineteen occurrences across two tests, SEVENTEEN were never
     re-run at all, because the job was already green — so "it passes on
     re-run" was never a statement about them._
+
+    **The positive half, which is load-bearing in the other direction and is
+    what confines the rule above to CI.** `retries` is `0` when `CI` is unset,
+    and `scripts/e2e.sh` never sets it — so a LOCAL e2e failure is a real
+    failure and a local pass is a real pass. A red-then-green pair proved
+    locally means what it says, with no retry in the middle, and N clean local
+    passes are N genuine red-or-greens rather than N maybe-retried greens.
+    **Do not discount a local result the way you must discount a green CI
+    tick.** Two files make that true — `playwright.config.ts`'s ternary and
+    `scripts/e2e.sh` — so check them rather than believe this sentence; one
+    line in either would falsify it. **And do not read it as "local is
+    sufficient":** the flake that produced RF42 hit 3 times in 22 CI jobs and
+    ZERO times in 144 local runs, because its trigger is a slower, more
+    contended runner. Local proves a failure real; only CI proves its absence.
 
 ## Commands
 
