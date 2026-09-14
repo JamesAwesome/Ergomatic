@@ -1117,22 +1117,48 @@ it lands the stranger on this same denial.
       · dies 2026-10-10 · not a fix-now because the actual fix is a rename
       surface in the product, which is unscoped work; the wave's own deadline
       is the backstop.
-- [ ] **Watch `e2e/appleAuth.spec.ts`'s delete cases for the navigation
-      failure seen three times in Task 4 and not reproduced in 144 runs
-      since.** A real e2e failure (rower lands on Today instead of the confirm
-      screen) was traced to a `/api/me`-vs-attempt-read race via
-      `framenavigated`; the App.tsx guard now in place is argued from a
-      provable invariant (react-router's `<Navigate>` acting from an effect,
-      cited against the installed `react-router` 7.18.3 source) rather than
-      the race, and is independently gateable — but the race itself was never
-      reproduced closely enough to confirm the guard is why it stopped.
-      **This row is LOAD-BEARING**: the evidence lives in
-      `task-4-report.md` under `.superpowers/`, which is git-excluded and
-      dies with the worktree — this ROADMAP row is the only durable record.
-      **S**
-      · dies 2026-10-15 · not a fix-now because there is nothing further to
-      fix without a reproduction; this is a watch, not a defect, and the date
-      is the backstop for a trigger (a second sighting) that may never fire.
+- [ ] **Confirm the `appleAuth` navigation flake is dead. Cause is KNOWN and
+      the fix is in this PR; what remains is measuring the rate.**
+      **Superseded the same day it was written** — it was filed as "a watch
+      with no reproduction", and then the flake-hunting session
+      (`Ergomatic - FlakeNukem`) produced the reproduction and the cause.
+      Recorded here because the evidence dies otherwise.
+      **What is now established, not inferred.** `appleAuth.spec.ts:211`
+      ("linking Apple proves Google then Apple…") failed **3 times in the 22
+      CI e2e jobs since `10ed2c2a`**, every one retry-saved, so every job
+      reported GREEN (RF42). All three fail identically at
+      `getByLabel('Usual sign-in confirmed')` with the element ABSENT — not
+      hidden, so not a styling or aria regression. Two carry the navigation to
+      `/?authAttempt=link-apple&proof=google` in the call log. The third's
+      `playwright-report` page snapshot shows the rower **on `/today` with the
+      baseline doors rendered** — the `/ → destination → /today` trace caught
+      in the act. Jobs `103829038779`, `103833697818` (both `ring-header`) and
+      `103959457513` (`sweep-and-doors`); the first two are the same branch 31
+      minutes apart, so treat it as **two independent branch-events, not
+      three**. None predates `10ed2c2a`.
+      **The mechanism, and why this PR fixes it.** `App.tsx` mounts no
+      `<Routes>` while `/api/me` is in flight, and `AppRoutes.tsx`'s
+      `path="/"` is `<Navigate to="/today" replace>`. `<BrowserRouter>`
+      carries no `useTransitions`, so react-router 7.18.3 wraps its location
+      update in `React.startTransition` (`chunk-YRTY65LJ.js:273`) while
+      `/api/me` resolving is an ordinary `setState`, and `navigate()` itself
+      is synchronous (`chunk-7SIULPXI.js:7283`). The session can therefore
+      commit ahead of the pending transition, mounting the route tree against
+      a `state.location` still at `/`, where the root redirect replaces the
+      destination the push just created. This PR's `App.tsx` guard holds the
+      destination until `me` resolves, which puts the push last.
+      **Why it is CI-only:** 0 of 144 local runs, and local runs are
+      retries-0 (`playwright.config.ts` `retries: process.env.CI ? 1 : 0`;
+      `scripts/e2e.sh` never sets `CI`), so those were genuine red-or-green.
+      The trigger is load — a slower, more contended runner widening the
+      window.
+      **What closes this row:** FlakeNukem re-measures over the CI e2e jobs
+      after this PR merges and reports the rate. Zero closes it. A survivor
+      still showing Today means the guard is incomplete; a different screen
+      means a second mechanism. **S**
+      · dies 2026-10-15 · a row and not a fix-now because the fix already
+      shipped here and only the confirming measurement is outstanding, and it
+      needs post-merge CI jobs that do not exist yet.
 - [ ] **Raise the `--rule` hairline: it measures 1.47:1 on `--surface`.**
       Pre-existing (`10ed2c2a`, predates PR1): `.auth-identity`'s card border
       (`app/src/index.css:275`, `border: 1px solid var(--rule)` on
