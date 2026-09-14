@@ -450,6 +450,33 @@ Three habits, each learned the same way:
   An assertion is unaffected; only the human-readable readout is lost, which
   is exactly the part a reader trusts. Route readouts through
   `process.stdout.write`, or write them to a file and commit it.
+- **The monitor's ring is readable from an e2e run, with no dev seam.**
+  When a browser-side test needs to know what the driver actually saw and
+  in what order, read
+  `localStorage.getItem("ergomatic:last-session-log")` after teardown:
+  `useMonitorSession.ts`'s `stash()` writes that key UNCONDITIONALLY on the
+  way out (the two `sessionStorage` siblings beside it are gated), so it is
+  there in the production bundle the compose stack serves. Measured
+  2026-09-14 on TD-5: four runs of the real free-row flow, each dumping the
+  ring, settled a timing question that three attempts had guessed at — the
+  answer was a **9 ms** ordering miss, invisible to every assertion in the
+  suite. **Reach for this before inventing an observable.** A question of
+  the form "did the app see X before Y?" has an answer already written
+  down, and a new production seam to expose it is a cost the question does
+  not justify.
+- **A page-side event is never synchronised with one wall-clock wait.**
+  `await page.waitForTimeout(n)` measures Node's clock, not the page's, so
+  a single wait aimed at a window with a near bound AND a far bound can
+  fail in both directions — too short and the event has not happened, too
+  long and the window has closed — and the failure arrives on a loaded CI
+  runner rather than on the machine where it was tuned. Every other
+  `waitForTimeout` in these specs is a one-sided settling wait, which is
+  safe; a two-sided one is not. **Pump instead:** offer the input on an
+  interval for as long as the precondition holds (`while
+  (page.url().endsWith("/justrow") && Date.now() < stopAt)`), and let the
+  consequence itself end the loop. That also makes every offer satisfy the
+  precondition by construction rather than by a separate assertion. TD-5's
+  capture is the worked example.
 
 ## 12. What a reviewer is for
 
