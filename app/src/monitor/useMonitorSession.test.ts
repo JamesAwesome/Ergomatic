@@ -9265,6 +9265,45 @@ describe("useMonitorSession: exportLog", () => {
     expect(preConnect.meta.appVersion).toBe("dev");
   });
 
+  it("names the MONITOR, the SESSION and the BUILD in the export's header after a real connect", async () => {
+    // THE WHOLE POINT OF THE HEADER, and the assertion its own wiring was
+    // missing. The byte-identity test below compares the hook's export to
+    // the LOG's — both lose the device name together if the wiring goes, so
+    // it cannot catch a missing `setMeta`. This one reads the values off a
+    // real connect and pins them against INDEPENDENT literals.
+    const log = createEventLog();
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS,
+      deviceName: DEVICE_NAME,
+      events: [status(100, { elapsedSeconds: 20, distanceMeters: 70 })],
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        createLog: () => log,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: releasingSchedule(),
+        },
+      }),
+    );
+
+    await connect(result);
+
+    const meta = parseLogExport(result.current.exportLog()).meta;
+    // The advertised BLE name — the fact a pasted log could never carry.
+    expect(meta.deviceName).toBe(DEVICE_NAME);
+    // A session id, so three stashed pastes are tellable apart and a
+    // Try-again that replaced the ring is detectable rather than silent.
+    expect(typeof meta.sessionId).toBe("string");
+    expect(meta.sessionId).not.toBe("");
+    // And the build. "dev" under test is the honest value; what matters is
+    // that the field is populated from the build rather than absent.
+    expect(meta.appVersion).toBe("dev");
+  });
+
   it("returns the LIVE driver's own trace, byte-identical to the log's", async () => {
     const log = createEventLog();
     const fake = createFakeTransport({
