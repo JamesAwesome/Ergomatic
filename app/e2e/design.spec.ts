@@ -13174,9 +13174,13 @@ test.describe("the account block, landscape (Wave A PR 1 Task 4)", () => {
       throw new Error("account block not laid out");
     }
 
-    // Still beside, and the notice sits above the LIST, not above both.
+    // Still beside, and the notice sits above the LIST alone: its right
+    // edge stops short of the action column. Spanning both columns instead
+    // puts it in a row of its own UNDER the box, which grid happily
+    // overlaps — `noticeBox.x < deleteBox.x` is true either way and gates
+    // nothing, so the edge is what this asserts.
     expect(deleteBox.x).toBeGreaterThan(listBox.x + listBox.width - 1);
-    expect(noticeBox.x).toBeLessThan(deleteBox.x);
+    expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(deleteBox.x);
     // The box's top is level with the notice's, not pushed below it.
     expect(deleteBox.y).toBeLessThanOrEqual(noticeBox.y + 1);
     // And the whole of it is still on screen, which is what spanning both
