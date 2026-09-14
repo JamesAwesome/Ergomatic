@@ -90,6 +90,34 @@ Two things that bite here:
 - **`deploy.sh` refuses to run on a dirty checkout** (`exit 3`), and a
   hand-rolled rollback is the most likely way to leave one dirty. Check
   `git status --porcelain` on the host before letting CI deploy again.
+- **A STALE `.git/HEAD.lock` ON THE HOST LOOKS EXACTLY LIKE A FAILED BUILD,
+  and rolling back cannot clear it.** Seen 2026-09-14 on run `34907509845`
+  (merge `a847148b`): all six code jobs green, `deploy` red, and the only
+  honest line in a 166-line log was
+
+  ```
+  fatal: update_ref failed for ref 'HEAD': cannot lock ref 'HEAD':
+  Unable to create '/home/<user>/Ergomatic/.git/HEAD.lock': File exists.
+  ```
+
+  `git checkout --force "$SHA"` could not move HEAD, the `ERR` trap fired,
+  and the rollback did its job perfectly — `PREV` rebuilt, every container
+  healthy, `exit 1`. **The tell is that the log ends with everything
+  HEALTHY and still exits 1**, because what you are reading is the
+  ROLLBACK's `up`, not the deploy's. Prod then serves the PREVIOUS commit
+  while main's tip looks merged and green (RF28's exact shape).
+
+  **A re-run does not fix it** — git never clears the lock itself, so the
+  next deploy hits the same wall. Clear it on the host first:
+
+  ```bash
+  ls -l ~/Ergomatic/.git/HEAD.lock     # confirm no live git is holding it
+  rm ~/Ergomatic/.git/HEAD.lock
+  ```
+
+  then `gh run rerun <run-id> --failed`. Confirm prod actually moved
+  afterwards rather than trusting the green tick: the deploy is only real
+  if the host's `git rev-parse HEAD` equals the merge SHA.
 - **A rollback is only safe above the floor.** If the good SHA is below it,
   restoring the database comes first.
 
