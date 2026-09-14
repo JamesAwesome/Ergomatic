@@ -833,9 +833,12 @@ not a desk session; dated on the way past (campsite rule, PR 2 prep).
 
 **Status: OPEN 2026-09-12 — James chose Apple sign-in first and approved
 new rowers creating accounts.** The design and rendered Gate 0 were approved
-on 2026-09-12; implementation and local checks are complete behind a
-disabled-by-default front door. The interrupted code-review gate remains open;
-the PR stays draft. Approved spec:
+on 2026-09-12. **Apple sign-in SHIPPED #425 and is live on staging; deletion,
+unlink and the conflict copy SHIPPED #436; v0.48.0 (build 993) carries both to
+TestFlight.** What is left in the wave: PR2, the link follow-through, and
+James's own staging deletion against real Apple or Google, which no test has
+ever exercised (the re-auth leg has only run against a synthetic provider) and
+without which no 5.1.1(v) compliance claim stands. Approved spec:
 [Apple sign-in and open accounts](docs/superpowers/specs/2026-09-12-apple-signin-design.md).
 **TRIAD twice — auth AND stored shape. L.**
 · dies 2026-10-10 (set 2026-09-10 under the wave-heading rule above) · a month
@@ -977,9 +980,12 @@ it lands the stranger on this same denial.
       is probably that the plan, log, baselines and Concept2 link qualify as
       significant — and "probably" is what RF16 says to stop writing. The
       spec answers it in one paragraph with the feature list beside it.
-      · dies 2026-10-10 (campsite rule, set at Task 5) · this is the wave's
-      own deadline (above); PR1 (deletion, unlink, conflict copy) is complete
-      on branch `wave-a-pr1` and awaiting review, not a fix-now gap.
+      · dies 2026-10-10 (campsite rule, set at Task 5; re-dated nothing, the
+      date stands) · this is the wave's own deadline (above). **PR1 MERGED as
+      #436 (2026-09-14, main `638e79eb`) and the route, the UI and the
+      re-auth all exist.** The row stays open on one thing only: no deletion
+      has ever completed against real Apple or real Google, so the feature is
+      shipped and the CLAIM is not yet earned.
 - [x] **SHIPPED 2026-09-13 (#425, main `10ed2c2a`, deployed to staging) — Apple sign-in** (moved from Phase PROD; the duplicate entry that lived
       under triggered follow-ons is deleted). **FIRST, ruled by James
       2026-09-12; design and rendered Gate 0 APPROVED the same day.** Covers
@@ -1000,7 +1006,13 @@ it lands the stranger on this same denial.
       `src/onboarding/KnowBaseline.tsx:52`. Rides this wave because it is a
       sign-in-adjacent onboarding screen. **S**
 
-- [ ] **Remove a sign-in method from You.** A link is currently PERMANENT — no
+- [x] **SHIPPED #436 (2026-09-14, main `638e79eb`) — Remove a sign-in method
+      from You.** `DELETE /api/auth/methods/:provider` and the Remove control
+      on the methods list; the guard is the `WHERE` clause as designed. **The
+      row was left unticked by the PR that shipped it** and is reconciled here
+      rather than silently, because a register that claims shipped work is
+      still open is the failure RF14 exists to prevent. Was: A link is
+      currently PERMANENT — no
       code path anywhere nulls a subject column (grep-verified 2026-09-13 across
       `app/server` and `app/src`). A mis-link cannot be undone AND it burns that
       Apple ID for its rightful owner, who can then never create their own
@@ -1024,28 +1036,43 @@ it lands the stranger on this same denial.
       · dies 2026-10-10 · blocked, not deferred: shipping before cross-surface
       subject continuity is proven on real hardware would permanently attach a
       surface-specific subject at the exact moment there is no unlink to undo it.
-- [ ] **`account_conflict` names its recovery.** _"That Apple sign-in is already
-      connected to another Ergomatic account. Nothing changed."_ is accurate and
-      offers no next step — the one string a rower can hit with no way forward.
-      Duplicates are resolved by DELETION ONLY (James, 2026-09-13; merge and
-      one-way transfer both rejected). Copy only, rides PR1. **S**
-      · dies 2026-09-26 · not a separate fix because the recovery it would name
-      — delete the spare account from You — does not exist until deletion lands.
-- [ ] **The fourth denial surface says a third different thing.**
-      `src/native/signin.ts` renders `"<email> isn't invited to this Ergomatic."`
-      with NO next step at all, while three other surfaces now say "Ask the owner
-      to add you." Found at #429's review. Rides PR1, because deletion is what
-      gives every denial surface a recovery worth naming. **S**
-      · dies 2026-09-26 · not fixed in #429 because that PR had no recovery to
-      point at; fixing the words without the route just moves the dead end.
-- [ ] **"Ask the owner to add you" is wrong for a reader who is already in.**
-      `you/SignInMethods.tsx` shows it to a signed-in rower linking a second
-      identity whose address is not allowlisted — they already have access; the
-      ask is for THAT ADDRESS. Found at #429's review. Rides PR1, which rewrites
-      this screen for unlink anyway. **S**
-      · dies 2026-09-26 · not fixed in #429 because the surrounding screen is
-      being redesigned in PR1 and the copy should be written once, not twice.
-- [ ] **`nativeSignIn` keeps a `v8 ignore` it no longer earns** — MOVED here
+- [x] **DONE — `account_conflict` names its recovery.** The You screen's
+      conflict notice now carries four numbered steps, each naming a control
+      that exists: `Sign out`, sign in to that account, `Delete account` on
+      "You", then `Add Apple`. Gate 0 approved by James 2026-09-14, revision 3
+      — the recovery was a paragraph in revisions 1 and 2, and as prose it ran
+      too long to act on and never said where the Delete account button lives.
+      **Two corrections to this row's own premise.** The sign-in screen's copy
+      of the same conflict ALREADY named its recovery (#436, Task 5); only the
+      You screen's copy was a dead end, so the row was broader than the defect.
+      And the lighter recovery the row never considered — sign in to the other
+      account and Remove that method, no data lost — is refused when it is that
+      account's only method (`attempts.ts`, the guard in the `WHERE`), which is
+      exactly the account an accidental sign-in creates. Deletion always works;
+      naming both would put an "if" in a four-step list.
+- [x] **DONE — the fourth denial surface says what the other three say.**
+      `src/native/signin.ts` now ends "Ask the owner to add you.", word for
+      word with the web sign-in screen, the denied-redirect surface and the
+      You screen. Covered by `signin.test.ts` in both the named-address and
+      the no-address arms, which exist because the same change lifted this
+      function out from under its `v8 ignore` (row below).
+- [x] **CLOSED AS RULED, NOT FIXED (James, 2026-09-14, at the Gate 0 for the
+      copy bundle): "case 2 stick with today, this will be the only Ergomatic
+      even tho the repo is public right now".** The string stays exactly as it
+      is. Recorded rather than struck so the argument does not come back: the
+      row held that `you/SignInMethods.tsx` shows "Ask the owner to add you."
+      to a signed-in rower linking a second identity whose address is not
+      allowlisted, and that since they already have access the ask is for THAT
+      ADDRESS, not for them. The proposed rewrite was "Ask the owner to add it,
+      then link again", with `This account` becoming `That address`. Withdrawn
+      whole. Found at #429's review.
+- [x] **DONE — `nativeSignIn` is out from under the `v8 ignore`.** The
+      file-wide ignore is split in two so it covers only `initNativeAuth` and
+      `nativeGoogleProofAfterInit`, the two genuinely thin wrappers;
+      `nativeSignIn`'s four branches are now covered by `signin.test.ts` (the
+      offline variant, a token-less online response, the 403 body parse in
+      both its arms, and the generic failure). Cleared while the file was open
+      for the denial copy, as the row intended. Was: MOVED here
       2026-09-13 from the audit overlay to ride PR1, which edits the same file
       for the denial copy above. Original filing at #353's code review: that PR
       narrowed a file-wide ignore because it "stops being honest the moment it
@@ -2274,9 +2301,11 @@ fixed.
       itself just applied to the authorization parameters. Both are
       pre-existing debt, neither introduced by the PR that found them. **S**
 
-- [ ] **`nativeSignIn` keeps a `v8 ignore` it no longer earns** — MOVED
+- [x] **DONE — `nativeSignIn` keeps a `v8 ignore` it no longer earns** — MOVED
       2026-09-13 into Wave A to ride the account-management PR, which edits the
-      same file. Original filing and reasoning are on the row there.
+      same file. Closed there 2026-09-14; the reasoning and the outcome are on
+      the Wave A row. The `callbackClaims` half of the row above is NOT closed
+      by it and stays open.
 
 - [ ] **SHIPPED v0.42.0 (902) — a monitor older than 2018 is silently unusable.**
       Concept2 appended `Erg Machine Type` to `0x0032` in spec V1.26

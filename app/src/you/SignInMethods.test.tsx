@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthFlowController, AuthFlowView } from "../adapters/authFlow";
@@ -297,6 +297,69 @@ describe("SignInMethods", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "That Apple sign-in is already connected",
     );
+  });
+
+  // THE ONE DEAD END THIS SCREEN COULD REACH AND NOT LEAVE (Gate 0, James,
+  // 2026-09-14). The conflict notice was true and offered no next step. The
+  // recovery is a SEQUENCE, so it renders as one, and each step names a
+  // control that exists on a screen the rower can get to. Asserted as an
+  // ordered list of exact strings rather than with `toHaveTextContent`,
+  // which passes on a substring and so cannot see a step going missing.
+  it("names the conflict recovery as steps, in order", async () => {
+    vi.mocked(api).mockResolvedValue(
+      new Response(JSON.stringify({ apple: false, google: true }), {
+        status: 200,
+      }),
+    );
+    render(
+      <SignInMethods
+        auth={controller({
+          kind: "error",
+          purpose: "link",
+          code: "account_conflict",
+          targetProvider: "apple",
+        })}
+      />,
+    );
+    const alert = await screen.findByRole("alert");
+    expect(alert.querySelector(".auth-notice-cue")?.textContent).toBe(
+      "If that account is yours too, you can move the Apple sign-in here:",
+    );
+    expect(
+      within(alert)
+        .getAllByRole("listitem")
+        .map((step) => step.textContent),
+    ).toStrictEqual([
+      "Tap Sign out.",
+      "Sign in to that account through Apple.",
+      "On \u201cYou\u201d, tap Delete account.",
+      "Sign in to this account again. On \u201cYou\u201d, tap Add Apple.",
+    ]);
+  });
+
+  // The steps are a list in the ACCESSIBILITY TREE, not four paragraphs that
+  // happen to start with a digit: a screen reader announces the count and
+  // the position, which is the whole reason a four-step recovery is legible
+  // by ear at all.
+  it("renders the conflict recovery as a real ordered list", async () => {
+    vi.mocked(api).mockResolvedValue(
+      new Response(JSON.stringify({ apple: false, google: true }), {
+        status: 200,
+      }),
+    );
+    const { container } = render(
+      <SignInMethods
+        auth={controller({
+          kind: "error",
+          purpose: "link",
+          code: "account_conflict",
+          targetProvider: "google",
+        })}
+      />,
+    );
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByRole("list").tagName).toBe("OL");
+    expect(container.querySelector(".auth-notice-steps")).not.toBeNull();
   });
 
   it("offers Remove only where removing is possible", async () => {

@@ -8,8 +8,14 @@ export async function initNativeAuth(): Promise<void> {
     google: { iOSClientId: import.meta.env.VITE_GOOGLE_IOS_CLIENT_ID ?? "" },
   });
 }
+/* v8 ignore stop */
 
 /** Returns true on success; throws with a message suitable for the notice area. */
+/* NOT UNDER THE IGNORE ABOVE, and the reason is #353's own wording: a
+   file-wide ignore "stops being honest the moment it holds ordering logic
+   that can be wrong". This function narrows a union, throws on a null token,
+   parses a body on 403 and throws generically otherwise -- four ways to be
+   wrong, none of them a thin wrapper. `signin.test.ts` covers each. */
 export async function nativeSignIn(): Promise<boolean> {
   const res = await SocialLogin.login({ provider: "google", options: {} });
   // GoogleLoginResponse is a discriminated union (online/offline); only the
@@ -25,8 +31,12 @@ export async function nativeSignIn(): Promise<boolean> {
   });
   if (minted.status === 403) {
     const body = (await minted.json()) as { email?: string };
+    // THE FOURTH DENIAL SURFACE (ROADMAP row, found at #429's review). The
+    // other three end "Ask the owner to add you."; this one stopped at the
+    // fact and left the rower on a screen with nothing to do. Same words, so
+    // a rower who hits two of them twice reads one instruction, not two.
     throw new Error(
-      `${body.email ?? "This account"} isn't invited to this Ergomatic.`,
+      `${body.email ?? "This account"} isn't invited to this Ergomatic. Ask the owner to add you.`,
     );
   }
   if (!minted.ok) throw new Error("Sign-in failed. Try again.");
@@ -37,6 +47,7 @@ export async function nativeSignIn(): Promise<boolean> {
 
 /** Runs the provider interaction after the auth-flow owner has initialized
  * the plugin and rechecked that its operation is still current. */
+/* v8 ignore start -- thin plugin wrapper; proven on device via TestFlight. */
 export async function nativeGoogleProofAfterInit(
   nonce: string,
 ): Promise<{ idToken: string }> {
