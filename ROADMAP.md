@@ -3310,7 +3310,8 @@ Each needs erg time or a deliberate recording session.
   fake store's insertion ordering — NAMED, not chosen, per this entry's own
   standard. What both signatures share is a request seeing state that some
   other test owns.
-- **THE E2E SUITE FLAKES, and this is the second recorded occurrence.**
+- **THE E2E SUITE FLAKES — THREE RECORDED OCCURRENCES, AND TWO OF THEM ARE
+  THE SAME TEST.**
   · dies 2026-10-13 · a row and not a fix now because a hunt needs a
   reproduction and neither occurrence has one; what it needs first is a
   COUNT, which nothing currently collects.
@@ -3342,6 +3343,21 @@ Each needs erg time or a deliberate recording session.
   the `playwright-report` artifact is already uploaded on every red run
   (occurrence 2's is artifact 10311637594), so a count is recoverable from CI
   history without instrumenting anything.
+  **Occurrence 3, 2026-09-13 (PR #430, the ring-header branch):** ONE
+  failure — `design.spec.ts:12883`, "the stored skip (Phase RW PR C) ›
+  resetting the baselines brings the doors back", `.doorscard` never
+  appeared. 580 passed.
+  **AND IT IS THE SAME TEST AS OCCURRENCE 1.** #419's failure was recorded
+  as "design.spec:12728 doors-back" — the same test name at a line that has
+  since shifted. That changes this row's own reading: occurrences 1 and 3
+  are ONE repeat offender, not two samples of a general runner flake, and
+  occurrence 2's four-specs-at-once looks like a different phenomenon
+  sharing a row. **Whoever takes this should split it:** a named
+  order-dependent test is a different hunt from a loaded-runner flake, and
+  conflating them is why a count was asked for first.
+  Passing in isolation locally is NOT evidence either way here — see the
+  trap below, which this occurrence demonstrates rather than merely warns
+  about.
   **The trap for whoever picks this up:** a re-run that goes green is not
   evidence the test is flaky rather than order-dependent. Occurrence 2's
   re-run was `--failed`, so it ran those specs in a DIFFERENT population than
