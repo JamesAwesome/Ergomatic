@@ -2849,7 +2849,26 @@ question, not a re-raised one.
 | **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by THREE FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window; and, since 2026-09-04, the per-user `C2_ALLOWED_EMAILS` gate — the VICTIM must be on that list for the callback to complete at all, because the hop re-checks `availableFor(user.email)` at step 3b after resolving its principal, so on a one-account rollout the population that can be victimised is one) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**; and since 2026-09-04 "a real cohort" is itself gated on `C2_ALLOWED_EMAILS`, so the flag flip alone no longer admits one) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
 | **App-wide `ambiguous_auth` promotion** | **RULED (James, 2026-09-03): KEEP — bearer-wins + the `auth_disagreement` log app-wide, the hard refusal only on `/api/concept2/*`. Security read: bearer-wins is not an escalation (the request acts as the bearer holder, who already has that access); cross-site cannot pair a victim's cookie with an attacker's bearer (no CORS middleware, so the custom header fails preflight); the routes where identity binds an external account already refuse; promoting would risk a silent app-wide brick on a shared household phone if a web sign-in ever lands `erg_session` in the native jar beside another account's bearer, on 42-requests-one-install evidence. Trigger to revisit: prod ever logs an `auth_disagreement` line.** Was LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
 
-## The "say which number this is" design pass — TRIGGER FIRED 2026-09-04, STILL UNOPENED
+## The "say which number this is" design pass — OPENED 2026-09-14
+
+**Spec:**
+[docs/superpowers/specs/2026-09-14-number-provenance-design.md](docs/superpowers/specs/2026-09-14-number-provenance-design.md).
+**Scope ruled by James 2026-09-14: "everything agrees"** — labelling, the
+chart, AND making live and stored quantities agree where they diverge. Four
+PRs grouped by risk model, not by screen; PR 4 (M4/M5/M7) is TRIAD.
+
+**The pass gained an EIGHTH member and an appendix on the day it opened,
+both from James, and the eighth is the only one a rower can see today: the
+y-axis clips its own numbers.** His 2026-09-14 phone screenshot of Season
+2027 reads `L50,000` and `L00,000` — a seven-glyph tick into a gutter
+hand-sized for six. Third occurrence of one class (`TraceChart` 36→42,
+`WeekBars` 36→44, `SeasonGroup` copied 44), and the first with a production
+frame. The advance was MEASURED at 5.94 units at 9 px against the ~5.67 all
+four constants assume (probe `6b76f902`, branch `number-provenance`); no
+gate we own can see the class, because the screenshot seed's widest tick is
+six glyphs. Ruled the same day: shorten metres ticks to `150k`. The
+appendix is the CUSTOM filter printing the dates its own pickers already
+show — drop the echo, keep `NO ROWS`.
 
 **Phase OD, 2026-09-09: this heading said "(post-Wave F, unopened)" for five
 days after Wave F closed on 2026-09-04.** The trigger fired; the heading kept
@@ -2892,16 +2911,16 @@ watts is itself a derivation of pace, so nothing on that strip is
 measured.** The honest axis is WHOSE ARITHMETIC, which James already ruled
 (§3.1, the logbook's). Putting the wrong axis on the board asks him to rule
 on a distinction that does not exist.
-**NEXT (≤0.25): none owed — this one needed a date, not an answer, and now
-has one.** · dies 2026-10-12 (set 2026-09-12, proposed by the controller at
-the housekeeping sweep before Wave A opens; James rules at that PR's review) ·
-this is a row and not a fix now because its five members share ONE Gate 0 by
-James's own 2026-08-31 ruling, and fixing any one of them alone is the
-third-of-a-screen approval that ruling exists to prevent. The date is two days
-past Wave A's own (2026-10-10), so it asks the only question that rots here:
-did Wave A finish, and did this then open. **The accretion is the cost of
-waiting** — the pass gained two members in one day on 2026-09-07, so a slip
-re-dates a LARGER gate than the one being deferred.
+**NEXT: Gate 0** — five boards, both orientations, before any implementation
+task (spec §4). · dies 2026-10-12 (set 2026-09-12 at the housekeeping sweep;
+James rules at the PR that carries it) · **the date's own question is now
+ANSWERED and the answer was not the expected one.** It asked "did Wave A
+finish, and did this then open"; the pass opened on 2026-09-14 ahead of Wave
+A, because James asked for it. The date now governs the Gate 0, not the
+opening. **The accretion prediction held:** the pass gained two members in
+one day on 2026-09-07 and gained two more (M8 and the appendix) on the day
+it opened — eight and an appendix, against the "five" this paragraph was
+written under.
 
 - [ ] **Phase LP's strip eyebrow says `PM5 · PER INTERVAL` over two
       columns that are Concept2's arithmetic** (PM final gate #327,
