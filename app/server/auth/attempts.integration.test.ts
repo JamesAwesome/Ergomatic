@@ -5,10 +5,12 @@ import pg from "pg";
 import { createDb } from "../db/index.js";
 import { startPostgres } from "../testing/postgres.js";
 import { createAttempts } from "./attempts.js";
-import { createSessionStore } from "./sessions.js";
+import { createSessionStore, hashToken } from "./sessions.js";
 import { createUserStore } from "./users.js";
 import { createAccessPolicy } from "./accessPolicy.js";
 import { recordingRevoke } from "../testing/fakes.js";
+import type { RevokeApple } from "./appleRevoke.js";
+import type { AuthProvider } from "../../shared/auth.js";
 
 describe("front-door transactions against Postgres", () => {
   let container: StartedPostgreSqlContainer;
@@ -713,5 +715,568 @@ describe("front-door transactions against Postgres", () => {
     expect(
       (await pool.query("SELECT apple_sub FROM users")).rows,
     ).toStrictEqual([{ apple_sub: null }]);
+  });
+
+  // --- Wave A PR 1 Task 3: the delete purpose ----------------------------
+  function makeAttempts(revoke: RevokeApple) {
+    return createAttempts(pool, createAccessPolicy("public", ""), revoke);
+  }
+  /** Resolves once some backend in this database is blocked on a lock — the
+   *  barrier the concurrency tests use instead of a sleep. */
+  async function waitForLock() {
+    for (let i = 0; i < 200; i++) {
+      const rows = await pool.query<{ waiting: boolean }>(
+        "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock') AS waiting",
+      );
+      if (rows.rows[0].waiting) return true;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    return false;
+  }
+  async function seedUser(subs: {
+    googleSub: string | null;
+    appleSub: string | null;
+  }) {
+    return (
+      await pool.query<{ id: string }>(
+        "INSERT INTO users(google_sub,apple_sub,email,name) VALUES($1,$2,'rower@test','Rower') RETURNING id",
+        [subs.googleSub, subs.appleSub],
+      )
+    ).rows[0];
+  }
+  async function seedSession(userId: string) {
+    return (
+      await pool.query<{ id: string }>(
+        "INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,gen_random_uuid()::text,now()+interval '60 days') RETURNING id",
+        [userId],
+      )
+    ).rows[0];
+  }
+  async function deleteReadyAttempt(
+    user: { id: string; provider: AuthProvider; sub: string },
+    grant?: { clientId: string; refreshToken: string },
+    session?: { id: string },
+    s: ReturnType<typeof createAttempts> = store,
+  ) {
+    const current = session ?? (await seedSession(user.id));
+    const b = await s.begin({
+      surface: "native",
+      purpose: "delete",
+      targetProvider: user.provider,
+      originalSessionId: current.id,
+    });
+    const accepted = await s.accept(await s.claim(b.attempt), {
+      sub: user.sub,
+      email: "",
+      emailVerified: false,
+      name: "Rower",
+      ...(grant ? { grant } : {}),
+    });
+    return {
+      ready: accepted.attempt!,
+      session: current,
+      bindingSecret: b.bindingSecret,
+    };
+  }
+  // Every table Postgres cascades from `users`, DERIVED from the catalog in
+  // the census test below rather than trusted from this list: a table added
+  // with an ON DELETE CASCADE user_id must not be able to join the schema
+  // without joining this seed too (RF37's derived-list lesson).
+  const CASCADING_TABLES = [
+    "apple_grants",
+    "article_reads",
+    "baselines",
+    "concept2_auth_attempts",
+    "concept2_links",
+    "plan_state",
+    "preferences",
+    "session_logs",
+    "sessions",
+    "test_history",
+    "workouts",
+  ];
+  async function seedUserWithDataEverywhere() {
+    const user = await seedUser({
+      googleSub: "g-everywhere",
+      appleSub: "a-everywhere",
+    });
+    const workout = (
+      await pool.query<{ id: string }>(
+        "INSERT INTO workouts(user_id,title,type,effort,source,steps) VALUES($1,'Mine','O2',3,'user','[]'::jsonb) RETURNING id",
+        [user.id],
+      )
+    ).rows[0];
+    const log = (
+      await pool.query<{ id: string }>(
+        "INSERT INTO session_logs(user_id,workout_id,workout_title,steps,source) VALUES($1,$2,'Mine','[]'::jsonb,'timer') RETURNING id",
+        [user.id, workout.id],
+      )
+    ).rows[0];
+    await pool.query(
+      "INSERT INTO baselines(user_id,k2_seconds) VALUES($1,120)",
+      [user.id],
+    );
+    await pool.query(
+      "INSERT INTO plan_state(user_id,plan_key,done_n) VALUES($1,'sprint',2)",
+      [user.id],
+    );
+    await pool.query("INSERT INTO preferences(user_id) VALUES($1)", [user.id]);
+    await pool.query(
+      "INSERT INTO test_history(user_id,distance,split_seconds,session_log_id) VALUES($1,'2k',110,$2)",
+      [user.id, log.id],
+    );
+    await pool.query(
+      "INSERT INTO article_reads(user_id,slug) VALUES($1,'intro')",
+      [user.id],
+    );
+    await pool.query(
+      "INSERT INTO concept2_links(user_id,c2_user_id,access_token,refresh_token,expires_at) VALUES($1,4242,'at','rt',now()+interval '1 hour')",
+      [user.id],
+    );
+    await pool.query(
+      "INSERT INTO concept2_auth_attempts(nonce,user_id) VALUES(gen_random_uuid()::text,$1)",
+      [user.id],
+    );
+    await pool.query(
+      "INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'haus.waffle.ergomatic','rt-native')",
+      [user.id],
+    );
+    return user;
+  }
+  it("re-proves the provider the rower already holds, not the opposite one", async () => {
+    const user = await seedUser({ googleSub: "g-1", appleSub: null });
+    const session = await seedSession(user.id);
+    const { attempt } = await store.begin({
+      surface: "native",
+      purpose: "delete",
+      targetProvider: "google",
+      originalSessionId: session.id,
+    });
+    expect(attempt.existingProvider).toBe("google");
+    expect(attempt.targetProvider).toBe("google");
+    expect(attempt.stage).toBe("reauth_authorize");
+    expect(attempt.originalSessionId).toBe(session.id);
+  });
+  it("holds the delete equality the CHECK constraint does not enforce", async () => {
+    // The DBA gate found that `auth_attempts_session_check`'s delete arm
+    // admits `existing_provider <> target_provider` — the equality is a pure
+    // application-layer promise, so `begin()` is the only thing keeping it
+    // and this assertion is its only gate.
+    const user = await seedUser({ googleSub: "g-eq", appleSub: null });
+    const session = await seedSession(user.id);
+    const { attempt } = await store.begin({
+      surface: "native",
+      purpose: "delete",
+      targetProvider: "google",
+      originalSessionId: session.id,
+    });
+    expect(
+      (
+        await pool.query(
+          "SELECT existing_provider,target_provider FROM auth_attempts WHERE id=$1",
+          [attempt.id],
+        )
+      ).rows,
+    ).toStrictEqual([
+      { existing_provider: "google", target_provider: "google" },
+    ]);
+    // And the database really does admit the mismatch: an unequal delete row
+    // on another session inserts cleanly.
+    const other = await seedSession(user.id);
+    await pool.query(
+      "INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,expires_at) VALUES('h','native','delete','apple','google','reauth_authorize',1,gen_random_uuid()::text,gen_random_uuid()::text,$1,now()+interval '5 minutes')",
+      [other.id],
+    );
+    expect(
+      (
+        await pool.query(
+          "SELECT target_provider,existing_provider FROM auth_attempts WHERE original_session_id=$1",
+          [other.id],
+        )
+      ).rows,
+    ).toStrictEqual([
+      { target_provider: "apple", existing_provider: "google" },
+    ]);
+  });
+  it("refuses a delete attempt naming a provider the rower does not hold", async () => {
+    const user = await seedUser({ googleSub: "g-2", appleSub: null });
+    const session = await seedSession(user.id);
+    await expect(
+      store.begin({
+        surface: "native",
+        purpose: "delete",
+        targetProvider: "apple",
+        originalSessionId: session.id,
+      }),
+    ).rejects.toThrow("account_conflict");
+  });
+  it("one attempt per session across purposes: a delete displaces a live link", async () => {
+    // `auth_attempts_link_session_unique` is keyed on original_session_id
+    // ALONE, so it collides across purposes. Task 1 deferred this gate to the
+    // first task that could mint a delete attempt through the store.
+    const user = await seedUser({ googleSub: "g-x", appleSub: null });
+    const session = await seedSession(user.id);
+    const link = await store.begin({
+      surface: "native",
+      purpose: "link",
+      targetProvider: "apple",
+      originalSessionId: session.id,
+    });
+    const removal = await store.begin({
+      surface: "native",
+      purpose: "delete",
+      targetProvider: "google",
+      originalSessionId: session.id,
+    });
+    expect(
+      (
+        await pool.query(
+          "SELECT id FROM auth_attempts WHERE original_session_id=$1",
+          [session.id],
+        )
+      ).rows,
+    ).toStrictEqual([{ id: removal.attempt.id }]);
+    await expect(
+      store.read(link.attempt.id, link.bindingSecret, "native"),
+    ).rejects.toThrow("attempt_expired");
+    // The index, not merely the sweep: a second row on this session is
+    // refused whatever its purpose.
+    await expect(
+      pool.query(
+        "INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,expires_at) VALUES('h','native','link','apple','google','reauth_authorize',1,gen_random_uuid()::text,gen_random_uuid()::text,$1,now()+interval '5 minutes')",
+        [session.id],
+      ),
+    ).rejects.toThrow("auth_attempts_link_session_unique");
+  });
+  it("reaches delete_ready when the reauth matches the signed-in account", async () => {
+    const user = await seedUser({ googleSub: "g-3", appleSub: null });
+    const session = await seedSession(user.id);
+    const b = await store.begin({
+      surface: "native",
+      purpose: "delete",
+      targetProvider: "google",
+      originalSessionId: session.id,
+    });
+    const result = await store.accept(await store.claim(b.attempt), {
+      sub: "g-3",
+      email: "",
+      emailVerified: false,
+      name: "Rower",
+    });
+    expect(result.attempt!.stage).toBe("delete_ready");
+    expect(result.attempt!.reauthenticatedAt).toBeTruthy();
+    expect(result.attempt!.state).toBe(b.attempt.state);
+  });
+  it("refuses when the delete reauth proves a DIFFERENT account", async () => {
+    const user = await seedUser({ googleSub: "g-4", appleSub: null });
+    await seedUser({ googleSub: "someone-else", appleSub: null });
+    const session = await seedSession(user.id);
+    const b = await store.begin({
+      surface: "native",
+      purpose: "delete",
+      targetProvider: "google",
+      originalSessionId: session.id,
+    });
+    await expect(
+      store.accept(await store.claim(b.attempt), {
+        sub: "someone-else",
+        email: "",
+        emailVerified: false,
+        name: "Other",
+      }),
+    ).rejects.toThrow("account_changed");
+  });
+  it("still refuses a delete attempt parked at a signup-only stage", async () => {
+    // `consistent()`'s stage rules gained a `delete_ready` arm; the signup
+    // rule must not have been loosened with it. Every verified_* column is
+    // filled so the ONLY clause that can fire is the signup one.
+    const user = await seedUser({ googleSub: "g-c", appleSub: null });
+    const session = await seedSession(user.id);
+    const secret = "wrong-shaped-but-unused";
+    const row = (
+      await pool.query<{ id: string }>(
+        "INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,expires_at,verified_subject,verified_email,verified_name) VALUES($1,'native','delete','google','google','confirm',1,gen_random_uuid()::text,gen_random_uuid()::text,$2,now()+interval '5 minutes','g-c','rower@test','Rower') RETURNING id",
+        [hashToken(secret), session.id],
+      )
+    ).rows[0];
+    await expect(store.read(row.id, secret, "native")).rejects.toThrow(
+      "attempt_expired",
+    );
+  });
+  it("removes the account's rows from every cascading table and the account itself", async () => {
+    const user = await seedUserWithDataEverywhere();
+    // Seeded BEFORE the census below, because `sessions` is one of the tables
+    // the census requires a row in.
+    const session = await seedSession(user.id);
+    const census = (
+      await pool.query<{ table: string }>(
+        `SELECT DISTINCT c.relname AS "table" FROM pg_constraint con JOIN pg_class c ON c.oid=con.conrelid JOIN pg_class p ON p.oid=con.confrelid WHERE con.contype='f' AND p.relname='users' AND con.confdeltype='c' ORDER BY 1`,
+      )
+    ).rows.map((r) => r.table);
+    expect([...census].sort()).toStrictEqual([...CASCADING_TABLES].sort());
+    for (const table of CASCADING_TABLES)
+      expect(
+        (await pool.query(`SELECT 1 FROM ${table} WHERE user_id=$1`, [user.id]))
+          .rowCount,
+        `${table} was never seeded`,
+      ).toBeGreaterThan(0);
+    const { ready } = await deleteReadyAttempt(
+      { id: user.id, provider: "google", sub: "g-everywhere" },
+      undefined,
+      session,
+    );
+    expect(await store.deleteAccount(ready, session.id)).toStrictEqual({
+      outcome: "deleted",
+      appleRevoked: true,
+    });
+    for (const table of CASCADING_TABLES)
+      expect(
+        (await pool.query(`SELECT 1 FROM ${table} WHERE user_id=$1`, [user.id]))
+          .rowCount,
+        `${table} still holds rows`,
+      ).toBe(0);
+    expect(
+      (await pool.query("SELECT 1 FROM auth_attempts WHERE id=$1", [ready.id]))
+        .rowCount,
+      "auth_attempts cascades through sessions",
+    ).toBe(0);
+    expect(
+      (await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount,
+    ).toBe(0);
+  });
+  it("revokes every Apple grant plus the attempt's own credential", async () => {
+    const { revoke, seen } = recordingRevoke();
+    const deleting = makeAttempts(revoke);
+    const user = await seedUser({ googleSub: null, appleSub: "a-7" });
+    await pool.query(
+      "INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'haus.waffle.ergomatic','rt-native'),($1,'haus.waffle.ergomatic.web.staging','rt-web')",
+      [user.id],
+    );
+    // The attempt carries a THIRD live credential, which would otherwise
+    // cascade away through sessions with nothing revoked.
+    const { ready, session } = await deleteReadyAttempt(
+      { id: user.id, provider: "apple", sub: "a-7" },
+      { clientId: "haus.waffle.ergomatic", refreshToken: "rt-attempt" },
+      undefined,
+      deleting,
+    );
+    const result = await deleting.deleteAccount(ready, session.id);
+    expect(seen.map((g) => g.refreshToken).sort()).toStrictEqual([
+      "rt-attempt",
+      "rt-native",
+      "rt-web",
+    ]);
+    expect(result.appleRevoked).toBe(true);
+  });
+  it("revokes the grant as it stands at DELETE time, not as it was read", async () => {
+    // A concurrent grant() upsert refreshes the token while this transaction
+    // is OPEN. `ON CONFLICT DO UPDATE` leaves the FK column unchanged, so
+    // Postgres runs no RI check and takes no lock on the parent: the refresh
+    // slips straight past this transaction's `users FOR UPDATE`. A plain
+    // READ COMMITTED SELECT issued before that upsert commits returns the
+    // DEAD token and Apple's 200 ("revoked OR previously invalid") would
+    // report success over a live credential. `DELETE ... RETURNING` blocks on
+    // the uncommitted row instead and returns what the cascade destroyed.
+    //
+    // The upsert is held in an OPEN transaction on a SECOND connection (RF21):
+    // committing it first makes both shapes read rt-NEW and the gate cannot
+    // go red.
+    expect(pool.options.max).toBeGreaterThanOrEqual(2);
+    const { revoke, seen } = recordingRevoke();
+    const deleting = makeAttempts(revoke);
+    const user = await seedUser({ googleSub: null, appleSub: "a-9" });
+    await pool.query(
+      "INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'c1','rt-OLD')",
+      [user.id],
+    );
+    const { ready, session } = await deleteReadyAttempt(
+      { id: user.id, provider: "apple", sub: "a-9" },
+      undefined,
+      undefined,
+      deleting,
+    );
+    const racer = await pool.connect();
+    try {
+      await racer.query("BEGIN");
+      await racer.query(
+        "INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'c1','rt-NEW') ON CONFLICT(user_id,client_id) DO UPDATE SET refresh_token=excluded.refresh_token",
+        [user.id],
+      );
+      const pending = deleting.deleteAccount(ready, session.id);
+      expect(await waitForLock()).toBe(true);
+      await racer.query("COMMIT");
+      await pending;
+    } finally {
+      racer.release();
+    }
+    expect(
+      seen.map((g) => g.refreshToken),
+      "the revoke must carry the token the cascade destroyed",
+    ).toStrictEqual(["rt-NEW"]);
+  });
+  it("deletes the account even when Apple cannot be reached, and says so", async () => {
+    const deleting = makeAttempts(recordingRevoke(false).revoke);
+    const user = await seedUser({ googleSub: null, appleSub: "a-8" });
+    await pool.query(
+      "INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'c','rt')",
+      [user.id],
+    );
+    const { ready, session } = await deleteReadyAttempt(
+      { id: user.id, provider: "apple", sub: "a-8" },
+      undefined,
+      undefined,
+      deleting,
+    );
+    expect(await deleting.deleteAccount(ready, session.id)).toStrictEqual({
+      outcome: "deleted",
+      appleRevoked: false,
+    });
+    expect(
+      (await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount,
+    ).toBe(0);
+  });
+  it("does NOT delete the account when a revoker REJECTS", async () => {
+    // The type says Promise<boolean>, which cannot forbid a rejection. The
+    // account is already gone when this runs, so a throw must be swallowed
+    // and reported as `appleRevoked: false`, never propagated as a failure.
+    const deleting = makeAttempts(async () => {
+      throw new Error("apple is down");
+    });
+    const user = await seedUser({ googleSub: null, appleSub: "a-11" });
+    await pool.query(
+      "INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'c','rt')",
+      [user.id],
+    );
+    const { ready, session } = await deleteReadyAttempt(
+      { id: user.id, provider: "apple", sub: "a-11" },
+      undefined,
+      undefined,
+      deleting,
+    );
+    expect(await deleting.deleteAccount(ready, session.id)).toStrictEqual({
+      outcome: "deleted",
+      appleRevoked: false,
+    });
+    expect(
+      (await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount,
+    ).toBe(0);
+  });
+  it("does NOT delete the account when the local write fails", async () => {
+    // RF25's owner: our write failing is fatal. A BEFORE DELETE TRIGGER, never
+    // a CHECK constraint — a CHECK does not fire on a cascade DELETE, so a
+    // constraint-based version of this test could not go red.
+    const { revoke, seen } = recordingRevoke();
+    const deleting = makeAttempts(revoke);
+    const user = await seedUser({ googleSub: "g-9", appleSub: null });
+    const { ready, session } = await deleteReadyAttempt(
+      { id: user.id, provider: "google", sub: "g-9" },
+      undefined,
+      undefined,
+      deleting,
+    );
+    await pool.query(
+      "CREATE FUNCTION force_delete_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'forced delete failure'; END $$",
+    );
+    await pool.query(
+      "CREATE TRIGGER force_delete_failure BEFORE DELETE ON users FOR EACH ROW EXECUTE FUNCTION force_delete_failure()",
+    );
+    try {
+      await expect(deleting.deleteAccount(ready, session.id)).rejects.toThrow();
+      expect(
+        (await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id]))
+          .rowCount,
+        "the account must survive a failed delete",
+      ).toBe(1);
+      expect(
+        seen,
+        "a failed deletion must never revoke anything",
+      ).toStrictEqual([]);
+    } finally {
+      await pool.query("DROP TRIGGER force_delete_failure ON users");
+      await pool.query("DROP FUNCTION force_delete_failure()");
+    }
+  });
+  it("refuses a delete driven from a session that is not the attempt's own", async () => {
+    const user = await seedUser({ googleSub: "g-12", appleSub: null });
+    const { ready } = await deleteReadyAttempt({
+      id: user.id,
+      provider: "google",
+      sub: "g-12",
+    });
+    const other = await seedSession(user.id);
+    await expect(store.deleteAccount(ready, other.id)).rejects.toThrow(
+      "account_changed",
+    );
+    expect(
+      (await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount,
+    ).toBe(1);
+  });
+  it("refuses a delete whose reauth has gone stale", async () => {
+    const user = await seedUser({ googleSub: "g-13", appleSub: null });
+    const { ready, session, bindingSecret } = await deleteReadyAttempt({
+      id: user.id,
+      provider: "google",
+      sub: "g-13",
+    });
+    await pool.query(
+      "UPDATE auth_attempts SET reauthenticated_at=now()-interval '5 minutes',expires_at=now()+interval '5 minutes' WHERE id=$1",
+      [ready.id],
+    );
+    const stale = await store.read(ready.id, bindingSecret, "native");
+    await expect(store.deleteAccount(stale, session.id)).rejects.toThrow(
+      "attempt_expired",
+    );
+    expect(
+      (await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount,
+    ).toBe(1);
+  });
+  it("does not deadlock against a concurrent sign-in on ANOTHER session", async () => {
+    // TWO sessions, and the count is the whole test: with ONE, bound() ->
+    // original() takes the users row before either ordered statement, so the
+    // ordering buys nothing and a broken implementation still passes.
+    //
+    // The holder takes original()'s OWN two row locks — sessions[B] then
+    // users — as two statements rather than one. original() acquires them in
+    // that order inside a single statement, and a concurrent deleter can sit
+    // anywhere between them; splitting the holder only makes that window
+    // deterministic instead of timing-dependent. Issuing them as one
+    // statement (the brief's first shape) acquires BOTH before the deleter
+    // starts, which cannot cycle under either lock order and so proves
+    // nothing.
+    //
+    // Correct order: the deleter's first lock is the ordered sessions sweep,
+    // which blocks on sessions[B] while holding NO users lock. The holder
+    // takes users freely and commits.
+    // Wrong order (sweep after bound()): the deleter holds users before it
+    // wants sessions[B], the holder holds sessions[B] and wants users, and
+    // Postgres kills one of them with 40P01.
+    expect(pool.options.max).toBeGreaterThanOrEqual(2);
+    const user = await seedUser({ googleSub: "g-10", appleSub: null });
+    const sessionA = await seedSession(user.id);
+    const sessionB = await seedSession(user.id);
+    const { ready } = await deleteReadyAttempt(
+      { id: user.id, provider: "google", sub: "g-10" },
+      undefined,
+      sessionA,
+    );
+    const holder = await pool.connect();
+    try {
+      await holder.query("BEGIN");
+      await holder.query("SELECT id FROM sessions WHERE id=$1 FOR UPDATE", [
+        sessionB.id,
+      ]);
+      const pending = store.deleteAccount(ready, sessionA.id);
+      expect(await waitForLock()).toBe(true);
+      await holder.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
+        user.id,
+      ]);
+      await holder.query("COMMIT");
+      await expect(pending).resolves.toStrictEqual({
+        outcome: "deleted",
+        appleRevoked: true,
+      });
+    } finally {
+      holder.release();
+    }
   });
 });

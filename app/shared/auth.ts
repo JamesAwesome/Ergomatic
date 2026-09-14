@@ -30,6 +30,7 @@ export type AuthStep =
       profile: { email: string; name: string };
     })
   | (AttemptView & { outcome: "link_ready" })
+  | (AttemptView & { outcome: "delete_ready" })
   | SignedIn;
 export type NativeBegin = AuthStep & { bindingSecret: string };
 export interface SignedIn {
@@ -62,7 +63,8 @@ export interface NativeProof {
 }
 export type BeginAuth =
   | { purpose: "signin"; provider: AuthProvider }
-  | { purpose: "link"; provider: AuthProvider };
+  | { purpose: "link"; provider: AuthProvider }
+  | { purpose: "delete"; provider: AuthProvider };
 
 export interface AuthMethods {
   apple: boolean;

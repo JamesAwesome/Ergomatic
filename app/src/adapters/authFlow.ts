@@ -40,6 +40,12 @@ export type AuthFlowView =
       provider: AuthProvider;
     }
   | { kind: "linked"; targetProvider: AuthProvider }
+  // Wave A PR 1 Task 3: the rower has re-proved their provider and the
+  // account may now be deleted. The controller method that acts on it is
+  // Task 4's; this member exists so `acceptStep` has somewhere to put a
+  // successful delete reauth (without it the transition is silent and the
+  // screen never appears).
+  | { kind: "delete_ready" }
   | {
       kind: "cancelled";
       purpose: AuthPurpose;
@@ -126,10 +132,12 @@ function isAuthOptions(value: unknown): value is AuthOptions {
 }
 
 /** Exported for its own unit gate: this is pure view->route mapping over
- * eight kinds, and it previously had no client coverage at all —
+ * every view kind, and it previously had no client coverage at all —
  * `return null` as its first line left the whole client suite green,
- * with two e2e cases reaching about three of the eight branches. Gating
- * pure logic exclusively through a browser inverts the pyramid. */
+ * with two e2e cases reaching about three of its branches. Gating
+ * pure logic exclusively through a browser inverts the pyramid.
+ * `delete_ready` deliberately falls through to null here: the screen it
+ * routes to is Task 4's. */
 export function destinationFor(
   view: AuthFlowView,
 ): "/" | "/you" | "/you/sign-in-methods" | null {
@@ -413,6 +421,13 @@ async function acceptStep(
   }
   if (step.outcome === "link_ready") {
     await finalizeLink(context, active, generation);
+    return;
+  }
+  // BEFORE the `step.stage` read below: a delete_ready member carries no
+  // `.stage`, so without this early return that line is a TS2339 and the
+  // client build fails even though the server project type-checks.
+  if (step.outcome === "delete_ready") {
+    context.setView({ kind: "delete_ready" });
     return;
   }
   if (step.purpose === "link" && step.stage === "target") {
