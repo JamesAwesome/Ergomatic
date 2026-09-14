@@ -13124,7 +13124,9 @@ test.describe("/you/stats", () => {
 // RC-24 is the reason this is a structural gate and not a capture: a
 // layout approved on non-structural evidence shipped broken, on the exact
 // failure mode this checks — a block pushed off the bottom of a
-// landscape phone (390px tall here, this repo's only landscape height).
+// landscape phone. 844x390 here: the SHORTEST landscape frame this repo
+// tests, and 77 of the 85 landscape viewport declarations under `e2e/`
+// (measured 2026-09-14; the other three heights are 393, 420 and 430).
 test.describe("the account block, landscape (Wave A PR 1 Task 4)", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     await page.route("**/api/auth/options", (route) =>

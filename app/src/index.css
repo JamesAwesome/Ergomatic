@@ -12789,14 +12789,25 @@ section:not(.news-pinned) .news-row:last-of-type {
    (see the Concept2 block's own header for the survey).
 
    RULING 1, James 2026-09-14: the quarantine box sits BESIDE the methods
-   list in landscape, never below it. Below, on a landscape phone (390px
-   tall, the height every gate in this repo uses), it
-   falls off — which is the RC-24 failure, shipped once already.
+   list in landscape, never below it. Below, on a landscape phone, it falls
+   off — which is the RC-24 failure, shipped once already. 844x390 is the
+   frame the gate uses: the SHORTEST landscape frame this repo tests, and
+   77 of the 85 landscape viewport declarations under `e2e/` (measured
+   2026-09-14; the other three heights are 393, 420 and 430).
 
-   The confirm screen takes two columns for the same reason: stacked, its
-   header, its two lines and its two 44px buttons do not fit in 320px and
-   the escape hatch ends up below the fold on the one screen that most
-   needs one.
+   The confirm screen takes two columns for the same reason, and here are
+   the numbers rather than an assertion that it does not fit. Measured at
+   844x390 on the real stack, with `.auth-delete-screen`'s row rule
+   disabled and then restored: STACKED, the screen is 442px tall against a
+   390px viewport and Cancel's bottom edge sits at 421.6 — 31.6px below the
+   fold, so the escape hatch on the one screen that most needs one has to
+   be scrolled to. TWO COLUMNS, the screen is exactly 390 and Cancel's
+   bottom is at 302. No tab bar is involved either way: this route is in
+   `AppRoutes.tsx`'s HIDDEN_TABBAR_PREFIXES, and the probe confirmed
+   `.tabbar` absent in both layouts. What the two columns do NOT fix is a
+   44px document-level dead scroll present in both (scrollHeight 434 vs
+   clientHeight 390, from `.auth-flow-screen`'s own `min-height: 100dvh`
+   plus outer padding) — pre-existing, unrelated, and not claimed here.
 
    LAYOUT ONLY — no `color`, no `background`, no `border` — so every ratio
    stated on the block above still holds here. */

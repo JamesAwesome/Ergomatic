@@ -1099,11 +1099,12 @@ describe("front-door transactions against Postgres", () => {
     // NO SUPPORTED WRITER PRODUCES THIS STATE TODAY: there is one grant
     // writer, and `unlink` deletes every grant in the same TRANSACTION that
     // nulls `apple_sub` — two statements, not one, but they commit or fail
-    // together, which is what makes the pairing hold. It is seeded by raw SQL on purpose, because the
-    // thing under test is what happens WHEN THAT STOPS HOLDING — reading
-    // `apple_sub` first and skipping the DELETE would let the grant cascade
-    // away unrevoked while `revokeApple([])` answered `true`, and the rower
-    // would be told `appleRevoked` over a live credential at Apple. The
+    // together, which is what makes the pairing hold. It is seeded by raw
+    // SQL on purpose, because the thing under test is what happens WHEN
+    // THAT STOPS HOLDING — reading `apple_sub` first and skipping the
+    // DELETE would let the grant cascade away unrevoked while
+    // `revokeApple([])` answered `true`, and the rower would be told
+    // `appleRevoked` over a live credential at Apple. The
     // schema permits the state (nullable column, no dependency between the
     // two tables), so the guarantee is "whatever apple_sub says, a grant we
     // hold is revoked".
