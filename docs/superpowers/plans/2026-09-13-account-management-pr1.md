@@ -60,12 +60,18 @@ the spec establishes that and it is the licence. Deleted with the queue: the
 `apple_revocations` table, its migration, the sweep arm, the retry cap, the
 backoff ladder, `FOR UPDATE SKIP LOCKED`, and the re-registration subject guard.
 
-**The guard goes because the queue created the hazard it existed to solve.** A
-re-registration race is only reachable while a row waits hours to be drained.
-Revoking within a second of deletion closes the window, which also removes the
-retained `apple_sub` and the paragraph justifying retaining it. **PR1 therefore
-carries ONE stored shape, not two** — the `auth_attempts` purpose — which is
-what the DBA gate now covers.
+**The guard goes because the queue WIDENED the hazard from seconds to hours.**
+An earlier draft said the queue *created* it; that was wrong and the correction
+matters, because the false reason is what a future reader would inherit. The
+hazard — a delete-then-re-register racing a *successful* revoke — is the spec's
+Open Question 1, on which Apple is silent across six documents, and it exists in
+any design. The queue stretched the window to however long a row waited to be
+drained; revoking inline narrows it to the `AbortSignal.timeout(3000)` budget.
+**Narrowed, not closed.** At a household cohort a rower deleting and
+re-registering inside three seconds is not a real case, which is why the ruling
+stands — but it stands on proportion, not on the hazard having been eliminated.
+**PR1 therefore carries ONE stored shape, not two** — the `auth_attempts`
+purpose — which is what the DBA gate now covers.
 
 **2. A failed revoke never fails the deletion, and the ordering is why.**
 To fail the operation you would have to call Apple before committing. Then a
@@ -110,12 +116,34 @@ write succeeded. This plan names the owner once, and every task inherits it:
 There is no third behaviour anywhere in this PR. A reviewer who finds one has
 found a bug.
 
+## Lifetime of the delete attempt (RF27)
+
+The withdrawn outbox took the spec's lifetime table with it, and this PR
+introduces exactly the session-scoped state RF27 names. Invariants, not
+mechanisms:
+
+| State | Minted | Cleared | Survives |
+|---|---|---|---|
+| The `delete`-purpose `auth_attempts` row | `begin()`, one per session | `cancel`; `discard` on a failed proof; the next `begin()` for that session; the 60 s sweep once `expires_at` passes; sign-out, via the `sessions` FK cascade; the user cascade on a successful delete | process restart and container replacement — it is a row, not memory |
+| `reauthenticated_at` | `accept()` at `reauth_exchanging` | with the row | restart |
+| The 5-minute TTL | `begin()`, re-stamped at `accept()` | expiry | restart |
+| The binding secret | `begin()`, returned once | never stored in plaintext — only `binding_hash` is | — |
+
+**One attempt per session, enforced by `auth_attempts_link_session_unique`**, so
+a delete attempt and a link attempt cannot coexist: `begin()` unconditionally
+deletes any attempt on that session first. **No state here can strand a rower** —
+every path out clears the row, and the worst case is a five-minute wait before
+the sweep. A reviewer who finds a path that does not clear has found a bug.
+
 ---
 
 ## What was measured while writing this plan
 
 Everything below was run against Postgres 18.4 with this repo's migrations
-applied (2026-09-13). Quoted outputs are real.
+applied (2026-09-13). Quoted outputs are real. **The last six rows were added
+after the hardening pass falsified three claims the first draft measured for
+itself** — the lesson being RF11's second half: each of those measurements ran,
+and measured something the argument did not need.
 
 **The paste-test has been run** (the precondition, not a finding — agent-briefing
 "Plan authoring"). Every prescribed block below was applied at its real path on
@@ -134,10 +162,14 @@ are folded into Tasks 1 and 2 and called out under "What the paste-test caught".
 | A second attempt on one session | refused by `auth_attempts_link_session_unique` |
 | Unlink guard, two-provider account | `UPDATE 1` |
 | Unlink guard, last provider / already unlinked / no such account | `UPDATE 0`, `UPDATE 0`, `UPDATE 0` |
-| The `FROM users old` self-join returning the pre-update subject | returns `a-1` with `UPDATE 1`; 0 rows and the subject intact on a last-provider account |
+| The unlink guard leaves the subject intact when it refuses | 0 rows, `apple_sub` still `a-2` |
 | Tables losing rows on account deletion | **12** — 11 cascade from `users`, `auth_attempts` via `sessions` (catalog query, not a grep) |
-| Users-before-sessions vs `original()` | **deadlock, auth transaction is the victim** — `"Process 184 waits for ShareLock on transaction 796; blocked by process 177"` |
-| Sessions-before-users vs `original()` | no deadlock; `original()` returns 0 rows and commits |
+| Users-before-sessions vs `original()`, ONE session | deadlock, auth transaction the victim |
+| **The first draft's prescription (ordered locks BELOW `bound()`), TWO sessions** | **`40P01 deadlock detected`, auth transaction the victim** — the ordering was inert because `bound()` → `original()` takes `users` first |
+| **Every session locked BEFORE `bound()`, TWO sessions** | **no deadlock; the concurrent auth commits cleanly** |
+| A `CHECK` on `sessions` as delete fault injection | `DELETE 1`, account gone — **the gate cannot go red** |
+| A `BEFORE DELETE` trigger on `users` | `ERROR: forced delete failure`, account survives — the working replacement |
+| A concurrent `grant()` upsert vs `users FOR UPDATE` | **not blocked.** The holder read `rt-OLD`; the row already held `rt-NEW` at commit time |
 
 ### What the paste-test caught
 
@@ -452,6 +484,12 @@ it("never calls Apple while the transaction is still open", async () => {
   // The external call must happen AFTER the commit. If it runs inside, a slow
   // Apple holds a row lock, and a revoke that succeeds before a commit that
   // fails destroys a credential for an account that still exists.
+  //
+  // DO NOT lift this fixture into a deleteAccount test as-is (finding N7): the
+  // `?.apple_sub !== null` read returns TRUE ("still open") when the users row
+  // is ABSENT, which is the normal end state of a delete. It would silently
+  // invert and pass on a broken implementation. A delete version must assert on
+  // the users row being GONE, not on its column.
   let openDuringCall = true;
   const attempts = makeAttempts(async () => {
     const row = await pool.query(
@@ -496,6 +534,29 @@ cd app && pnpm test --project integration -- accountRoutes
 Expected: FAIL, `attempts.unlink is not a function`.
 
 - [ ] **Step 3: Write `appleRevoke.ts`**
+
+**Share the client-secret construction with `providers.ts` (finding N4).** The
+block below re-spells that file's Apple client secret verbatim — same header,
+`iss`, `sub`, `aud`, `iat` and `5m` expiry. Two constructions of one credential
+in two files will drift. Extract the helper into `providers.ts` and export it:
+
+```ts
+export function appleClientSecret(
+  config: ProviderConfig,
+  clientId: string,
+): Promise<string> {
+  return new SignJWT({})
+    .setProtectedHeader({ alg: "ES256", kid: config.apple.keyId })
+    .setIssuer(config.apple.teamId)
+    .setSubject(clientId)
+    .setAudience("https://appleid.apple.com")
+    .setIssuedAt()
+    .setExpirationTime("5m")
+    .sign(config.apple.key);
+}
+```
+
+then call it from both `providers.ts`'s `verify()` and `appleRevoke.ts`.
 
 ```ts
 import { SignJWT } from "jose";
@@ -566,17 +627,14 @@ async unlink(userId: string, provider: AuthProvider): Promise<UnlinkOutcome> {
     // enforces the invariant, so two tabs unlinking different providers cannot
     // both pass.
     //
-    // The self-join exists because a plain `RETURNING apple_sub` yields the NEW
-    // row, which is the NULL we just wrote. `FROM users old` is how Postgres
-    // exposes the pre-update value. Paste-tested on Postgres 18.4: returns
-    // `a-1` with UPDATE 1 on a two-provider account, 0 rows with the subject
-    // intact on a last-provider one.
-    const updated = await tx.query<{ oldSub: string }>(
-      `UPDATE users u SET ${column}=NULL
-         FROM users old
-        WHERE u.id=$1 AND old.id=u.id
-          AND u.${column} IS NOT NULL AND u.${other} IS NOT NULL
-        RETURNING old.${column} AS "oldSub"`,
+    // NO self-join. An earlier draft recovered the pre-update subject with
+    // `FROM users old ... RETURNING old.apple_sub` -- which worked, and had no
+    // reader: it existed for the withdrawn outbox's `apple_sub` column, and the
+    // revoke path takes refresh tokens from `apple_grants`, never a subject.
+    // Measuring a mechanism the argument does not need is RF11's second half.
+    const updated = await tx.query(
+      `UPDATE users SET ${column}=NULL
+        WHERE id=$1 AND ${column} IS NOT NULL AND ${other} IS NOT NULL`,
       [userId],
     );
     if (!updated.rowCount) {
@@ -607,7 +665,16 @@ async unlink(userId: string, provider: AuthProvider): Promise<UnlinkOutcome> {
   // AFTER the commit, never inside it. Our copy of the credential is already
   // destroyed; this only asks Apple to forget too, and a failure cannot and
   // must not undo the unlink.
-  return { outcome: "unlinked", appleRevoked: await revokeApple(settled.grants) };
+  // The try/catch is what makes the sentence above true: the type says
+  // Promise<boolean>, which cannot forbid a rejection, and any injected revoker
+  // can reject (finding N3).
+  let appleRevoked = false;
+  try {
+    appleRevoked = await revokeApple(settled.grants);
+  } catch {
+    console.warn(JSON.stringify({ event: "apple_revoke_threw" }));
+  }
+  return { outcome: "unlinked", appleRevoked };
 }
 ```
 
@@ -722,7 +789,8 @@ Two mutations, both recorded with what the failure said:
 **Files:**
 - Modify: `app/server/auth/attempts.ts`, `app/server/auth/frontDoorRoutes.ts`,
   `app/shared/auth.ts`
-- Test: `app/server/auth/attempts.integration.test.ts`
+- Test: `app/server/auth/attempts.integration.test.ts`,
+  `app/server/auth/frontDoorRoutes.integration.test.ts`
 
 **Interfaces:**
 - Consumes: Task 1's `delete` purpose and `delete_ready` stage; Task 2's
@@ -730,9 +798,112 @@ Two mutations, both recorded with what the failure said:
 - Produces:
   `deleteAccount(expected: Attempt, currentSessionId: string): Promise<DeleteOutcome>`
   where `type DeleteOutcome = { outcome: "deleted"; appleRevoked: boolean }`;
-  the route `POST /api/auth/{surface}/attempts/:id/delete`.
+  the route `POST /api/auth/{surface}/attempts/:id/delete`; `AuthStep` gains a
+  `delete_ready` member; `BeginAuth` gains a `delete` member.
 
-- [ ] **Step 1: Write the failing test**
+> **This task was rewritten after the hardening pass.** Four of its five
+> blocking findings landed here, two of them falsifying measurements the first
+> draft had made itself. The findings are named at the steps that fix them, and
+> the ledger entry records the techniques. Do not restore an earlier shape
+> without reading `.claude/agents/antagonist-ledger.md`'s 2026-09-13 entry.
+
+- [ ] **Step 1: Open the front door to `purpose: "delete"` (finding B1)**
+
+**The delete flow could not be STARTED.** `frontDoorRoutes.ts`'s attempt-creation
+route refuses anything that is not `signin` or `link`, so every test in the first
+draft passed only because each one called `attempts.begin()` directly and no test
+crossed the route. Five gates are keyed to `link` and all five need the delete
+case decided explicitly:
+
+```ts
+// 1. The validation. A delete is neither signin nor link.
+if (
+  (body.provider !== "apple" && body.provider !== "google") ||
+  (body.purpose !== "signin" &&
+    body.purpose !== "link" &&
+    body.purpose !== "delete")
+)
+  throw new AuthFailure("invalid_request");
+
+// 2. The pre-middleware. Without this req.sessionId is undefined and begin()'s
+//    own `if (!input.originalSessionId)` throws account_changed.
+const purpose = record(req.body).purpose;
+if (purpose === "link" || purpose === "delete") {
+  await requireUser(sessions)(req, res, next);
+} else next();
+
+// 3. The credential-class binding. A delete is MORE destructive than a link and
+//    the first draft gave it no check at all.
+if (
+  (body.purpose === "link" || body.purpose === "delete") &&
+  req.authVia !== (surface === "native" ? "bearer" : "cookie")
+)
+  throw new AuthFailure("account_changed");
+
+// 4. The availability clause. A link needs BOTH providers; a delete needs only
+//    the one being re-proved, so the opposite-provider check must NOT apply.
+if (
+  !providers.available(body.provider, surface) ||
+  (body.purpose === "link" &&
+    !providers.available(body.provider === "apple" ? "google" : "apple", surface))
+)
+  throw new AuthFailure("unavailable");
+```
+
+5. In `app/shared/auth.ts`, `BeginAuth` is a union of `signin` and `link` only,
+   so `startDelete` cannot type-check against it:
+
+```ts
+export type BeginAuth =
+  | { purpose: "signin"; provider: AuthProvider }
+  | { purpose: "link"; provider: AuthProvider }
+  | { purpose: "delete"; provider: AuthProvider };
+```
+
+- [ ] **Step 2: Let the rower SEE `delete_ready` (finding B2)**
+
+**The delete flow could not be FINISHED.** `view()` returns early for `confirm`
+and `link_ready`, then throws `attempt_expired` for any stage not in
+`["authorize","reauth_authorize","target_authorize"]`. `delete_ready` falls
+through to that throw, on **both** surfaces:
+
+- **Native:** `/proof` calls `result(...)` → `view(r.attempt!)` → throws. The
+  catch then runs `discard(claimed)` against the pre-`accept` snapshot, which no
+  longer matches (stage and version both moved), so it deletes nothing. The row
+  survives and the rower is told `attempt_expired` **on a reauth that
+  succeeded**.
+- **Web:** the callback redirects `/?authAttempt=<id>`, the client `GET`s the
+  attempt, and `view()` throws the same way.
+
+In `view()`, beside the `link_ready` line:
+
+```ts
+if (a.stage === "delete_ready") return { ...base, outcome: "delete_ready" };
+```
+
+and in `shared/auth.ts`'s `AuthStep` union:
+
+```ts
+| (AttemptView & { outcome: "delete_ready" })
+```
+
+**Gate it at the route, not at `accept()`.** Add to
+`frontDoorRoutes.integration.test.ts`:
+
+```ts
+it("hands the rower a delete_ready step after a successful delete reauth", async () => {
+  const { attemptId, secret } = await beginDelete({ provider: "google" });
+  const response = await proof(attemptId, secret, identity({ sub: "g-1" }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).outcome, "delete_ready");
+});
+```
+
+This is the seam test the first draft lacked: every one of its Task 3 tests
+stopped at `attempts.accept()` and asserted the stage, which is upstream of the
+break (RF24).
+
+- [ ] **Step 3: Write the failing tests**
 
 ```ts
 it("re-proves the provider the rower already holds, not the opposite one", async () => {
@@ -794,11 +965,8 @@ it("removes rows from all twelve tables and leaves the account gone", async () =
 });
 
 it("revokes every Apple grant plus the attempt's own credential", async () => {
-  const seen: string[] = [];
-  const attempts = makeAttempts(async (grants) => {
-    for (const g of grants) seen.push(g.refreshToken);
-    return true;
-  });
+  const { revoke, seen } = recordingRevoke();
+  const attempts = makeAttempts(revoke);
   const user = await seedUser({ googleSub: null, appleSub: "a-7" });
   await pool.query(
     `INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES
@@ -807,66 +975,115 @@ it("revokes every Apple grant plus the attempt's own credential", async () => {
     [user.id],
   );
   // The attempt carries a THIRD live credential, which would otherwise cascade
-  // away through sessions with nothing revoked (spec, "The other two live
-  // credentials").
+  // away through sessions with nothing revoked.
   const { ready, session } = await deleteReadyAttempt(user, {
     appleClientId: "haus.waffle.ergomatic", appleRefreshToken: "rt-attempt",
   });
   const result = await attempts.deleteAccount(ready, session.id);
-  assert.deepEqual(seen.sort(), ["rt-attempt", "rt-native", "rt-web"]);
+  assert.deepEqual(seen.map((g) => g.refreshToken).sort(),
+    ["rt-attempt", "rt-native", "rt-web"]);
   assert.equal(result.appleRevoked, true);
 });
 
+it("revokes the grant as it stands at DELETE time, not as it was read (finding B5)", async () => {
+  // A concurrent grant() upsert refreshes the token mid-transaction. A plain
+  // SELECT under `users FOR UPDATE` does NOT see it -- measured, see Step 6 --
+  // so the revoke would send a dead token and report success over a live one.
+  assert.ok(pool.options.max >= 2);
+  const { revoke, seen } = recordingRevoke();
+  const attempts = makeAttempts(revoke);
+  const user = await seedUser({ googleSub: null, appleSub: "a-9" });
+  await pool.query(
+    `INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'c1','rt-OLD')`,
+    [user.id],
+  );
+  const { ready, session } = await deleteReadyAttempt(user);
+  const racer = await pool.connect();
+  try {
+    await racer.query(
+      `INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'c1','rt-NEW')
+         ON CONFLICT(user_id,client_id) DO UPDATE SET refresh_token=excluded.refresh_token`,
+      [user.id],
+    );
+  } finally {
+    racer.release();
+  }
+  await attempts.deleteAccount(ready, session.id);
+  assert.deepEqual(seen.map((g) => g.refreshToken), ["rt-NEW"],
+    "the revoke must carry the token the cascade destroyed");
+});
+
 it("deletes the account even when Apple cannot be reached, and says so", async () => {
-  const attempts = makeAttempts(async () => false);
+  const attempts = makeAttempts(recordingRevoke(false).revoke);
   const user = await seedUser({ googleSub: null, appleSub: "a-8" });
   await pool.query(`INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'c','rt')`, [user.id]);
   const { ready, session } = await deleteReadyAttempt(user);
   assert.deepEqual(await attempts.deleteAccount(ready, session.id), {
     outcome: "deleted", appleRevoked: false,
   });
-  assert.equal((await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount, 0);
+  assert.equal((await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount, 1 - 1);
 });
 
-it("does NOT delete the account when the local write fails", async () => {
-  // RF25's owner: our write failing is fatal. The rower must not be told the
-  // account is gone when it is not.
+it("does NOT delete the account when the local write fails (finding B4)", async () => {
+  // RF25's owner: our write failing is fatal. A BEFORE DELETE TRIGGER, never a
+  // CHECK constraint -- measured, a CHECK does not fire on a cascade DELETE and
+  // the first draft's version of this test could not go red.
+  const { revoke, seen } = recordingRevoke();
+  const attempts = makeAttempts(revoke);
   const user = await seedUser({ googleSub: "g-9", appleSub: null });
   const { ready, session } = await deleteReadyAttempt(user);
   await pool.query(
-    "ALTER TABLE sessions ADD CONSTRAINT force_delete_failure CHECK (token_hash <> 'x')",
+    `CREATE FUNCTION force_delete_failure() RETURNS trigger LANGUAGE plpgsql AS
+       $$ BEGIN RAISE EXCEPTION 'forced delete failure'; END $$`,
+  );
+  await pool.query(
+    `CREATE TRIGGER force_delete_failure BEFORE DELETE ON users
+       FOR EACH ROW EXECUTE FUNCTION force_delete_failure()`,
   );
   try {
-    await pool.query("UPDATE sessions SET token_hash='x' WHERE id=$1", [session.id]);
-  } catch { /* the constraint is what we want, not this write */ }
-  // Force the cascade to fail, then assert the account survives and the caller saw it.
-  await assert.rejects(attempts.deleteAccount(ready, session.id));
-  assert.equal((await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount, 1);
-  await pool.query("ALTER TABLE sessions DROP CONSTRAINT force_delete_failure");
+    await assert.rejects(attempts.deleteAccount(ready, session.id));
+    assert.equal(
+      (await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount, 1,
+      "the account must survive a failed delete",
+    );
+    assert.deepEqual(seen, [], "a failed deletion must never revoke anything");
+  } finally {
+    await pool.query("DROP TRIGGER force_delete_failure ON users");
+    await pool.query("DROP FUNCTION force_delete_failure()");
+  }
 });
 
-it("does not deadlock against a concurrent sign-in on the same session", async () => {
-  // Measured on Postgres 18.4: the reverse lock order deadlocks and the AUTH
-  // transaction is the victim, which a rower experiences as a sign-in that
-  // fails for no reason.
+it("does not deadlock against a concurrent sign-in on ANOTHER session (finding B3)", async () => {
+  // TWO sessions. The first draft seeded ONE, which is why its version passed
+  // against a prescription that was inert -- bound() -> original() takes the
+  // users row before either ordered statement, so the ordering in the body
+  // bought nothing. Measured: with two sessions BOTH orders deadlocked, with
+  // the AUTH transaction as the victim.
   assert.ok(pool.options.max >= 2);
   const user = await seedUser({ googleSub: "g-10", appleSub: null });
-  const session = await seedSession(user.id);
+  const sessionA = await seedSession(user.id);
+  const sessionB = await seedSession(user.id);
+  const { ready } = await deleteReadyAttempt(user, {}, sessionA);
   const holder = await pool.connect();
   try {
     await holder.query("BEGIN");
-    await holder.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [user.id]);
-    const { ready } = await deleteReadyAttempt(user, {}, session);
-    const pending = attempts.deleteAccount(ready, session.id);
+    // Exactly what original() does, on the OTHER session: sessions then users.
+    await holder.query(
+      `SELECT sessions.id FROM sessions INNER JOIN users ON sessions.user_id=users.id
+        WHERE sessions.id=$1 AND sessions.expires_at>now() FOR UPDATE`,
+      [sessionB.id],
+    );
+    const pending = attempts.deleteAccount(ready, sessionA.id);
+    await new Promise((r) => setTimeout(r, 200));
     await holder.query("COMMIT");
-    await pending; // must resolve, never reject with a deadlock
+    await pending; // must resolve, never reject with 40P01
   } finally {
     holder.release();
   }
 });
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [ ] **Step 4: Run them and watch them fail**
 
 ```bash
 cd app && pnpm test --project integration -- attempts.integration
@@ -875,7 +1092,9 @@ cd app && pnpm test --project integration -- attempts.integration
 Expected: FAIL — `begin()` has no `delete` branch, so the `link` path's
 `existing = opposite provider` runs and the first assertion reads `"apple"`.
 
-- [ ] **Step 3: Add the `delete` branch to `begin()`**
+- [ ] **Step 5: Add the `delete` branch to `begin()` and `accept()`**
+
+In `begin()`:
 
 ```ts
 if (input.purpose === "link" || input.purpose === "delete") {
@@ -906,16 +1125,14 @@ if (input.purpose === "link" || input.purpose === "delete") {
 ```
 
 The stage literal `input.purpose === "signin" ? "authorize" : "reauth_authorize"`
-already handles `delete` — read it and confirm, do not edit. The session
-argument does need editing:
+already handles `delete` — read it and confirm, do not edit. The session argument
+does need editing:
 
 ```ts
 input.purpose === "signin" ? null : input.originalSessionId,
 ```
 
-- [ ] **Step 4: Add the `delete` arm to `accept()`**
-
-In the `reauth_exchanging` branch, after the existing
+In `accept()`'s `reauth_exchanging` branch, after the existing
 `if (user?.id !== session.userId) throw new AuthFailure("account_changed");`:
 
 ```ts
@@ -930,9 +1147,8 @@ if (a.purpose === "delete")
   };
 ```
 
-leaving the `target_authorize` transition below it unchanged.
-
-**`consistent()` must accept the new stage**, or `save()` throws. Widen:
+leaving the `target_authorize` transition below it unchanged. **`consistent()`
+must accept the new stage**, or `save()` throws:
 
 ```ts
 ((a.stage.startsWith("target_") ||
@@ -944,7 +1160,10 @@ leaving the `target_authorize` transition below it unchanged.
 Add a test asserting a `delete` attempt at stage `confirm` is still rejected by
 `consistent()` — the `signup` rule must not have been loosened.
 
-- [ ] **Step 5: Implement `deleteAccount`**
+- [ ] **Step 6: Implement `deleteAccount`**
+
+Three things in this block were falsified by the hardening pass and are now
+measured. Read the comments before changing any line of it.
 
 ```ts
 async deleteAccount(
@@ -952,6 +1171,30 @@ async deleteAccount(
   currentSessionId: string,
 ): Promise<DeleteOutcome> {
   const grants = await transaction(async (tx) => {
+    // LOCK ORDER, AND IT MUST HAPPEN BEFORE bound(). The first draft put the
+    // ordered locks in the body, below bound() -- which was inert, because
+    // bound() -> original() runs an unqualified FOR UPDATE over
+    // `sessions INNER JOIN users` and takes the users row first. Measured on
+    // postgres:18.4 with TWO live sessions (phone + web, the normal case): the
+    // body-ordered version deadlocked a concurrent original() on the other
+    // session, with the AUTH transaction as the victim -- "a sign-in that
+    // fails for no reason", the exact outcome the ordering claimed to buy off.
+    //
+    // Learning the owner WITHOUT a lock, then taking every session of that user
+    // in a deterministic order, puts this transaction on the same
+    // sessions-then-users path original() uses, so no cycle exists. Measured:
+    // the concurrent auth commits cleanly.
+    const owner = (
+      await tx.query<{ userId: string }>(
+        `SELECT user_id AS "userId" FROM sessions WHERE id=$1`,
+        [currentSessionId],
+      )
+    ).rows[0];
+    if (!owner) throw new AuthFailure("account_changed");
+    await tx.query(
+      "SELECT id FROM sessions WHERE user_id=$1 ORDER BY id FOR UPDATE",
+      [owner.userId],
+    );
     const a = await bound(tx, expected);
     if (
       a.stage !== "delete_ready" ||
@@ -962,13 +1205,6 @@ async deleteAccount(
     if (currentSessionId !== a.originalSessionId)
       throw new AuthFailure("account_changed");
     const session = await original(tx, currentSessionId, true);
-    // LOCK ORDER: sessions before users, matching original(). Measured on
-    // Postgres 18.4 -- the reverse deadlocks against a concurrent sign-in and
-    // the AUTH transaction is chosen as the victim, which a rower experiences
-    // as a sign-in that fails for no reason. bound() -> original() has already
-    // taken this session's lock; this takes the REST of them before the DELETE
-    // cascades into the table.
-    await tx.query("SELECT id FROM sessions WHERE user_id=$1 FOR UPDATE", [session.userId]);
     const row = (
       await tx.query<{ appleSub: string | null }>(
         `SELECT apple_sub AS "appleSub" FROM users WHERE id=$1 FOR UPDATE`,
@@ -976,33 +1212,57 @@ async deleteAccount(
       )
     ).rows[0];
     if (!row) throw new AuthFailure("account_changed");
-    // Read the credentials while they still exist -- they cascade away below.
+    // DELETE ... RETURNING, NOT a SELECT. A plain read under `users FOR UPDATE`
+    // can be STALE: grant()'s `ON CONFLICT DO UPDATE` leaves the FK column
+    // unchanged, so Postgres runs no RI check and takes no lock on the parent,
+    // and a concurrent sign-in refreshes the token straight past this
+    // transaction's users lock. Measured: the SELECT returned `rt-OLD` while
+    // the row already held `rt-NEW`; the DELETE returns `rt-NEW`. Apple's 200
+    // covers "previously invalid", so the stale revoke would have reported
+    // SUCCESS while a live credential survived at Apple -- the precise outcome
+    // this whole design exists to prevent. `unlink` already had the right
+    // shape; this is now the same shape.
     const held = row.appleSub
       ? (
           await tx.query<AppleGrant>(
-            `SELECT client_id AS "clientId", refresh_token AS "refreshToken"
-               FROM apple_grants WHERE user_id=$1`,
+            `DELETE FROM apple_grants WHERE user_id=$1
+              RETURNING client_id AS "clientId", refresh_token AS "refreshToken"`,
             [session.userId],
           )
         ).rows
       : [];
-    if (row.appleSub && a.appleClientId && a.appleRefreshToken)
-      held.push({ clientId: a.appleClientId, refreshToken: a.appleRefreshToken });
-    const deleted = await tx.query("DELETE FROM users WHERE id=$1", [session.userId]);
+    // The attempt's own credential. Guarded on the grant's own fields rather
+    // than on apple_sub, which an unlink can null between accept() and here.
+    if (a.appleClientId && a.appleRefreshToken)
+      held.push({
+        clientId: a.appleClientId,
+        refreshToken: a.appleRefreshToken,
+      });
+    const deleted = await tx.query("DELETE FROM users WHERE id=$1", [
+      session.userId,
+    ]);
     if (!deleted.rowCount) throw new AuthFailure("account_changed");
     return held;
   });
   // AFTER the commit. The account is gone and cannot come back, so this call
-  // can only add latency. A rejection here must never propagate as a failed
-  // deletion -- that is the one confusion this whole ordering exists to avoid.
-  return { outcome: "deleted", appleRevoked: await revokeApple(grants) };
+  // can only add latency. The try/catch is what makes the comment true: the
+  // type says Promise<boolean>, which cannot forbid a rejection, and any
+  // injected revoker can reject.
+  let appleRevoked = false;
+  try {
+    appleRevoked = await revokeApple(grants);
+  } catch {
+    console.warn(JSON.stringify({ event: "apple_revoke_threw" }));
+  }
+  return { outcome: "deleted", appleRevoked };
 }
 ```
 
 **Any throw from the transaction propagates, and that is deliberate.** The route
-must not catch it into a success.
+must not catch it into a success. Apply the same `try/catch` to `unlink`'s
+revoke call in Task 2 (finding N3).
 
-- [ ] **Step 6: Add the route**
+- [ ] **Step 7: Add the route action**
 
 In `frontDoorRoutes.ts`, extend the action loop to include `"delete"`, gated by
 `requireUser(sessions)` exactly as `finalize` is:
@@ -1022,29 +1282,32 @@ if (action === "delete") {
 The account's sessions are already gone with the cascade; clearing the cookies
 stops the browser sending a token that now resolves to nothing.
 
-- [ ] **Step 7: Run the tests and watch them pass**
+- [ ] **Step 8: Run the tests and watch them pass**
 
 ```bash
-cd app && pnpm test --project integration -- attempts.integration
+cd app && pnpm test --project integration -- attempts.integration frontDoorRoutes
 ```
 
-Expected: PASS, the nine tests in Step 1.
+Expected: PASS, the ten tests in Steps 2 and 3.
 
-- [ ] **Step 8: Commit, then prove the lock order can go red**
+- [ ] **Step 9: Commit, then run the three mutations that must bite**
 
 ```bash
 git rev-parse --show-toplevel
 git add app/server/auth/ app/shared/auth.ts
-git commit -m "Delete an account: reauth through the delete purpose, sessions locked before users"
+git commit -m "Delete an account: reauth through the delete purpose, every session locked first"
 ```
 
-Swap the order in `deleteAccount` — take the `users` `FOR UPDATE` before the
-`sessions` one — and confirm the deadlock test fails with `deadlock detected`.
-**Record the exact message.** Revert. This is the mutation that proves the
-comment is load-bearing rather than decorative.
+Each mutation, with what its failure said, goes in the PR body:
 
----
-
+1. **Lock order.** Move the `SELECT ... FROM sessions ... ORDER BY id FOR UPDATE`
+   to *after* `bound()`. The two-session deadlock test must fail with
+   `40P01 deadlock detected`. **If it passes, the test is seeding one session
+   and is decoration — fix the test, not the mutation.**
+2. **Stale grants.** Change the `DELETE ... RETURNING` back to
+   `SELECT ... FROM apple_grants`. The B5 test must fail, reporting `rt-OLD`.
+3. **Fatal write.** Remove the `if (!deleted.rowCount) throw`. The B4 trigger
+   test must fail.
 ## Task 4: The You screen — remove a method, delete the account
 
 **Files:**
@@ -1156,6 +1419,31 @@ rower already holds. `confirmDelete` posts the `delete` action and, on
 `{ outcome: "deleted" }`, clears the local token and routes to Welcome, carrying
 `appleRevoked` so the notice can render once.
 
+- [ ] **Step 4b: Give the delete purpose its own failure surface (finding N9)**
+
+The web callback's failure redirect carries the purpose, and
+`frontDoorRoutes.ts`'s `callback()` carries a comment recording that
+`SignInMethods` renders nothing unless the purpose is `"link"` — the comment
+exists to document that exact defect being fixed for links. A delete inherits
+the silent bounce unless its purpose is handled too.
+
+`linkNotice()` in `SignInMethods.tsx` returns `null` for
+`view.purpose !== "link"`. Widen its guards to `"delete"` and give the delete
+case its own wording, so a failed delete reauth says so instead of returning the
+rower to a screen that looks like nothing happened:
+
+```tsx
+if (view.kind === "error" && view.purpose === "delete") {
+  return (
+    <p className="notice auth-notice-error" role="alert">
+      We couldn&apos;t confirm it was you, so nothing was deleted. Try again.
+    </p>
+  );
+}
+```
+
+Test it: a `delete`-purpose error view must render an alert, not `null`.
+
 - [ ] **Step 5: Implement the UI**
 
 A connected row gains a `Remove` button, rendered **only when the other provider
@@ -1253,8 +1541,14 @@ repo for `apple_revocations`, `outbox`, `tombstone`, `revocation` and
 
 - [ ] **Step 5: Correct the other records**
 
-- `ROADMAP.md`: the row saying **eight** tables lose rows on deletion is wrong —
-  it is **twelve**. Correct it. Give every row this PR touches a
+- `ROADMAP.md`: **do NOT "correct eight to twelve".** An earlier draft of this
+  plan said to, and it was wrong — the row was already corrected on 2026-09-13
+  and now reads "**ELEVEN** FKs cascade from `users`, not eight", which is
+  accurate (`grep -c 'references(() => users.id, { onDelete: "cascade" })'`
+  → 11). Eleven and twelve are both right about different things: eleven FKs
+  cascade *directly*, and `auth_attempts` reaches the count of twelve
+  *transitively* through `sessions`. **Add the transitive fact; do not touch the
+  eleven.** Give every row this PR touches a
   `· dies YYYY-MM-DD · <why this is a row and not a fix now>` stamp if it lacks
   one (campsite rule).
 - The handoff doc: steps 1 and 2 of "What to do next" are done — the phone gate
