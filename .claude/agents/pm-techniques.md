@@ -252,3 +252,64 @@ section it fits; the engagement record belongs there, as its own dated section.
 An entry that lands only in the record is invisible to the next agent — which
 is exactly what happened: every section in this file stopped growing on
 2026-08-15, while the record beneath it reached 6413 lines.
+- **The recovery may already be on the screen, and finding it re-prices the
+  feature that automates it.** Wave A PR2 (2026-09-14) was scoped as "the rower
+  is returned to sign-in with a fresh chance to make a duplicate" — TRIAD twice,
+  a migration, three plan revisions. `SignIn.tsx` had shipped the recovery as
+  copy two PRs earlier, with `Add Apple ›` live on the You methods list. The
+  feature turns two steps into one; it does not unlock a capability.
+  **Before pricing any "the rower is stuck" work, read the screen's own copy and
+  open every control that copy points at.**
+- **A slice can be unreachable in the mode the HOST actually runs, and the
+  schema will not tell you.** `requireAccess(identity.email)` runs before the
+  `confirm` stage; `ACCESS_MODE` unset means `restricted`; an Apple relay
+  address is never on `ALLOWED_EMAILS`. **At every build-now gate, read the
+  DEPLOYED configuration**, and ask which of the feature's cases the live config
+  admits. A slice nobody can reach is not a slice.
+- **Two rows in one wave with different `dies` dates ARE the execution order.**
+  The dates were stamped so a wave's unblocked half could not hide behind its
+  blocked half. Run the `tr` sweep and check whether a row in the SAME wave dies
+  sooner before endorsing any slice.
+- **A phase's written exit is the test for "is this the next slice", and the
+  slice often is not in it.** Quote the exit and check whether the proposed work
+  appears in it before judging sequence on anything else.
+- **A host-session runsheet has two clocks and the safety one is usually
+  missing.** Capping the OPERATOR at 35 minutes while the door-open window had
+  no number, and including the teardown inside the cap, means an overrun extends
+  the exposure. **Give the exposure window its own hard cap, started by the step
+  that opens it, and put the closing step OUTSIDE the total.**
+- **A feasibility unknown that chat can settle must be settled in chat, never
+  carried into the runsheet as a branch.** One unknown (a second Apple ID) was
+  asked and answered in a line and killed a case for free; the sibling unknown
+  (a second Google account in the native chooser) was assumed "likely on hand"
+  and was the PRIMARY case's only prerequisite. **The one you assume is the one
+  to check first — it is assumed precisely because it is the one you need.**
+- **A permissive-mode admission test needs its restrictive-mode denial leg, or
+  it cannot go red.** "The confirmation screen appeared" cannot distinguish "the
+  gate admitted" from "the gate was never consulted". Take the SAME identity to
+  the denial first, then flip. RF21 at the operator layer, and normally free.
+- **A session that creates an account under a permissive mode must delete it
+  BEFORE restoring the restrictive one.** The policy is re-checked on every
+  protected request, so an account left alive at teardown is the locked-out
+  rower exposure — created by the session testing for it. Any step whose
+  observable requires "and the empty screen" is a step that creates something.
+- **At a RE-GATE, diff the new version's contract coverage against the OLD
+  version's, not only against your own findings list.** Runsheet v2
+  (2026-09-14) folded all twelve findings and, in restructuring the timer table
+  around the new door clock, silently dropped the TOTAL operator wall-clock cap
+  that v1 had carried. A fold that fixes a structure is exactly where an
+  unrelated clause falls out, and a findings-list re-read cannot see it —
+  nothing on the list was about the total.
+- **A document that names a version trap can still walk into it in its own
+  pass condition.** The same v2 wrote "a copy observable must be quoted from
+  the surface actually running it", then pinned a denial string that #444 had
+  added seven commits AFTER the tag the phone runs — on the control leg, whose
+  entire job is to be falsifiable. **Grep every pinned user-visible string
+  against `git show <the tag the surface runs>:<file>`, not against main**, and
+  check whether the build carries a second branch that prints a different one.
+- **When a version-to-version diff turns up ONE lost contract clause, finish
+  the whole clause list before reporting.** 2026-09-14: the v2 fold dropped
+  both the total wall-clock cap and the typing/paste count; the re-gate found
+  the cap, reported it, and missed the count, which then survived into the
+  approved version. A found regression is evidence the fold was lossy, not
+  evidence you have finished looking.

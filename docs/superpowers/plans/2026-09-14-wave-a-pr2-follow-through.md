@@ -223,7 +223,9 @@ Every task ends with a mutation probe that bites, run against a COMMITTED tree
 
 ### Task 0: the migration
 
-**Files:** create `app/server/db/migrations/00NN_*.sql` via `pnpm db:generate`;
+**Files:** create `app/drizzle/00NN_*.sql` via `pnpm db:generate` — NOT
+`app/server/db/migrations/`, which does not exist; `app/drizzle.config.ts` is
+`out: "./drizzle"` and all 33 migrations live there;
 modify `app/server/db/schema.ts`; test
 `app/server/db/schema.integration.test.ts`.
 
@@ -236,7 +238,11 @@ modify `app/server/db/schema.ts`; test
 - [ ] **Step 2** — run, and confirm the middle state is among the failures.
 - [ ] **Step 3** — edit the CHECK in `schema.ts`, run `pnpm db:generate`, and
       confirm it emits exactly one `ALTER TABLE` and no `CREATE TABLE`.
-- [ ] **Step 4** — re-run; all four cases hold.
+- [ ] **Step 4** — re-run; all SEVEN cases hold, and they are inserted into the
+      REAL table, not a scratch one: a bare table carrying only the arm's five
+      columns has none of the sibling CHECKs, FKs or the partial unique index,
+      and admits two rows this design produces that the real schema refuses
+      (23505 on `auth_attempts_link_session_unique`, 23503 on the sessions FK).
 - [ ] **Step 5** — DBA gate at PLAN: DONE 2026-09-14, verdict FAIL, folded
       above. What remains for the PR gate is the migration as actually written.
 - [ ] **Step 6** — map 23503 on `sessions_user_id_users_id_fk` to
@@ -366,11 +372,11 @@ before Step 1.
 - [ ] **Step 2** — run against an already-booted stack; confirm `pnpm build`
       SUCCEEDED before reading any mutation result (RF12's corollary).
 - [ ] **Step 3** — mutation probe on that leg.
-- [ ] **Step 4** — **the RFC 9700 correction**, in all three files that carry
-      it: the spec, this plan, and
-      `docs/superpowers/HANDOFF-2026-09-14-apple-login-leftovers.md`. Replace
-      with NIST SP 800-63C-4 §3.8.1 and Sudhodanan & Paverd, USENIX Security
-      2022 §6.2.2, quoting the load-bearing line in each case.
+- [x] **Step 4 — DONE, landed ahead of this PR.** The RFC 9700 correction went
+      into the spec and the handoff on 2026-09-14 rather than waiting here, on
+      the PM's ruling: a dangling citation reads as evidence (RF16), and holding
+      the fix inside a TRIAD PR that may not be built for weeks leaves it
+      standing for weeks.
 - [ ] **Step 5** — **commit the deletion evidence before citing it.** James
       completed the real-provider deletion on staging 2026-09-14; the account
       row was confirmed absent by a count query. The antagonist correctly
@@ -381,7 +387,8 @@ before Step 1.
       an eight-stage machine" premise: the stages are reused, and what the work
       actually costs is a CHECK widening plus an edit to the machine's central
       invariant guard.
-- [ ] **Step 7** — record the NIST 800-63C-4 §3.8 notice deviation. The spec's
+- [x] **Step 7 — DONE, landed ahead of this PR**, in the spec's corrected
+      citation block. Was: record the NIST 800-63C-4 §3.8 notice deviation. The spec's
       "the You screen is the only detection channel" departs from a SHALL
       ("notify the subscriber via a mechanism independent of the transaction",
       800-63B-4 §4.1.2). The deviation may well be right at this cohort; it

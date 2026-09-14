@@ -938,7 +938,19 @@ it lands the stranger on this same denial.
       · dies 2026-09-26 · the policy is chosen and rides the Apple auth design;
       changing admission now without its account-continuity gate would split
       the first slice's invariant.
-- [ ] **In-app account deletion.** No DELETE-user route and no UI exist
+- [x] **DONE and VERIFIED AGAINST A REAL PROVIDER — in-app account deletion.**
+      Shipped #436; **James ran the deletion on staging against build 993 on
+      2026-09-14**: he deleted a throwaway account from inside the app, the
+      delete signed him out, and
+      `select count(*) from users where email = '<the deleted address>'`
+      returned **0**. Also measured in the same session: `users` 6,
+      `sessions` 21, `apple_grants` 1, `auth_attempts` 0, and
+      `auth_attempts` holding a credential 0. **This is what earns the App
+      Review 5.1.1(v) claim that #436 deliberately did not make**, because
+      until then the re-auth leg had only ever run against a synthetic
+      provider. NOT proven by it: that Apple accepted the revoke — that is
+      invisible to these counts and lives in the api container log. Was: No
+      DELETE-user route and no UI exist
       anywhere (checked across `app/server` and `app/src`: baselines reset and
       logs delete, but nothing removes a user). The spec enumerates exactly
       what is removed and what survives. **DESIGNED 2026-09-13 —
@@ -1029,13 +1041,30 @@ it lands the stranger on this same denial.
       Today the flow cancels the attempt and destroys the verified subject and
       the Apple grant, so the same screen returns on EVERY future Apple sign-in
       — a fresh chance to create a duplicate each time. Ruled 2026-09-13: follow
-      through WITH a confirmation naming both identities. A ninth stage in an
-      eight-stage machine plus a new terminal transition, carrying the Apple
-      grant deletion must later revoke — TRIAD, needs a lifetime table (RF27)
-      and a full antagonist pass. PR2 of the account-management spec. **M**
-      · dies 2026-10-10 · blocked, not deferred: shipping before cross-surface
-      subject continuity is proven on real hardware would permanently attach a
-      surface-specific subject at the exact moment there is no unlink to undo it.
+      through WITH a confirmation naming both identities. **James ruled
+      2026-09-14 that the confirmation comes AFTER the proof**, because a
+      confirmation is a control only when the account owner is the one reading
+      it. TRIAD twice — auth AND stored shape. PR2 of the account-management
+      spec. **M**
+      **TWO PREMISES OF THIS ROW ARE FALSE, both measured 2026-09-14.**
+      (a) "A ninth stage in an eight-stage machine" — no new stage is needed;
+      the existing `reauth_*` stages are reused. What the work actually costs is
+      a CHECK widening on `auth_attempts_session_check` plus edits to
+      `consistent()`, the module's central invariant guard. (b) "Blocked on
+      cross-surface subject continuity proven on real hardware" — that closed
+      2026-09-13, when Apple sign-in on Kaito landed on the existing account
+      (`apple_grants` 1→2, `users` stayed at 6).
+      **NOT READY as of 2026-09-14, and not next.** Plan revision 3 lives at
+      `docs/superpowers/plans/2026-09-14-wave-a-pr2-follow-through.md`. Three
+      gates ran: DBA PASS WITH ROWS, PM shape-approved but sequencing NOT NOW,
+      antagonist NOT READY — nothing can hand the client the minted session
+      while the attempt is alive, because `AuthStep` makes `SignedIn` and
+      `link_ready` mutually exclusive union members. **And the defect is smaller
+      than this row says:** `SignIn.tsx` has printed the two-step recovery above
+      the two buttons since #436, so this turns a two-step recovery into one
+      step rather than unsticking anyone.
+      · dies 2026-10-10 · unchanged; the wave's own deadline, and the open
+      sign-up policy row below dies sooner and is what the wave's exit needs.
 - [x] **DONE — `account_conflict` names its recovery.** The You screen's
       conflict notice now carries four numbered steps, each naming a control
       that exists: `Sign out`, sign in to that account, `Delete account` on
@@ -1082,6 +1111,21 @@ it lands the stranger on this same denial.
       `nativeSignOut` that came out from under it. **S**
       · dies 2026-10-12 · pre-existing debt, and cheaper to clear while the file
       is already open than as its own branch.
+- [ ] **The Apple private-relay round trip has never been exercised end to
+      end.** No relay-address account has ever been created, stored or deleted
+      on any host. `restricted` cannot reach the case (a relay address is never
+      on `ALLOWED_EMAILS` before the account exists), the 2026-09-14
+      public-activation session struck it, and every test we own uses a
+      synthetic provider or a real address. What it would prove: that sign-up
+      stores the relay address, that `docs/deploy.md`'s retrieval procedure
+      actually repairs the allowlist for a relay-first tester, and that
+      deletion finds the account again. It needs an Apple ID that has never
+      authorized Ergomatic — a new one, or a household member's with their
+      consent. James, 2026-09-14: "I don't have a second Apple account." **S**
+      · dies 2026-10-10 · not a fix now because no desk or test path can reach
+      it and the only routes cost a second Apple ID, which is James's call and
+      real friction on Apple's side; it rides Wave A's own date because public
+      activation and external TestFlight are exactly what make it bind.
 - [ ] **A locked-out rower cannot delete their account in-app.** Two paths
       already produce this: `ACCESS_MODE=restricted` with the rower's email
       removed from `ALLOWED_EMAILS`, and the `APPLE_*` configuration being
