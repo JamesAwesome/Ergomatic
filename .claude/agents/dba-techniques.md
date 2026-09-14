@@ -243,6 +243,36 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
 
 - **(2026-09-13, Apple discard delta) A PK predicate does not mean a PK plan.** The snapshot-conditional failure DELETE includes id, binding, provider intent, stage/version, state/nonce and original session; PostgreSQL18.4 chose `auth_attempts_state_unique` at517–1,000,512 attempts. Matching deletion cost54WAL B; stale stage/version/binding cost0; captured warm execution0.005–0.019ms. Hold the real winner after its UPDATE and before COMMIT, issue stale cleanup on another connection, observe its lock wait, then commit: the conditional delete returnedfalse and retained the winner. The former id/hash/surface predicate deleted it and failed the same gate. Read the actual Index Cond and test failure cleanup independently of successful transitions.
 
+- **(2026-09-14, Wave A PR1 Task 1) A plain `ADD CONSTRAINT ... CHECK` (no
+  `NOT VALID`) takes `AccessExclusiveLock` for a full-table validation scan,
+  and it blocks concurrent inserts.** Widening three CHECK constraints on
+  `auth_attempts` (3xDROP + 3xADD, one Drizzle transaction) measured
+  2.268 / 16.999 / 116.971 ms total at 1k / 100k / 1M rows -- `DROP CONSTRAINT`
+  is flat ~0.2-0.8 ms regardless of size, `ADD CONSTRAINT` scales ~linearly
+  (~5 ms/100k each). A concurrent INSERT on a second connection with
+  `lock_timeout='500ms'` was refused while the ALTER's transaction was open.
+  Trivial against `deploy.sh`'s 120 s `--wait-timeout` at any scale this table
+  reaches, but the lock IS real and IS exclusive -- do not assume a CHECK
+  widening is lock-free just because it adds no data.
+- **A partial unique index scoped only by nullness (`WHERE x IS NOT NULL`) is
+  shared across every `purpose` that populates that column.**
+  `auth_attempts_link_session_unique` on `original_session_id` blocks a
+  `delete`-purpose and a `link`-purpose attempt on the same session from
+  coexisting -- confirmed by direct collision, not inferred from the definition.
+- **Widening a `purpose`/`stage` CHECK is backward-compatible by construction**
+  (old values are a strict subset of the new set) -- confirmed by inserting
+  old-shape rows against the post-migration schema. No `docs/RELEASING.md`
+  rollback-table row needed for this class of migration.
+- **A CHECK constraint's comment can claim an equality the CHECK does not
+  enforce.** `auth_attempts_session_check`'s `delete` arm requires
+  `original_session_id`/`existing_provider` non-null but never compares
+  `existing_provider` to `target_provider`, so a row with them DIFFERENT is
+  admitted -- despite a comment saying a delete "re-proves a provider ... so
+  existing and target are equal by design." Deliberate per the authoring plan,
+  but the equality is then a pure application-layer promise with zero DB
+  backstop. Say so explicitly to whichever task writes the code meant to keep
+  the promise.
+
 ## Where the dated record lives
 
 `dba-ledger.md`, one section per engagement with its environment table and

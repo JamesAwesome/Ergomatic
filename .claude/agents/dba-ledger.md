@@ -468,3 +468,45 @@ code review) and `original()`'s `FOR UPDATE` with no `OF` clause locking
 **Unmeasured:** production host CPU/RAM, real production row counts (these
 tables have never held one), the Apple provider round trip, and whether a real
 Apple refresh token approaches the 8192-char bound.
+
+## 2026-09-14 — Wave A PR1 Task 1, migration 0032 `auth_attempts` delete purpose (stored-shape PR gate)
+
+**PASS.** Widens three CHECK constraints on `auth_attempts` (`purpose`, `stage`,
+`session`) to admit a `delete` attempt and its `delete_ready` stage. No new
+table, no new index, no column added.
+
+Environment: `postgres:18.4` (Debian aarch64) in Docker Desktop, Apple M5 host,
+10 CPUs/16 GiB; stock `shared_buffers=128MB`, `work_mem=4MB`; all 33
+`app/drizzle/*.sql` applied via `psql -v ON_ERROR_STOP=1`; single runs
+(deterministic DDL, not sampled).
+
+**Migration timing/lock**, 3xDROP + 3xADD CONSTRAINT CHECK in one transaction:
+**2.268 / 16.999 / 116.971 ms** at 1k / 100k / 1M rows. `AccessExclusiveLock` on
+`auth_attempts` for the whole transaction, confirmed via `pg_locks` against a
+held transaction; a concurrent INSERT with `lock_timeout=500ms` was refused
+while held. Deploy is restart-based (`docker compose up -d --build --wait`), not
+rolling, so no live old instance runs against the mid-migration schema.
+
+**Additive/backward-compatible**: old-shape inserts (`signin`/no-session,
+`link`/differing-providers) succeed unchanged against the widened schema — no
+`docs/RELEASING.md` rollback row needed. This matters for `deploy.sh`'s ERR-trap
+rollback, which rebuilds the OLD image against the ALREADY-migrated database.
+
+**Delete-arm admit/refuse matrix** (9 direct inserts, not the app's suite):
+admits `signin` (old shape), `link`/differ, and `delete` with session +
+existing_provider present **regardless of whether `existing_provider` equals
+`target_provider`**; refuses `link`/equal (unchanged), `delete`/null session,
+`delete`/null existing_provider. **Finding, handed to Task 3, not a blocker
+here**: the delete arm does not enforce `existing_provider = target_provider` at
+the DB layer despite the code comment's "by design" equality. That invariant is
+100% application-layer. Pre-existing in kind, not a regression — `stage`/`purpose`
+pairing was never DB-enforced either.
+
+**Read path (Task 3, not yet built)**: `SELECT id FROM sessions WHERE user_id=$1
+ORDER BY id FOR UPDATE` is already served by the pre-existing
+`sessions_user_id_idx` — `Bitmap Index Scan`, 0.109 ms at 1,050 sessions and
+0.098 ms at 1,000,000. **No new index needed.**
+
+**Unmeasured**: production host CPU/RAM; per-row WAL cost of a future
+`delete`-purpose insert (inferred identical to `link`'s, since no column or index
+changed); Task 3's actual code, which does not exist yet.
