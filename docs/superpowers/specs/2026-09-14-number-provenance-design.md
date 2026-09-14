@@ -320,6 +320,13 @@ short, across two screens** — the two metres gutters clip a seventh glyph by
 derived from the widest formatted string its own data can produce, at its
 own class's measured advance.
 
+**SHIPPED in PR 2.** All seven constants are derived by `labelRoom`; metres
+ticks print `150k`; trace pace ticks print whole seconds; the trace chart's
+end labels anchor inward. The gate is `e2e/stats.spec.ts`'s "no chart label
+escapes its own viewBox", which goes red on the real defect (measured: the
+restored grouping reports `100,000` at x = −11.59, the restored centred
+anchor reports `0:40` at x = 301.2 in a 320 viewBox).
+
 **Ruled already (James, 2026-09-14): shorten the labels** — metres ticks
 become `150k` / `100k` / `50k`. Survived an attack at the low end: `niceMax`
 floors at `base = 1000` (`charts/axis.ts:128-130`), so every metres tick is
@@ -355,6 +362,15 @@ what the two date inputs already show. The line's one non-redundant state is
 `NO ROWS · <range>`. **Ruled by James 2026-09-14: drop the echo on CUSTOM,
 keep `NO ROWS`.** Presets keep their line — there the caption is the only
 place the dates appear.
+
+**SHIPPED in PR 2, and narrower than the board drew it.** Writing the test
+found that I5 governs this line from the other side too: the drop is
+CONDITIONAL on the line actually being an echo. Two states leave the inputs
+showing a pair that is not the pair being counted — a TO typed past today is
+clamped, and an out-of-order pair leaves the last valid range in force — and
+an unconditional drop silenced both. The rule is now "identical to the
+inputs means redundant; anything else means the inputs are not what is being
+counted".
 
 ## 3. Scope
 
@@ -423,7 +439,7 @@ clause is the one that needs the receipt.
 | PR | Members | Risk model | State |
 | --- | --- | --- | --- |
 | 1 | M1, M2 | Copy on a rendered surface. No number moves. | after 0B |
-| 2 | M8 + appendix | Layout across four charts, two screens; one copy deletion. No number moves. | **first, off 0A** |
+| 2 | M8 + appendix | Layout across four charts, two screens; one copy deletion. No number moves. | **LANDED** |
 | 3 | M3, M6, M9 | Changes what an axis IS. Antagonist pass. No stored data. | **PROVISIONAL** |
 | 4 | M4, M5, M7 | **TRIAD** — stored figures render differently. dba + antagonist + PM. | **PROVISIONAL** |
 
@@ -550,7 +566,7 @@ that PR; the probe itself does not survive the branch, and neither does
 | Gate 0 split (James) | 2026-09-14 | 0A first, PR 2 ships off it |
 | Antagonist anchor | 2026-09-14 | findings folded in; vetted ground below |
 | PM open | 2026-09-14 | APPROVED with four amendments, all folded in |
-| Gate 0A | presented 2026-09-14 | owed — artifact `MZsVEJ1rSsxYLFQRuCrbtS` rev 1, boards at `docs/design/number-provenance/gate0a/` |
+| Gate 0A | 2026-09-14 | **APPROVED as rendered** (James: "approved") — artifact `MZsVEJ1rSsxYLFQRuCrbtS` rev 1, boards at `docs/design/number-provenance/gate0a/`. Rulings 1, 3 and 4 take the option the boards rendered; **ruling 2 (the MACHINE caption) was NOT inferred** and stays open, which leaves M7 in PR 4 |
 | Gate 0B | — | owed |
 
 **The phase's VETTED GROUND** (attacked and held, so later specs inherit it

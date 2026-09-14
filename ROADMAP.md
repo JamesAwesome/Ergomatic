@@ -2851,6 +2851,20 @@ question, not a re-raised one.
 
 ## The "say which number this is" design pass — OPENED 2026-09-14
 
+**PR 2 (M8 + the appendix) is the first to land; Gate 0A approved it
+2026-09-14** (boards at `docs/design/number-provenance/gate0a/`, artifact
+`MZsVEJ1rSsxYLFQRuCrbtS`). **M8 and the appendix are STRUCK by that PR.**
+Measuring M8 for the gate found **two more of the same class nobody had
+seen** and widened the member: the trace chart clipped its last x tick by
+2.80 units on the log screen, and `SeasonGroup`'s `LABEL_ROOM` was 0.22
+short at the worst placement its own rule allows. Seven constants reserve
+space for text, not four; three were short; the per-glyph advance is **5.94**
+where the class carries letter-spacing and **5.40** where it does not, both
+measured, against the ~5.67 every constant assumed. Invariant I4 now governs
+all seven and each is derived by `labelRoom` from the widest string its own
+data can produce. **Gate 0B (M1-M6 and the new M9) is still owed**, and PRs
+3 and 4 are PROVISIONAL until it runs.
+
 **Spec:**
 [docs/superpowers/specs/2026-09-14-number-provenance-design.md](docs/superpowers/specs/2026-09-14-number-provenance-design.md).
 **Scope ruled by James 2026-09-14: "everything agrees"** — labelling, the
@@ -2863,10 +2877,17 @@ y-axis clips its own numbers.** His 2026-09-14 phone screenshot of Season
 2027 reads `L50,000` and `L00,000` — a seven-glyph tick into a gutter
 hand-sized for six. Third occurrence of one class (`TraceChart` 36→42,
 `WeekBars` 36→44, `SeasonGroup` copied 44), and the first with a production
-frame. The advance was MEASURED at 5.94 units at 9 px against the ~5.67 all
-four constants assume (probe `6b76f902`, branch `number-provenance`); no
-gate we own can see the class, because the screenshot seed's widest tick is
-six glyphs. Ruled the same day: shorten metres ticks to `150k`. The
+frame — **and the count went to five once the gate measured it** (see the PR
+2 note at the top of this section). The advance was MEASURED at 5.94 units
+at 9 px for `.stats-tick` and **5.40** for the classes carrying no
+letter-spacing, against the ~5.67 every constant assumed (probe
+`6b76f902`, branch `number-provenance`); **"all four are ~5 % under-sized"
+was wrong** — only the two metres gutters clipped, and they clipped on a
+SEVENTH GLYPH, which overflows at the assumed advance too. No gate we owned
+could see the class, because jsdom leaves `getBBox` undefined and the
+screenshot seed's widest tick is six glyphs; **there is one now**, in
+Playwright (`e2e/stats.spec.ts`), asserting that no chart text escapes its
+own viewBox. Ruled the same day: shorten metres ticks to `150k`. The
 appendix is the CUSTOM filter printing the dates its own pickers already
 show — drop the echo, keep `NO ROWS`.
 
