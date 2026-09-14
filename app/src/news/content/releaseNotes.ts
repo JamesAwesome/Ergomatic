@@ -5,6 +5,32 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.48.0: git log v0.47.0..main --oneline — FOUR merges besides this
+    // notes PR itself, each accounted for (RF15; no --merges, which returns
+    // empty on this squash-merged repo). ONE reaches a rower:
+    //   #436 account deletion, sign-in-method removal and the conflict
+    //     copy — all three items. The reason this release exists rather
+    //     than waits, and the reason v0.47.0 was NOT uploaded on its own:
+    //     v0.47.0 carries Apple sign-in, so uploading it alone would have
+    //     put account CREATION in a tester's hands one build ahead of
+    //     account DELETION. App Review 5.1.1(v) makes deletion
+    //     unconditional for any app supporting creation. PM gate,
+    //     2026-09-14: hold v0.47.0's upload, cut this, ship both in one
+    //     build. Ruled by James the same day.
+    //   #433 #434 #435 CI flake accounting — a row split into its two
+    //     actual phenomena, a url gate that could never go red, and a
+    //     sweep that counts retry-saved flakes and prints the runner each
+    //     job gets. All of it changes what AGENTS can see about CI; none
+    //     of it changes anything a rower does, sees or taps. No note.
+    version: "v0.48.0",
+    date: "2026-09-14",
+    items: [
+      "You can delete your Ergomatic account from inside the app. It is on You, under ACCOUNT. You prove it is you first, then a screen lists what goes before anything is deleted.",
+      "You can remove a sign-in method you no longer want, from the same screen. Your last one has no Remove button, so you cannot lock yourself out of your own account.",
+      "If a sign-in belongs to another Ergomatic account, the screen now tells you how to recover instead of leaving you stuck: sign in to that account, delete it, then add the sign-in here.",
+    ],
+  },
+  {
     // v0.47.0: git log v0.46.0..main --oneline — TEN merges besides this
     // notes PR itself, each accounted for (RF15; no --merges, which returns
     // empty on this squash-merged repo). THREE reach a rower:
