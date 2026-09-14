@@ -1184,14 +1184,25 @@ while we are in here.
       `maxWorkers` key sits on the ROOT `test` block, so unit, client and
       integration files share ONE pool, and each integration file starts
       its own `PostgreSqlContainer`) and CI runs an uncapped pool against
-      containers on a two-core runner. **That is a concrete, testable
-      mechanism for a synchronous render missing a 5 s deadline, and it
-      costs one config line to test.**
-      **Deliberately NOT changed here.** Capping CI workers is a claim
-      about a cost nobody has measured (RF30), it would slow every run,
-      and it belongs with a before/after measurement rather than riding an
-      e2e PR. What this row now owes is that measurement, not another
-      sighting.
+      containers, under v8 coverage instrumentation (`pnpm test:coverage`),
+      with all three projects in one invocation. **That is a concrete,
+      testable mechanism for a synchronous render missing a 5 s deadline.**
+      **CORRECTION, 2026-09-14, same day it was filed:** this row first
+      said "a two-core runner". **That was never measured** — it was the
+      shape of an explanation, which is exactly what RF16 forbids. The
+      repo is PUBLIC, and GitHub's standard `ubuntu-latest` for public
+      repositories is documented as larger than two cores, so the number
+      was probably wrong as well as unsourced. **Nothing in CI prints the
+      runner's core count or vitest's resolved worker count today**, so
+      neither figure can be recovered from the logs we already have.
+      **THE FIRST THING THIS ROW OWES IS THEREFORE THE INSTRUMENT, NOT THE
+      EXPERIMENT** — print `os.availableParallelism()` and the worker count
+      vitest actually resolved, so the next red run carries its own
+      explanation. A before/after on a capped pool is the SECOND step and
+      is meaningless before the first: capping to a number we have not
+      measured against a baseline we cannot see is guessing twice.
+      **Deliberately NOT changed in #434.** Capping CI workers is a cost
+      nobody has measured (RF30) and would slow every run.
       (c) A third, on the SAME release run: `pnpm e2e` returned `553 passed`
       with exit 1, and the two immediately following full runs both returned
       `554 passed`. **Which test failed was not captured** — the tail showed
@@ -3564,6 +3575,97 @@ Each needs erg time or a deliberate recording session.
   population than the full suite did. A green `--failed` re-run cannot
   distinguish flaky from order-dependent — the obvious next move is the one
   that cannot answer the question. Re-run the WHOLE suite.
+
+- **FLAKE 5 — THE INVENTORY. Every test that has ever failed in CI, counted
+  from the logs 2026-09-14.** · dies 2026-11-14 · a row and not a fix now
+  because it is a MEASUREMENT, not a defect — it exists so the next hunt
+  picks targets by frequency instead of by whoever happened to notice one.
+  **Method:** the `e2e` job log of every attempt of every CI run (1,093
+  logs, zero fetch failures, reaching the repo's first run on 2026-07-27)
+  plus all 19 failed `app` job logs. Vitest was CONFIRMED to have no
+  `retry` key, so a vitest flake always reddens its job and reading only
+  failed `app` jobs is sound; Playwright's `retries: 1` is why the e2e side
+  needed every green log too (RF42).
+  **112 failure events across 29 title-distinct tests. 68 were retry-saved
+  into GREEN jobs; 44 went red.**
+  **THE HEADLINE: THE WORST FLAKE THIS REPO HAS EVER HAD WAS NEVER FILED,
+  AND IS ALREADY DEAD.** `library.spec.ts`'s two scroll-restoration tests
+  account for **38 of the 112 events (34%)**, over 15 branches, hitting
+  `main` **15 times** — and `grep -c "scroll restoration" ROADMAP.md`
+  returned ZERO. Nobody knew, because 36 of the 38 were retry-saved.
+  **They stop dead**: last occurrence 2026-08-11T14:42:05Z, and
+  `ba82f364` ("Library ignores the disconnected-root scroll echo that
+  poisoned its saved position", #84) landed 16:29:26Z — **1h47m later**,
+  with ZERO occurrences in the 916 e2e jobs since. Both titles are
+  byte-identical today, so the stop is not a rename artefact. **That fix
+  was worth far more than anything recorded at the time said**, and the
+  only reason we can say so now is that the count came from logs rather
+  than from red runs.
+  **THE RATE IS NOT IMPROVING, and the obvious reading of it is wrong.**
+  August 10.7% → September 5.7% looks like progress; it is entirely the
+  scroll pair dying (32 of August's 60 flake-carrying jobs contained only
+  that pair). **Excluding it, the rate is flat at 4-6% for seven straight
+  weeks and September is the highest of the three periods.** Roughly ONE
+  E2E JOB IN 18 currently carries a test that failed at least once, and
+  **two thirds of those ship a green tick.**
+  **Live and unfiled when this was taken**, in rate order:
+  - **`appleAuth.spec.ts:210`** (linking Apple) — 3 events in the 22 jobs
+    since it landed. **ROOT-CAUSED AND HANDED OFF** the same day to the
+    session that owns Apple login: the root route's
+    `<Navigate to="/today" replace>` can overwrite a just-pushed entry when
+    `/api/me` commits against a location still lagging inside the Router's
+    `startTransition`. Their branch already carries the guard. Confirmed,
+    not inferred — see the artifact technique below.
+  - **`connected.spec.ts` Task 8 landscape** — 6 over five weeks, 4
+    branches, but WEAKER than the count: two reds are same-day breakage
+    when the test landed and one rides a four-failure run. **NEXT TARGET.**
+  - **`onboarding.spec.ts` fresh-user arc** — 3 retry-saved, then RENAMED
+    by `413dde44`; no successor title has flaked, so it may be dormant
+    rather than fixed. Do not assume either.
+  **NOT FLAKES, so not targets:** `news.spec.ts`'s two entries (15 events,
+  ALL red, never once retry-saved) are release-notes pin drift on notes
+  branches — CI catching exactly what it is meant to. Worth one note: it
+  took `main` red once (`bf98c138`, 2026-08-30). Several other red
+  singletons are ordinary branch breakage that went green at the next SHA.
+  **THE INSTRUMENT WORTH KEEPING, found while confirming the Apple one:**
+  `ci.yml` uploads `playwright-report` on `if: always()`, and its
+  `error-context` file carries **Playwright's full page snapshot at the
+  moment of failure** — the actual screen, as a yaml accessibility tree.
+  For anything inside the 14-day window that turns "which assertion timed
+  out" into "here is what the rower was looking at", which is what settled
+  the Apple mechanism in one read. The job log cannot do that. Use the log
+  to COUNT and the artifact to DIAGNOSE.
+  **The sweep reproduced FLAKE 1 at 9 and FLAKE 3 at 10 branch-for-branch**,
+  independently of the hand counts, which is the evidence that the method
+  is sound rather than merely thorough.
+  **WHAT IS ACTUALLY LEFT, and it is the number that matters.** Counting
+  only events in ISOLATED jobs (one failure in the job — a job with four
+  at once is a runner event, not a test bug) since 2026-08-15, there are
+  34, and they classify:
+
+  | events | what |
+  |---|---|
+  | 9 | FLAKE 3 — **fixed in #434** |
+  | 9 | FLAKE 1 — **fixed in #434** |
+  | 1 | FLAKE 4 (`stats.spec.ts`) — **fixed in #434** |
+  | 5 | `news.spec.ts` release-notes pin drift — **never a flake** |
+  | 4 | `connected-swipe` WIP breakage, one branch, one day — **not a flake** |
+  | 2 | `appleAuth.spec.ts` — **owned by the Apple-login session**, guard written |
+  | 2 | `onboarding.spec.ts` fresh-user arc — renamed, nothing since |
+  | 2 | true singletons (`today.spec.ts`, `log.spec.ts`), one each |
+
+  **#434 killed 19 of those 34 — 56% — and all three of the top entries.**
+  After it, the live isolated-flake population is: one test owned by
+  another session, one possibly-dormant test, and two singletons that have
+  each happened once ever. **That is the honest status of "flakes dead":
+  the named ones are dead, and what remains is either somebody else's, too
+  rare to hunt, or not a flake at all.**
+  **The real remaining work is therefore the MULTI-FAILURE RUNS, not any
+  single test** — three jobs in the corpus failed four tests at once
+  (`103829038779`, `103672406399`, `101506257739`), which is FLAKE 2's
+  territory and a runner question. That is exactly what the capacity
+  banner in `test-run.sh` was added to make answerable, and why it came
+  before any attempt to cap workers. **S**
 
 - **FLAKE 4 — the read-after-write class, censused and CLOSED 2026-09-14.**
   · dies 2026-10-14 · a row and not a fix now only as bookkeeping: the two
