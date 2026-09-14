@@ -35,6 +35,7 @@
 // check; comparing our derived split against the machine's own average-pace
 // field is the one DEFINITION check available, and it is the one below.
 
+import { parseLogExport } from "./eventLog";
 import {
   act,
   render,
@@ -152,7 +153,8 @@ describe("the free row, wire to log door (RF24: one test upstream of the produce
     // capture spans some 400 s of virtual time. The frame literal is typed
     // from `docs/monitor/pm5-interface-notes.md:204`, never built. The
     // hook's `exportLog()` is the same string the diagnostics door copies.
-    const ring = JSON.parse(result.current.exportLog()) as {
+    const ring = parseLogExport(result.current.exportLog())
+      .entries as unknown as {
       kind: string;
       detail: string;
     }[];

@@ -43,6 +43,7 @@
 // guarantees the wait ends at all when none of them ever comes. Injected as
 // `MonitorSessionDeps.schedule` so tests fire it rather than wait for it.
 
+import { APP_VERSION } from "../appVersion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { isValidPm5AdvertisingName } from "../../domain/monitor/nfc.js";
@@ -4741,6 +4742,13 @@ export function useMonitorSession(
         // throw — kept for the same "degrade honestly, don't assume" reason
         // `resolveHandoffCondition`'s own `completedAt === null` guard above
         // is kept, not a path any test exercises today.
+        //
+        // CORRECTED: the paragraph above used to call `exportLog()` "a plain
+        // `JSON.stringify` over an array of `{kind, detail}` string pairs".
+        // It serializes `{meta, entries}` now (`eventLog.ts`'s
+        // `MonitorLogExport`). The reasoning it supports is unchanged —
+        // nothing in there can throw — but the description was falsified by
+        // the change six lines below it.
         if (exported !== null) {
           // Lifecycle design spec §2: the single key above is perishable —
           // one slot, overwritten by the very next teardown — which is
@@ -5455,6 +5463,11 @@ export function useMonitorSession(
           resumes: 0,
         };
         sessionRef.current = session;
+        // The export header's session id. Set at the mint, beside the id
+        // itself, so every stash and every paste can be told apart — and so
+        // a Try-again that REPLACED this ring is detectable rather than
+        // silent (`connect()` does not stash, by design).
+        log.setMeta({ sessionId: session.id });
         // Task 1 (lost-monitor design spec): a fresh connection tracks no
         // hidden window yet — clears whatever a PREVIOUS connection's own
         // background/foreground pair (or an interrupted one that never saw
@@ -5501,6 +5514,12 @@ export function useMonitorSession(
             log.record("already-connected-guard", outcome);
           }
         }
+        // The monitor's advertised name, into the export header. It has
+        // always been known HERE — it is handed to the driver on the very
+        // next line, stored on `session_logs.device_name`, and printed as
+        // the sheet's on-screen caption — but it never reached the bytes
+        // COPY LOG copies, so no pasted log could name its monitor.
+        log.setMeta({ deviceName: device.name ?? null });
         const driver = createPm5Driver(transport, log, {
           ...depsRef.current.driverOptions,
           deviceName: device.name,
@@ -6455,9 +6474,21 @@ export function useMonitorSession(
             kind: `nfc-attempt:${entry.kind}`,
             detail: entry.detail ?? `seq ${entry.seq}`,
           }));
-    if (log === undefined) return JSON.stringify(prefix);
+    // The header rides every one of these shapes. An attempt that never
+    // reached a session ring has no `deviceName` or `sessionId` to give —
+    // but it still names the BUILD, which is the difference between a
+    // useless paste and a locatable one.
+    if (log === undefined) {
+      return JSON.stringify({
+        meta: { appVersion: APP_VERSION },
+        entries: prefix,
+      });
+    }
     if (prefix.length === 0) return log.exportLog();
-    return JSON.stringify([...prefix, ...log.entries()]);
+    return JSON.stringify({
+      meta: log.meta(),
+      entries: [...prefix, ...log.entries()],
+    });
   }, []);
 
   // Teardown on unmount: the listener goes, the radio goes, no driver is

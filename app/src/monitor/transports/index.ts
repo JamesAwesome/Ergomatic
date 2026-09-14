@@ -76,6 +76,7 @@
 // specific moments, immune to a backgrounded tab's timer throttling — see
 // that property's own doc comment.
 
+import { tryParseLogExport } from "../eventLog";
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 import {
   hasTargetedScan,
@@ -86,7 +87,6 @@ import {
 // I1 fix (final-review): type-only — the stash callback below builds
 // `MonitorLogEntry` objects to keep the stash keys valid `exportLog()`
 // JSON; see that callback's own comment.
-import type { MonitorLogEntry } from "../eventLog.js";
 import { createWebBluetoothTransport } from "./webBluetooth";
 
 // `FakeScript`/`FakeControls` are TYPE-ONLY imports: they cost nothing at
@@ -390,16 +390,19 @@ export function resolveDefaultTransport():
               ]) {
                 const prior = sessionStorage.getItem(key);
                 if (prior === null) continue;
-                let entries: MonitorLogEntry[];
-                try {
-                  entries = JSON.parse(prior) as MonitorLogEntry[];
-                } catch {
-                  // A malformed prior value (e.g. an older build's
-                  // pre-JSON stash still sitting in this tab) — best-
-                  // effort diagnostics, never throw out of the
-                  // instrument's own teardown path.
-                  continue;
-                }
+                // THROUGH THE SHAPE'S OWNER. This used to `JSON.parse` the
+                // prior value straight into an array, which broke the day
+                // the export grew its `{meta, entries}` header: `push` on an
+                // object throws, out of an instrument's own teardown. It
+                // STRICT, and the distinction is load-bearing: a malformed
+                // prior value (an older build's pre-JSON stash still sitting
+                // in this tab) must be LEFT ALONE, not replaced with an
+                // empty log. The lenient `parseLogExport` returns empty for
+                // unreadable bytes, and using it here overwrote exactly what
+                // this loop promises to preserve.
+                const priorExport = tryParseLogExport(prior);
+                if (priorExport === null) continue;
+                const entries = priorExport.entries;
                 let nextSeq =
                   entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
                 for (const line of lines) {
@@ -411,7 +414,13 @@ export function resolveDefaultTransport():
                   });
                   nextSeq += 1;
                 }
-                sessionStorage.setItem(key, JSON.stringify(entries));
+                // Re-serialized in the CURRENT shape, header preserved, so
+                // an appended stash stays readable by the same parser that
+                // just read it.
+                sessionStorage.setItem(
+                  key,
+                  JSON.stringify({ meta: priorExport.meta, entries }),
+                );
               }
             },
           });

@@ -2555,6 +2555,13 @@ export function createPm5Driver(
     // behaviour and no test could go red on it — a line that reads as a gate
     // and is not one (whole-branch review, finding 5).
     const value = (decoded as { ergMachineType?: unknown }).ergMachineType;
+    // THE HEADER RECORDS IT ON EVERY PATH, not only on refusal. Before this,
+    // a RowErg (a supported value) and a pre-2018 monitor that sends no such
+    // field at all were INDISTINGUISHABLE in an exported log, because the
+    // only thing that wrote the value was the refusal below. `null` is the
+    // honest reading for "the field was absent", which is itself the answer
+    // to "was this a monitor too old to classify".
+    log.setMeta({ ergMachineType: typeof value === "number" ? value : null });
     if (typeof value !== "number") return;
     const machine = unsupportedErgMachine(value);
     if (machine === null) return;

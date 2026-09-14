@@ -97,6 +97,11 @@ jobs:
           context: ./app
           target: web
           push: false
+          # The client bundle is emitted by this build, so the stamp has to
+          # be passed here as well as to the api image — they are separate
+          # builds of the same Dockerfile.
+          build-args: |
+            APP_VERSION=ci
 
   e2e:
     needs: changes
@@ -170,6 +175,10 @@ jobs:
         run: |
           bash -n scripts/compose-env.test.sh
           bash scripts/compose-env.test.sh
+      - name: Test the client bundle's version-stamp plumbing
+        run: |
+          bash -n scripts/app-version-stamp.test.sh
+          bash scripts/app-version-stamp.test.sh
       - name: Lint + test the ios-release probe-flag guard
         run: |
           bash -n app/scripts/ios-release.sh

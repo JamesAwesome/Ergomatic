@@ -91,6 +91,14 @@ services:
     build:
       context: ./app
       target: web
+      # THE CLIENT BUNDLE IS BUILT HERE, so the version stamp must arrive
+      # here. The `api` service passes this too, but they are separate
+      # builds: `web` copies `dist/client` out of the `build` stage, and
+      # without this arg that stage takes `ARG APP_VERSION=dev` and every
+      # diagnostics log pasted from the web app reads "dev" while
+      # `/api/health` reports the real version. Found in review of #430.
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
     container_name: ${ERGO_STACK:-ergomatic}-web
     restart: unless-stopped
     security_opt:

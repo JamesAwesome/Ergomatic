@@ -133,6 +133,7 @@
 // mutation evidence (below) reverts that and confirms leg 2 goes red on
 // it again.
 
+import { parseLogExport } from "./eventLog";
 import { createElement } from "react";
 import { act, render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -902,7 +903,7 @@ describe("the summary hold's permanent gate, leg 1: Menu terminate (storage-spin
     // entry stays checked too, as a separate presence assertion (it is
     // real evidence that the write was attempted at the wire layer, just
     // not evidence of THIS hook's own ordering).
-    const entries = JSON.parse(full.exportLog()) as {
+    const entries = parseLogExport(full.exportLog()).entries as unknown as {
       kind: string;
       detail: string;
     }[];
@@ -1038,7 +1039,7 @@ describe("the summary hold's permanent gate, leg 2: user End (storage-spine desi
     // own internal statement order, and so could never go red on a
     // resolve-before-write reordering inside the hook). The driver-side
     // entry is still checked, as a separate presence assertion.
-    const entries = JSON.parse(full.exportLog()) as {
+    const entries = parseLogExport(full.exportLog()).entries as unknown as {
       kind: string;
       detail: string;
     }[];
@@ -1115,7 +1116,7 @@ describe("the summary hold's permanent gate, leg 3: timeout (storage-spine desig
     expect(fullRecord).not.toHaveProperty("summaryDetail");
     expect(fullRecord).not.toHaveProperty("verificationBytes");
 
-    const entries = JSON.parse(full.exportLog()) as {
+    const entries = parseLogExport(full.exportLog()).entries as unknown as {
       kind: string;
       detail: string;
     }[];

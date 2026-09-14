@@ -38,6 +38,7 @@ import type { MachineSummaryDetail, MonitorRun } from "../monitor/monitorRun";
 import { loadMonitorRun, MONITOR_RUN_KEY } from "../monitor/handoffStore";
 import { seedMonitorRun } from "../test/seedHandoff";
 import type { SeriesData } from "../monitor/seriesRecorder";
+import { parseLogExport } from "../monitor/eventLog";
 import type { MonitorLogEntry } from "../monitor/eventLog";
 import { asSerialized } from "../test/asSerialized";
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
@@ -986,9 +987,8 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
     // The whole story in one artifact: the session's own ring, plus the
     // `log-door-miss` this very arrival appended (no record in storage, so
     // `monitorModeRun` missed on `no-run`).
-    const copied = JSON.parse(
-      writeText.mock.calls[0]![0] as string,
-    ) as MonitorLogEntry[];
+    const copied = parseLogExport(writeText.mock.calls[0]![0] as string)
+      .entries as MonitorLogEntry[];
     expect(copied[0]).toMatchObject({ kind: "close-no-record" });
     expect(copied[1]).toMatchObject({
       kind: "log-door-miss",
@@ -2991,9 +2991,7 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
 describe("LogSession: monitorModeRun logs which condition missed onto the log-door stash", () => {
   function missEntries(): { kind: string; detail: string }[] {
     const raw = localStorage.getItem("ergomatic:log-door-misses");
-    return raw === null
-      ? []
-      : (JSON.parse(raw) as { kind: string; detail: string }[]);
+    return raw === null ? [] : parseLogExport(raw).entries;
   }
 
   it("condition 1 (no from=monitor flag at all) logs nothing — an ordinary manual visit is not the silence this stash exists to catch", async () => {
@@ -3269,9 +3267,8 @@ describe("LogSession: the log-door miss survives the teardown that follows it", 
     await userEvent.click(
       screen.getByRole("button", { name: "MONITOR LOG · COPY" }),
     );
-    const copied = JSON.parse(
-      writeText.mock.calls[0]![0] as string,
-    ) as MonitorLogEntry[];
+    const copied = parseLogExport(writeText.mock.calls[0]![0] as string)
+      .entries as MonitorLogEntry[];
     expect(copied.map((e) => e.kind)).toStrictEqual([
       "close-no-record",
       "log-door-miss",
@@ -3328,9 +3325,8 @@ describe("LogSession: the log-door miss survives the teardown that follows it", 
     await userEvent.click(
       await screen.findByRole("button", { name: "MONITOR LOG · COPY" }),
     );
-    const copied = JSON.parse(
-      writeText.mock.calls[0]![0] as string,
-    ) as MonitorLogEntry[];
+    const copied = parseLogExport(writeText.mock.calls[0]![0] as string)
+      .entries as MonitorLogEntry[];
     expect(copied.map((e) => e.kind)).toStrictEqual([
       "close-no-record",
       "log-door-miss",
@@ -4391,9 +4387,9 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     // LOW-3: the POST sacrifice ring-logs itself — the prior entry
     // survives (APPEND, not overwrite), and one new entry names the
     // sacrifice with the status (413) that triggered it.
-    const ring = JSON.parse(
+    const ring = parseLogExport(
       sessionStorage.getItem("ergomatic:last-rowed-log")!,
-    ) as { seq: number; kind: string; detail: string }[];
+    ).entries as { seq: number; kind: string; detail: string }[];
     expect(ring).toHaveLength(2);
     expect(ring[0]).toStrictEqual({
       seq: 0,
@@ -4412,9 +4408,9 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     // exactly where it is read, silently falsifying the reason this logging
     // exists: a systematic server refusal of `series` must show up in
     // diagnostics.
-    const sessionRing = JSON.parse(
+    const sessionRing = parseLogExport(
       localStorage.getItem("ergomatic:last-session-log")!,
-    ) as { seq: number; kind: string; detail: string }[];
+    ).entries as { seq: number; kind: string; detail: string }[];
     expect(sessionRing.map((e) => e.kind)).toContain("post-sacrifice");
     expect(
       sessionRing.find((e) => e.kind === "post-sacrifice")!.detail,
@@ -4473,9 +4469,9 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(logCalls(apiFn)).toHaveLength(2);
 
-    const ring = JSON.parse(
+    const ring = parseLogExport(
       sessionStorage.getItem("ergomatic:last-rowed-log")!,
-    ) as { seq: number; kind: string; detail: string }[];
+    ).entries as { seq: number; kind: string; detail: string }[];
     // Still exactly 500 — the append pushed the count to 501, then the
     // cap trimmed the OLDEST one entry off the front.
     expect(ring).toHaveLength(500);

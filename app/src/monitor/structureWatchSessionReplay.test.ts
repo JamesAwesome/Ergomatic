@@ -17,6 +17,7 @@
 // no record at all — Phase LM's own finding, restated in the design spec's
 // §1 consumer section).
 
+import { parseLogExport } from "./eventLog";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -234,7 +235,9 @@ describe("useMonitorSession, replayed against walk-2026-08-27/menu-at-ready: RC-
     expect(out.programDropped).toBe(true);
 
     expect(out.stashedLog).not.toBeNull();
-    const entries = JSON.parse(out.stashedLog!) as { kind: string }[];
+    const entries = parseLogExport(out.stashedLog!).entries as {
+      kind: string;
+    }[];
     const fired = entries.filter((e) => e.kind === "structure-left");
     expect(fired).toHaveLength(1);
   });

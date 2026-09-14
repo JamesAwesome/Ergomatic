@@ -1,3 +1,4 @@
+import { parseLogExport } from "../eventLog";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   DiscoveredMonitor,
@@ -421,16 +422,8 @@ describe("resolveDefaultTransport", () => {
     // THE FIX, proven the way recurring failure 12 demands: parse it, not
     // just "contains a substring" — this line alone goes red under the OLD
     // `prior + "\n" + text` implementation (a SyntaxError, not a mismatch).
-    const entries = JSON.parse(monitorLog!) as {
-      seq: number;
-      kind: string;
-      detail: string;
-    }[];
-    const seeded = JSON.parse(seededJson) as {
-      seq: number;
-      kind: string;
-      detail: string;
-    }[];
+    const entries = parseLogExport(monitorLog!).entries;
+    const seeded = parseLogExport(seededJson).entries;
     // APPENDS to the prior entries — never replaces or drops them.
     expect(entries.slice(0, seeded.length)).toStrictEqual(seeded);
     // The hold-open window landed as real entries, not a lost/silent
@@ -461,16 +454,19 @@ describe("resolveDefaultTransport", () => {
 
     const emptyLog = createEventLog();
     sessionStorage.setItem("ergomatic:last-monitor-log", emptyLog.exportLog());
-    expect(emptyLog.exportLog()).toBe("[]");
+    // The export is `{meta, entries}` now; an empty log still carries its
+    // header (that is the NFC-failure case, where nothing was recorded
+    // because nothing got far enough to record).
+    expect(parseLogExport(emptyLog.exportLog()).entries).toStrictEqual([]);
 
     const transport = await resolveDefaultTransport();
     window.__pm5HoldOpen__!.arm();
     await transport!.disconnect();
     await window.__pm5HoldOpen__!.release();
 
-    const entries = JSON.parse(
+    const entries = parseLogExport(
       sessionStorage.getItem("ergomatic:last-monitor-log")!,
-    ) as { seq: number }[];
+    ).entries;
     expect(entries.length).toBeGreaterThan(0);
     expect(entries[0]!.seq).toBe(0);
 

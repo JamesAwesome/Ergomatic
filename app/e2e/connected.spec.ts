@@ -1,3 +1,4 @@
+import { parseLogExport } from "../src/monitor/eventLog";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -964,7 +965,9 @@ async function walkSurfaceToLog(
     stash,
     "teardown stashes the wire log for the ended session",
   ).not.toBeNull();
-  const entries = JSON.parse(stash!) as { kind: string }[];
+  // `{meta, entries}` since the grounding header landed. Read through the
+  // shape's own owner rather than re-deriving it here.
+  const entries = parseLogExport(stash!).entries;
   expect(entries.some((e) => e.kind === "write")).toBe(true);
 
   // THE MONITOR MODE SUMMARY (7C spec §4/§7, Task 6, rebuilt on
