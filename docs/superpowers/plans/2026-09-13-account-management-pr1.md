@@ -756,8 +756,50 @@ Export `failure` from `frontDoorRoutes.ts` if it is not already exported. In
 const attempts = createAttempts(pool, accessPolicy, createAppleRevoke(config));
 ```
 
-and mount `createAccountRoutes({ attempts, sessions })` beside the front-door
-router.
+and merge the account router INTO the one router that actually gets mounted.
+`createFrontDoor()` returns `{...createFrontDoorRoutes(...), attempts, providers,
+close}` — a single `router` key — and `server/app.ts` mounts exactly that one
+value (`app.use(deps.frontDoor.router)`). A `createAccountRoutes(...)` that is
+merely constructed and never merged gives a **404 in production with every unit
+test green**:
+
+```ts
+const routes = createFrontDoorRoutes({ attempts, providers, sessions, siteUrl: config.siteUrl });
+routes.router.use(createAccountRoutes({ attempts, sessions }));
+return { ...routes, attempts, providers, close: () => clearInterval(timer) };
+```
+
+**Then prove it over HTTP.** Every test prescribed in Tasks 2 and 3 calls
+`attempts.unlink()` / `attempts.deleteAccount()` directly, so none of them would
+notice an unmounted route, a missing `requireUser`, or a `req.sessionId` that is
+`undefined` (node-postgres rejects `undefined` bind params). Add one request-level
+test per route, through the real app:
+
+```ts
+it("removes a method over HTTP, through the mounted router", async () => {
+  const { agent, user } = await signedInAgent({ googleSub: "g-1", appleSub: "a-1" });
+  const response = await agent.delete("/api/auth/methods/apple");
+  assert.equal(response.status, 200);
+  assert.equal(response.body.outcome, "unlinked");
+});
+
+it("refuses an unauthenticated remove", async () => {
+  const response = await request(app).delete("/api/auth/methods/apple");
+  assert.equal(response.status, 401);
+});
+
+it("deletes the account over HTTP, through the mounted action", async () => {
+  const { agent, attemptId, secret } = await deleteReadyOverHttp();
+  const response = await agent
+    .post(`/api/auth/web/attempts/${attemptId}/delete`)
+    .set("Cookie", binding(attemptId, secret));
+  assert.equal(response.status, 200);
+  assert.equal(response.body.outcome, "deleted");
+});
+```
+
+`app/server/app.ts` therefore joins this task's modified files if the merge
+happens there instead of in `frontDoor.ts`.
 
 - [ ] **Step 6: Run the tests and watch them pass**
 
@@ -886,6 +928,27 @@ and in `shared/auth.ts`'s `AuthStep` union:
 ```ts
 | (AttemptView & { outcome: "delete_ready" })
 ```
+
+**Widening `AuthStep` BREAKS THE CLIENT BUILD, and the server-only typecheck
+cannot see it.** `acceptStep()` in `src/adapters/authFlow.ts` reaches
+`if (step.purpose === "link" && step.stage === "target")`, which is type-safe
+today only because the `"confirm"` and `"link_ready"` blocks above it return
+early, leaving a narrowed union whose every member happens to carry `.stage`. A
+`delete_ready` member has no `.stage`, so that line becomes
+`TS2339: Property 'stage' does not exist`. Add the branch in the SAME step,
+placed **before** that line:
+
+```ts
+if (step.outcome === "delete_ready") {
+  context.setView({ kind: "delete_ready" });
+  return;
+}
+```
+
+This is also what makes the screen appear at all: without it nothing sets
+`kind: "delete_ready"`, so a rower who re-authenticates successfully sees no
+transition and `DeleteAccount.tsx` never renders. **Run `pnpm typecheck` (which
+runs `tsc -b` over the client), not just the server project, after this step.**
 
 **Gate it at the route, not at `accept()`.** Add to
 `frontDoorRoutes.integration.test.ts`:
@@ -1319,7 +1382,10 @@ Each mutation, with what its failure said, goes in the PR body:
 - Consumes: `DELETE /api/auth/methods/:provider` → `UnlinkOutcome`;
   `POST /api/auth/{surface}/attempts/:id/delete` → `DeleteOutcome`.
 - Produces: `removeMethod(provider)`, `startDelete(provider)`, `confirmDelete()`
-  on `AuthFlowController`; `AuthFlowView` gains
+  on `AuthFlowController` — **add them to the `AuthFlowController` interface AND
+  to the `controller()` mock helper in `SignInMethods.test.tsx`** (finding L2-7;
+  both fail loudly rather than silently, but neither is otherwise named);
+  `AuthFlowView` gains
   `{ kind: "unlinked"; provider: AuthProvider }`,
   `{ kind: "unlink_refused"; provider: AuthProvider; reason: "last_provider" | "not_connected" | "account_gone" }`,
   and `{ kind: "delete_ready" }`.
@@ -1415,9 +1481,92 @@ async removeMethod(provider) {
 ```
 
 `startDelete` mirrors `prepareLink` with `purpose: "delete"` and the provider the
-rower already holds. `confirmDelete` posts the `delete` action and, on
-`{ outcome: "deleted" }`, clears the local token and routes to Welcome, carrying
-`appleRevoked` so the notice can render once.
+rower already holds — read `prepareLink` and follow its shape exactly rather than
+inventing one.
+
+`confirmDelete` is written out here because its ORDERING is the opposite of
+`nativeSignOut`'s and the difference is load-bearing (finding L2-5):
+
+```ts
+async confirmDelete() {
+  const active = context.operation.current;
+  if (!active) return;
+  const surface = context.native ? "native" : "web";
+  // The token must still be LIVE for this call -- the route is behind
+  // requireUser. nativeSignOut clears first on purpose, because there the
+  // network call is best-effort cleanup; here it is the operation itself.
+  const response = await api(
+    `/api/auth/${surface}/attempts/${active.step.attemptId}/delete`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(context.native ? { bindingSecret: active.bindingSecret } : {}),
+    },
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: AuthErrorCode };
+    // Carry the SERVER's code, never a hardcoded one (finding L2-6).
+    context.setView({
+      kind: "error",
+      purpose: "delete",
+      code: body.error ?? "signin_failed",
+    });
+    return;
+  }
+  const body = (await response.json()) as DeleteOutcome;
+  // Only AFTER the server confirms. The account is gone; this device's copy of
+  // the credential goes with it.
+  if (context.native) {
+    const { clearToken } = await import("../native/session");
+    await clearToken();
+  }
+  context.setView({ kind: "deleted", appleRevoked: body.appleRevoked });
+}
+```
+
+`AuthFlowView` therefore gains `{ kind: "deleted"; appleRevoked: boolean }` as
+well as the three members named above. Apply the same
+"carry the server's code" fix to `removeMethod`, whose draft hardcodes
+`signin_failed` and so renders copy written for a failed LINK proof.
+
+- [ ] **Step 4a: Refresh the methods list after an unlink (finding L2-3)**
+
+`useAuthMethods(refreshKey)` refetches ONLY when its key string changes, and
+`methodsRefreshKey()` special-cases `"linked"` and two link-purpose error codes,
+returning `"current"` for everything else — including both new views. So a
+successful remove leaves the row rendering `CONNECTED` with a live `Remove`
+button for a provider that is already gone, and a second tap answers
+`not_connected`. This is RF24's seam on the client: the write happens server-side
+and the read never re-runs.
+
+```ts
+function methodsRefreshKey(view: AuthFlowController["view"]): string {
+  if (view.kind === "linked") return `linked-${view.targetProvider}`;
+  if (view.kind === "unlinked") return `unlinked-${view.provider}`;
+  // A refused unlink can mean the server disagrees with what this screen shows
+  // (already removed, or the account is gone), so re-read rather than trust it.
+  if (view.kind === "unlink_refused") return `refused-${view.provider}-${view.reason}`;
+  ...
+}
+```
+
+**The test must click through, not render a fixture.** Task 4 Step 2's tests all
+render a hand-built methods object, which cannot catch this:
+
+```tsx
+it("stops showing a method as connected once it is removed", async () => {
+  let call = 0;
+  server.use(
+    http.get("/api/auth/methods", () =>
+      HttpResponse.json(call++ === 0 ? { apple: true, google: true } : { apple: false, google: true })),
+    http.delete("/api/auth/methods/apple", () =>
+      HttpResponse.json({ outcome: "unlinked", appleRevoked: true })),
+  );
+  renderMethods();
+  await userEvent.click(await screen.findByRole("button", { name: "Remove Apple" }));
+  expect(await screen.findByRole("button", { name: "Add Apple" })).toBeInTheDocument();
+});
+```
 
 - [ ] **Step 4b: Give the delete purpose its own failure surface (finding N9)**
 
@@ -1427,10 +1576,22 @@ The web callback's failure redirect carries the purpose, and
 exists to document that exact defect being fixed for links. A delete inherits
 the silent bounce unless its purpose is handled too.
 
-`linkNotice()` in `SignInMethods.tsx` returns `null` for
-`view.purpose !== "link"`. Widen its guards to `"delete"` and give the delete
-case its own wording, so a failed delete reauth says so instead of returning the
-rower to a screen that looks like nothing happened:
+`linkNotice()` in `SignInMethods.tsx` opens with a single COMBINED guard, and
+**that is the line to edit** — a new branch added below it is unreachable,
+because `purpose === "delete"` has already returned `null`, which reproduces the
+exact "nothing happened" defect this step exists to fix (finding L2-4). Edit the
+guard itself:
+
+```tsx
+// was: if (view.kind !== "error" || view.purpose !== "link") return null;
+if (
+  view.kind !== "error" ||
+  (view.purpose !== "link" && view.purpose !== "delete")
+)
+  return null;
+```
+
+then put the delete branch ABOVE the link-only branches:
 
 ```tsx
 if (view.kind === "error" && view.purpose === "delete") {
