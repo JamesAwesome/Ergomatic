@@ -117,9 +117,17 @@ found a bug.
 Everything below was run against Postgres 18.4 with this repo's migrations
 applied (2026-09-13). Quoted outputs are real.
 
+**The paste-test has been run** (the precondition, not a finding — agent-briefing
+"Plan authoring"). Every prescribed block below was applied at its real path on
+`9df48abb` and put through `npx tsc -p tsconfig.server.json --noEmit` and
+`npx eslint`, both of which came back **clean for the production files**, and
+`pnpm db:generate` was run to confirm the emitted DDL. The scratch
+implementation was then reverted; the worktree is clean. Two things it caught
+are folded into Tasks 1 and 2 and called out under "What the paste-test caught".
+
 | Claim | Result |
 |---|---|
-| The Task 1 migration applies | 4 × `ALTER TABLE`, no error |
+| The Task 1 migration applies | `pnpm db:generate` emits **6** `ALTER TABLE` (3 DROP + 3 ADD), no `CREATE TABLE` |
 | `delete` purpose, `existing_provider = target_provider`, non-null session | **admitted** |
 | `delete` purpose with `original_session_id IS NULL` | refused by `auth_attempts_session_check` |
 | **stage `delete_ready`** | **refused by `auth_attempts_stage_check` — see the spec correction below** |
@@ -130,6 +138,23 @@ applied (2026-09-13). Quoted outputs are real.
 | Tables losing rows on account deletion | **12** — 11 cascade from `users`, `auth_attempts` via `sessions` (catalog query, not a grep) |
 | Users-before-sessions vs `original()` | **deadlock, auth transaction is the victim** — `"Process 184 waits for ShareLock on transaction 796; blocked by process 177"` |
 | Sessions-before-users vs `original()` | no deadlock; `original()` returns 0 rows and commits |
+
+### What the paste-test caught
+
+**1. Making `revokeApple` required breaks 13 existing call sites, and the plan
+did not say so.** Measured:
+`grep -rn 'createAttempts(' server/ --include='*.ts' | grep -v 'export function' | wc -l`
+→ **13** — 11 in `attempts.integration.test.ts`, 1 in `frontDoor.ts`, 1 in
+`frontDoorRoutes.integration.test.ts`. Every one fails
+`TS2554: Expected 3 arguments, but got 2`. Task 2 now names them and carries the
+fixture. **The parameter stays required**: a defaulted no-op would report a
+revoke that never happened, which is the exact shape RF25 names.
+
+**2. `failure` is declared locally in `frontDoorRoutes.ts` and not exported**
+(`TS2459`). The plan already said to export it if needed; the paste-test
+confirms it IS needed, so Task 2 states it as a step rather than a conditional.
+
+Neither changes the design. Both would have cost an implementer a cycle.
 
 ### Spec correction this plan carries
 
@@ -299,11 +324,15 @@ export type AuthPurpose = "signin" | "link" | "delete";
 cd app && pnpm db:generate
 ```
 
-Open the generated `drizzle/0032_*.sql`. It must contain only `ALTER TABLE`
-statements against `auth_attempts` — **no `CREATE TABLE`**. If drizzle emits a
-table, something from the withdrawn outbox is still in `schema.ts`. Rename the
-file to `0032_account_delete_purpose.sql` and update
+Measured on `9df48abb`: drizzle emits `drizzle/0032_cold_puck.sql` containing
+**exactly six statements** against `auth_attempts` — three `DROP CONSTRAINT`
+then three `ADD CONSTRAINT`, in that order, and **no `CREATE TABLE`**. If a
+table appears, something from the withdrawn outbox is still in `schema.ts`.
+
+Rename the file to `0032_account_delete_purpose.sql` and update its `tag` in
 `drizzle/meta/_journal.json`, following `0029_drop_difficulty_compat.sql`.
+`pnpm db:generate` also writes `drizzle/meta/0032_snapshot.json`; that file is
+part of the migration and is committed with it.
 
 - [ ] **Step 5: Run the tests and watch them pass**
 
@@ -311,7 +340,7 @@ file to `0032_account_delete_purpose.sql` and update
 cd app && pnpm test --project integration -- schema.integration
 ```
 
-Expected: PASS, 4 tests, including the unchanged regression pin.
+Expected: PASS, the four tests in Step 1, including the unchanged regression pin.
 
 - [ ] **Step 6: Commit, then prove the constraints can still refuse**
 
@@ -582,7 +611,42 @@ async unlink(userId: string, provider: AuthProvider): Promise<UnlinkOutcome> {
 }
 ```
 
-- [ ] **Step 5: Add the route and wire the revoker**
+- [ ] **Step 4b: Update the 13 existing `createAttempts` call sites**
+
+`revokeApple` is a required third parameter, so every existing construction
+fails `TS2554: Expected 3 arguments, but got 2`. Measured on `9df48abb`:
+
+```bash
+grep -rn 'createAttempts(' server/ --include='*.ts' | grep -v 'export function' | wc -l   # 13
+```
+
+11 are in `attempts.integration.test.ts`, 1 in `frontDoor.ts` (Step 5 below),
+and 1 in `frontDoorRoutes.integration.test.ts`. Give the test files one shared
+fixture rather than 12 inline lambdas, so a later change to `RevokeApple` has
+one edit site:
+
+```ts
+/** Records what would have been revoked; resolves the value the test wants. */
+export function recordingRevoke(succeeds = true) {
+  const seen: AppleGrant[] = [];
+  const revoke: RevokeApple = async (grants) => {
+    seen.push(...grants);
+    return succeeds;
+  };
+  return { revoke, seen };
+}
+```
+
+Existing tests that do not care pass `recordingRevoke().revoke`. **Do not pass
+`async () => true` inline at 12 sites** — the assertions in Step 1 need `seen`,
+and two spellings of the same fake is how one of them silently stops asserting.
+
+- [ ] **Step 5: Export `failure`, add the route, and wire the revoker**
+
+`failure` is declared locally in `frontDoorRoutes.ts` and is not exported —
+importing it fails `TS2459`. Change `function failure(` to
+`export function failure(` (it is at the module level, not inside
+`createFrontDoorRoutes`, so this is the whole edit).
 
 `app/server/auth/accountRoutes.ts`:
 
@@ -634,7 +698,7 @@ router.
 cd app && pnpm test --project integration -- accountRoutes
 ```
 
-Expected: PASS, 8 tests.
+Expected: PASS. The eight tests in Step 1, plus the 13 updated call sites compiling.
 
 - [ ] **Step 7: Commit, then prove the guard can go red**
 
@@ -964,7 +1028,7 @@ stops the browser sending a token that now resolves to nothing.
 cd app && pnpm test --project integration -- attempts.integration
 ```
 
-Expected: PASS, 9 new tests.
+Expected: PASS, the nine tests in Step 1.
 
 - [ ] **Step 8: Commit, then prove the lock order can go red**
 
