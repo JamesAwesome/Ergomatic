@@ -1080,6 +1080,27 @@ it lands the stranger on this same denial.
       revocation call this PR's scope never included and Concept2's own API
       surface for it is unresearched; the wave's own deadline is the
       backstop.
+- [ ] **A cancelled or discarded attempt's `auth_attempts.apple_refresh_token`
+      is never revoked at Apple.** The third of the three live credentials the
+      account-management spec names in §"The other two live credentials"; the
+      other two got rows and this one did not. `attempts.begin` stores a
+      refresh token on the attempt row, and every path that ends an attempt
+      without finalizing — `cancel`, the callback's `discard`, and plain TTL
+      expiry — drops the row with the credential on it and no revoke call.
+      **The half the spec does not name:** a rower with both phone and web can
+      hold a SECOND live attempt on the other session, so `DELETE FROM users`
+      takes that attempt through `sessions` by cascade and its refresh token
+      goes with it, unrevoked — the deletion path itself leaks one, not just
+      the cancel path. What would fix it now: revoke held attempt tokens
+      inside `deleteAccount`'s transaction, the same shape
+      `apple_grants` already uses there. **NOT DONE IN THIS WAVE ON JAMES'S
+      RULING (whole-branch review, 2026-09-14): changing that transaction is
+      auth-shaped TRIAD work — a stored credential's lifetime — and belongs to
+      him, not to a fix round closing review findings.** **S**
+      · dies 2026-10-14 · a row and not a fix now because the fix edits the
+      deletion transaction, which is the one change in this PR that carries
+      both the stored-shape and the auth members of the triad, and it would
+      arrive without the antagonist pass and DBA gate those force.
 - [ ] **The re-registration name defect now has no retry in front of it.**
       TN3194, verbatim: "If the manual token revocation isn't completed, the
       next time the user authenticates with your client using Sign in with

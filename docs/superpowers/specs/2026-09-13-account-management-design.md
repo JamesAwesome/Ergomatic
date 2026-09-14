@@ -7,7 +7,9 @@
 > strikes every section the outbox left behind, so the record matches what
 > shipped rather than what PR1 opened with. Nothing else changed; revision 2's
 > corrections of revision 1, at the foot, still stand — item 2 there now also
-> notes revision 3's own correction. **Revision 2, 2026-09-13.** Revision 1 was hardened
+> notes revision 3's own correction.
+>
+> **Revision 2, 2026-09-13.** Revision 1 was hardened
 > and came back NOT READY with five blocking findings, three of them inside
 > its own load-bearing citations. This revision is a rewrite of the research,
 > the confirmation mechanism and the tombstone, not a patch. What changed and

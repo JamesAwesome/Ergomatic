@@ -1097,8 +1097,9 @@ describe("front-door transactions against Postgres", () => {
   });
   it("revokes a held grant even when the account's apple_sub is null", async () => {
     // NO SUPPORTED WRITER PRODUCES THIS STATE TODAY: there is one grant
-    // writer, and `unlink` deletes every grant in the same statement that
-    // nulls `apple_sub`. It is seeded by raw SQL on purpose, because the
+    // writer, and `unlink` deletes every grant in the same TRANSACTION that
+    // nulls `apple_sub` — two statements, not one, but they commit or fail
+    // together, which is what makes the pairing hold. It is seeded by raw SQL on purpose, because the
     // thing under test is what happens WHEN THAT STOPS HOLDING — reading
     // `apple_sub` first and skipping the DELETE would let the grant cascade
     // away unrevoked while `revokeApple([])` answered `true`, and the rower
@@ -1192,7 +1193,7 @@ describe("front-door transactions against Postgres", () => {
       (await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount,
     ).toBe(0);
   });
-  it("does NOT delete the account when a revoker REJECTS", async () => {
+  it("still deletes the account when the revoker REJECTS, and reports appleRevoked: false", async () => {
     // The type says Promise<boolean>, which cannot forbid a rejection. The
     // account is already gone when this runs, so a throw must be swallowed
     // and reported as `appleRevoked: false`, never propagated as a failure.

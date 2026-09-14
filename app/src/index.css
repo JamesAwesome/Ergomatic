@@ -425,11 +425,12 @@ button.auth-method-row {
 
 /* -- Removing a method, and deleting the account (Wave A PR 1 Task 4;
    Gate 0 approved 2026-09-14) ------------------------------------------
-   CONTRAST, computed rather than judged (RF6). Every pairing below sits on
-   `--page` (`body`'s ground; these rows and the box carry no fill of their
-   own): --accent on --page = 5.35:1, which clears AA's 4.5:1 for the
-   labels and 3:1 for the borders. Nothing here introduces a colour the
-   approved table did not already carry. */
+   CONTRAST, computed rather than judged (RF6). The method rows carry no
+   fill of their own, so their pairing is --accent on `--page` (`body`'s
+   ground) = 5.35:1, which clears AA's 4.5:1 for the labels and 3:1 for the
+   borders. THE QUARANTINE BOX IS THE EXCEPTION and is filled — see its own
+   rule below for why, and for its own two ratios. Every pairing on the
+   rows was already in the approved table. */
 /* The notice sits above BOTH columns, not inside the list. `.auth-methods`
    loses its own top margin when the notice supplies one, so the portrait
    spacing is unchanged from before this task. */
@@ -12788,7 +12789,8 @@ section:not(.news-pinned) .news-row:last-of-type {
    (see the Concept2 block's own header for the survey).
 
    RULING 1, James 2026-09-14: the quarantine box sits BESIDE the methods
-   list in landscape, never below it. Below, on a 320px-tall screen, it
+   list in landscape, never below it. Below, on a landscape phone (390px
+   tall, the height every gate in this repo uses), it
    falls off — which is the RC-24 failure, shipped once already.
 
    The confirm screen takes two columns for the same reason: stacked, its

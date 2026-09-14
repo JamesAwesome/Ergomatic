@@ -1,5 +1,8 @@
 import { useEffect, useRef } from "react";
-import type { AuthFlowController } from "../adapters/authFlow";
+import {
+  ownsDeleteScreen,
+  type AuthFlowController,
+} from "../adapters/authFlow";
 
 /** The confirm screen, reached only after the rower has re-proved the
  *  provider they already hold — `delete_ready` is the server saying so.
@@ -21,6 +24,11 @@ export default function DeleteAccount({
 }) {
   const view = auth.view;
   const deleted = view.kind === "deleted";
+  // THE REQUEST IS IN FLIGHT AND THE ACCOUNT MAY ALREADY BE GONE. Both
+  // controls go inert for its whole length: a second Delete is a second
+  // irreversible request, and a Cancel bumps the flow's generation, which
+  // makes the deletion's own success unreportable.
+  const deleting = view.kind === "busy" && view.purpose === "delete";
   // The callback is read through a ref so a caller that rebuilds it every
   // render cannot re-fire the handover; the effect keys on the transition
   // alone, which happens once per account.
@@ -35,11 +43,15 @@ export default function DeleteAccount({
   useEffect(() => {
     if (deleted) onDeletedRef.current();
   }, [deleted]);
-  if (view.kind !== "delete_ready") return null;
+  if (!ownsDeleteScreen(view) || deleted) return null;
   return (
     <main className="auth-flow-screen auth-delete-screen">
       <header className="auth-flow-header">
-        <button className="auth-back" onClick={() => void auth.cancel()}>
+        <button
+          className="auth-back"
+          disabled={deleting}
+          onClick={() => void auth.cancel()}
+        >
           ← CANCEL
         </button>
         <h1>Delete this account?</h1>
@@ -58,11 +70,16 @@ export default function DeleteAccount({
         <div className="auth-actions">
           <button
             className="button-l1"
+            disabled={deleting}
             onClick={() => void auth.confirmDelete()}
           >
             Delete account
           </button>
-          <button className="button-l2" onClick={() => void auth.cancel()}>
+          <button
+            className="button-l2"
+            disabled={deleting}
+            onClick={() => void auth.cancel()}
+          >
             Cancel
           </button>
         </div>

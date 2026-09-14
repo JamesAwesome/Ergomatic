@@ -176,6 +176,15 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
   // "A delete must name a provider the rower actually holds"), and that
   // provider's proof must be available on this surface. Apple first, to
   // match the order this list is drawn in.
+  // AND WHY THIS ONE GREYS WHERE REMOVE HIDES. They look like the same
+  // decision and are not. Remove's ABSENCE is meaningful — it says this is
+  // your last sign-in method, which is a fact about the account a rower can
+  // act on. A disabled Delete says something else entirely: the account is
+  // deletable, but this host cannot currently run the re-auth the deletion
+  // needs. Hiding it would hide the one control Apple requires be findable,
+  // over a condition the rower did not cause and cannot read off an empty
+  // space. Reachable only on a misconfigured host (James's ruling,
+  // whole-branch review).
   const deleteProvider =
     methods.methods.apple && auth.options.apple
       ? ("apple" as const)
@@ -243,7 +252,8 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
           no explanatory sentence, because "delete" already means what it
           means and the confirm screen's list is where the facts live.
           In landscape it sits BESIDE the list (index.css), never below,
-          where a 320px-tall screen would push it off (the RC-24 failure). */}
+          where a landscape phone's height would push it off (the RC-24
+          failure). */}
       <section
         className="auth-danger-zone"
         aria-labelledby="auth-account-heading"

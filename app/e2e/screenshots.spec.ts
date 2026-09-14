@@ -7889,7 +7889,8 @@ test("apple-link-confirm-landscape", async ({ page }) => {
  *  one-provider capture above is the other half of the same ruling, where
  *  the control is absent rather than greyed out. The landscape pair proves
  *  ruling 1: the quarantine box sits BESIDE the list, never below it,
- *  where a 320px-tall screen would push it off (the RC-24 failure). */
+ *  where a landscape phone's height would push it off (the RC-24
+ *  failure). */
 async function captureAccountBlock(
   page: Page,
   fileName: string,

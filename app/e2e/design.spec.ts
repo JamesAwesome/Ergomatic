@@ -13123,7 +13123,8 @@ test.describe("/you/stats", () => {
 // box sits BESIDE the sign-in methods list in landscape, never below it.
 // RC-24 is the reason this is a structural gate and not a capture: a
 // layout approved on non-structural evidence shipped broken, on the exact
-// failure mode this checks — a block pushed off a 320px-tall screen.
+// failure mode this checks — a block pushed off the bottom of a
+// landscape phone (390px tall here, this repo's only landscape height).
 test.describe("the account block, landscape (Wave A PR 1 Task 4)", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     await page.route("**/api/auth/options", (route) =>

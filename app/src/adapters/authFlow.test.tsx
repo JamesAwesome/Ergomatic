@@ -42,6 +42,7 @@ import { destinationFor, useAuthFlow } from "./authFlow";
 import type { AuthFlowView } from "./authFlow";
 import LinkSignInMethod from "../auth/LinkSignInMethod";
 import You from "../You";
+import DeleteAccount from "../you/DeleteAccount";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -2195,6 +2196,134 @@ describe("useAuthFlow", () => {
     expect(result.current.view).toStrictEqual({
       kind: "deleted",
       appleRevoked: true,
+    });
+  });
+
+  // THE IRREVERSIBLE TWIN of the Remove test above, and the one that
+  // actually costs something. Two POSTs means the second finds no session
+  // and answers `account_changed`; landing after the first, it overwrites
+  // `deleted` with an error the Welcome screen renders nothing for — the
+  // account gone and the screen silent. Driven through the real control,
+  // counting what the server saw.
+  it("goes inert for the whole deletion, so one tap cannot become two POSTs", async () => {
+    const del = deferred<Response>();
+    let posts = 0;
+    window.history.replaceState(null, "", "/?authAttempt=del-twice");
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/del-twice")
+        return ok({
+          outcome: "delete_ready",
+          attemptId: "del-twice",
+          purpose: "delete",
+          targetProvider: "google",
+          expiresAt: "2026-09-14T00:05:00.000Z",
+        });
+      if (path === "/api/auth/web/attempts/del-twice/delete") {
+        posts += 1;
+        return del.promise;
+      }
+      return new Response(null, { status: 404 });
+    });
+    let auth!: ReturnType<typeof useAuthFlow>;
+    function Harness() {
+      auth = useAuthFlow(() => {});
+      return <DeleteAccount auth={auth} onDeleted={() => {}} />;
+    }
+    render(<Harness />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete account" }),
+    );
+    // The screen is still mounted — a redirect here would take it out from
+    // under a request that has already committed server-side.
+    expect(
+      screen.getByRole("heading", { name: "Delete this account?" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Delete account" }),
+    ).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete account" }),
+    );
+    expect(posts).toBe(1);
+    await act(async () => {
+      del.resolve(ok({ outcome: "deleted", appleRevoked: false }));
+      await del.promise;
+    });
+    expect(auth.view).toStrictEqual({ kind: "deleted", appleRevoked: false });
+  });
+
+  // `cancel()` bumps the generation, which makes `confirmDelete`'s own
+  // generation check swallow a success it has already committed: the
+  // account is deleted and the app says cancelled, then keeps rendering a
+  // signed-in You until the next /api/me 401s.
+  it("puts Cancel out of reach while the deletion is in flight", async () => {
+    const del = deferred<Response>();
+    window.history.replaceState(null, "", "/?authAttempt=del-cancel");
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/del-cancel")
+        return ok({
+          outcome: "delete_ready",
+          attemptId: "del-cancel",
+          purpose: "delete",
+          targetProvider: "google",
+          expiresAt: "2026-09-14T00:05:00.000Z",
+        });
+      if (path === "/api/auth/web/attempts/del-cancel/delete")
+        return del.promise;
+      if (path.endsWith("/cancel"))
+        throw new Error("cancel must be unreachable");
+      return new Response(null, { status: 404 });
+    });
+    let auth!: ReturnType<typeof useAuthFlow>;
+    function Harness() {
+      auth = useAuthFlow(() => {});
+      return <DeleteAccount auth={auth} onDeleted={() => {}} />;
+    }
+    render(<Harness />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete account" }),
+    );
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "← CANCEL" })).toBeDisabled();
+    await act(async () => {
+      del.resolve(ok({ outcome: "deleted", appleRevoked: true }));
+      await del.promise;
+    });
+    expect(auth.view).toStrictEqual({ kind: "deleted", appleRevoked: true });
+  });
+
+  // A 200 means the account is gone; the deletion commits before the
+  // response is written. An unreadable body cost an unhandled rejection
+  // over an account that no longer exists.
+  it("still reports a deletion whose 200 carried a body it could not read", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=del-garbage");
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/del-garbage")
+        return ok({
+          outcome: "delete_ready",
+          attemptId: "del-garbage",
+          purpose: "delete",
+          targetProvider: "google",
+          expiresAt: "2026-09-14T00:05:00.000Z",
+        });
+      if (path === "/api/auth/web/attempts/del-garbage/delete")
+        return new Response("<html>gateway</html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        });
+      return new Response(null, { status: 404 });
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() =>
+      expect(result.current.view).toStrictEqual({ kind: "delete_ready" }),
+    );
+    await act(async () => result.current.confirmDelete());
+    expect(result.current.view).toStrictEqual({
+      kind: "deleted",
+      appleRevoked: false,
     });
   });
 

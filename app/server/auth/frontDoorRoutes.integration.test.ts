@@ -1003,6 +1003,56 @@ describe("supported auth producers through Express and signed tokens", () => {
     expect(rejected.headers.location).toContain("authPurpose=link");
     expect(rejected.headers.location).toContain("authProvider=apple");
   });
+  it("a rejected DELETE callback reports its own purpose and target", async () => {
+    // RF24: the PRODUCER of `authPurpose=delete`. Everything that asserts the
+    // client's delete-failure surface types that query string by hand
+    // (`e2e/appleAuth.spec.ts`, `authFlow.test.tsx`), and server-side only
+    // the link purpose was asserted — so the one line that has to emit
+    // `delete` for any of it to be reachable had no test starting upstream
+    // of it. Break the redirect here and every downstream gate stays green
+    // while a rower who failed a delete re-auth is bounced to Today in
+    // silence, which is finding I1's defect arriving from the other end.
+    const start = await request(app)
+      .post("/api/auth/web/attempts")
+      .set("Origin", "https://erg.test")
+      .send({ purpose: "signin", provider: "google" });
+    const s = start.body;
+    const startCookie = start.headers["set-cookie"][0].split(";")[0];
+    codes.set(
+      "google-delete-purpose",
+      await googleJwt(s.nonce, "google-delete-purpose", "google.web"),
+    );
+    await request(app)
+      .get("/api/auth/google/callback")
+      .query({ state: s.state, code: "google-delete-purpose" })
+      .set("Cookie", startCookie);
+    const signed = await request(app)
+      .post(`/api/auth/web/attempts/${s.attemptId}/confirm`)
+      .set("Origin", "https://erg.test")
+      .set("Cookie", startCookie)
+      .send({});
+    const sessionCookie = (signed.headers["set-cookie"] as unknown as string[])
+      .find((c) => c.startsWith("erg_session="))!
+      .split(";")[0];
+    // A delete re-proves the SAME provider the rower already holds.
+    const begun = await request(app)
+      .post("/api/auth/web/attempts")
+      .set("Origin", "https://erg.test")
+      .set("Cookie", sessionCookie)
+      .send({ purpose: "delete", provider: "google" });
+    expect(begun.status).toBe(200);
+    const binding = begun.headers["set-cookie"][0].split(";")[0];
+
+    const rejected = await request(app)
+      .get("/api/auth/google/callback")
+      .set("Cookie", binding)
+      .query({ state: "not-the-state", code: "google-delete-purpose" });
+    expect(rejected.headers.location).toContain("authError=invalid_proof");
+    expect(rejected.headers.location).toContain("authPurpose=delete");
+    expect(rejected.headers.location).toContain("authProvider=google");
+    // And nothing was deleted: a rejected re-auth is not a deletion.
+    expect((await pool.query("SELECT id FROM users")).rowCount).toBe(1);
+  });
   it("wrong callback provider cannot consume valid operation; old callback cannot cancel confirmation", async () => {
     const begin = await request(app)
       .post("/api/auth/web/attempts")

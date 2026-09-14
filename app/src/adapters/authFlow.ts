@@ -202,6 +202,20 @@ export function destinationFor(
   return null;
 }
 
+/** THE VIEWS `you/DeleteAccount` OWNS, in one place because two callers
+ *  need them and a disagreement between them is invisible: `AppRoutes`
+ *  decides whether the route renders the screen at all, and the screen
+ *  decides whether it draws. Drop `busy` from either and the confirm
+ *  screen vanishes mid-request — from the router it becomes a redirect to
+ *  `/you`, from the component a blank route. */
+export function ownsDeleteScreen(view: AuthFlowView): boolean {
+  return (
+    view.kind === "delete_ready" ||
+    view.kind === "deleted" ||
+    (view.kind === "busy" && view.purpose === "delete")
+  );
+}
+
 async function responseError(
   response: Response,
 ): Promise<{ code: AuthErrorCode; email?: string; status: number }> {
@@ -1026,6 +1040,21 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
       if (!active || active.step.outcome !== "delete_ready") return;
       const deleteGeneration = generation.current;
       const surface = native ? "native" : "web";
+      // A SECOND TAP IS NOT A SECOND DELETION, and unlike a removal this one
+      // cannot be taken back. Nothing here bumps `generation` (only
+      // `start`, `prepareLink` and `cancel` do), so two calls would share a
+      // generation and both would reach `setView`: the first commits the
+      // deletion, the second finds no session and answers `account_changed`,
+      // and the rower ends on a Welcome screen that says NOTHING — not even
+      // the Apple remedy `appleRevoked: false` exists to deliver. `busy`
+      // closes it at the source rather than at the button: it is what
+      // `DeleteAccount` disables both controls on, and `ownsDeleteScreen`
+      // above is what keeps the screen mounted while it is set. It also
+      // takes Cancel out of reach for the length of the request, which is
+      // the other reachable loss — `cancel()` bumps the generation, so a
+      // cancel mid-flight made this method swallow its own success and tell
+      // a rower whose account was gone that nothing had happened.
+      setView({ kind: "busy", purpose: "delete" });
       // THE TOKEN MUST STILL BE LIVE FOR THIS CALL — the route is behind
       // requireUser. `nativeSignOut` clears first on purpose, because there
       // the network call is best-effort cleanup; here it is the operation
@@ -1057,7 +1086,19 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
         setView({ kind: "error", purpose: "delete", code });
         return;
       }
-      const body = (await response.json()) as DeleteOutcome;
+      // THE ACCOUNT IS ALREADY GONE — the server answered 200 and the
+      // deletion commits before the response is written. A body we cannot
+      // read costs us only `appleRevoked`, and it is not a reason to tell
+      // the rower nothing happened. `false` is the honest default of the
+      // two: it shows the Apple remedy, which is wrong-but-harmless for a
+      // Google-only account (a list the rower looks at and finds nothing
+      // in) where `true` would silently leave a real grant standing.
+      let body: DeleteOutcome;
+      try {
+        body = (await response.json()) as DeleteOutcome;
+      } catch {
+        body = { outcome: "deleted", appleRevoked: false };
+      }
       if (generation.current !== deleteGeneration) return;
       // Only AFTER the server confirms. The account is gone; this device's
       // copy of the credential goes with it.

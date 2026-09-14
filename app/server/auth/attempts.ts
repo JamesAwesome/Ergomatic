@@ -654,8 +654,9 @@ export function createAttempts(
         // `unlink` already had this shape.
         // UNCONDITIONAL, never gated on `users.apple_sub`. That gate would
         // rest on a cross-table invariant nothing enforces: it holds today
-        // (one writer, and `unlink` deletes every grant when it nulls
-        // `apple_sub`), but the day it stops, the grants cascade away
+        // (one writer, and `unlink` deletes every grant in the same
+        // transaction that nulls `apple_sub` — two statements, committed
+        // together), but the day it stops, the grants cascade away
         // unrevoked and `revokeApple([])` returns `true` — the rower is told
         // `appleRevoked: true` over a live credential, exactly what the
         // paragraph above says this design exists to prevent. The statement

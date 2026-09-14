@@ -75,6 +75,14 @@ export interface AuthMethods {
 // message — a rower whose account is gone must never be told they cannot
 // remove their last sign-in method. `appleRevoked` rides only "unlinked":
 // it is meaningless for the other three outcomes.
+//
+// AND IT HAS NO CLIENT CONSUMER, deliberately. `removeMethod` drops it
+// (`src/adapters/authFlow.ts`, the `unlinked` view member's own comment):
+// the server returns it vacuously `true` for a Google unlink, where no
+// Apple call happens at all, so surfacing it would claim something about
+// Apple that never occurred. It is retained here for the RECORD — the
+// route's own response, which the integration tests assert — not for a
+// caller.
 export type UnlinkOutcome =
   | { outcome: "unlinked"; appleRevoked: boolean }
   | { outcome: "last_provider" }
