@@ -4001,9 +4001,11 @@ rather than found.
 **OPENED 2026-09-12.** Spec:
 [docs/superpowers/specs/2026-09-12-phase-td-design.md](docs/superpowers/specs/2026-09-12-phase-td-design.md).
 Scope ruled by James 2026-09-12: three rows, one PR. **TD-5 then came back
-out on 2026-09-13, measured** — see its row. What landed is the ungated
-reconciliation and the double link read; the other three are filed below
-with dates.
+out on 2026-09-13, measured** — and CLOSED on 2026-09-14 by a second spike
+that measured the window in a real browser (`2c9d7e09`; see its row). What
+landed is the ungated reconciliation, the double link read and the free-row
+capture; the two remaining rows, both split out on 2026-09-12, are filed
+below with their own dates.
 
 **THIS SECTION USED TO SAY TWO OF THESE SHARE ONE BLOCKER AND SHOULD BE DONE
 TOGETHER. THAT WAS FALSE, and a spike at production defaults measured it**
@@ -4028,15 +4030,19 @@ unblocking one does nothing for the other.
 condition is a quiet week rather than an incident.
 
 · dies 2026-09-26 (set 2026-09-12 by James at the open gate, matching the
-date Wave A PR 1 carried) · **the date governs THIS SLATE of three rows, not
+date Wave A PR 1 carried) · **the date governs THIS SLATE of rows, not
 the section.** A stalled Phase TD must never become the reason the front door
-slipped, and under the wave-heading rule one date on the heading covers all
-three rows rather than writing the same clause three times.
+slipped, and under the wave-heading rule one date on the heading covers the
+slate rather than writing the same clause on each row. **The slate was three
+and is now TWO** — TD-5 closed 2026-09-14 (`2c9d7e09`); TD-2 and TD-3, split
+out on 2026-09-12, carry their own later dates, so this heading date is now
+the earlier backstop of the two.
 
 **THE SECTION ITSELF SURVIVES ITS OWN DATE, and that is a ruling, not an
 oversight (James, 2026-09-12).** Line 43 of this file makes Phase TD the
 designated home for every debt row, created because "Small, queued" had
-passed 240 rows. Landing these three empties the section to ZERO rows, and
+passed 240 rows. Landing the slate empties the section to ZERO rows (TD-5
+landed 2026-09-14; the remaining two would do it), and
 `/close-phase` archives a closed phase verbatim — which would delete the
 convention along with the phase. So: **this phase STAYS OPEN as the standing
 debt home and `/close-phase` is explicitly NOT run on it.** When the slate
@@ -4175,11 +4181,46 @@ than back in the queue this was built to replace.
       an ADDITION on three others — net better, but not the pure halving the
       row implied. Spec §1.6.
 
-- [ ] **BACK OUT OF THE LANDING PR 2026-09-13 (James) — no committed
-      capture shows the free-row summary's machine tiles.** · dies
-      2026-10-13 · a row and not a fix now because three measured attempts
-      could not land the delivery inside the window, and the next honest
-      step is a browser-side ring dump rather than a fourth timing guess.
+- [x] **CAPTURED 2026-09-14 (`2c9d7e09`) — the free-row summary's machine
+      tiles are in `docs/screenshots/justrow-log.png`.** The ring dump this
+      row asked for was taken (branch `td5-spike`, commit `6ea6fdb9`: the
+      real free-row flow four times, delivering at +0/+400/+800/+1500 ms and
+      reading the ring the app itself stashes at
+      `ergomatic:last-session-log` — no dev seam, because that localStorage
+      write is unconditional at teardown). **The miss was 9 ms.** At +0 ms
+      the 0x0039 lands 9 ms BEFORE the `terminated` frame and is refused
+      `out-of-window`; the three earlier attempts were all on that side of
+      it. **The window, measured:** it OPENS 15/24/52/86 ms after
+      `terminate-sent` — the fake acks the terminate and delivers the
+      synthesized `terminated` status SYNCHRONOUSLY
+      (`onArmedFrameComplete`; a free row never programs, so
+      `queueTerminateAutoCycle`'s tick drain is not on this path), which
+      makes that spread APP-SIDE latency and therefore something a loaded
+      runner stretches — and CLOSES ~1800 ms after the ended hand-off opens,
+      `BURST_LINGER_MS` is 2000 ms and `summary-recorded` lands 200 ms after
+      the 0x0039, on the hash sub-window. **The capture PUMPS rather than
+      waiting a measured interval** (review finding, same PR): the DOM has
+      no signal for "the terminated frame landed" (`Wrapping up` renders on
+      every ended state) and inventing one is production code this row does
+      not justify, so the capture offers the frame every 150 ms for as long
+      as the free-row route is still mounted. A single wall-clock wait would
+      fail in BOTH directions on a loaded runner; the loop cannot, and every
+      offer is pre-navigation by construction.
+      Gated by locators, never by the PNG (RF21): the tier
+      block, AVG WATTS 300 / RATE 24 / DRAG 128, three dashes, and
+      each offer's own pre-navigation condition. Run RED first with the
+      assertion and no delivery; the biting mutation is shortening the
+      pump's reach to a single offer before the window opens
+      (`toHaveCount(6)` reports `Received: 0`).
+      **Three of the six tiles read a dash and the frame says so** — a bare
+      0x0039 carries no calories and the fixture's 90 frames carry no heart
+      rate, so this is NOT a picture of what hardware renders (a real free
+      row shows five of six, `justRowReplay.test.ts:350-355`). Ruled by
+      James 2026-09-12 on that exact cost. Original filing follows.
+      · dies 2026-10-13 (met) · a row and not a fix then because three
+      measured attempts could not land the delivery inside the window, and
+      the next honest step was a browser-side ring dump rather than a fourth
+      timing guess. That dump is what closed it.
       **What the attempts established, so nobody starts from scratch again:**
       (1) the fake IS reachable at delivery time — `__pm5FakeControls__`
       was asserted present in the failing run, so this is not the
