@@ -1064,11 +1064,25 @@ it lands the stranger on this same denial.
       the app. Recorded in the account-management spec rather than solved
       there (revision 3, "A consequence this design owes an answer to").
       Today's cohort is a household on a restricted deployment, so the
-      exposure is bounded. **S**
-      · dies 2026-10-10 · not a fix-now because the fix is either an
-      out-of-band deletion path (an admin action, contradicting "within the
-      app") or loosening the lockout paths themselves, and both are product
-      decisions PR1 does not own; the wave's own deadline is the backstop.
+      exposure is bounded.
+      **CORRECTION, 2026-09-14, found independently at the PM gate and by
+      Task 4's implementer: this row overstates its own gap, and the half it
+      overstates is the half that sounds worst.** Only `restricted` mode
+      checks `ALLOWED_EMAILS` (`docs/deploy.md`), so **`ACCESS_MODE=public`
+      retires the first path outright** — the same flip that makes 5.1.1(v)
+      actually bind (public activation, submission for review, external
+      TestFlight) is the flip that deletes that exposure. Nor does the
+      requirement bind today: under `restricted` an App Review reviewer
+      cannot create an account in the first place, so there is no account to
+      delete and 5.1.1(v)'s own condition is unmet from their side.
+      What survives is ONE path, and it is smaller than "a rower is trapped":
+      an operator removing `APPLE_*` from our own host while Apple-only
+      accounts exist. That is a misconfiguration reversible by restoring the
+      config, not a state a rower can reach or be held in. **S**
+      · dies 2026-10-10 · not a fix-now because what survives the correction
+      is an operator misconfiguration with an obvious remedy, and the path
+      that would make it bind is retired by the act that makes it bind; the
+      wave's own deadline is the backstop.
 - [ ] **Concept2 tokens are never deauthorized at Concept2 on deletion.**
       `concept2_links` rows cascade away on account deletion with nothing
       revoked at Concept2's end, and there is no deauthorize path anywhere in
