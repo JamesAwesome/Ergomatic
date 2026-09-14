@@ -102,36 +102,87 @@ It needs earning.
 ### The migration
 
 One `ALTER TABLE`, widening the `signin` arm of `auth_attempts_session_check`.
-The arm today is:
 
-    (purpose='signin' and original_session_id is null and existing_provider is null)
+**Revision 2 proposed a two-state arm and the DBA gate FAILED it: the design has
+THREE states, and the missing one is where the rower spends the entire second
+round trip.** While they are away at their usual provider's consent screen, the
+attempt sits at `reauth_authorize` with `existing_provider` SET and
+`original_session_id` still NULL — no session can exist yet. Measured, both as
+an INSERT and as `followThrough`'s real UPDATE from a `confirm` row: refused,
+23514. `attemptProvider()` reads `existing_provider` at every `reauth_*` stage
+and three `frontDoorRoutes.ts` call sites use it in exactly that window.
 
-It becomes a two-state arm: both columns NULL before the follow-through, both
-set after it, and never one without the other.
+The arm is therefore keyed on STAGE, naming all three states:
 
     (purpose='signin' and (
-       (original_session_id is null and existing_provider is null) or
-       (original_session_id is not null and existing_provider is not null
-        and existing_provider <> target_provider)))
+       (stage in ('authorize','exchanging','confirm')
+          and original_session_id is null and existing_provider is null) or
+       (stage in ('reauth_authorize','reauth_exchanging')
+          and original_session_id is null and existing_provider is not null
+          and existing_provider <> target_provider) or
+       (stage='link_ready'
+          and original_session_id is not null and existing_provider is not null
+          and existing_provider <> target_provider)))
 
-Setting `existing_provider` on the follow-through is what makes
-`attemptProvider()` correct for the second leg with no change to it, and the
-`<>` clause carries over the link arm's own rule that the two providers differ.
+The looser alternative — deleting `original_session_id is not null and` from the
+revision-2 arm — also admits all five states, and was measured and rejected: it
+silently admits `reauth_authorize` with `existing_provider` NULL, which is a
+`followThrough` that forgot its write, and `attemptProvider()` then hands `null`
+to the authorize-URL builder. The stage-keyed form refuses that, and refuses
+`confirm` with `existing_provider` set.
 
-**STORED SHAPE. The DBA gate applies at plan and at PR, and the TRIAD's full
-treatment with it.** Two consequences the antagonist named and did not trace,
-which the DBA gate must:
+**A CHECK is evaluated PER STATEMENT, so the arm dictates statement
+granularity.** Measured: `SET stage='reauth_authorize'` alone raises 23514;
+`SET stage=..., existing_provider=...` together succeeds. Same at the other
+boundary. `save()` writes neither column, so Tasks 2 and 3 each need their own
+single-statement UPDATE. That is the predicate earning its keep, not a cost.
 
-1. `auth_attempts_link_session_unique` — unique on `original_session_id` where
-   not null — begins covering signin rows.
-2. `bound()` starts locking the session row for these attempts, so
-   `original()`'s lock-order comment starts applying to this path.
+**STORED SHAPE. The DBA gate applies at plan (done, FAIL, folded here) and at
+PR, and the TRIAD's full treatment with it.** What it measured, so nothing here
+is re-litigated from memory:
+
+- **Lock:** `AccessExclusiveLock`, and it blocks READS as well as writes. The
+  whole DROP+ADD transaction is **0.564 ms** at realistic size; the ADD scans at
+  ~49 µs per 1,000 rows. `auth_attempts` is CAPPED at ~512 signin rows plus one
+  per live session — **160 kB** at that ceiling — so no migration cost on this
+  table can matter. It was judged on correctness.
+- **The ADD validates against live rows and aborts the whole Drizzle
+  transaction if any fails.** One row of each of the 11 states the shipped
+  machine can produce was seeded; all validate clean.
+- **Rollback is clean and loud.** An older image applies nothing and boots
+  (PRIMARY, from Drizzle's own migrator). A hand-written narrowing aborts while
+  a widened row is live and succeeds after the 5-minute sweep. No
+  `docs/RELEASING.md` floor row is owed. What a revert cannot undo: a minted
+  session at its 30-day TTL, and `users.apple_sub` if `finalize()` ran.
+- **No deadlock is available** between the follow-through and a concurrent
+  delete, proven by held transactions in both interleaves with an RF21 control
+  that DOES deadlock. But see the two rows below.
+
+### Two consequences the DBA traced, which are now tasks
+
+1. **`begin()`'s pre-sweep deletes an in-flight follow-through.** Its
+   `DELETE FROM auth_attempts WHERE original_session_id=$1` exists to dodge
+   `auth_attempts_link_session_unique`; the moment a signin attempt can hold a
+   session, starting a link or delete from that session silently removes it.
+   The end state is benign, the client's attempt id goes stale. And the FK's
+   `ON DELETE CASCADE` now lets signout and the expiry sweep reach a signin
+   attempt for the first time.
+2. **A concurrent account delete raises 23503 and nothing maps it.**
+   `transaction()`'s catch converts only 23505 on the two subject uniques, so
+   `INSERT INTO sessions` meeting a just-deleted user propagates
+   `sessions_user_id_users_id_fk` raw — a 500 where `account_changed` is right.
 
 ### The three edits in `attempts.ts`
 
-1. **`consistent()`** — widen the signup rule so a signin attempt may sit at
-   `reauth_authorize`, `reauth_exchanging` and `link_ready`, AND extend its
-   `verified` clause to those stages. Without the second half the machine stops
+1. **`consistent()` — THREE edits, not two.** Widen the signup rule so a signin
+   attempt may sit at `reauth_authorize`, `reauth_exchanging` and `link_ready`;
+   extend its `verified` clause to those stages; **and widen the separate
+   `(stage.startsWith("target_") || stage === "link_ready") && purpose !== "link"`
+   clause**, the one added to close RF34's mirror case. The DBA applied only the
+   first edit to `consistent()` extracted verbatim and measured the result:
+   `reauth_authorize` and `reauth_exchanging` then PASS and `link_ready` STILL
+   THROWS. Without the third edit, Task 3 Step 7's falsification test fails and
+   would read as the design's central claim being wrong. Without the second half the machine stops
    requiring the carried `verified_*` columns at exactly the stages the design
    needs them to survive. This is the module's central invariant guard; editing
    it is TRIAD-weight work in the machine, which is the cost that moved out of
@@ -176,18 +227,22 @@ Every task ends with a mutation probe that bites, run against a COMMITTED tree
 modify `app/server/db/schema.ts`; test
 `app/server/db/schema.integration.test.ts`.
 
-- [ ] **Step 1** — failing test on real Postgres: the four rows the widened arm
-      must admit or refuse. Both columns NULL: admitted. Both set with differing
-      providers: admitted. `original_session_id` set, `existing_provider` NULL:
-      refused, 23514. `existing_provider = target_provider`: refused.
-- [ ] **Step 2** — run, confirm the middle two are the ones that fail today.
+- [ ] **Step 1** — failing test on real Postgres, SEVEN rows, not four. The
+      four revision 2 named, plus the three the DBA added: the follow-through
+      middle state (`reauth_authorize`, `existing_provider` set,
+      `original_session_id` NULL) ADMITTED — this is the one revision 2's
+      predicate refused; `reauth_authorize` with a session already adopted
+      REFUSED; `confirm` with `existing_provider` set REFUSED.
+- [ ] **Step 2** — run, and confirm the middle state is among the failures.
 - [ ] **Step 3** — edit the CHECK in `schema.ts`, run `pnpm db:generate`, and
       confirm it emits exactly one `ALTER TABLE` and no `CREATE TABLE`.
 - [ ] **Step 4** — re-run; all four cases hold.
-- [ ] **Step 5** — DBA gate on the migration before going further: lock
-      behaviour on `ALTER TABLE ... DROP CONSTRAINT / ADD CONSTRAINT`, and the
-      two untraced consequences named in the design section.
-- [ ] **Step 6** — commit.
+- [ ] **Step 5** — DBA gate at PLAN: DONE 2026-09-14, verdict FAIL, folded
+      above. What remains for the PR gate is the migration as actually written.
+- [ ] **Step 6** — map 23503 on `sessions_user_id_users_id_fk` to
+      `account_changed` in `transaction()`'s catch, with a held-transaction test
+      rather than a race: a concurrent account delete is the only producer.
+- [ ] **Step 7** — commit.
 
 ### Task 1: the machine admits the state
 
@@ -199,7 +254,10 @@ modify `app/server/db/schema.ts`; test
       Today all three throw `attempt_expired` from `consistent()`; that is the
       proof this task is needed, and it is the antagonist's own probe.
 - [ ] **Step 2** — run, confirm all three fail.
-- [ ] **Step 3** — widen `consistent()`'s signup rule.
+- [ ] **Step 3** — widen `consistent()`'s signup rule. Expect `link_ready` to
+      STILL throw after this edit alone; that is measured, not a surprise.
+- [ ] **Step 3b** — widen the `link_ready && purpose !== "link"` clause, and
+      re-run Step 1 expecting all three to read.
 - [ ] **Step 4** — failing test for the OTHER half: a signin attempt at
       `reauth_exchanging` with `verified_subject` NULL must be refused. Without
       extending the `verified` clause, the machine stops protecting the carried
@@ -273,7 +331,10 @@ modify `app/server/db/schema.ts`; test
 - [ ] **Step 5** — mutation probe for Step 3: make the arm resolve the account
       from `req.sessionId` instead of the proven subject, and confirm it goes
       red. This is the one mutation that matters in this task.
-- [ ] **Step 6** — commit.
+- [ ] **Step 6** — name, in a test or a comment with its reason, that `begin()`'s
+      pre-sweep and a signout now delete an in-flight follow-through. The end
+      state is benign; the stale attempt id is what the client must survive.
+- [ ] **Step 7** — commit.
 
 ### Task 5: the client, and the copy
 
