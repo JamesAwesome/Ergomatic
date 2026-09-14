@@ -16,7 +16,10 @@ import { TWO_ROWS_MAKE_A_CHART } from "./TimeByTypeGroup";
 const W = 320;
 const H = 140;
 /** DERIVED (invariant I4, Gate 0A ruling 1) — see `WeekBarsGroup`'s
- *  `PAD_L`, the same widest-ever tick (`1000k`) and the same arithmetic. */
+ *  `PAD_L` for the arithmetic AND for the stated bound this shares: five
+ *  glyphs holds every total up to 8,000,000 m. This is the axis that
+ *  reaches highest, since a season accumulates where a week does not, so
+ *  it is the one the bound is really about. */
 const PAD_L = labelRoom(["1000k"], ADVANCE.spaced, 6);
 const PAD_R = 12;
 const PAD_T = 14;

@@ -148,6 +148,33 @@ describe("labelRoom — the space a set of formatted labels needs", () => {
     );
   });
 
+  // THE BOUND THE TWO METRES GUTTERS REST ON, pinned at its boundary with
+  // INDEPENDENT literals (RF21/RF33: never `niceMax`'s own output, never
+  // the charts' `PAD_L`). Both gutters reserve five glyphs = 36 units, and
+  // the first draft of their comments claimed five glyphs was all the
+  // shortened format could EVER print. It is not — `niceMax`'s ladder is
+  // unbounded, and at a total above 8,000,000 m the grid becomes
+  // `0 / 5000k / 10000k`, whose six glyphs need 42. Five glyphs covers
+  // every total at or below 8,000,000 m, which is several times the
+  // highest-volume rowing anyone does. If this test goes red, a gutter is
+  // now too small and the comments in `WeekBarsGroup` and `SeasonGroup`
+  // are wrong with it.
+  it("five glyphs holds every metres grid up to 8,000,000 m, and six are needed just past it", () => {
+    const gridRoom = (total: number): number => {
+      const { max, step } = niceMax(total);
+      const ticks = chooseTicks([0, max], max / step + 1);
+      return labelRoom(
+        ticks.map((t) => formatTick(t, "metres")),
+        ADVANCE.spaced,
+        6,
+      );
+    };
+    expect(gridRoom(43_012)).toBeLessThanOrEqual(36);
+    expect(gridRoom(163_012)).toBeLessThanOrEqual(36);
+    expect(gridRoom(8_000_000)).toBe(36);
+    expect(gridRoom(8_000_001)).toBe(42);
+  });
+
   it("an empty label set reserves only the gap", () => {
     expect(labelRoom([], ADVANCE.spaced, 6)).toBe(6);
   });

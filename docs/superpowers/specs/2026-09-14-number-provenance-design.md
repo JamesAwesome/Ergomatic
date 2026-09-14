@@ -306,9 +306,24 @@ machine row; the watts accumulator skips `r.tier !== "stored"`. So METRES
 and TIME describe a superset of the rows AVG WATTS is computed from. The
 caption that would have explained it was struck by rulings 18 and 19
 (§1.1). Measured ZERO on production 2026-09-13; latent, and the first
-stored-tier row carrying a distance makes it visible. **Agrees when** the
-three cells describe one population, or the column says they do not — which
-means reopening rulings 18/19 with James, not working around them.
+stored-tier row carrying a distance makes it visible.
+
+**RULED at Gate 0A (James, 2026-09-14): option C, NO CAPTION.** Rulings 18
+and 19 stand — the struck line was `k ROW(S) PREDATE WORK-ONLY TOTALS`,
+struck by name, and re-adding it would have been its third attempt. **So
+M7's second arm is CLOSED: the column may not say the cells differ.**
+**Agrees when** the three cells describe ONE population — which moves a
+stored figure, so M7 stays TRIAD and stays in PR 4.
+
+**Which rows reach the stored tier, measured for the ruling** (correcting
+the career-stats spec, which says a `link-lost` close lands there):
+`monitorRun.ts`'s own contract is that `workSeconds`/`workMeters` are
+"otherwise unconditional" over any non-empty `actuals`, so a dropped link
+or a terminated piece still lands in the `work-pair` tier and DOES feed AVG
+WATTS. The stored tier needs a monitor row with no measured interval at
+all — a legacy row from before those columns, or the "0 OF 1 INTERVALS
+MEASURED" case where the finish grace delivers no boundary. (PRIMARY —
+`src/monitor/monitorRun.ts:686-692`.)
 
 ### M8 — charts clip their own labels (NEW, and live today)
 
@@ -566,7 +581,7 @@ that PR; the probe itself does not survive the branch, and neither does
 | Gate 0 split (James) | 2026-09-14 | 0A first, PR 2 ships off it |
 | Antagonist anchor | 2026-09-14 | findings folded in; vetted ground below |
 | PM open | 2026-09-14 | APPROVED with four amendments, all folded in |
-| Gate 0A | 2026-09-14 | **APPROVED as rendered** (James: "approved") — artifact `MZsVEJ1rSsxYLFQRuCrbtS` rev 1, boards at `docs/design/number-provenance/gate0a/`. Rulings 1, 3 and 4 take the option the boards rendered; **ruling 2 (the MACHINE caption) was NOT inferred** and stays open, which leaves M7 in PR 4 |
+| Gate 0A | 2026-09-14 | **APPROVED as rendered** (James: "approved") — artifact `MZsVEJ1rSsxYLFQRuCrbtS` rev 1, boards at `docs/design/number-provenance/gate0a/`. Rulings 1, 3 and 4 take the option the boards rendered; **ruling 2 (the MACHINE caption) RULED C by James the same day: NO CAPTION** — rulings 18/19 stand, and M7's "or the column says they do not" arm is closed. M7 survives only as the population change, which moves a stored figure and stays TRIAD in PR 4 |
 | Gate 0B | — | owed |
 
 **The phase's VETTED GROUND** (attacked and held, so later specs inherit it

@@ -2862,7 +2862,10 @@ space for text, not four; three were short; the per-glyph advance is **5.94**
 where the class carries letter-spacing and **5.40** where it does not, both
 measured, against the ~5.67 every constant assumed. Invariant I4 now governs
 all seven and each is derived by `labelRoom` from the widest string its own
-data can produce. **Gate 0B (M1-M6 and the new M9) is still owed**, and PRs
+data can produce. **Gate 0A ruling 2, the MACHINE column's caption: RULED C — no caption**
+(James, 2026-09-14). Rulings 18/19 stand; M7's "the column says they do
+not" arm is closed, so M7 survives only as the population change and stays
+TRIAD in PR 4. **Gate 0B (M1-M6 and the new M9) is still owed**, and PRs
 3 and 4 are PROVISIONAL until it runs.
 
 **Spec:**
