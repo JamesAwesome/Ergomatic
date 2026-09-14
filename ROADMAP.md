@@ -1208,6 +1208,23 @@ while we are in here.
         budget against genuine layout work. Load is an amplifier, not a
         producer — the research doc's §4 measured the same unchanged build at
         73% then 95%, moving the metric the WRONG way.
+        **HUNTED 2026-09-14 AND NOT SOLVED, said plainly rather than
+        closed.** The sighted test (`design.spec.ts`, "picking a effort level
+        does not shift the chips below it") was read end to end and its
+        screen's async inputs enumerated: `Builder.tsx` early-returns on
+        `baselinesState` loading, so the chips do not exist until baselines
+        are ready, and the only other async input, `useWorkouts`, feeds AUTO
+        NAME alone and moves no layout. **No late-arriving element above the
+        chips was found**, which is what a settle-budget story needs. That
+        leaves the mechanism unestablished, and fixing it on a guess is how
+        the wrong layer gets chased.
+        **What DID land: the helper now throws with the whole frame-by-frame
+        trajectory, not only the last box.** A box still travelling in one
+        direction is layout that had not finished; one that jumped once and
+        held is a different bug. The instrument was proved to fire both ways
+        (a zero-frame budget reports 1 entry, a never-satisfied settle
+        condition reports 21) — so the next sighting names the mechanism
+        instead of adding a datapoint. **The row stays open until it does.**
       - **The integration/container-contention class stands alone.** Different
         runner, different pool: `vitest.config.ts`'s `maxWorkers` sits on the
         ROOT `test` block, so unit and client files share one pool with the
@@ -3394,17 +3411,59 @@ Each needs erg time or a deliberate recording session.
   GitHub's runners are under comparable pressure is unknown and is exactly
   what a count would show. **S**
 
-  **THE TRAP BOTH ROWS SHARE, and it bit during this very investigation:**
+- **FLAKE 3 — `library.spec.ts`'s SOURCE filter test read the library
+  before the workout it had just authored was committed.** · dies
+  2026-10-14 · a row and not a fix now only in the bookkeeping sense: the
+  FIX is in this PR, and the row exists because one green CI run proves
+  nothing about a flake, exactly as FLAKE 1's history shows.
+  **The test:** `SOURCE filter › selecting MY WORKOUTS narrows to an
+  authored workout, and CLEAR ALL restores the full library`. Every
+  failure was the same assertion and the same shape — `toHaveCount`,
+  `Expected: 303 / Received: 302`, the authored workout missing from the
+  list read.
+  **THE CAUSE WAS A GATE THAT COULD NOT GO RED (RF21), and it was hiding in
+  a regex.** After clicking "Save to library" the test waited with
+  `await expect(page).toHaveURL(/\/library\/[^/]+$/)`. That pattern also
+  matches `/library/new` — one of the two non-id segments under
+  `/library/` — which is the page the test was ALREADY STANDING ON. So the
+  wait was satisfied on tick zero, before the POST it existed to await had
+  even been issued, and the `page.goto("/library")` on the next line raced
+  the in-flight write.
+  **Why the fixed gate is sound:** `Builder.tsx:466` navigates to
+  `/library/<savedId>` strictly AFTER `await api(...)` resolves, so
+  reaching a real detail url is proof the row is committed. `/library/new`
+  proves nothing.
+  **Fixed by narrowing, not by waiting harder.** `WORKOUT_DETAIL_URL` in
+  `e2e/helpers.ts` excludes exactly `new` and `import`, so a call site that
+  was already sound is unchanged and a dead one becomes live. Applied at
+  ALL 25 sites across eight specs, not only the flaking one (RF34) — the
+  invariant governs every one of them.
+  **Proved red, through the real served path, not by reading the regex.**
+  `Builder.tsx` was mutated to navigate to `/library/new` after a
+  successful save and the stack rebuilt: the test failed at the URL gate
+  with `Received: "http://127.0.0.1:8171/library/new"`, never reaching the
+  count. The old pattern matches that string; the new one does not.
+  Unmutated, `library`, `builder`, `retest` and `onboarding` ran 44/44.
+  **This row stays open until a full CI suite has run green on it more than
+  once.** **S**
+
+  **THE TRAP ALL THREE ROWS SHARE, and it bit during this very
+  investigation:**
   a re-run with `gh run rerun --failed` runs those specs in a DIFFERENT
   population than the full suite did. A green `--failed` re-run cannot
   distinguish flaky from order-dependent — the obvious next move is the one
   that cannot answer the question. Re-run the WHOLE suite.
 
-  **Why these are two rows and not one.** They were filed as one on
+  **Why these are separate rows and not one.** 1 and 2 were filed as one on
   2026-09-13 and split on 2026-09-14 once the doors-back repeat was
   spotted. A named order-dependent test and a loaded-runner flake are
   different hunts with different first moves, and holding them in one row
-  meant each one's evidence argued against the other's diagnosis.
+  meant each one's evidence argued against the other's diagnosis. 3 was
+  filed the same day it was diagnosed. **1 and 3 turned out to be the same
+  BUG CLASS from opposite directions** — a test reading state across a
+  write it never actually waited for — which is an argument for keeping
+  them separate, not folding them: neither was findable from the other's
+  symptom, and the shared shape only became visible once both had causes.
 
 - **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
   `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
