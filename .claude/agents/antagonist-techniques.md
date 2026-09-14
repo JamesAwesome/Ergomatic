@@ -436,3 +436,41 @@ section it fits; the engagement record belongs there, as its own dated section.
 An entry that lands only in the record is invisible to the next agent — which
 is exactly what happened: every section in this file stopped growing on
 2026-08-15, while the record beneath it reached 10015 lines.
+
+46. **A vendor sentence opening with `If you don't have…` licenses the CASE, not
+    the rule — and check whether the doc prescribes a FALLBACK inside that case.**
+    TN3194's "you must still fulfill the user's account deletion request" is
+    conditioned on holding no refresh token, access token or authorization code —
+    the opposite of our situation — and Apple's response to that condition is a
+    three-step manual path ending "Direct the user to manually revoke access for
+    your client", not an exemption. RF16's third corollary, measured on a
+    compliance argument: quote the FULL paragraph AND the list that follows the
+    colon, because that is where the obligation lives.
+47. **"Reuses the existing X" is a claim about CHECK constraints, not vocabulary
+    — paste the row the design implies into the real DDL.** A deletion
+    confirmation "reusing the reauth stage" was refused three ways against
+    migration 0031: `purpose='delete'` violates `auth_attempts_purpose_check`;
+    the honest shape (existing = target) violates `auth_attempts_session_check`;
+    the only insertable row is a lie. A reuse claim that needs a migration is a
+    SECOND stored shape, and TRIAD scoping will have missed it.
+48. **An unqualified `FOR UPDATE` over a JOIN locks every table in the FROM list
+    — that is a lock ORDER, and a new `DELETE FROM parent` enters it backwards.**
+    `SELECT … FROM sessions INNER JOIN users … FOR UPDATE` takes sessions then
+    users; a delete transaction touching the parent first deadlocks 40P01 with
+    the AUTH transaction as victim. When a module carries a lock-order rule in a
+    COMMENT, a new writer inherits it — grep for the comment before adding one.
+49. **An "anonymous" row holding a live credential is pseudonymous, and the
+    anonymity is usually what breaks the deterministic guard.** A revocation
+    tombstone stripped of the Apple subject cannot ask
+    `SELECT 1 FROM users WHERE apple_sub = $1` — the exact question that settles
+    its own named re-registration hazard — so it substitutes a bounded window: a
+    heuristic wearing a number. **Ask what the erased field would have DECIDED
+    before crediting the erasure.**
+50. **A per-surface client id means a per-surface CREDENTIAL — read the PK, not
+    the prose.** `apple_grants` is keyed `(user_id, client_id)` and boot refuses
+    `nativeClientId === webClientId`, so a phone-and-web rower holds TWO live
+    refresh tokens. Any singular "read the grant" is one credential short.
+51. **A design's own stated principle is a grep.** "Holding a live refresh token
+    for a provider the rower just detached is the inconsistency this avoids"
+    governed three credentials and the spec touched one. RF34 applied to a
+    sentence rather than a function.

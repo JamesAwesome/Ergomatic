@@ -10747,3 +10747,86 @@ an unrun PASS. James approved the corrected spec and rendered Gate 0 on 2026-09-
 - **DISPOSITION:** one mechanism pass, no prescribed executable blocks so lens 2 skipped, no runtime work in this pass and no original blocked execution resumption. Source references and complete report: `docs/superpowers/research/2026-09-13-apple-review-fixes/native-logging-harden.md`.
 
 - **IMPLEMENTATION CORRECTION, same native logging engagement:** Capacitor 8.5.1’s prebuilt simulator getters return constant true in both architectures, even when the app’s Release plist has empty `CAPACITOR_DEBUG` and its compilation has no `DEBUG`. The device slice reads the expected plist fallback. The app-owned evaluator therefore uses that same source rule at app compile time. A Release test that replaced the production plugin with a forced-false test instance proved only its injected branch and was rejected as the default-host oracle. The correction removes that override and requires real default Debug/Release hosted gates; exact binary/configuration evidence is in the review-fix implementation record.
+
+## 2026-09-13 — Account management spec (delete / unlink / follow-through), anchor pass
+
+FULL pass, TRIAD twice (auth + a new stored shape). Spec:
+`docs/superpowers/specs/2026-09-13-account-management-design.md`. Verdict on
+revision 1: **NOT READY** — five blocking findings, three inside the spec's own
+load-bearing citations. Revision 2 folds all of them and records what changed.
+
+**Falsified.**
+
+1. *"Deletion reuses the existing reauth stage"* and *"the tombstone is the only
+   new stored shape"*. Both false. `auth_attempts_purpose_check` admits only
+   `('signin','link')`; `auth_attempts_session_check` requires a link row's
+   `existing_provider` to DIFFER from its target, so re-proving the provider you
+   hold is unrepresentable. `attempts.ts` refuses it twice more. Deletion needs a
+   migration — a second stored shape TRIAD scoping had missed. **Technique 47.**
+2. *TN3194's "you must still fulfill…"* read as a general rule. It opens **"If
+   you don't have the user's refresh token, access token, or authorization
+   code"** — we have the token — and inside its own case Apple prescribes a
+   three-step manual path ending "Direct the user to manually revoke access",
+   not an exemption. The CONCLUSION (delete then revoke) survives on authority
+   revision 1 never cited: *"If your process for account deletion is manual or
+   otherwise takes time to complete, this is acceptable."* Also corrected:
+   Apple says apps **should** revoke, not must. **Technique 46.**
+3. *"The tombstone is deliberately anonymous."* False — it holds a live Apple
+   refresh token, exchangeable at Apple for an `id_token` containing identity
+   information. And the anonymity foreclosed the deterministic guard: the Apple
+   subject is stable across stop-and-restart, so `SELECT 1 FROM users WHERE
+   apple_sub=$1` decides the re-registration hazard exactly. Revision 2 retains
+   the subject and argues retention instead. **Technique 49 — the pass's
+   brittleness finding.**
+4. *"Read the Apple grant"* (singular). `apple_grants` PK is
+   `(user_id, client_id)` and `frontDoor.ts` refuses to boot when the native and
+   web ids are equal, so a phone-and-web rower has two live tokens.
+   **Technique 50.**
+5. *"A rower always retains at least one way back in."* Already false at HEAD in
+   the repo's own boot warnings — an allowlist shrink and a removed `APPLE_*`
+   set both strand accounts whose providers are intact. Corollary the spec owed:
+   a locked-out rower cannot delete in-app, which 5.1.1(v) requires.
+6. The 5.1.1(v) paragraph argued the "significant account-based features"
+   sentence; the deletion obligation is a separate, unconditional one. Right
+   argument, wrong proposition.
+7. The spec's own anti-inconsistency principle governed three credentials and
+   touched one. **Technique 51.**
+
+**Measured, at honest severity.** A deletion transaction touching the `users`
+row before its DELETE deadlocks (40P01) against `original()`'s unqualified
+`FOR UPDATE` over `sessions INNER JOIN users`, with the AUTH transaction as the
+victim. The natural single-statement race produced 0 deadlocks in 50 attempts
+across three cascade sizes — so this is a prescribed lock order for the plan
+(sessions before users) plus a held-lock gate, NOT a shipped-defect claim.
+**Technique 48.**
+
+**PR2 identity injection — settled, as the PM asked.** It is the OAuth
+pre-account-linking attack (RFC 9700, already cited in `schema.ts` for the
+Concept2 case). The confirmation alone is NOT sufficient. What bounds it is
+`auth_attempts.binding_hash` — attacker and victim must drive the same client,
+collapsing it to shared-device — which the spec never named. Sufficient only
+with: the second sign-in being a FRESH authentication inside the attempt, never
+a live cookie or bearer; a confirmation naming the private-relay address; the
+carried subject bound to the attempt's five-minute expiry; and PR1's unlink as
+the compensating control, which makes PR2 blocked on PR1 for a SECURITY reason.
+
+**Attacked and HELD — the vetted ground.** Unlink's guard-in-the-WHERE shape.
+Unlink can never strand a live link attempt (preconditions mutually exclusive:
+`begin(link)` needs exactly one provider, unlink needs two). "No unlink path
+exists." "Eleven FKs cascade from users", counted independently — though a
+twelfth table is reached transitively through `sessions`, and it holds a live
+Apple credential. "`session_logs.workout_id`'s set-null is irrelevant to account
+deletion." "Whether a completed revoke harms a re-registered account is
+unverified in either direction" — held after searching six Apple documents.
+TN3194 quotes 1 and 3, verbatim-accurate and correctly used.
+
+**Controller note, verified after the pass:** the revoke-idempotency wording in
+this report was a paraphrase. Apple's actual 200 text is *"The request was
+successful; the provided token has been revoked successfully or was previously
+invalid."*, and the `token` field settles the scope question the abstract
+muddies: *"The user session associated with the token provided is revoked."*
+Per-token. The spec carries Apple's wording, not the relayed one.
+
+**Could not establish.** Whether a successful revoke harms a re-registered
+account. Which `CredentialState` follows a successful developer revoke. Whether
+the natural deletion race is reachable in production. No repo gates run.
