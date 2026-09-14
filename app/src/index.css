@@ -476,7 +476,21 @@ button.auth-method-row {
 
 /* THE QUARANTINE BOX. James ruled that a rule was not enough separation
    (2026-09-14): the border is the containment — it says this block is not
-   part of the list above it. */
+   part of the list above it.
+
+   IT IS FILLED, and with the SUNKEN ground rather than `--surface`. On the
+   uncertain-link path an error notice sits directly above it, and
+   `.notice` already carries `background: var(--surface)` with
+   `.notice.auth-notice-error` overriding its border to `--accent` — so a
+   `--surface` fill here would make the two rectangles identical in BOTH
+   fill and border, which is the opposite of what ruling 1 asks the border
+   to do. `--surface-sunken` reads as a recessed block against the notice's
+   raised card, and the accent border is untouched.
+
+   CONTRAST, computed (RF6): `--accent` on `--surface-sunken` = 5.03:1,
+   `--accent-hover` (the hover/press label) = 6.28:1. Both clear AA's
+   4.5:1 for the label and 3:1 for the border. The box's own edge against
+   the page is the existing `--accent` on `--page`, 5.35:1. */
 .auth-danger-zone {
   display: flex;
   flex-direction: column;
@@ -485,6 +499,7 @@ button.auth-method-row {
   padding: 14px 16px 16px;
   border: 1px solid var(--accent);
   border-radius: var(--radius);
+  background: var(--surface-sunken);
   gap: 12px;
 }
 
@@ -12786,17 +12801,33 @@ section:not(.news-pinned) .news-row:last-of-type {
 @media (orientation: landscape) {
   .auth-account-block {
     display: grid;
-    align-items: center;
+    align-items: start;
     gap: 20px;
     grid-template-columns: 1fr 216px;
   }
 
+  /* THE NOTICE RIDES INSIDE THE LIST COLUMN, not across both. Spanning
+     both columns shifts the action column down by the notice's own
+     height, and on a 390px-tall screen that takes the bottom off the
+     quarantine box — the same fall-off-the-screen failure ruling 1
+     exists to prevent, arriving by a different route. Placed explicitly
+     at row 1 so the list auto-places beneath it. */
   .auth-account-notice {
-    grid-column: 1 / -1;
+    grid-row: 1;
+    grid-column: 1;
   }
 
+  .auth-account-block .auth-methods {
+    grid-column: 1;
+  }
+
+  /* Spanning every row keeps the box's TOP level with the column beside
+     it whether or not a notice is present, so its position does not move
+     under the rower when one appears. */
   .auth-danger-zone {
     margin-top: 0;
+    grid-row: 1 / -1;
+    grid-column: 2;
   }
 
   .auth-delete-account {

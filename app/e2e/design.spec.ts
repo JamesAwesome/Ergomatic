@@ -13145,6 +13145,62 @@ test.describe("the account block, landscape (Wave A PR 1 Task 4)", () => {
     });
   });
 
+  // F1 + F2. An error notice on this screen is itself a `--accent`-bordered
+  // rectangle (`.notice.auth-notice-error`), and it already carries
+  // `background: var(--surface)` — so the two blocks are told apart by
+  // their FILL, and the quarantine box's has to differ from it. And in
+  // landscape the notice rides inside the list column: spanning both
+  // shifts the action column down by its own height and takes the bottom
+  // off the box on a 390px-tall screen.
+  test("844x390 with an error notice: the box keeps its place, stays on screen, and does not read as a second notice", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    // Exactly what `frontDoorRoutes.ts`'s callback redirect builds when a
+    // link finalize result cannot be confirmed.
+    await page.goto(
+      "/?authError=signin_failed&authPurpose=link&authProvider=apple",
+    );
+    await expect(page).toHaveURL(/\/you$/);
+    const notice = page.locator(".auth-account-notice .notice");
+    await expect(notice).toBeVisible();
+
+    const list = page.locator(".auth-methods");
+    const box = page.locator(".auth-danger-zone");
+    const noticeBox = await stableBoundingBox(notice);
+    const listBox = await stableBoundingBox(list);
+    const deleteBox = await stableBoundingBox(box);
+    if (!noticeBox || !listBox || !deleteBox) {
+      throw new Error("account block not laid out");
+    }
+
+    // Still beside, and the notice sits above the LIST, not above both.
+    expect(deleteBox.x).toBeGreaterThan(listBox.x + listBox.width - 1);
+    expect(noticeBox.x).toBeLessThan(deleteBox.x);
+    // The box's top is level with the notice's, not pushed below it.
+    expect(deleteBox.y).toBeLessThanOrEqual(noticeBox.y + 1);
+    // And the whole of it is still on screen, which is what spanning both
+    // columns cost.
+    const viewportHeight = page.viewportSize()!.height;
+    expect(deleteBox.y + deleteBox.height).toBeLessThanOrEqual(viewportHeight);
+
+    // Told apart by fill, not by two identical accent borders.
+    const grounds = await page.evaluate(() => {
+      const el = (selector: string) => {
+        const node = document.querySelector(selector);
+        if (!node) throw new Error(`missing ${selector}`);
+        return getComputedStyle(node).backgroundColor;
+      };
+      return {
+        box: el(".auth-danger-zone"),
+        notice: el(".auth-account-notice .notice"),
+      };
+    });
+    expect(grounds.box).toBe("rgb(239, 234, 222)"); // --surface-sunken
+    expect(grounds.notice).toBe("rgb(255, 253, 247)"); // --surface
+    expect(grounds.box).not.toBe(grounds.notice);
+  });
+
   test("844x390: the quarantine box sits beside the methods list, and its whole height is on screen", async ({
     page,
   }) => {
