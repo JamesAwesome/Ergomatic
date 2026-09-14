@@ -1,3 +1,4 @@
+import { parseLogExport } from "../src/monitor/eventLog";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -300,9 +301,12 @@ test.describe("Just Row: the whole flow", () => {
     const copyButton = cards.first().locator(".diag-copy");
     await copyButton.click();
     await expect(copyButton).toHaveText("COPIED");
-    const ring = JSON.parse(
+    // THE REAL CLIPBOARD, through the shipped button — the only place in
+    // the suite that reads the export the way a rower actually pastes it.
+    // `{meta, entries}` since the grounding header landed.
+    const ring = parseLogExport(
       await page.evaluate(() => navigator.clipboard.readText()),
-    ) as { kind: string; detail: string }[];
+    ).entries;
     const kinds = ring.map((e) => e.kind);
     // Both frame literals are TYPED from `docs/monitor/pm5-interface-notes.md`
     // (§12 example 2, §13), never built.

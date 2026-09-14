@@ -14,11 +14,16 @@
  * nothing set one, which is true of a local `pnpm dev` and is exactly what
  * we want it to say there.
  *
- * **A `"dev"` reading in a log that came from TestFlight means the BUILD
- * PLUMBING is broken, not that the field is unused** — `Dockerfile`'s build
- * stage and `package.json`'s `ios:build` both pass `APP_VERSION`, and
- * `appVersion.test.ts` pins that a set value reaches this constant. That
- * failure mode is the whole reason this is a define rather than a literal:
- * a literal would be silently stale instead of loudly `dev`.
+ * **A `"dev"` reading in a log that came from a real build means the BUILD
+ * PLUMBING is broken, not that the field is unused.** Six sites have to
+ * agree, and `scripts/app-version-stamp.test.sh` gates every one of them:
+ * this constant, `vite.config.ts`'s define, the Dockerfile's build stage
+ * (declared ABOVE `RUN pnpm build`), `package.json`'s `ios:build`,
+ * `compose.yml`'s **web** service and CI's "Build web image" step. The last
+ * two were missed on the first attempt — the api image got the arg and the
+ * web image, which is the one that emits `dist/client`, did not, so every
+ * web log would have read `dev` while `/api/health` reported the truth.
+ * That failure mode is the whole reason this is a define rather than a
+ * literal: a literal would be silently stale instead of loudly `dev`.
  */
 export const APP_VERSION: string = import.meta.env.VITE_APP_VERSION || "dev";

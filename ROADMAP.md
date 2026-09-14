@@ -2145,6 +2145,10 @@ fixed.
       (`SET_RESTDURATION`) in that capture. `response.ts`'s
       `echoedCommandIds` exists and is used ONLY by the fake; the driver
       never compares the monitor's echo against what it sent. **M**
+      · dies 2026-11-13 (campsite: given a date on the way past, 2026-09-13,
+      by the PR that rewrote this row) · what remains is BUILDING the
+      per-boundary check, which the two rows above own; this row is now the
+      evidence behind them rather than an open question.
 
 - [x] **The Bluetooth scan sheet mixes "PM5" and "monitor" in one flow.**
       CLOSED in the Phase MT close-out PR, with the permission-screen row that

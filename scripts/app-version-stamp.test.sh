@@ -43,9 +43,43 @@ grep -q '^ARG APP_VERSION' <<<"$build_stage" ||
 grep -q '^ENV APP_VERSION' <<<"$build_stage" ||
   fail "app/Dockerfile's BUILD stage declares ARG APP_VERSION but never exports it as ENV — vite reads process.env"
 
+#    The ARG/ENV pair must also sit ABOVE `RUN pnpm build`: below it, both
+#    greps still pass and the stamp is still `dev`. Checked by line order.
+arg_line=$(grep -n '^ARG APP_VERSION' <<<"$build_stage" | head -1 | cut -d: -f1)
+build_line=$(grep -n '^RUN pnpm build' <<<"$build_stage" | head -1 | cut -d: -f1)
+[ -n "$arg_line" ] && [ -n "$build_line" ] && [ "$arg_line" -lt "$build_line" ] ||
+  fail "app/Dockerfile's BUILD stage declares APP_VERSION at or below RUN pnpm build — vite would not see it"
+
 # 3. The iOS build supplies one. This is the build a TestFlight tester's
-#    log actually comes from, so an unstamped ios:build is the worst case.
-grep -q 'APP_VERSION=' app/package.json ||
+#    log actually comes from. Anchored to the ios:build SCRIPT, not the
+#    whole file: an unanchored grep passes on any other script carrying the
+#    string.
+grep -E '"ios:build":[^"]*"[^"]*APP_VERSION=' app/package.json >/dev/null ||
   fail "app/package.json's ios:build no longer supplies APP_VERSION — TestFlight logs would all read dev"
 
-echo "app-version-stamp: OK — vite define, Dockerfile build stage, and ios:build all supply APP_VERSION."
+# 4. THE CLIENT-SERVING IMAGE GETS IT TOO, which is the site this gate
+#    originally missed. `dist/client` is emitted by the build stage and
+#    COPIED into the `web` target, and compose builds `web` and `api`
+#    SEPARATELY — so an arg passed only to `api` leaves the bundle stamped
+#    `dev` while `/api/health` reports the real version. Caught in review of
+#    PR #430, after the first version of this gate passed over it.
+#    Asserted against the REAL `docker compose config` render rather than a
+#    grep of the YAML source — the same rule `compose-env.test.sh` states for
+#    itself, and it matters here: a hand-parsed window silently missed this
+#    when the arg sat below a comment block.
+web_args=$(APP_VERSION=stamp-probe POSTGRES_PASSWORD=dummy docker compose config 2>/dev/null |
+  awk '/^  (web|api):/{svc=$1} /APP_VERSION/{print svc, $2}')
+grep -q '^web: stamp-probe$' <<<"$web_args" ||
+  fail "compose.yml's web service does not receive APP_VERSION as a build arg — the client bundle would be stamped dev in every deploy (rendered config said: ${web_args:-none})"
+awk '/name: Build web image/,/^$/' .github/workflows/ci.yml | grep -q 'APP_VERSION' ||
+  fail "CI's 'Build web image' step passes no APP_VERSION build-arg — the client bundle would be stamped dev in CI"
+
+# 5. The constant still READS the define. Replacing `appVersion.ts` with a
+#    literal passes every check above and every unit test.
+#    Anchored to the EXPORT line, not the file: the same string appears in
+#    this module's own doc comment, so an unanchored grep matched the prose
+#    while the code had been replaced by a literal.
+grep -qE '^export const APP_VERSION.*import\.meta\.env\.VITE_APP_VERSION' app/src/appVersion.ts ||
+  fail "app/src/appVersion.ts no longer reads import.meta.env.VITE_APP_VERSION — the stamp would be a hardcoded literal"
+
+echo "app-version-stamp: OK — the define, the constant, the Dockerfile build stage (above pnpm build), ios:build, compose's web service and CI's web image all carry APP_VERSION."

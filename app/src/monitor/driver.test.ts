@@ -13718,6 +13718,30 @@ describe("Phase MT: unsupported erg machine", () => {
     return events.filter((e) => e.kind === "unsupported-machine");
   }
 
+  it("records the machine type in the export header on a SUPPORTED machine, where nothing else says anything", () => {
+    // THE HALF THE REFUSAL TESTS CANNOT REACH. Every other test in this
+    // describe asserts the `unsupported-machine` EVENT, which only fires
+    // when the denylist refuses. A RowErg fires nothing — so before the
+    // header carried the value, a supported machine and a pre-2018 monitor
+    // that sends no such field at all were indistinguishable in a log.
+    // Deleting the `setMeta` in `classifyErgMachine` leaves every refusal
+    // test green; this is the one that goes red.
+    const { transport, log, events } = subscribed();
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(0));
+    // 0 is a RowErg: no refusal, and that is the point.
+    expect(unsupported(events)).toStrictEqual([]);
+    expect(log.meta().ergMachineType).toBe(0);
+  });
+
+  it("records NULL for a monitor too old to carry the field, which is itself the answer", () => {
+    // Pre-v1.26 wire form omits `ergMachineType` entirely. `null` here is
+    // not "we did not look" — it is "this monitor cannot tell us", which is
+    // exactly what a report about an old monitor needs the log to say.
+    const { transport, log } = subscribed();
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(0, "pre-v126"));
+    expect(log.meta().ergMachineType).toBeNull();
+  });
+
   it("a SkiErg's 0x0032 emits unsupported-machine naming the ski, from real wire bytes", () => {
     const { transport, events } = subscribed();
     transport.notify(ADDITIONAL_STATUS_1_UUID, as1(128));

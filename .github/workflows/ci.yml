@@ -97,6 +97,11 @@ jobs:
           context: ./app
           target: web
           push: false
+          # The client bundle is emitted by this build, so the stamp has to
+          # be passed here as well as to the api image — they are separate
+          # builds of the same Dockerfile.
+          build-args: |
+            APP_VERSION=ci
 
   e2e:
     needs: changes

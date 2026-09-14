@@ -4742,6 +4742,13 @@ export function useMonitorSession(
         // throw — kept for the same "degrade honestly, don't assume" reason
         // `resolveHandoffCondition`'s own `completedAt === null` guard above
         // is kept, not a path any test exercises today.
+        //
+        // CORRECTED: the paragraph above used to call `exportLog()` "a plain
+        // `JSON.stringify` over an array of `{kind, detail}` string pairs".
+        // It serializes `{meta, entries}` now (`eventLog.ts`'s
+        // `MonitorLogExport`). The reasoning it supports is unchanged —
+        // nothing in there can throw — but the description was falsified by
+        // the change six lines below it.
         if (exported !== null) {
           // Lifecycle design spec §2: the single key above is perishable —
           // one slot, overwritten by the very next teardown — which is

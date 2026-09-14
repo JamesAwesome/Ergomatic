@@ -44,6 +44,7 @@ import {
   type HandoffEntry,
 } from "../monitor/handoffStore";
 import type { SeriesData } from "../monitor/seriesRecorder";
+import { tryParseLogExport } from "../monitor/eventLog";
 import type { MonitorLogEntry } from "../monitor/eventLog";
 import { LOG_DOOR_MISS_KEY, recordLogDoorMiss } from "./logDoorDiagnostics";
 import { useStagedDiscard } from "./useStagedDiscard";
@@ -475,7 +476,15 @@ function recordPostSacrifice(status: number): void {
   try {
     const raw = sessionStorage.getItem("ergomatic:last-rowed-log");
     if (raw === null) return;
-    let entries = JSON.parse(raw) as MonitorLogEntry[];
+    // STRICT, and it must stay strict. This is a read-modify-WRITE: it
+    // parses a stash, appends, and writes it back. The lenient parser
+    // returns an empty log for unreadable bytes, which here would REPLACE
+    // whatever was there with a one-entry ring — destroying the very
+    // diagnostics this function exists to preserve. A `null` means leave it
+    // alone, which is what the old `JSON.parse` throw did via the catch.
+    const priorRowed = tryParseLogExport(raw);
+    if (priorRowed === null) return;
+    let entries = priorRowed.entries;
     const nextSeq =
       entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
     entries.push({
@@ -495,7 +504,10 @@ function recordPostSacrifice(status: number): void {
     if (entries.length > POST_SACRIFICE_LOG_CAPACITY) {
       entries = entries.slice(entries.length - POST_SACRIFICE_LOG_CAPACITY);
     }
-    sessionStorage.setItem("ergomatic:last-rowed-log", JSON.stringify(entries));
+    sessionStorage.setItem(
+      "ergomatic:last-rowed-log",
+      JSON.stringify({ meta: priorRowed.meta, entries }),
+    );
     // SCOPED REVIEW finding 1 (2026-08-26): this entry must land in BOTH
     // stashes, because it is appended AFTER the teardown that wrote them.
     // `readMonitorLogStash` now prefers `last-session-log` on a
@@ -510,8 +522,9 @@ function recordPostSacrifice(status: number): void {
     // one must not overwrite the session stash with the rowed ring's tail.
     const sessionRaw = localStorage.getItem("ergomatic:last-session-log");
     if (sessionRaw !== null) {
-      let sessionEntries = JSON.parse(sessionRaw) as MonitorLogEntry[];
-      if (Array.isArray(sessionEntries)) {
+      const priorSession = tryParseLogExport(sessionRaw);
+      if (priorSession !== null) {
+        let sessionEntries = priorSession.entries;
         sessionEntries.push({
           seq:
             sessionEntries.length > 0
@@ -528,7 +541,7 @@ function recordPostSacrifice(status: number): void {
         }
         localStorage.setItem(
           "ergomatic:last-session-log",
-          JSON.stringify(sessionEntries),
+          JSON.stringify({ meta: priorSession.meta, entries: sessionEntries }),
         );
       }
     }
@@ -977,9 +990,16 @@ function withDoorMisses(stash: string): string {
   try {
     const raw = localStorage.getItem(LOG_DOOR_MISS_KEY);
     if (raw === null) return stash;
-    const entries = JSON.parse(stash) as MonitorLogEntry[];
+    // STRICT for the same reason as `recordPostSacrifice`: this returns a
+    // REWRITTEN stash, so an unreadable one must be handed back untouched
+    // rather than replaced with an empty log. The lenient parser would
+    // FAIL OPEN in the wrong direction here — returning a stash with the
+    // misses merged into nothing.
+    const priorStash = tryParseLogExport(stash);
+    if (priorStash === null) return stash;
+    const entries = priorStash.entries;
     const misses = JSON.parse(raw) as MonitorLogEntry[];
-    if (!Array.isArray(entries) || !Array.isArray(misses)) return stash;
+    if (!Array.isArray(misses)) return stash;
     // ULTRAREVIEW bug_001 (2026-08-26): merge only the misses that belong to
     // THIS session. The key is append-only and nothing clears it, so without
     // this a real diagnostic copy carried every miss the install had ever
@@ -1010,10 +1030,10 @@ function withDoorMisses(stash: string): string {
         ? misses
         : misses.filter((m) => typeof m.atMs !== "number" || m.atMs >= floor);
     let seq = entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
-    return JSON.stringify([
-      ...entries,
-      ...relevant.map((m) => ({ ...m, seq: seq++ })),
-    ]);
+    return JSON.stringify({
+      meta: priorStash.meta,
+      entries: [...entries, ...relevant.map((m) => ({ ...m, seq: seq++ }))],
+    });
   } catch {
     return stash;
   }
