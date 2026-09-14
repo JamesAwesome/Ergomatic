@@ -2046,6 +2046,40 @@ fixed.
       or count a repeated identical `frame-error`, or reserve connect-time
       entries from eviction. **S**
 
+- [ ] **BOUNDARY RECONCILIATION: check what the monitor is RUNNING, not just
+      what it acked.** · dies 2026-11-13 · a row and not a fix now because it
+      is a new mechanism in the driver's hot path and wants its own spec and
+      antagonist pass, not a rider on a diagnostics change.
+      Filed 2026-09-13 out of the research that answered the arm-verification
+      row above. Everything it needs is already on the wire, unread: at each
+      interval's work phase, `0x0031`'s `intervalType` and
+      `(durationRaw, durationType)` and `0x0032`'s Rest Time name THAT
+      interval's programmed shape, and `0x0033`'s interval count says which
+      index it is. Compared against `program.intervals[k]` per boundary,
+      those four distinguish "the monitor is running what we sent" from "the
+      monitor is running something else" — the exact question the Sea Fret
+      report could not answer. `0x0037`'s per-boundary frame corroborates it
+      retrospectively, carrying the just-finished interval's own rest time
+      and distance (60/60/0 across the rests capture's three intervals).
+      **Two traps for whoever builds it.** `0.0` rest is ambiguous between
+      "programmed r0" and "no program loaded" — the menu-at-ready capture
+      shows the unloaded state reads 0.0 too — so a zero only means
+      something paired with `0x0031`'s structure fields. And this can only
+      ever be per-boundary: the interval count is a progress counter, so a
+      pre-flight gate is impossible. **M**
+
+- [ ] **The driver never checks the PM's own command echo.** · dies
+      2026-11-13 · a row and not a fix now because it is the cheap half of
+      the row above and should land with it rather than alone.
+      The CSAFE ack echoes the opcode IDs the monitor parsed — in
+      `walk-2026-08-25/rests-finished`, three 7-opcode interval blocks each
+      containing `04` (`SET_RESTDURATION`). That proves how many interval
+      blocks WITH a rest write it accepted, which is a direct check on the
+      "it dropped a rest" class of report. `domain/monitor/pm5/response.ts`'s
+      `echoedCommandIds` already parses it and is used ONLY by the fake to
+      build acks; nothing compares the monitor's echo against what we sent.
+      Carries no VALUES, so it bounds structure, never durations. **S**
+
 - [ ] **We cannot read the monitor's firmware version, and it is the one
       fact every report of this class needs.** Documented at characteristic
       `0x0014` (20 bytes, READ) in the C2 Device Information service
@@ -2069,11 +2103,48 @@ fixed.
       compiled program carries `restSeconds: 60` on both intervals and the
       wire bytes carry `04 02 00 3c` twice, matching the CSAFE worked
       example byte for byte. What is certain is that no instrument we own
-      would have caught it (recurring failure 19). **OPEN QUESTION:** whether
-      the PM exposes any readback for PROGRAMMED rest — `0x0032`'s rest
-      fields are live values, not configuration — which decides whether this
-      is an extension of the existing check or a different mechanism. Needs
-      the reporter's firmware version and a recorded session. **M**
+      would have caught it (recurring failure 19).
+      **THE OPEN QUESTION IS ANSWERED, AND THIS ROW'S TWO STATED BLOCKERS
+      WERE BOTH WRONG (measured 2026-09-13).** It read: "whether the PM
+      exposes any readback for PROGRAMMED rest — `0x0032`'s rest fields are
+      live values, not configuration … Needs the reporter's firmware version
+      and a recorded session."
+      - **`0x0032`'s rest field IS the programmed value**, not a live-only
+        one. Measured across all ten committed captures that carry a
+        programming write: while armed and settled it equals interval 0's
+        `SET_RESTDURATION`, and it RE-ARMS per interval. In
+        `walk-2026-08-25/rests-finished` (`[60s r60, 500m r60, 60s r0]`) it
+        reads 60.0 armed, counts down through the rest phase, resets to 60.0
+        when interval 2's work starts, and reads 0.0 when interval 3's does.
+        The vendor document is SILENT on the field, not supporting — its
+        "this value will change depending on where you are in the interval"
+        footnote attaches to `Interval Type`, in both the GATT and
+        multiplexed tables.
+      - **Interval k's structure is readable while k is current.**
+        `0x0031`'s `(durationRaw, durationType)` pair tracks the CURRENT
+        interval, byte-exact to what we sent: 6000/time, 500/distance,
+        6000/time across that capture's three intervals.
+      - **"A recorded session" was unsatisfiable by the reporter anyway.**
+        Recording sits behind `DEV || VITE_ENABLE_FAKE_MONITOR`, folded out
+        at build time with a `pm5-recording` needle in `dist-grep.sh`
+        proving it absent from production bundles. A TestFlight tester
+        cannot record. No row said so.
+      **So this needs no `Transport.read`, no firmware version and no
+      recording — the data has been arriving the whole time and we ignore
+      it.** `verifyArmed` compares three values ONCE, pre-row: `armedWatch`
+      runs only while the machine reports `armed`, so all structural
+      checking stops at the first stroke. The Sea Fret symptom would have
+      shown as interval 1's work phase reporting `restSec 0.0` where the
+      program said 60.
+      **What it can never be is a pre-flight gate:** `0x0033`'s interval
+      count is a PROGRESS counter, not the programmed total (0 while armed,
+      then 1, 2, 3), so N is unknowable before the piece runs. Any check of
+      this kind is per-boundary reconciliation.
+      **One free corroboration nobody reads:** the CSAFE ack echoes the
+      opcode IDs the PM parsed — three 7-opcode blocks each containing `04`
+      (`SET_RESTDURATION`) in that capture. `response.ts`'s
+      `echoedCommandIds` exists and is used ONLY by the fake; the driver
+      never compares the monitor's echo against what it sent. **M**
 
 - [x] **The Bluetooth scan sheet mixes "PM5" and "monitor" in one flow.**
       CLOSED in the Phase MT close-out PR, with the permission-screen row that
