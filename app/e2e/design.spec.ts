@@ -12902,6 +12902,26 @@ test.describe("the stored skip (Phase RW PR C)", () => {
     await page.getByRole("button", { name: "Reset baseline setup" }).click();
     await page.getByRole("button", { name: "Reset baseline setup" }).click();
 
+    // WAIT FOR THE RESET TO LAND BEFORE NAVIGATING. This test failed twice on
+    // CI (ROADMAP's FLAKE 1 row: 2026-09-12 on #419's main run, 2026-09-13 on
+    // PR #430) and passed every time it was run alone or re-run — the
+    // signature of a race, not a break. The confirm click fires
+    // `handleReset`, which AWAITS `DELETE /api/baselines`
+    // (`ResetBaselineSetup.tsx`); nothing here waited for it, so
+    // `page.goto("/today")` raced the write and Today could still read the
+    // old baselines — no doors, and `.doorscard` never appears.
+    //
+    // The confirm panel closing IS the proof, and it is a better one than a
+    // network wait: `handleReset` sets `armed` false ONLY on a successful
+    // response and leaves the panel open with `.baseline-error` on failure.
+    // So an absent panel means the DELETE both completed AND succeeded.
+    // Asserting the error's absence too keeps the first assertion honest —
+    // without it, a panel that vanished for some other reason would read the
+    // same (RF38: a property of how the test got here is an assertion, not a
+    // comment).
+    await expect(page.locator(".baseline-confirm")).toHaveCount(0);
+    await expect(page.locator(".baseline-error")).toHaveCount(0);
+
     await page.goto("/today");
     await expect(page.locator(".doorscard")).toBeVisible();
   });

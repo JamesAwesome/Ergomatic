@@ -464,7 +464,22 @@ requirements).
     - **Proposed to add** — every row this work wants to file, one line each:
       title, `dies` date, and the clause saying why it is a row and not a fix.
     - **Now overdue** — every row ANYWHERE in `ROADMAP.md` whose `dies` date
-      has passed, one line each, oldest first.
+      has passed, one line each, oldest first. **Find them with THIS, not
+      with a bare `grep`:**
+
+      ```
+      tr '\n' ' ' < ROADMAP.md | grep -oE "dies +20[0-9]{2}-[0-9]{2}-[0-9]{2}" | sort -u
+      ```
+
+      **The `tr` is the whole point.** A stamp that WRAPS across two lines —
+      `· dies` ending one line and `2026-10-13 ·` starting the next — is
+      invisible to `grep "dies 20"`, and `ROADMAP.md` is hand-wrapped, so
+      this is common rather than exotic. Measured 2026-09-14: the naive grep
+      saw 33 of 37 stamps, and **three of the four it missed were rows filed
+      that same day** — so the sweep was silently blind to the newest work,
+      which is exactly the population it exists to catch. This is not
+      hypothetical drift; it was found twice in one day, once in the morning
+      sweep and once when re-counting a row's own date after filing it.
 
     He rules keep / kill / re-date on each. **Nothing is struck without him**
     (RF30: striking an item is a decision he does not get to make again). A row

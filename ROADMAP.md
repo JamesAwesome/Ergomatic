@@ -3330,10 +3330,25 @@ Each needs erg time or a deliberate recording session.
   test, not a broken one — and it is why "it passed when I ran it" is not
   evidence here. Whoever picks this up should reproduce it by running the
   FULL suite in CI's own worker configuration, not by running the test.
-  **The cheap first move:** `.doorscard` is rendered after a baselines
-  reset, so the suspicion worth testing first is that the reset's write has
-  not landed when the assertion starts — i.e. a missing wait on the store,
-  not a missing element. **S**
+  **DIAGNOSED AND FIXED 2026-09-14, and the suspicion this row recorded was
+  right.** `handleReset` (`you/ResetBaselineSetup.tsx`) awaits
+  `DELETE /api/baselines`; the test clicked confirm and went straight to
+  `page.goto("/today")` with that write still in flight, so Today could
+  still read the old baselines and no doors card rendered. Fire-and-forget
+  click, then navigate.
+  **Proved both directions rather than inferred**, by injecting a 2.5 s
+  delay into the reset: with the fix the test passes (4.0 s, it waited);
+  with the fix removed and the same delay, it fails `.doorscard` —
+  `element(s) not found`, the identical failure CI saw twice.
+  **The fix waits on the reset's own UI, not on the network:** the confirm
+  panel closes only when the DELETE resolves OK — `handleReset` clears
+  `armed` on success and leaves the panel open with `.baseline-error` on
+  failure — so an absent panel proves the write both completed and
+  succeeded. The error's absence is asserted too, or a panel that vanished
+  for another reason would read the same (RF38).
+  **This row stays open until a full CI suite has run green on it more than
+  once**, because the whole point of its history is that one green run
+  proves nothing here. **S**
 
 - **FLAKE 2 — one CI run failed four tests across four unrelated specs at
   once.** · dies 2026-10-14 · a row and not a fix now because a single run
