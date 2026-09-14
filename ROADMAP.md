@@ -1317,7 +1317,28 @@ while we are in here.
       is nothing; and re-run in the WHOLE-SUITE form, never
       `gh run rerun --failed`, which would have run a different population
       and could not have answered the question (the trap FLAKES 1-3 share).
-      So (b) is now: two sightings, one sourced re-run, and a mechanism.
+      **SIGHTED A THIRD AND FOURTH TIME 2026-09-14, and this is the
+      escalation: both were MAIN's own post-merge runs, eleven minutes
+      apart.** Same file, same test, same `Test timed out in 5000ms`, `app`
+      job, attempt 1 each time. Run `34876650602` at head `8486a349`
+      (17:45 UTC, the 13-package Dependabot bump, #440) and run
+      `34877745107` at head `b6ede012` (17:56 UTC, TD-5's capture, #442).
+      **`b6ede012` touched ZERO files under `app/src/`** — one e2e spec,
+      `ROADMAP.md` and one PNG — so it cannot be a regression, and its
+      whole-run re-run (attempt 2, all seven jobs including `deploy`) went
+      green on the identical commit. `8486a349` is the one sighting that is
+      NOT diff-innocent, since it moved 13 packages; what clears it is
+      `a3292ba2` (#441), which CONTAINS that bump and passed at 17:51
+      between the two failures. Numbers from `b6ede012` attempt 1, for the
+      runner hypothesis: 356 files, 9,033 passed, `Duration 298.85s` of
+      which `environment 210.82s`.
+      **Why the escalation matters more than the count:** sightings 1-2 were
+      branch runs, where someone is watching. These two are RF28's exact
+      shape — main red after a merge, with nothing but the post-merge ritual
+      standing between that and eleven hours of nobody reading it. Twice in
+      fifteen minutes on the same afternoon.
+      So (b) is now: four sightings, two sourced whole-run re-runs, and a
+      mechanism.
       **THE OPEN QUESTION, scheduled before the order (Phase OD's rule),
       and it took one read to find:** `vitest.config.ts:11` is
       `maxWorkers: isCI() ? undefined : workerCap(…, 4)`. The cap that
