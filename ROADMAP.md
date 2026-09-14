@@ -1112,17 +1112,23 @@ it lands the stranger on this same denial.
       · dies 2026-10-15 · not a fix-now because there is nothing further to
       fix without a reproduction; this is a watch, not a defect, and the date
       is the backstop for a trigger (a second sighting) that may never fire.
-- [ ] **The `--rule` hairline measures 1.47:1 on `--surface`.** Pre-existing
-      (`10ed2c2a`, predates PR1): `.auth-identity`'s card border
+- [ ] **Raise the `--rule` hairline: it measures 1.47:1 on `--surface`.**
+      Pre-existing (`10ed2c2a`, predates PR1): `.auth-identity`'s card border
       (`app/src/index.css:275`, `border: 1px solid var(--rule)` on
       `background: var(--surface)`), rendered on the confirm and reauth
-      screens PR1 reuses. Decorative — it separates a card from its own
-      background, carries no text and states nothing on its own — so WCAG's
-      3:1 non-text minimum does not govern it. PR1's contrast pass looked at
-      this element and is recording the number rather than leaving a later
-      reader to assume it was cleared. **S**
-      · dies 2026-10-10 · not a fix-now because nothing requires it to clear
-      3:1; recorded, not a defect.
+      screens PR1 reuses. **RULED BY JAMES 2026-09-14: fix it, but as its own
+      PR.** PR1's contrast pass argued it was decorative and therefore outside
+      WCAG's 3:1 non-text minimum, and filed it as a no-change record; he
+      overruled that, and this row is now an action rather than an
+      observation. Not bundled into PR1 because `--rule` is used across the
+      whole app, so raising it is a token sweep with its own captures and its
+      own blast radius — the opposite of the deletion PR's scope. The work:
+      darken `--rule` until the pairing clears 3:1, sweep every surface that
+      consumes it, recompute the pairings `theme/tokens.css` already tabulates,
+      and re-take the captures that change. **M**
+      · dies 2026-10-14 · a row and not a fix-now because it changes a token
+      every screen consumes, which cannot ride a PR about account deletion
+      without making that PR's own gate harder to run.
 
 **Exit:** a stranger installs from TestFlight, signs in with Apple or Google,
 gets an empty working account, rows a row (the "rows a row" clause is closed
