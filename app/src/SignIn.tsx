@@ -16,7 +16,7 @@ function Welcome({ auth }: { auth: AuthFlowController }) {
       {auth.view.kind === "error" && auth.view.purpose === "signin" && (
         <p className="notice auth-notice-error" role="alert">
           {auth.view.code === "access_denied"
-            ? `${auth.view.email ?? "This account"} isn't invited to this Ergomatic. Ask James to add you.`
+            ? `${auth.view.email ?? "This account"} isn't invited to this Ergomatic. Ask the owner to add you.`
             : "That sign-in didn’t work. Give it another try."}
         </p>
       )}
@@ -182,7 +182,8 @@ function LegacySignIn({
       <p className="tagline">Rowing workout tracker &amp; planner.</p>
       {denied && (
         <p className="notice" role="alert">
-          {denied} isn&apos;t invited to this Ergomatic. Ask James to add you.
+          {denied} isn&apos;t invited to this Ergomatic. Ask the owner to add
+          you.
         </p>
       )}
       {failed && (

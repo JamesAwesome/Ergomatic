@@ -28,7 +28,7 @@ test("a web access denial keeps the verified email and scrubs auth return parame
   );
 
   await expect(page.getByRole("alert")).toHaveText(
-    "relay@privaterelay.appleid.com isn't invited to this Ergomatic. Ask James to add you.",
+    "relay@privaterelay.appleid.com isn't invited to this Ergomatic. Ask the owner to add you.",
   );
   await expect(page).toHaveURL(/\?keep=1#return$/);
   await expect(

@@ -162,7 +162,7 @@ describe("SignIn front door", () => {
     });
     render(<SignIn auth={auth} />);
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "relay@privaterelay.appleid.com isn't invited to this Ergomatic. Ask James to add you.",
+      "relay@privaterelay.appleid.com isn't invited to this Ergomatic. Ask the owner to add you.",
     );
     expect(screen.queryByText(/didn’t work/)).not.toBeInTheDocument();
   });
@@ -175,7 +175,7 @@ describe("SignIn front door", () => {
     });
     render(<SignIn auth={auth} />);
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "This account isn't invited to this Ergomatic. Ask James to add you.",
+      "This account isn't invited to this Ergomatic. Ask the owner to add you.",
     );
     expect(screen.queryByText(/didn’t work/)).not.toBeInTheDocument();
   });

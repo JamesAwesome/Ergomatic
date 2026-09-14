@@ -22,7 +22,7 @@ function linkNotice(auth: AuthFlowController): React.ReactNode {
     return (
       <p className="notice auth-notice-error" role="alert">
         {view.email ?? "This account"} isn&apos;t invited to this Ergomatic. Ask
-        James to add you.
+        the owner to add you.
       </p>
     );
   }

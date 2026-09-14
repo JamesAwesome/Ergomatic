@@ -236,7 +236,7 @@ describe("SignInMethods", () => {
       />,
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "saved@example.test isn't invited to this Ergomatic. Ask James to add you.",
+      "saved@example.test isn't invited to this Ergomatic. Ask the owner to add you.",
     );
     expect(screen.queryByText(/couldn’t confirm/)).not.toBeInTheDocument();
   });
