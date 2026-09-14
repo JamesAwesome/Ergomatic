@@ -1,5 +1,5 @@
 export type AuthProvider = "apple" | "google";
-export type AuthPurpose = "signin" | "link";
+export type AuthPurpose = "signin" | "link" | "delete";
 export interface AuthUser {
   id: string;
   email: string;

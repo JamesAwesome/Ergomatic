@@ -20,7 +20,8 @@ export type Stage =
   | "reauth_exchanging"
   | "target_authorize"
   | "target_exchanging"
-  | "link_ready";
+  | "link_ready"
+  | "delete_ready";
 export interface Attempt {
   id: string;
   bindingHash: string;
