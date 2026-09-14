@@ -702,11 +702,29 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
   // A BFCACHE RESTORE IS NOT A RELOAD, and `busy` outlives it.
   //
   // On web, `start()` sets `busy` and then hands the browser to the provider.
-  // `busy` disables BOTH provider buttons (`SignIn.tsx`). Coming back with
-  // Back — which is also how a rower leaves Apple's sheet without finishing —
-  // restores the SAME document from the back/forward cache with React state
-  // intact: no remount, no reload, so nothing here ever ran again and both
-  // buttons stayed dead until a manual refresh. Reported from staging.
+  // `busy` disables BOTH provider buttons (`SignIn.tsx`). Coming back with the
+  // browser's own Back or edge-swipe restores the SAME document from the
+  // back/forward cache with React state intact: no remount, no reload, so
+  // nothing here ever ran again and both buttons stayed dead until a manual
+  // refresh. Reported from staging, and the "until a refresh" detail is what
+  // identifies it — a fresh load is already idle.
+  //
+  // NOT the provider's own Cancel button: `frontDoorRoutes.ts` has a live
+  // `user_cancelled_authorize` branch that discards the attempt and 303s to
+  // `/?authResult=cancelled`, which produces a FRESH document with the
+  // buttons live. An earlier draft of this comment claimed Back was also how
+  // a rower leaves Apple's sheet; that would make the server branch dead code,
+  // and it is not.
+  //
+  // PRIOR ART, which this deliberately diverges from: `you/Concept2Card.tsx`
+  // and `api/useConcept2Link.ts` already handle this defect class (their
+  // "invariant I5") and do NOT gate on `persisted`. They can afford not to,
+  // because at ordinary load there is no outcome or busy flag to wipe. This
+  // flow cannot: the return-URL effect above sets `busy` while it fetches
+  // `/?authAttempt=<id>`, and `pageshow` fires on every ordinary load too,
+  // after mount and after effects — so an ungated clear would strand every
+  // OAuth return on an idle Welcome screen. The `persisted` check is the whole
+  // difference, and `authFlow.test.tsx` pins both halves.
   //
   // `persisted: true` on `pageshow` is the only signal a restore gives us.
   //

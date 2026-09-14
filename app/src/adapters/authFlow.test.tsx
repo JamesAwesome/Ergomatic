@@ -919,7 +919,51 @@ describe("useAuthFlow", () => {
         Object.assign(new Event("pageshow"), { persisted: true }),
       );
     });
-    expect(result.current.view.kind).not.toBe("busy");
+    expect(result.current.view.kind).toBe("idle");
+  });
+
+  it("an ORDINARY load's pageshow does not wipe the busy view an OAuth return is using", async () => {
+    // `persisted` is the whole guard, and without this case it is an unbitten
+    // branch (RF21): `pageshow` fires on every ordinary load too, after mount
+    // and after effects. The return-URL effect sets `busy` while it fetches
+    // `/?authAttempt=<id>`, so a clear that did not check `persisted` would
+    // strand EVERY OAuth return on an idle Welcome screen — a worse bug than
+    // the one being fixed, and invisible to the restore test above.
+    window.history.replaceState(null, "", "/?authAttempt=return-1");
+    let resolveRead!: (response: Response) => void;
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/return-1")
+        return new Promise<Response>((done) => {
+          resolveRead = done;
+        });
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.view.kind).toBe("busy"));
+
+    // The ordinary load event: same document, NOT restored.
+    await act(async () => {
+      window.dispatchEvent(
+        Object.assign(new Event("pageshow"), { persisted: false }),
+      );
+    });
+    expect(result.current.view.kind).toBe("busy");
+
+    // And the return still completes into its real screen.
+    await act(async () => {
+      resolveRead(
+        ok({
+          outcome: "confirm",
+          attemptId: "return-1",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          profile: { email: "r@a.test", name: "Rower" },
+        }),
+      );
+    });
+    await waitFor(() => expect(result.current.view.kind).toBe("confirm"));
   });
 
   it("shows a busy view while an attempt is being minted, and routes it nowhere", async () => {
