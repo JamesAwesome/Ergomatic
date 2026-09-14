@@ -1149,6 +1149,41 @@ while we are in here.
       unit` run and passed both alone (6/6) and on an immediate full re-run
       (286 files, 7937). Client-project only, so unrelated to (a)'s origin
       storage.
+      **SIGHTED A SECOND TIME 2026-09-14** (PR #434's `app` job, run
+      `34845000865` attempt 1, head `08eac824`) — **the trigger this row
+      names has now FIRED.** Same file, same test. The branch touched ZERO
+      files under `app/src/` (its diff is e2e specs and markdown), so it
+      cannot be a regression, and there is no signal-death signature in the
+      log: no `Allocation failed`, no 137/134 (RF40 checked before the
+      re-run, not after).
+      **THE NEW FACT, and it narrows the hunt more than the second sighting
+      does: the failure is `Test timed out in 5000ms` on a SYNCHRONOUS
+      test.** `Releases.test.tsx:32` is `it("…", () => {` with no `async`
+      and a plain `renderReleases()` — there is nothing in it to await. A
+      synchronous render exceeding five seconds is not a statement about
+      the test's logic; it is the worker not being scheduled. The run's own
+      numbers agree: 8,940 tests, `Duration 292.55s` of which
+      `environment 210.12s`.
+      **That makes (b) evidence for FLAKE 2's runner hypothesis rather than
+      a separate puzzle** — and unlike (a), whose stated mechanism was
+      refuted, this one has a mechanism nobody has argued against yet.
+      **THE OPEN QUESTION, scheduled before the order (Phase OD's rule),
+      and it took one read to find:** `vitest.config.ts:11` is
+      `maxWorkers: isCI() ? undefined : workerCap(…, 4)`. The cap that
+      exists to protect a laptop is **INERT IN CI BY DESIGN** — vitest
+      falls back to its CPU-derived default there. Combine that with the
+      fact already recorded under the integration-flake row below (the
+      `maxWorkers` key sits on the ROOT `test` block, so unit, client and
+      integration files share ONE pool, and each integration file starts
+      its own `PostgreSqlContainer`) and CI runs an uncapped pool against
+      containers on a two-core runner. **That is a concrete, testable
+      mechanism for a synchronous render missing a 5 s deadline, and it
+      costs one config line to test.**
+      **Deliberately NOT changed here.** Capping CI workers is a claim
+      about a cost nobody has measured (RF30), it would slow every run,
+      and it belongs with a before/after measurement rather than riding an
+      e2e PR. What this row now owes is that measurement, not another
+      sighting.
       (c) A third, on the SAME release run: `pnpm e2e` returned `553 passed`
       with exit 1, and the two immediately following full runs both returned
       `554 passed`. **Which test failed was not captured** — the tail showed
