@@ -310,9 +310,12 @@ test("no chart label escapes its own viewBox, on a season past 100,000 m (invari
   await expect(page.getByRole("heading", { name: "Stats" })).toBeVisible();
   await page.getByText("2K 1:54.0").waitFor();
   await page.evaluate(() => document.fonts.ready);
-  // The fixture reaches the arm this gate exists for: without the
-  // shortened tick these labels are the ones that clip.
-  await expect(page.getByText("150k").first()).toBeVisible();
+  // The fixture reaches the arm this gate exists for — and it is asserted
+  // through a label whose FORMAT this change does not touch. `150k` would
+  // have read the same, but it would also disappear under the very
+  // mutation the gate exists to catch, failing this line instead of the
+  // viewBox assertion below and hiding what actually broke.
+  await expect(page.getByText(/^16[0-9],[0-9]{3} TODAY$/)).toBeVisible();
   await assertNoChartLabelEscapesItsViewBox(page, "You to Stats");
 
   // The other screen the invariant governs, and the one that carried the
