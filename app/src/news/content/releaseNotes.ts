@@ -5,6 +5,41 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.47.0: git log v0.46.0..main --oneline — TEN merges besides this
+    // notes PR itself, each accounted for (RF15; no --merges, which returns
+    // empty on this squash-merged repo). THREE reach a rower:
+    //   #425 Apple sign-in and account creation — items 1 and 2. The reason
+    //     this release exists rather than waits: auth/session flow is a
+    //     named trigger in RELEASING.md. Its PM gate recorded "public
+    //     release NOT READY" against OPENING SIGN-UP (ACCESS_MODE=public),
+    //     which this build does not do — access stays restricted, so a
+    //     TestFlight build reaches allowlisted emails only. Ruled by James
+    //     2026-09-13.
+    //   #424 Phase PS PR 2: the charts on Stats — item 3. v0.46.0's note
+    //     promised these by name ("metres per week, the season curve,
+    //     streaks and the test trend come next"), so the promise is kept
+    //     explicitly.
+    //   #429 the owner's name is gone from the sign-in screen, and the
+    //     button no longer sticks after a cancel — item 2's second half.
+    //   #423 Phase TD: a stale VERIFIED ✓ after relinking to a DIFFERENT
+    //     Concept2 account. A rower can see it, but only by relinking to a
+    //     second account mid-session — nobody on the household list has two.
+    //     Folded into no item; named here so the omission is a decision.
+    //   #430 the diagnostics ring names its monitor, build and session. The
+    //     rower taps the same button; only the text they paste to James
+    //     changes. Helps him read their reports, not them. No note.
+    //   #422 #426 #427 #428 #431 ROADMAP records, an e2e flake row, a Codex
+    //     adapter, test fixtures, a capture, two specs. Nothing reaches a
+    //     tester. No note.
+    version: "v0.47.0",
+    date: "2026-09-14",
+    items: [
+      "You can sign in with Apple now, alongside Google. New accounts can be created either way, and if you already have an account you can link the second provider to it rather than ending up with two.",
+      "The sign-in screen no longer carries anyone else's name, and its button no longer sticks after you back out of a sign-in and return. If your email is not on the invite list, the screen now says so plainly instead of failing quietly.",
+      "The Stats page gained the rest of its charts, as v0.46.0 promised: metres per week, the season curve with your average per day and your streak, and the test trend for your 2k and 6k.",
+    ],
+  },
+  {
     // v0.46.0: git log v0.45.0..main --oneline — FORTY-TWO merges besides
     // the notes PRs themselves (#419, #420), each accounted for (RF15; no
     // --merges, which returns empty on this squash-merged repo). Three days
