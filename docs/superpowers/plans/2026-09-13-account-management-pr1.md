@@ -11,15 +11,17 @@ through a new `delete` purpose, so re-proving a provider before destruction goes
 through the same audited path as linking. The destructive transaction locks
 sessions before users, matching the lock order `attempts.ts` already documents,
 because the reverse order deadlocks and the auth transaction is the victim.
-Apple credentials outlive the account for as long as it takes to revoke them,
-in a transactional outbox drained by the sweep that already runs every 60 s.
+Apple's revoke is called **inline, after that transaction commits** — never
+before it, and never queued.
 
 **Tech Stack:** Postgres 18 + Drizzle migrations, Express 5, node-postgres
 (raw SQL in `server/auth/`, Drizzle elsewhere), React 19, Vitest, Playwright.
 
 **Spec:** `docs/superpowers/specs/2026-09-13-account-management-design.md`
 revision 2. Read it before Task 1 — this plan argues from it and does not
-restate its research.
+restate its research. **Three of its rulings were superseded by James on
+2026-09-13; they are listed under "Rulings that supersede the spec" below and
+the spec is amended in Task 5.**
 
 ## Global Constraints
 
@@ -29,14 +31,86 @@ restate its research.
   leaves an account with zero provider subjects, except deletion, which removes
   the account entirely."
 - **The last-provider guard lives in the `WHERE` clause**, never a read-then-write.
-- **Deletion never awaits Apple.** Copy must not claim revocation is complete.
 - **Lock order is sessions before users**, in every transition, without exception.
+- **Deletion's own write failing is fatal and surfaced. Apple not answering is
+  not.** See "One owner of the invariant" below — this is the repo's recorded
+  systemic defect (RF25) and the plan names the owner explicitly.
 - **Platform conditionals live only in the adapter layer** (`src/platform.ts`,
   `src/api.ts`, `src/native/`, `src/adapters/`) — lint-enforced.
 - **Server imports use `.js` extensions.** ESM only. pnpm only.
 - Run gates from `app/`. `pnpm test --project integration` needs Docker;
   **`pnpm exec vitest --project integration` hangs — do not use it.**
 - 44px hit targets and WCAG AA are hard requirements, contrast stated as a number.
+
+---
+
+## Rulings that supersede the spec (James, 2026-09-13)
+
+The spec's §"`apple_revocations` — a transactional outbox" and its lifetime
+table are **withdrawn**. Three rulings replace them. Task 5 amends the spec so
+the record does not contradict the code.
+
+**1. Revocation is synchronous and best effort. There is no outbox.**
+The spec's queue bought retry, and retry's only payload is the TN3194
+consequence: a rower who deletes and later re-registers gets no name from Apple
+and is `"Rower"` forever. **The spec itself records that defect as already on
+the register, reachable another way** — so the machinery was lowering the odds
+of hitting an already-accepted bug. Apple's duty here is **should**, not must;
+the spec establishes that and it is the licence. Deleted with the queue: the
+`apple_revocations` table, its migration, the sweep arm, the retry cap, the
+backoff ladder, `FOR UPDATE SKIP LOCKED`, and the re-registration subject guard.
+
+**The guard goes because the queue created the hazard it existed to solve.** A
+re-registration race is only reachable while a row waits hours to be drained.
+Revoking within a second of deletion closes the window, which also removes the
+retained `apple_sub` and the paragraph justifying retaining it. **PR1 therefore
+carries ONE stored shape, not two** — the `auth_attempts` purpose — which is
+what the DBA gate now covers.
+
+**2. A failed revoke never fails the deletion, and the ordering is why.**
+To fail the operation you would have to call Apple before committing. Then a
+commit that fails after a successful revoke leaves the credential destroyed at
+Apple while the account still exists, and **no transaction can un-revoke a
+token**. That asymmetry — our write rolls back, Apple's does not — is the whole
+reason to keep the external call after the commit. It also inverts Apple's own
+priorities: deletion is unconditional under 5.1.1(v), revocation is a *should*,
+so letting an Apple outage block a deletion defeats the requirement being
+served.
+
+**3. A failed revoke tells the rower, and tells them Apple's own remedy.**
+TN3194's fallback for the case where you cannot revoke is verbatim: *"Direct the
+user to manually revoke access for your client."* The spec criticises revision 1
+for substituting a log line for that step. So the delete response carries
+`appleRevoked: boolean` and Welcome renders a one-time notice when it is false.
+One boolean and one sentence, discharging a documented instruction.
+
+**Not a scale compromise.** An earlier draft of this plan said the outbox should
+return once there is more than one container. **That was wrong.** A delete
+request is handled end to end inside one process, so nothing is shared and
+nothing needs coordinating; the outbox is what *creates* the multi-container
+problem `SKIP LOCKED` then solves. Two concurrent deletes cannot double-revoke
+either — `FOR UPDATE` on sessions then users makes the second one find the
+account gone and throw `account_changed` — and Apple's 200 covers "revoked
+successfully **or was previously invalid**" regardless. The trigger for an
+outbox is not container count and not load (deletion is rare per user); it would
+only be a decision that the revoke must be *guaranteed*, which Apple does not
+ask for.
+
+## One owner of the invariant (RF25)
+
+The repo's recorded systemic defect is a caller proceeding as though a failed
+write succeeded. This plan names the owner once, and every task inherits it:
+
+| Step | On failure |
+|---|---|
+| The delete transaction | **Fatal.** Roll back, surface it, the rower is told the account was NOT deleted and stays signed in. |
+| Apple's revoke, after commit | **Not fatal.** The account is already gone and cannot come back. Log it, set `appleRevoked: false`, show the rower Apple's own remedy. |
+| The unlink `UPDATE` | **Fatal** only in the sense that zero rows is an outcome, not an error — and the three causes get three different messages. |
+
+There is no third behaviour anywhere in this PR. A reviewer who finds one has
+found a bug.
+
+---
 
 ## What was measured while writing this plan
 
@@ -45,15 +119,15 @@ applied (2026-09-13). Quoted outputs are real.
 
 | Claim | Result |
 |---|---|
-| The Task 1 migration applies | 4 × `ALTER TABLE`, `CREATE TABLE`, `CREATE INDEX`, no error |
+| The Task 1 migration applies | 4 × `ALTER TABLE`, no error |
 | `delete` purpose, `existing_provider = target_provider`, non-null session | **admitted** |
 | `delete` purpose with `original_session_id IS NULL` | refused by `auth_attempts_session_check` |
 | **stage `delete_ready`** | **refused by `auth_attempts_stage_check` — see the spec correction below** |
 | A second attempt on one session | refused by `auth_attempts_link_session_unique` |
 | Unlink guard, two-provider account | `UPDATE 1` |
 | Unlink guard, last provider / already unlinked / no such account | `UPDATE 0`, `UPDATE 0`, `UPDATE 0` |
+| The `FROM users old` self-join returning the pre-update subject | returns `a-1` with `UPDATE 1`; 0 rows and the subject intact on a last-provider account |
 | Tables losing rows on account deletion | **12** — 11 cascade from `users`, `auth_attempts` via `sessions` (catalog query, not a grep) |
-| `FOR UPDATE SKIP LOCKED` under two claimers | disjoint: claimer 1 took `rt-1,rt-2`; claimer 2 took `rt-3` |
 | Users-before-sessions vs `original()` | **deadlock, auth transaction is the victim** — `"Process 184 waits for ShareLock on transaction 796; blocked by process 177"` |
 | Sessions-before-users vs `original()` | no deadlock; `original()` returns 0 rows and commits |
 
@@ -63,9 +137,8 @@ applied (2026-09-13). Quoted outputs are real.
 shapes" widens `auth_attempts_purpose_check` and `auth_attempts_session_check`.
 Measured: inserting a row with `stage='delete_ready'` is refused by
 `auth_attempts_stage_check`, which the spec never mentions. Task 1 widens all
-three. This does not add a third *stored shape* — it is the same
-`auth_attempts` shape — but a plan that widened two of three would fail at the
-first integration test, so it is called out rather than discovered.
+three. This does not add a stored shape — it is the same `auth_attempts` shape —
+but a plan that widened two of three would fail at the first integration test.
 
 ---
 
@@ -73,59 +146,55 @@ first integration test, so it is called out rather than discovered.
 
 **Server — created**
 
-- `app/drizzle/0032_account_management.sql` — the migration. Generated by
+- `app/drizzle/0032_account_delete_purpose.sql` — the migration. Generated by
   `drizzle-kit`, then hand-checked against Task 1's expected DDL.
-- `app/server/auth/revocations.ts` — the outbox: enqueue, claim, drain, the
-  re-registration subject guard, the attempt cap. One responsibility: Apple
-  credentials that outlive their account.
-- `app/server/auth/revocations.integration.test.ts`
-- `app/server/auth/accountRoutes.ts` — the two authenticated routes that are not
-  part of the attempt state machine (`DELETE /api/auth/methods/:provider`).
-  Kept out of `frontDoorRoutes.ts`, which is already 402 lines and owns the
-  attempt lifecycle.
+- `app/server/auth/appleRevoke.ts` — one responsibility: turn a list of Apple
+  grants into revoke calls. ~30 lines. Injected into `createAttempts` so
+  `attempts.ts` needs neither `jose` nor `fetch`, and tests need no network.
+- `app/server/auth/accountRoutes.ts` — the authenticated route that is not part
+  of the attempt state machine (`DELETE /api/auth/methods/:provider`). Kept out
+  of `frontDoorRoutes.ts`, which is already 402 lines and owns the attempt
+  lifecycle.
 - `app/server/auth/accountRoutes.integration.test.ts`
 
 **Server — modified**
 
-- `app/server/db/schema.ts` — `appleRevocations` table; `authAttempts` purpose
-  and stage unions.
+- `app/server/db/schema.ts` — the `authAttempts` purpose and stage unions.
 - `app/server/auth/attempts.ts` — the `delete` branch in `begin()` and
   `accept()`; `deleteAccount()`; `unlink()`.
 - `app/server/auth/frontDoorRoutes.ts` — the `delete` action alongside
   confirm/finalize/cancel; mount `accountRoutes`.
-- `app/server/auth/frontDoor.ts` — revocation as the sweep's third arm.
-- `app/shared/auth.ts` — `AuthPurpose` gains `"delete"`; `AuthStep` gains a
-  `delete_ready` member; `UnlinkOutcome` is declared here because both sides
-  parse it; `AuthMethods` unchanged.
+- `app/server/auth/frontDoor.ts` — build the real revoker from config and pass
+  it to `createAttempts`.
+- `app/shared/auth.ts` — `AuthPurpose` gains `"delete"`; `UnlinkOutcome` and
+  `DeleteOutcome` are declared here because both sides parse them.
 
 **Client — modified**
 
-- `app/src/adapters/authFlow.ts` — `startDelete`, `confirmDelete`, `removeMethod`
-  on the controller.
-- `app/src/you/SignInMethods.tsx` — Remove affordance per connected method, the
-  three zero-row messages, and the Delete account entry point.
-- `app/src/you/DeleteAccount.tsx` — created. The confirm screen and its copy.
-- `app/src/SignIn.tsx` — the `account_conflict` recovery copy.
+- `app/src/adapters/authFlow.ts` — `startDelete`, `confirmDelete`, `removeMethod`.
+- `app/src/you/SignInMethods.tsx` — Remove per connected method, the three
+  zero-row messages, the Delete account entry point.
+- `app/src/you/DeleteAccount.tsx` — created. The confirm screen.
+- `app/src/SignIn.tsx` — the `account_conflict` recovery copy, and the one-time
+  Apple-settings notice when `appleRevoked` is false.
 
 ---
 
 ## Task 1: The migration and the schema
 
 **Files:**
-- Create: `app/drizzle/0032_account_management.sql`
-- Modify: `app/server/db/schema.ts`
-- Modify: `app/shared/auth.ts`
+- Create: `app/drizzle/0032_account_delete_purpose.sql`
+- Modify: `app/server/db/schema.ts`, `app/shared/auth.ts`
 - Test: `app/server/db/schema.integration.test.ts`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: the `appleRevocations` Drizzle table; `AuthPurpose = "signin" | "link" | "delete"`
-  in `shared/auth.ts`; the `Stage` union in `attempts.ts` gains `"delete_ready"`.
-  Every later task depends on this migration being applied.
+- Produces: `AuthPurpose = "signin" | "link" | "delete"` in `shared/auth.ts`;
+  the `Stage` union in `attempts.ts` gains `"delete_ready"`. Every later task
+  depends on this migration being applied.
 
 **This task carries the DBA gate.** It is TRIAD work — a stored shape. Do not
-start Task 2 until the DBA has returned a verdict on this task's measured
-numbers.
+start Task 2 until the DBA has returned a verdict on its measured numbers.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -140,9 +209,7 @@ it("admits a delete-purpose attempt that re-proves a provider the rower holds", 
      VALUES('bh','native','delete','apple','apple','reauth_authorize',1,'s1','n1',$1,now()+interval '5 min')`,
     [session.id],
   );
-  const rows = await pool.query(
-    "SELECT purpose,stage FROM auth_attempts WHERE state='s1'",
-  );
+  const rows = await pool.query("SELECT purpose,stage FROM auth_attempts WHERE state='s1'");
   assert.equal(rows.rows[0].purpose, "delete");
 });
 
@@ -153,6 +220,20 @@ it("refuses a delete-purpose attempt with no session to ride", async () => {
        VALUES('bh','native','delete','apple','apple','reauth_authorize',1,'s2','n2',NULL,now()+interval '5 min')`,
     ),
     /auth_attempts_session_check/,
+  );
+});
+
+it("still refuses a link whose existing provider equals its target", async () => {
+  const user = await seedUser({ googleSub: "g-9", appleSub: "a-9" });
+  const session = await seedSession(user.id);
+  await assert.rejects(
+    pool.query(
+      `INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,expires_at)
+       VALUES('bh','native','link','apple','apple','reauth_authorize',1,'s4','n4',$1,now()+interval '5 min')`,
+      [session.id],
+    ),
+    /auth_attempts_session_check/,
+    "widening for delete must not loosen the link arm",
   );
 });
 
@@ -167,18 +248,13 @@ it("admits the delete_ready stage", async () => {
   const rows = await pool.query("SELECT stage FROM auth_attempts WHERE state='s3'");
   assert.equal(rows.rows[0].stage, "delete_ready");
 });
-
-it("keeps one outbox row per grant, and orders by when it is next due", async () => {
-  await pool.query(
-    `INSERT INTO apple_revocations(client_id,refresh_token,apple_sub)
-     VALUES('haus.waffle.ergomatic','rt-1','sub-a'),
-           ('haus.waffle.ergomatic.web.staging','rt-2','sub-a')`,
-  );
-  const rows = await pool.query("SELECT client_id,attempts FROM apple_revocations ORDER BY client_id");
-  assert.equal(rows.rowCount, 2);
-  assert.equal(rows.rows[0].attempts, 0);
-});
 ```
+
+The third test is the one that matters most: the `delete` arm must be **added**
+to `auth_attempts_session_check`, not blended into the `link` arm. A widening
+that accidentally drops `existing_provider <> target_provider` from the link arm
+would let a link re-prove the provider it is adding, and no other test here
+would notice.
 
 - [ ] **Step 2: Run it and watch it fail**
 
@@ -186,47 +262,11 @@ it("keeps one outbox row per grant, and orders by when it is next due", async ()
 cd app && pnpm test --project integration -- schema.integration
 ```
 
-Expected: the first three fail on `auth_attempts_purpose_check` /
-`auth_attempts_stage_check`; the fourth fails with
-`relation "apple_revocations" does not exist`.
+Expected: tests 1, 2 and 4 fail on `auth_attempts_purpose_check` /
+`auth_attempts_stage_check`. Test 3 passes already — it is a regression pin, and
+it must still pass at Step 5.
 
-- [ ] **Step 3: Add the tables and unions to `schema.ts`**
-
-In `app/server/db/schema.ts`, beside `appleGrants`:
-
-```ts
-export const appleRevocations = pgTable(
-  "apple_revocations",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    clientId: text("client_id").notNull(),
-    refreshToken: text("refresh_token").notNull(),
-    // Retained deliberately. It is what makes the re-registration hazard
-    // decidable rather than guessed: before each attempt, a live account
-    // holding this subject means the Apple ID came back, and the row is
-    // dropped unrevoked. The spec's "retention argument" section is the
-    // justification -- these rows exist solely to discharge Apple's own
-    // documented revocation instruction, for a bounded period.
-    appleSub: text("apple_sub").notNull(),
-    attempts: integer("attempts").notNull().default(0),
-    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    check("apple_revocations_attempts_check", sql`${t.attempts} >= 0`),
-    index("apple_revocations_due_idx").on(t.nextAttemptAt),
-  ],
-);
-```
-
-**There is no foreign key to `users` and that is the point** — the row must
-outlive the account it came from.
-
-Widen the three CHECK constraints on `authAttempts` to:
+- [ ] **Step 3: Widen the three CHECK constraints in `schema.ts`**
 
 ```
 purpose in ('signin','link','delete')
@@ -245,6 +285,7 @@ or (purpose='delete' and original_session_id is not null
 
 The `delete` arm deliberately has **no** `<> target_provider` clause: a delete
 re-proves a provider the rower already holds, so existing and target are equal.
+The `link` arm keeps its clause untouched.
 
 In `app/shared/auth.ts`:
 
@@ -258,12 +299,11 @@ export type AuthPurpose = "signin" | "link" | "delete";
 cd app && pnpm db:generate
 ```
 
-Open the generated `drizzle/0032_*.sql`. It must contain four `ALTER TABLE`
-statements (drop + add for each widened CHECK is two per constraint; drizzle may
-emit them differently — what matters is the final constraint text), one
-`CREATE TABLE "apple_revocations"`, and one `CREATE INDEX`. **Rename the file to
-`0032_account_management.sql`** and update `drizzle/meta/_journal.json` to match,
-following the convention of `0029_drop_difficulty_compat.sql`.
+Open the generated `drizzle/0032_*.sql`. It must contain only `ALTER TABLE`
+statements against `auth_attempts` — **no `CREATE TABLE`**. If drizzle emits a
+table, something from the withdrawn outbox is still in `schema.ts`. Rename the
+file to `0032_account_delete_purpose.sql` and update
+`drizzle/meta/_journal.json`, following `0029_drop_difficulty_compat.sql`.
 
 - [ ] **Step 5: Run the tests and watch them pass**
 
@@ -271,66 +311,69 @@ following the convention of `0029_drop_difficulty_compat.sql`.
 cd app && pnpm test --project integration -- schema.integration
 ```
 
-Expected: PASS, 4 new tests.
+Expected: PASS, 4 tests, including the unchanged regression pin.
 
-- [ ] **Step 6: Prove the constraints can still refuse**
+- [ ] **Step 6: Commit, then prove the constraints can still refuse**
 
-Mutation probe, per RF21. Temporarily widen the `delete` arm of
-`auth_attempts_session_check` to drop `original_session_id is not null`,
-re-run, and confirm the "refuses a delete-purpose attempt with no session to
-ride" test goes **red**. Record what the failure said. Revert the mutation
-(the file is committed first — see Step 7's ordering note).
-
-- [ ] **Step 7: Commit**
-
-**Commit before the probe in Step 6, not after** (RF22): a mutation revert on a
-dirty file has destroyed real work here twice.
+**Commit first** (RF22): a mutation revert on a dirty file has destroyed real
+work here twice.
 
 ```bash
 cd /Users/james/projects/github/jamesawesome/Ergomatic-worktrees/wave-a-pr1
 git rev-parse --show-toplevel   # MUST print the worktree path, not the main checkout
 git add app/drizzle app/server/db/schema.ts app/shared/auth.ts app/server/db/schema.integration.test.ts
-git commit -m "Account management: the delete purpose, the delete_ready stage, and the revocation outbox"
+git commit -m "Account management: the delete purpose and the delete_ready stage"
 ```
+
+Then widen the `delete` arm to drop `original_session_id is not null`, re-run,
+confirm test 2 goes **red**, record what the failure said, and revert.
 
 ---
 
-## Task 2: Unlink, and the three reasons zero rows can happen
+## Task 2: Unlink, the three reasons zero rows can happen, and the revoker
 
 **Files:**
-- Modify: `app/server/auth/attempts.ts`
-- Create: `app/server/auth/accountRoutes.ts`
-- Create: `app/server/auth/accountRoutes.integration.test.ts`
-- Modify: `app/server/auth/frontDoorRoutes.ts`
+- Create: `app/server/auth/appleRevoke.ts`, `app/server/auth/accountRoutes.ts`,
+  `app/server/auth/accountRoutes.integration.test.ts`
+- Modify: `app/server/auth/attempts.ts`, `app/server/auth/frontDoor.ts`,
+  `app/shared/auth.ts`
 
 **Interfaces:**
 - Consumes: Task 1's migration.
 - Produces:
-  `unlink(userId: string, provider: AuthProvider): Promise<UnlinkOutcome>` on the
-  `Attempts` object, where
-  `type UnlinkOutcome = { outcome: "unlinked" } | { outcome: "last_provider" } | { outcome: "not_connected" } | { outcome: "account_gone" }`;
-  and the route `DELETE /api/auth/methods/:provider`.
+  ```ts
+  // shared/auth.ts
+  export type UnlinkOutcome =
+    | { outcome: "unlinked"; appleRevoked: boolean }
+    | { outcome: "last_provider" }
+    | { outcome: "not_connected" }
+    | { outcome: "account_gone" };
+  // appleRevoke.ts
+  export interface AppleGrant { clientId: string; refreshToken: string }
+  export type RevokeApple = (grants: AppleGrant[]) => Promise<boolean>;
+  ```
+  `createAttempts(pool, accessPolicy, revokeApple)` — a third **required**
+  parameter. Required, not defaulted: a default no-op would silently report
+  success, which is the exact failure RF25 names.
+  Route: `DELETE /api/auth/methods/:provider`.
 
 - [ ] **Step 1: Write the failing test**
-
-`app/server/auth/accountRoutes.integration.test.ts`:
 
 ```ts
 it("removes a provider from a two-provider account", async () => {
   const user = await seedUser({ googleSub: "g-1", appleSub: "a-1" });
   const result = await attempts.unlink(user.id, "apple");
-  assert.deepEqual(result, { outcome: "unlinked" });
+  assert.equal(result.outcome, "unlinked");
   const row = await pool.query("SELECT apple_sub,google_sub FROM users WHERE id=$1", [user.id]);
   assert.equal(row.rows[0].apple_sub, null);
   assert.equal(row.rows[0].google_sub, "g-1");
 });
 
-it("refuses to remove the last provider, and says which reason it was", async () => {
+it("refuses to remove the last provider, and leaves the subject intact", async () => {
   const user = await seedUser({ googleSub: null, appleSub: "a-2" });
-  const result = await attempts.unlink(user.id, "apple");
-  assert.deepEqual(result, { outcome: "last_provider" });
+  assert.deepEqual(await attempts.unlink(user.id, "apple"), { outcome: "last_provider" });
   const row = await pool.query("SELECT apple_sub FROM users WHERE id=$1", [user.id]);
-  assert.equal(row.rows[0].apple_sub, "a-2", "the subject must survive a refused unlink");
+  assert.equal(row.rows[0].apple_sub, "a-2");
 });
 
 it("distinguishes a provider that was never connected", async () => {
@@ -344,7 +387,12 @@ it("distinguishes an account deleted in another tab", async () => {
   assert.deepEqual(await attempts.unlink(user.id, "apple"), { outcome: "account_gone" });
 });
 
-it("enqueues every Apple grant for revocation when Apple is removed", async () => {
+it("revokes BOTH grants when a phone-and-web rower removes Apple", async () => {
+  const seen: string[] = [];
+  const attempts = makeAttempts(async (grants) => {
+    for (const g of grants) seen.push(g.refreshToken);
+    return true;
+  });
   const user = await seedUser({ googleSub: "g-5", appleSub: "a-5" });
   await pool.query(
     `INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES
@@ -352,26 +400,55 @@ it("enqueues every Apple grant for revocation when Apple is removed", async () =
       ($1,'haus.waffle.ergomatic.web.staging','rt-web')`,
     [user.id],
   );
-  await attempts.unlink(user.id, "apple");
-  const queued = await pool.query(
-    "SELECT client_id,refresh_token,apple_sub FROM apple_revocations ORDER BY client_id",
+  const result = await attempts.unlink(user.id, "apple");
+  assert.deepEqual(seen.sort(), ["rt-native", "rt-web"]);
+  assert.equal(result.outcome === "unlinked" && result.appleRevoked, true);
+  assert.equal((await pool.query("SELECT 1 FROM apple_grants WHERE user_id=$1", [user.id])).rowCount, 0);
+});
+
+it("still removes the method when Apple cannot be reached, and says so", async () => {
+  const attempts = makeAttempts(async () => false);
+  const user = await seedUser({ googleSub: "g-6", appleSub: "a-6" });
+  await pool.query(
+    `INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'c','rt')`,
+    [user.id],
   );
-  assert.equal(queued.rowCount, 2, "a phone-and-web rower holds TWO live refresh tokens");
-  assert.equal(queued.rows[0].apple_sub, "a-5");
-  const grants = await pool.query("SELECT 1 FROM apple_grants WHERE user_id=$1", [user.id]);
-  assert.equal(grants.rowCount, 0);
+  const result = await attempts.unlink(user.id, "apple");
+  assert.deepEqual(result, { outcome: "unlinked", appleRevoked: false });
+  const row = await pool.query("SELECT apple_sub FROM users WHERE id=$1", [user.id]);
+  assert.equal(row.rows[0].apple_sub, null, "a failed revoke never undoes the unlink");
+});
+
+it("never calls Apple while the transaction is still open", async () => {
+  // The external call must happen AFTER the commit. If it runs inside, a slow
+  // Apple holds a row lock, and a revoke that succeeds before a commit that
+  // fails destroys a credential for an account that still exists.
+  let openDuringCall = true;
+  const attempts = makeAttempts(async () => {
+    const row = await pool.query(
+      "SELECT apple_sub FROM users WHERE id=$1",
+      [trackedUserId],
+    );
+    // A second connection sees the committed NULL only if the tx already ended.
+    openDuringCall = row.rows[0]?.apple_sub !== null;
+    return true;
+  });
+  const user = await seedUser({ googleSub: "g-7", appleSub: "a-7" });
+  trackedUserId = user.id;
+  await pool.query(`INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'c','rt')`, [user.id]);
+  await attempts.unlink(user.id, "apple");
+  assert.equal(openDuringCall, false, "the revoke ran before the commit");
 });
 
 it("holds the guard against a concurrent unlink of the other provider", async () => {
   // A held-lock test, not a race (spec, Testing). Verify the pool has >= 2
   // connections first, or this hangs instead of failing.
   assert.ok(pool.options.max >= 2, "this test needs a second connection");
-  const user = await seedUser({ googleSub: "g-6", appleSub: "a-6" });
+  const user = await seedUser({ googleSub: "g-8", appleSub: "a-8" });
   const holder = await pool.connect();
   try {
     await holder.query("BEGIN");
     await holder.query("UPDATE users SET google_sub=NULL WHERE id=$1", [user.id]);
-    // Uncommitted. The unlink below must block, then see google_sub NULL and refuse.
     const pending = attempts.unlink(user.id, "apple");
     await holder.query("COMMIT");
     assert.deepEqual(await pending, { outcome: "last_provider" });
@@ -389,25 +466,82 @@ cd app && pnpm test --project integration -- accountRoutes
 
 Expected: FAIL, `attempts.unlink is not a function`.
 
-- [ ] **Step 3: Implement `unlink` in `attempts.ts`**
+- [ ] **Step 3: Write `appleRevoke.ts`**
 
-Add to the returned object in `createAttempts`:
+```ts
+import { SignJWT } from "jose";
+import type { ProviderConfig } from "./providers.js";
+
+export interface AppleGrant {
+  clientId: string;
+  refreshToken: string;
+}
+/** Resolves true only when EVERY grant was accepted by Apple. */
+export type RevokeApple = (grants: AppleGrant[]) => Promise<boolean>;
+
+export function createAppleRevoke(
+  config: ProviderConfig,
+  fetcher: typeof fetch = fetch,
+): RevokeApple {
+  return async (grants) => {
+    if (!grants.length) return true;
+    const results = await Promise.allSettled(
+      grants.map(async (g) => {
+        const secret = await new SignJWT({})
+          .setProtectedHeader({ alg: "ES256", kid: config.apple.keyId })
+          .setIssuer(config.apple.teamId)
+          .setSubject(g.clientId)
+          .setAudience("https://appleid.apple.com")
+          .setIssuedAt()
+          .setExpirationTime("5m")
+          .sign(config.apple.key);
+        const response = await fetcher("https://appleid.apple.com/auth/revoke", {
+          method: "POST",
+          body: new URLSearchParams({
+            token: g.refreshToken,
+            token_type_hint: "refresh_token",
+            client_id: g.clientId,
+            client_secret: secret,
+          }),
+          // Bounded on purpose. The rower is waiting on a delete that has
+          // ALREADY committed; this call can only add latency, never change
+          // the outcome, so it gets a short leash.
+          signal: AbortSignal.timeout(3000),
+          redirect: "error",
+        });
+        // Apple's 200 covers "revoked successfully OR was previously invalid",
+        // so a repeat is harmless and needs no dedupe.
+        if (!response.ok) throw new Error(String(response.status));
+      }),
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed)
+      console.warn(
+        JSON.stringify({ event: "apple_revoke_failed", failed, of: grants.length }),
+      );
+    return failed === 0;
+  };
+}
+```
+
+- [ ] **Step 4: Implement `unlink` in `attempts.ts`**
 
 ```ts
 async unlink(userId: string, provider: AuthProvider): Promise<UnlinkOutcome> {
-  return transaction(async (tx) => {
+  const settled = await transaction(async (tx): Promise<
+    UnlinkOutcome | { outcome: "unlinked"; grants: AppleGrant[] }
+  > => {
     const column = subjectColumn(provider);
     const other = subjectColumn(provider === "apple" ? "google" : "apple");
     // The guard lives in the WHERE clause, not a read-then-write. The database
     // enforces the invariant, so two tabs unlinking different providers cannot
     // both pass.
     //
-    // The self-join exists because a plain `RETURNING apple_sub` yields the
-    // NEW row -- which is the NULL we just wrote. `FROM users old` is how
-    // Postgres exposes the pre-update value, and the subject is needed for the
-    // outbox row below. Paste-tested on Postgres 18.4: this form returns
-    // `a-1` with `UPDATE 1` on a two-provider account, and 0 rows with the
-    // subject left intact on a last-provider one.
+    // The self-join exists because a plain `RETURNING apple_sub` yields the NEW
+    // row, which is the NULL we just wrote. `FROM users old` is how Postgres
+    // exposes the pre-update value. Paste-tested on Postgres 18.4: returns
+    // `a-1` with UPDATE 1 on a two-provider account, 0 rows with the subject
+    // intact on a last-provider one.
     const updated = await tx.query<{ oldSub: string }>(
       `UPDATE users u SET ${column}=NULL
          FROM users old
@@ -426,46 +560,29 @@ async unlink(userId: string, provider: AuthProvider): Promise<UnlinkOutcome> {
           [userId],
         )
       ).rows[0];
-      if (!row) return { outcome: "account_gone" as const };
-      if (!row.mine) return { outcome: "not_connected" as const };
-      return { outcome: "last_provider" as const };
+      if (!row) return { outcome: "account_gone" };
+      if (!row.mine) return { outcome: "not_connected" };
+      return { outcome: "last_provider" };
     }
-    if (provider === "apple") {
-      // BOTH grants, if the rower used phone and web. `frontDoor.ts` refuses to
-      // boot if the native and web client ids are equal, so these are always
-      // distinct rows.
-      const grants = await tx.query<{ clientId: string; refreshToken: string }>(
-        `DELETE FROM apple_grants WHERE user_id=$1
-          RETURNING client_id AS "clientId", refresh_token AS "refreshToken"`,
-        [userId],
-      );
-      for (const g of grants.rows)
-        await tx.query(
-          "INSERT INTO apple_revocations(client_id,refresh_token,apple_sub) VALUES($1,$2,$3)",
-          [g.clientId, g.refreshToken, updated.rows[0].oldSub],
-        );
-    }
-    return { outcome: "unlinked" as const };
+    if (provider !== "apple") return { outcome: "unlinked", grants: [] };
+    // BOTH grants, if the rower used phone and web. `frontDoor.ts` refuses to
+    // boot if the native and web client ids are equal, so these are distinct.
+    const grants = await tx.query<AppleGrant>(
+      `DELETE FROM apple_grants WHERE user_id=$1
+        RETURNING client_id AS "clientId", refresh_token AS "refreshToken"`,
+      [userId],
+    );
+    return { outcome: "unlinked", grants: grants.rows };
   });
+  if (!("grants" in settled)) return settled;
+  // AFTER the commit, never inside it. Our copy of the credential is already
+  // destroyed; this only asks Apple to forget too, and a failure cannot and
+  // must not undo the unlink.
+  return { outcome: "unlinked", appleRevoked: await revokeApple(settled.grants) };
 }
 ```
 
-Add the type to **`app/shared/auth.ts`**, not `attempts.ts` — the client parses
-this response, and `src/` importing from `server/` is refused by
-`no-restricted-imports` and by typecheck:
-
-```ts
-export type UnlinkOutcome =
-  | { outcome: "unlinked" }
-  | { outcome: "last_provider" }
-  | { outcome: "not_connected" }
-  | { outcome: "account_gone" };
-```
-
-`attempts.ts` imports it from `../../shared/auth.js`; `authFlow.ts` imports it
-from `../../shared/auth`.
-
-- [ ] **Step 4: Add the route**
+- [ ] **Step 5: Add the route and wire the revoker**
 
 `app/server/auth/accountRoutes.ts`:
 
@@ -501,43 +618,54 @@ export function createAccountRoutes(deps: {
 }
 ```
 
-Export `failure` from `frontDoorRoutes.ts` if it is not already exported, and
-mount the router in `frontDoor.ts` beside `createFrontDoorRoutes`.
+Export `failure` from `frontDoorRoutes.ts` if it is not already exported. In
+`frontDoor.ts`:
 
-- [ ] **Step 5: Run the tests and watch them pass**
+```ts
+const attempts = createAttempts(pool, accessPolicy, createAppleRevoke(config));
+```
+
+and mount `createAccountRoutes({ attempts, sessions })` beside the front-door
+router.
+
+- [ ] **Step 6: Run the tests and watch them pass**
 
 ```bash
 cd app && pnpm test --project integration -- accountRoutes
 ```
 
-Expected: PASS, 6 tests.
+Expected: PASS, 8 tests.
 
-- [ ] **Step 6: Prove the guard can go red**
-
-Mutate the `WHERE` clause — delete `AND ${other} IS NOT NULL` — and confirm
-"refuses to remove the last provider" fails. Record the message. Revert.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Commit, then prove the guard can go red**
 
 ```bash
 git rev-parse --show-toplevel
-git add app/server/auth/
+git add app/server/auth/ app/shared/auth.ts
 git commit -m "Unlink a sign-in method, with the last-provider guard in the WHERE clause"
 ```
+
+Two mutations, both recorded with what the failure said:
+1. Delete `AND ${other} IS NOT NULL` from the `WHERE` → "refuses to remove the
+   last provider" must fail.
+2. Move the `revokeApple` call inside the transaction → "never calls Apple while
+   the transaction is still open" must fail. If it does **not** fail, that test
+   is decoration and must be fixed before moving on (RF21).
 
 ---
 
 ## Task 3: Deletion — the `delete` purpose through the attempt machine
 
 **Files:**
-- Modify: `app/server/auth/attempts.ts`
-- Modify: `app/server/auth/frontDoorRoutes.ts`
+- Modify: `app/server/auth/attempts.ts`, `app/server/auth/frontDoorRoutes.ts`,
+  `app/shared/auth.ts`
 - Test: `app/server/auth/attempts.integration.test.ts`
 
 **Interfaces:**
-- Consumes: Task 1's `delete` purpose and `delete_ready` stage; Task 2's outbox
-  insert pattern.
-- Produces: `deleteAccount(expected: Attempt, currentSessionId: string): Promise<{ deleted: true }>`;
+- Consumes: Task 1's `delete` purpose and `delete_ready` stage; Task 2's
+  `RevokeApple`.
+- Produces:
+  `deleteAccount(expected: Attempt, currentSessionId: string): Promise<DeleteOutcome>`
+  where `type DeleteOutcome = { outcome: "deleted"; appleRevoked: boolean }`;
   the route `POST /api/auth/{surface}/attempts/:id/delete`.
 
 - [ ] **Step 1: Write the failing test**
@@ -547,9 +675,7 @@ it("re-proves the provider the rower already holds, not the opposite one", async
   const user = await seedUser({ googleSub: "g-1", appleSub: null });
   const session = await seedSession(user.id);
   const { attempt } = await attempts.begin({
-    surface: "native",
-    purpose: "delete",
-    targetProvider: "google",
+    surface: "native", purpose: "delete", targetProvider: "google",
     originalSessionId: session.id,
   });
   assert.equal(attempt.existingProvider, "google", "a delete re-proves what you hold");
@@ -562,9 +688,7 @@ it("refuses a delete attempt naming a provider the rower does not hold", async (
   const session = await seedSession(user.id);
   await assert.rejects(
     attempts.begin({
-      surface: "native",
-      purpose: "delete",
-      targetProvider: "apple",
+      surface: "native", purpose: "delete", targetProvider: "apple",
       originalSessionId: session.id,
     }),
     (e: AuthFailure) => e.code === "account_conflict",
@@ -572,11 +696,10 @@ it("refuses a delete attempt naming a provider the rower does not hold", async (
 });
 
 it("reaches delete_ready when the reauth matches the signed-in account", async () => {
-  const { claimed, session } = await reauthenticatedDeleteAttempt({ sub: "g-3" });
+  const { claimed } = await reauthenticatedDeleteAttempt({ sub: "g-3" });
   const result = await attempts.accept(claimed, identity({ sub: "g-3" }));
   assert.equal(result.attempt!.stage, "delete_ready");
   assert.ok(result.attempt!.reauthenticatedAt);
-  void session;
 });
 
 it("refuses when the reauth proves a DIFFERENT account", async () => {
@@ -599,39 +722,77 @@ it("removes rows from all twelve tables and leaves the account gone", async () =
     const rows = await pool.query(`SELECT 1 FROM ${table} WHERE user_id=$1`, [user.id]);
     assert.equal(rows.rowCount, 0, `${table} still holds rows`);
   }
-  const attemptRows = await pool.query("SELECT 1 FROM auth_attempts WHERE id=$1", [ready.id]);
-  assert.equal(attemptRows.rowCount, 0, "auth_attempts cascades through sessions");
-  const userRows = await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id]);
-  assert.equal(userRows.rowCount, 0);
+  assert.equal(
+    (await pool.query("SELECT 1 FROM auth_attempts WHERE id=$1", [ready.id])).rowCount, 0,
+    "auth_attempts cascades through sessions",
+  );
+  assert.equal((await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount, 0);
 });
 
-it("enqueues one revocation per Apple grant before the account goes", async () => {
-  const user = await seedUser({ googleSub: "g-7", appleSub: "a-7" });
+it("revokes every Apple grant plus the attempt's own credential", async () => {
+  const seen: string[] = [];
+  const attempts = makeAttempts(async (grants) => {
+    for (const g of grants) seen.push(g.refreshToken);
+    return true;
+  });
+  const user = await seedUser({ googleSub: null, appleSub: "a-7" });
   await pool.query(
     `INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES
       ($1,'haus.waffle.ergomatic','rt-native'),
       ($1,'haus.waffle.ergomatic.web.staging','rt-web')`,
     [user.id],
   );
+  // The attempt carries a THIRD live credential, which would otherwise cascade
+  // away through sessions with nothing revoked (spec, "The other two live
+  // credentials").
+  const { ready, session } = await deleteReadyAttempt(user, {
+    appleClientId: "haus.waffle.ergomatic", appleRefreshToken: "rt-attempt",
+  });
+  const result = await attempts.deleteAccount(ready, session.id);
+  assert.deepEqual(seen.sort(), ["rt-attempt", "rt-native", "rt-web"]);
+  assert.equal(result.appleRevoked, true);
+});
+
+it("deletes the account even when Apple cannot be reached, and says so", async () => {
+  const attempts = makeAttempts(async () => false);
+  const user = await seedUser({ googleSub: null, appleSub: "a-8" });
+  await pool.query(`INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'c','rt')`, [user.id]);
   const { ready, session } = await deleteReadyAttempt(user);
-  await attempts.deleteAccount(ready, session.id);
-  const queued = await pool.query("SELECT apple_sub FROM apple_revocations");
-  assert.equal(queued.rowCount, 2);
-  assert.equal(queued.rows[0].apple_sub, "a-7");
+  assert.deepEqual(await attempts.deleteAccount(ready, session.id), {
+    outcome: "deleted", appleRevoked: false,
+  });
+  assert.equal((await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount, 0);
+});
+
+it("does NOT delete the account when the local write fails", async () => {
+  // RF25's owner: our write failing is fatal. The rower must not be told the
+  // account is gone when it is not.
+  const user = await seedUser({ googleSub: "g-9", appleSub: null });
+  const { ready, session } = await deleteReadyAttempt(user);
+  await pool.query(
+    "ALTER TABLE sessions ADD CONSTRAINT force_delete_failure CHECK (token_hash <> 'x')",
+  );
+  try {
+    await pool.query("UPDATE sessions SET token_hash='x' WHERE id=$1", [session.id]);
+  } catch { /* the constraint is what we want, not this write */ }
+  // Force the cascade to fail, then assert the account survives and the caller saw it.
+  await assert.rejects(attempts.deleteAccount(ready, session.id));
+  assert.equal((await pool.query("SELECT 1 FROM users WHERE id=$1", [user.id])).rowCount, 1);
+  await pool.query("ALTER TABLE sessions DROP CONSTRAINT force_delete_failure");
 });
 
 it("does not deadlock against a concurrent sign-in on the same session", async () => {
-  // The lock order is the whole point. Measured on Postgres 18.4: the reverse
-  // order deadlocks and the AUTH transaction is the victim, which surfaces to
-  // a rower as a mysterious sign-in failure.
+  // Measured on Postgres 18.4: the reverse lock order deadlocks and the AUTH
+  // transaction is the victim, which a rower experiences as a sign-in that
+  // fails for no reason.
   assert.ok(pool.options.max >= 2);
-  const user = await seedUser({ googleSub: "g-8", appleSub: null });
+  const user = await seedUser({ googleSub: "g-10", appleSub: null });
   const session = await seedSession(user.id);
   const holder = await pool.connect();
   try {
     await holder.query("BEGIN");
     await holder.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [user.id]);
-    const { ready } = await deleteReadyAttempt(user, session);
+    const { ready } = await deleteReadyAttempt(user, {}, session);
     const pending = attempts.deleteAccount(ready, session.id);
     await holder.query("COMMIT");
     await pending; // must resolve, never reject with a deadlock
@@ -652,10 +813,6 @@ Expected: FAIL — `begin()` has no `delete` branch, so the `link` path's
 
 - [ ] **Step 3: Add the `delete` branch to `begin()`**
 
-In `attempts.ts`, replace the `if (input.purpose === "link") {` block's opening
-so both non-signin purposes share the session lookup, and the provider
-resolution differs:
-
 ```ts
 if (input.purpose === "link" || input.purpose === "delete") {
   if (!input.originalSessionId) throw new AuthFailure("account_changed");
@@ -664,9 +821,7 @@ if (input.purpose === "link" || input.purpose === "delete") {
   existing =
     input.purpose === "delete"
       ? input.targetProvider
-      : input.targetProvider === "apple"
-        ? "google"
-        : "apple";
+      : input.targetProvider === "apple" ? "google" : "apple";
   const user = (
     await tx.query<{ existing: string | null; target: string | null }>(
       `SELECT ${subjectColumn(existing)} AS existing,${subjectColumn(input.targetProvider)} AS target FROM users WHERE id=$1`,
@@ -676,8 +831,8 @@ if (input.purpose === "link" || input.purpose === "delete") {
   if (input.purpose === "link") {
     if (!user?.existing || user.target) throw new AuthFailure("account_conflict");
   } else if (!user?.existing) {
-    // A delete must name a provider the rower actually holds. There is
-    // nothing to re-prove otherwise.
+    // A delete must name a provider the rower actually holds; there is nothing
+    // to re-prove otherwise.
     throw new AuthFailure("account_conflict");
   }
   await tx.query("DELETE FROM auth_attempts WHERE original_session_id=$1", [
@@ -686,15 +841,9 @@ if (input.purpose === "link" || input.purpose === "delete") {
 }
 ```
 
-Change the stage literal so a delete also starts at reauth:
-
-```ts
-input.purpose === "signin" ? "authorize" : "reauth_authorize",
-```
-
-(already correct — it keys off `signin`, so no edit needed; confirm by reading).
-
-And the `original_session_id` argument:
+The stage literal `input.purpose === "signin" ? "authorize" : "reauth_authorize"`
+already handles `delete` — read it and confirm, do not edit. The session
+argument does need editing:
 
 ```ts
 input.purpose === "signin" ? null : input.originalSessionId,
@@ -702,39 +851,24 @@ input.purpose === "signin" ? null : input.originalSessionId,
 
 - [ ] **Step 4: Add the `delete` arm to `accept()`**
 
-In the `reauth_exchanging` branch, the existing code moves a link to
-`target_authorize`. Split on purpose:
+In the `reauth_exchanging` branch, after the existing
+`if (user?.id !== session.userId) throw new AuthFailure("account_changed");`:
 
 ```ts
-if (a.stage === "reauth_exchanging") {
-  const session = await original(tx, a.originalSessionId!, true);
-  const user = await find(tx, a.existingProvider!, identity.sub);
-  if (user?.id !== session.userId) throw new AuthFailure("account_changed");
-  if (a.purpose === "delete")
-    return {
-      attempt: await save(tx, {
-        ...a,
-        stage: "delete_ready",
-        reauthenticatedAt: now,
-        expiresAt: new Date(now.getTime() + ttl),
-      }),
-    };
+if (a.purpose === "delete")
   return {
     attempt: await save(tx, {
       ...a,
-      stage: "target_authorize",
-      state: random(),
-      nonce: random(),
+      stage: "delete_ready",
       reauthenticatedAt: now,
       expiresAt: new Date(now.getTime() + ttl),
     }),
   };
-}
 ```
 
-**`consistent()` must accept the new stage.** Its current rule
-`(a.stage.startsWith("target_") || a.stage === "link_ready") && !a.reauthenticatedAt`
-does not cover `delete_ready`. Widen it:
+leaving the `target_authorize` transition below it unchanged.
+
+**`consistent()` must accept the new stage**, or `save()` throws. Widen:
 
 ```ts
 ((a.stage.startsWith("target_") ||
@@ -743,10 +877,8 @@ does not cover `delete_ready`. Widen it:
   !a.reauthenticatedAt)
 ```
 
-Also confirm the `signup` rule still holds: for `purpose="delete"` the stage is
-never one of `authorize`/`exchanging`/`confirm`, so
-`(a.purpose === "signin") !== signup` stays `false !== false`. Add a test
-asserting a `delete` attempt at stage `confirm` is rejected.
+Add a test asserting a `delete` attempt at stage `confirm` is still rejected by
+`consistent()` — the `signup` rule must not have been loosened.
 
 - [ ] **Step 5: Implement `deleteAccount`**
 
@@ -754,8 +886,8 @@ asserting a `delete` attempt at stage `confirm` is rejected.
 async deleteAccount(
   expected: Attempt,
   currentSessionId: string,
-): Promise<{ deleted: true }> {
-  return transaction(async (tx) => {
+): Promise<DeleteOutcome> {
+  const grants = await transaction(async (tx) => {
     const a = await bound(tx, expected);
     if (
       a.stage !== "delete_ready" ||
@@ -770,83 +902,61 @@ async deleteAccount(
     // Postgres 18.4 -- the reverse deadlocks against a concurrent sign-in and
     // the AUTH transaction is chosen as the victim, which a rower experiences
     // as a sign-in that fails for no reason. bound() -> original() has already
-    // taken the session lock above; this takes the rest of them before the
-    // DELETE cascades.
-    await tx.query("SELECT id FROM sessions WHERE user_id=$1 FOR UPDATE", [
-      session.userId,
-    ]);
-    const sub = (
+    // taken this session's lock; this takes the REST of them before the DELETE
+    // cascades into the table.
+    await tx.query("SELECT id FROM sessions WHERE user_id=$1 FOR UPDATE", [session.userId]);
+    const row = (
       await tx.query<{ appleSub: string | null }>(
         `SELECT apple_sub AS "appleSub" FROM users WHERE id=$1 FOR UPDATE`,
         [session.userId],
       )
     ).rows[0];
-    if (!sub) throw new AuthFailure("account_changed");
-    if (sub.appleSub) {
-      const grants = await tx.query<{ clientId: string; refreshToken: string }>(
-        `SELECT client_id AS "clientId", refresh_token AS "refreshToken"
-           FROM apple_grants WHERE user_id=$1`,
-        [session.userId],
-      );
-      for (const g of grants.rows)
-        await tx.query(
-          "INSERT INTO apple_revocations(client_id,refresh_token,apple_sub) VALUES($1,$2,$3)",
-          [g.clientId, g.refreshToken, sub.appleSub],
-        );
-    }
-    // The attempt's own Apple credential, which would otherwise cascade away
-    // through sessions with nothing revoked (spec, "The other two live
-    // credentials").
-    if (a.appleClientId && a.appleRefreshToken && sub.appleSub)
-      await tx.query(
-        "INSERT INTO apple_revocations(client_id,refresh_token,apple_sub) VALUES($1,$2,$3)",
-        [a.appleClientId, a.appleRefreshToken, sub.appleSub],
-      );
-    const deleted = await tx.query("DELETE FROM users WHERE id=$1", [
-      session.userId,
-    ]);
+    if (!row) throw new AuthFailure("account_changed");
+    // Read the credentials while they still exist -- they cascade away below.
+    const held = row.appleSub
+      ? (
+          await tx.query<AppleGrant>(
+            `SELECT client_id AS "clientId", refresh_token AS "refreshToken"
+               FROM apple_grants WHERE user_id=$1`,
+            [session.userId],
+          )
+        ).rows
+      : [];
+    if (row.appleSub && a.appleClientId && a.appleRefreshToken)
+      held.push({ clientId: a.appleClientId, refreshToken: a.appleRefreshToken });
+    const deleted = await tx.query("DELETE FROM users WHERE id=$1", [session.userId]);
     if (!deleted.rowCount) throw new AuthFailure("account_changed");
-    return { deleted: true as const };
+    return held;
   });
+  // AFTER the commit. The account is gone and cannot come back, so this call
+  // can only add latency. A rejection here must never propagate as a failed
+  // deletion -- that is the one confusion this whole ordering exists to avoid.
+  return { outcome: "deleted", appleRevoked: await revokeApple(grants) };
 }
 ```
 
+**Any throw from the transaction propagates, and that is deliberate.** The route
+must not catch it into a success.
+
 - [ ] **Step 6: Add the route**
 
-In `frontDoorRoutes.ts`, extend the action loop:
+In `frontDoorRoutes.ts`, extend the action loop to include `"delete"`, gated by
+`requireUser(sessions)` exactly as `finalize` is:
 
 ```ts
-for (const action of ["confirm", "finalize", "cancel", "delete"] as const)
-  router.post(
-    `${prefix}/:id/${action}`,
-    ...(action === "finalize" || action === "delete"
-      ? [requireUser(sessions)]
-      : []),
-    async (req, res) => {
-      try {
-        const secret = requestBinding(req, surface);
-        const attemptId = id(req);
-        if (action === "cancel") { /* unchanged */ }
-        const a = await attempts.read(attemptId, secret, surface);
-        if (action === "delete") {
-          await attempts.deleteAccount(a, req.sessionId!);
-          if (surface === "web") {
-            res.append("Set-Cookie", cookie("", 0));
-            res.append("Set-Cookie", sessionCookie("", new Date(0)));
-          }
-          res.json({ outcome: "deleted" });
-          return;
-        }
-        /* confirm / finalize unchanged */
-      } catch (error) {
-        failure(res, error);
-      }
-    },
-  );
+if (action === "delete") {
+  const outcome = await attempts.deleteAccount(a, req.sessionId!);
+  if (surface === "web") {
+    res.append("Set-Cookie", cookie("", 0));
+    res.append("Set-Cookie", sessionCookie("", new Date(0)));
+  }
+  res.json(outcome);
+  return;
+}
 ```
 
 The account's sessions are already gone with the cascade; clearing the cookies
-stops the browser from sending a token that now resolves to nothing.
+stops the browser sending a token that now resolves to nothing.
 
 - [ ] **Step 7: Run the tests and watch them pass**
 
@@ -854,281 +964,33 @@ stops the browser from sending a token that now resolves to nothing.
 cd app && pnpm test --project integration -- attempts.integration
 ```
 
-Expected: PASS, 7 new tests.
+Expected: PASS, 9 new tests.
 
-- [ ] **Step 8: Prove the lock order can go red**
-
-Swap the order in `deleteAccount` — take the `users` `FOR UPDATE` before the
-`sessions` one — and confirm the deadlock test fails with
-`deadlock detected`. **Record the exact message.** Revert. This is the one
-mutation that proves the comment is load-bearing rather than decorative.
-
-- [ ] **Step 9: Commit**
+- [ ] **Step 8: Commit, then prove the lock order can go red**
 
 ```bash
 git rev-parse --show-toplevel
-git add app/server/auth/
+git add app/server/auth/ app/shared/auth.ts
 git commit -m "Delete an account: reauth through the delete purpose, sessions locked before users"
 ```
 
----
-
-## Task 4: The revocation outbox and its sweep arm
-
-**Files:**
-- Create: `app/server/auth/revocations.ts`
-- Create: `app/server/auth/revocations.integration.test.ts`
-- Modify: `app/server/auth/frontDoor.ts`
-
-**Interfaces:**
-- Consumes: the `apple_revocations` table; `providers` for the client secret.
-- Produces: `createRevocations(pool, config)` exposing
-  `drain(): Promise<{ revoked: number; dropped: number; failed: number }>`.
-
-- [ ] **Step 1: Write the failing test**
-
-```ts
-it("drops a row unrevoked when the Apple ID has re-registered", async () => {
-  await seedUser({ googleSub: null, appleSub: "sub-back" });
-  await pool.query(
-    "INSERT INTO apple_revocations(client_id,refresh_token,apple_sub) VALUES('c','rt','sub-back')",
-  );
-  const fetcher = mock.fn();
-  const result = await createRevocations(pool, config, fetcher).drain();
-  assert.equal(result.dropped, 1);
-  assert.equal(fetcher.mock.callCount(), 0, "a re-registered subject is never revoked");
-  assert.equal((await pool.query("SELECT 1 FROM apple_revocations")).rowCount, 0);
-});
-
-it("deletes the row when Apple accepts the revoke", async () => {
-  await pool.query(
-    "INSERT INTO apple_revocations(client_id,refresh_token,apple_sub) VALUES('c','rt','sub-gone')",
-  );
-  const fetcher = mock.fn(async () => new Response("", { status: 200 }));
-  const result = await createRevocations(pool, config, fetcher).drain();
-  assert.equal(result.revoked, 1);
-  assert.equal((await pool.query("SELECT 1 FROM apple_revocations")).rowCount, 0);
-});
-
-it("backs off and keeps the row when Apple fails", async () => {
-  await pool.query(
-    "INSERT INTO apple_revocations(client_id,refresh_token,apple_sub) VALUES('c','rt','sub-gone')",
-  );
-  const fetcher = mock.fn(async () => new Response("", { status: 500 }));
-  await createRevocations(pool, config, fetcher).drain();
-  const row = await pool.query("SELECT attempts,next_attempt_at>now() AS later FROM apple_revocations");
-  assert.equal(row.rows[0].attempts, 1);
-  assert.equal(row.rows[0].later, true);
-});
-
-it("drops the row at the cap and says so", async () => {
-  await pool.query(
-    "INSERT INTO apple_revocations(client_id,refresh_token,apple_sub,attempts) VALUES('c','rt','sub-gone',4)",
-  );
-  const fetcher = mock.fn(async () => new Response("", { status: 500 }));
-  const result = await createRevocations(pool, config, fetcher).drain();
-  assert.equal(result.failed, 1);
-  assert.equal((await pool.query("SELECT 1 FROM apple_revocations")).rowCount, 0);
-});
-
-it("gives two concurrent drains disjoint work", async () => {
-  // SKIP LOCKED, measured: claimer 1 took rt-1 and rt-2, claimer 2 took rt-3.
-  assert.ok(pool.options.max >= 2);
-  await pool.query(
-    `INSERT INTO apple_revocations(client_id,refresh_token,apple_sub) VALUES
-      ('c','rt-1','s1'),('c','rt-2','s2'),('c','rt-3','s3')`,
-  );
-  const seen: string[] = [];
-  const slow = async (_url: string, init: RequestInit) => {
-    seen.push(String(new URLSearchParams(init.body as string).get("token")));
-    await new Promise((r) => setTimeout(r, 50));
-    return new Response("", { status: 200 });
-  };
-  const r = createRevocations(pool, config, slow);
-  await Promise.all([r.drain(), r.drain()]);
-  assert.equal(new Set(seen).size, seen.length, "no token was revoked twice");
-  assert.equal(seen.length, 3);
-});
-```
-
-- [ ] **Step 2: Run it and watch it fail**
-
-```bash
-cd app && pnpm test --project integration -- revocations
-```
-
-Expected: FAIL, module not found.
-
-- [ ] **Step 3: Implement `revocations.ts`**
-
-```ts
-import { SignJWT } from "jose";
-import type pg from "pg";
-import type { ProviderConfig } from "./providers.js";
-
-const CAP = 5;
-const BACKOFF_MS = [60_000, 300_000, 900_000, 3_600_000, 21_600_000];
-
-export function createRevocations(
-  pool: pg.Pool,
-  config: ProviderConfig,
-  fetcher: typeof fetch = fetch,
-) {
-  async function clientSecret(clientId: string): Promise<string> {
-    return new SignJWT({})
-      .setProtectedHeader({ alg: "ES256", kid: config.apple.keyId })
-      .setIssuer(config.apple.teamId)
-      .setSubject(clientId)
-      .setAudience("https://appleid.apple.com")
-      .setIssuedAt()
-      .setExpirationTime("5m")
-      .sign(config.apple.key);
-  }
-  return {
-    async drain() {
-      let revoked = 0, dropped = 0, failed = 0;
-      const tx = await pool.connect();
-      try {
-        await tx.query("BEGIN");
-        // SKIP LOCKED gives concurrent sweepers disjoint work by construction:
-        // correct at one container and at five, with no coordination. It
-        // matters here because revocation is the first NON-IDEMPOTENT side
-        // effect in this loop -- the other arms are DELETEs, where duplicate
-        // work is only waste.
-        const claimed = await tx.query<{
-          id: string; clientId: string; refreshToken: string;
-          appleSub: string; attempts: number;
-        }>(
-          `SELECT id, client_id AS "clientId", refresh_token AS "refreshToken",
-                  apple_sub AS "appleSub", attempts
-             FROM apple_revocations
-            WHERE next_attempt_at <= now() AND attempts < $1
-            FOR UPDATE SKIP LOCKED LIMIT 10`,
-          [CAP],
-        );
-        for (const row of claimed.rows) {
-          // The deterministic guard. Apple documents that the subject "doesn't
-          // change if the user stops using Sign in with Apple with your app and
-          // later starts using it again", so a live account holding this
-          // subject means the Apple ID came back -- and revoking would hit the
-          // NEW relationship.
-          const live = await tx.query("SELECT 1 FROM users WHERE apple_sub=$1", [
-            row.appleSub,
-          ]);
-          if (live.rowCount) {
-            await tx.query("DELETE FROM apple_revocations WHERE id=$1", [row.id]);
-            dropped++;
-            continue;
-          }
-          let ok = false;
-          try {
-            const response = await fetcher("https://appleid.apple.com/auth/revoke", {
-              method: "POST",
-              body: new URLSearchParams({
-                token: row.refreshToken,
-                token_type_hint: "refresh_token",
-                client_id: row.clientId,
-                client_secret: await clientSecret(row.clientId),
-              }),
-              signal: AbortSignal.timeout(10000),
-              redirect: "error",
-            });
-            // 200 means "revoked successfully OR was previously invalid", so
-            // at-least-once delivery is safe and no dedupe is needed.
-            ok = response.ok;
-          } catch {
-            ok = false;
-          }
-          if (ok) {
-            await tx.query("DELETE FROM apple_revocations WHERE id=$1", [row.id]);
-            revoked++;
-          } else if (row.attempts + 1 >= CAP) {
-            // At the cap the row is dropped and the failure is logged. Apple's
-            // own conditional path says to direct the rower to revoke access
-            // themselves -- but they are gone by then. A known limit, recorded.
-            await tx.query("DELETE FROM apple_revocations WHERE id=$1", [row.id]);
-            console.warn(
-              JSON.stringify({ event: "apple_revocation_abandoned", clientId: row.clientId }),
-            );
-            failed++;
-          } else {
-            await tx.query(
-              "UPDATE apple_revocations SET attempts=attempts+1, next_attempt_at=now()+($2::int * interval '1 millisecond') WHERE id=$1",
-              [row.id, BACKOFF_MS[row.attempts] ?? BACKOFF_MS.at(-1)],
-            );
-          }
-        }
-        await tx.query("COMMIT");
-      } catch (error) {
-        await tx.query("ROLLBACK");
-        throw error;
-      } finally {
-        tx.release();
-      }
-      return { revoked, dropped, failed };
-    },
-  };
-}
-```
-
-**Note the crash semantics, from the spec's lifetime table:** a crash mid-attempt
-loses the increment, so the cap is a floor, not a ceiling.
-
-- [ ] **Step 4: Add the sweep arm**
-
-In `frontDoor.ts`, beside `sweepAttempts` and `sweepSessions`:
-
-```ts
-const revocations = createRevocations(pool, config);
-async function sweepRevocations() {
-  try {
-    await revocations.drain();
-  } catch {
-    console.warn(JSON.stringify({ event: "apple_revocation_sweep_failed" }));
-  }
-}
-async function sweep() {
-  await Promise.all([sweepAttempts(), sweepSessions(), sweepRevocations()]);
-}
-```
-
-The independent error boundary matters: a failing revoke must never stop
-attempts and sessions being swept.
-
-- [ ] **Step 5: Run the tests and watch them pass**
-
-```bash
-cd app && pnpm test --project integration -- revocations
-```
-
-Expected: PASS, 5 tests.
-
-- [ ] **Step 6: Prove the subject guard can go red**
-
-Delete the `if (live.rowCount)` block and confirm "drops a row unrevoked when
-the Apple ID has re-registered" fails on `fetcher.mock.callCount()`. Revert.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git rev-parse --show-toplevel
-git add app/server/auth/
-git commit -m "Revoke Apple credentials after deletion, through an outbox the existing sweep drains"
-```
+Swap the order in `deleteAccount` — take the `users` `FOR UPDATE` before the
+`sessions` one — and confirm the deadlock test fails with `deadlock detected`.
+**Record the exact message.** Revert. This is the mutation that proves the
+comment is load-bearing rather than decorative.
 
 ---
 
-## Task 5: The You screen — remove a method, delete the account
+## Task 4: The You screen — remove a method, delete the account
 
 **Files:**
-- Modify: `app/src/adapters/authFlow.ts`
-- Modify: `app/src/you/SignInMethods.tsx`
+- Modify: `app/src/adapters/authFlow.ts`, `app/src/you/SignInMethods.tsx`
 - Create: `app/src/you/DeleteAccount.tsx`
 - Test: `app/src/you/SignInMethods.test.tsx`, `app/src/you/DeleteAccount.test.tsx`
 
 **Interfaces:**
-- Consumes: `DELETE /api/auth/methods/:provider` returning `UnlinkOutcome`;
-  `POST /api/auth/{surface}/attempts/:id/delete` returning `{ outcome: "deleted" }`.
+- Consumes: `DELETE /api/auth/methods/:provider` → `UnlinkOutcome`;
+  `POST /api/auth/{surface}/attempts/:id/delete` → `DeleteOutcome`.
 - Produces: `removeMethod(provider)`, `startDelete(provider)`, `confirmDelete()`
   on `AuthFlowController`; `AuthFlowView` gains
   `{ kind: "unlinked"; provider: AuthProvider }`,
@@ -1137,24 +999,22 @@ git commit -m "Revoke Apple credentials after deletion, through an outbox the ex
 
 **This task carries the design gate.** It changes what a rower reads and sees,
 so **Gate 0 applies: James approves the rendered screens before any
-implementation step runs.** Present both orientations at real proportions,
-against what they replace, with every colour pairing's contrast ratio computed
-and stated as a number. Present it and STOP.
+implementation step runs.**
 
 - [ ] **Step 1: Gate 0 — render the screens and stop**
 
-Produce, as real captures against a seeded account:
+Produce, as real captures against a seeded account, in **both orientations at
+real proportions**, against what they replace, with every colour pairing's
+contrast ratio computed and stated as a number:
 
-1. The methods list with a two-provider account: each row carries `Remove`.
-2. The same list with one provider: the remaining row's `Remove` is absent, not
-   disabled-and-mysterious. State in the caption why (a disabled control with no
-   reason is the failure RC-24 shipped).
-3. Each of the three refusal notices, with its exact copy.
-4. The delete confirm screen, including the sentence about revocation **not**
-   being complete.
+1. The methods list on a two-provider account: each row carries `Remove`.
+2. The same list with one provider: the remaining row has **no** `Remove` at
+   all, rather than a disabled control with no explanation.
+3. Each of the three refusal notices, with exact copy.
+4. The delete confirm screen.
+5. The post-deletion Welcome notice for `appleRevoked: false`.
 
-Do not proceed until James approves. **The gate is the approval, not the
-presentation.**
+Present it and STOP. **The gate is the approval, not the presentation.**
 
 - [ ] **Step 2: Write the failing test**
 
@@ -1170,24 +1030,22 @@ it("offers no Remove on the last remaining method", async () => {
 });
 
 it("tells a rower whose account is gone the truth, not the last-provider line", async () => {
-  server.use(
-    http.delete("/api/auth/methods/apple", () =>
-      HttpResponse.json({ outcome: "account_gone" }),
-    ),
-  );
+  server.use(http.delete("/api/auth/methods/apple", () =>
+    HttpResponse.json({ outcome: "account_gone" })));
   renderMethods({ apple: true, google: true });
   await userEvent.click(screen.getByRole("button", { name: "Remove Apple" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    /account is no longer available/i,
-  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(/no longer available/i);
   expect(screen.queryByText(/last sign-in method/i)).toBeNull();
 });
 
-it("does not claim the Apple revocation is finished", async () => {
-  renderDeleteConfirm();
-  const body = screen.getByTestId("delete-confirm-body").textContent ?? "";
-  expect(body).not.toMatch(/revoked|removed from Apple/i);
-  expect(body).toMatch(/can take a little while/i);
+it("shows Apple's own remedy when the revoke did not land", async () => {
+  renderDeleted({ outcome: "deleted", appleRevoked: false });
+  expect(await screen.findByRole("status")).toHaveTextContent(/Apple ID settings/i);
+});
+
+it("says nothing about Apple when the revoke landed", async () => {
+  renderDeleted({ outcome: "deleted", appleRevoked: true });
+  expect(screen.queryByText(/Apple ID settings/i)).toBeNull();
 });
 ```
 
@@ -1198,17 +1056,19 @@ cd app && pnpm test --project client
 ```
 
 **Do not use `pnpm test --project client -- <pattern>`** — pnpm swallows the
-scoped flag and silently runs the whole suite. If you need a file filter:
+scoped flag and silently runs the whole suite. For a file filter:
 
 ```bash
 NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client src/you/SignInMethods.test.tsx
 ```
 
+Note that form collapses a signal death to exit 1 (RF40), and `console.log` from
+a client test never reaches stdout — use `process.stdout.write` for any probe
+readout (RF/TESTING.md §11).
+
 Expected: FAIL, no Remove buttons rendered.
 
 - [ ] **Step 4: Implement the controller methods**
-
-In `authFlow.ts`, add to the returned controller:
 
 ```ts
 async removeMethod(provider) {
@@ -1227,59 +1087,44 @@ async removeMethod(provider) {
 },
 ```
 
-`startDelete` mirrors `prepareLink`, passing `purpose: "delete"` and the
-provider the rower already holds; `confirmDelete` posts to the `delete` action
-and, on `{ outcome: "deleted" }`, clears the local token and routes to Welcome.
+`startDelete` mirrors `prepareLink` with `purpose: "delete"` and the provider the
+rower already holds. `confirmDelete` posts the `delete` action and, on
+`{ outcome: "deleted" }`, clears the local token and routes to Welcome, carrying
+`appleRevoked` so the notice can render once.
 
 - [ ] **Step 5: Implement the UI**
 
-In `SignInMethods.tsx`, a connected row becomes a row plus a `Remove` button,
-rendered **only when the other provider is also connected**:
+A connected row gains a `Remove` button, rendered **only when the other provider
+is also connected** (`const removable = methods.methods.apple && methods.methods.google;`):
 
 ```tsx
-{connected ? (
-  <div className="auth-method-row" key={provider}>
-    <span className="auth-method-name">{name(provider)}</span>
-    <span className="auth-method-connected">CONNECTED</span>
-    {removable && (
-      <button
-        className="button-l2 auth-method-remove"
-        aria-label={`Remove ${name(provider)}`}
-        onClick={() => void auth.removeMethod(provider)}
-      >
-        Remove
-      </button>
-    )}
-  </div>
-) : ( /* unchanged Add button */ )}
+{removable && (
+  <button
+    className="button-l2 auth-method-remove"
+    aria-label={`Remove ${name(provider)}`}
+    onClick={() => void auth.removeMethod(provider)}
+  >
+    Remove
+  </button>
+)}
 ```
 
-where `const removable = methods.methods.apple && methods.methods.google;`.
-
-The three refusal notices, copy exact:
+Copy, exact:
 
 - `last_provider` — "That's your only way back in, so it has to stay. Add the other sign-in method first, then remove this one."
 - `not_connected` — "That sign-in method isn't connected to this account."
 - `account_gone` — "This account is no longer available. Nothing was changed."
+- The confirm screen — "Your account and everything in it is deleted for good. This cannot be undone."
+- The `appleRevoked: false` notice — "Your account is deleted. We couldn't reach Apple to disconnect Ergomatic, so you can remove it yourself in your Apple ID settings, under Sign in with Apple."
 
-`DeleteAccount.tsx` carries the confirm copy. The revocation sentence:
+**The confirm screen must not promise anything about Apple**, because the
+revoke has not happened when it is read.
 
-> "Your account and everything in it goes right away. Telling Apple to forget
-> the connection can take a little while longer."
-
-44px minimum hit targets on every control. Compute the contrast ratio of the
-destructive button against its background and state the number in the PR body.
-
-- [ ] **Step 6: Run the tests and watch them pass**
+- [ ] **Step 6: Run the tests, then the e2e specs and captures**
 
 ```bash
 cd app && pnpm test --project client
-```
-
-- [ ] **Step 7: Run the e2e specs and capture**
-
-```bash
-cd app && pnpm e2e
+pnpm e2e
 pnpm screenshots
 git checkout -- docs/screenshots/   # then re-add ONLY the screens this diff touched
 ```
@@ -1287,7 +1132,7 @@ git checkout -- docs/screenshots/   # then re-add ONLY the screens this diff tou
 An `app/src/` change is not done until a full e2e run has passed somewhere you
 have read the result (RF1).
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git rev-parse --show-toplevel
@@ -1297,13 +1142,13 @@ git commit -m "You: remove a sign-in method, delete the account"
 
 ---
 
-## Task 6: The conflict copy, and the records
+## Task 5: The conflict copy, and the records
 
 **Files:**
-- Modify: `app/src/SignIn.tsx`
-- Modify: `ROADMAP.md`
-- Modify: `docs/superpowers/HANDOFF-2026-09-13-account-management.md`
-- Modify: `docs/design/DEVIATIONS.md` if any row it holds describes this area
+- Modify: `app/src/SignIn.tsx`, `ROADMAP.md`,
+  `docs/superpowers/specs/2026-09-13-account-management-design.md`,
+  `docs/superpowers/HANDOFF-2026-09-13-account-management.md`,
+  `docs/design/DEVIATIONS.md` if a row there describes this area
 
 **Interfaces:**
 - Consumes: deletion existing. **This copy cannot ship before Task 3.**
@@ -1330,27 +1175,38 @@ cd app && pnpm test --project client
 > "That Apple sign-in already belongs to another Ergomatic account. To use it
 > here, sign in to that account, delete it from You, then add this sign-in."
 
-- [ ] **Step 4: Correct the records**
+- [ ] **Step 4: Amend the spec, so the record does not contradict the code**
+
+Revision 3 of the spec: strike §"`apple_revocations` — a transactional outbox"
+and its lifetime table; replace with the three rulings from this plan's
+"Rulings that supersede the spec"; correct "Two stored shapes" to one; and add
+the third CHECK to the migration description. **Replace the superseded claims —
+never append a correction beneath a contradiction.**
+
+**Then grep the proposition, not only the string** (RF, Phase JC). Search the
+repo for `apple_revocations`, `outbox`, `tombstone`, `revocation` and
+`next_attempt_at` and reconcile every hit or state why it stands.
+
+- [ ] **Step 5: Correct the other records**
 
 - `ROADMAP.md`: the row saying **eight** tables lose rows on deletion is wrong —
-  it is **twelve**. Correct it, and give every row this PR touches a
+  it is **twelve**. Correct it. Give every row this PR touches a
   `· dies YYYY-MM-DD · <why this is a row and not a fix now>` stamp if it lacks
   one (campsite rule).
-- The handoff doc: steps 1 and 2 of "What to do next" are done — the phone
-  gate closed 2026-09-13 (`apple_grants` 1 → 2 on one account, `users` still 6)
-  and #431 merged as `be7838aa`. Replace the stale list; do not append a
-  correction beneath a contradiction.
-- File the rows the spec names rather than leaving them in a PR body (RF14):
-  a locked-out rower cannot delete in-app; Concept2 tokens are never
-  deauthorized at Concept2.
+- The handoff doc: steps 1 and 2 of "What to do next" are done — the phone gate
+  closed 2026-09-13 (`apple_grants` 1 → 2 on one account, `users` still 6) and
+  #431 merged as `be7838aa`. Replace the stale list.
+- File as rows, not PR-body prose (RF14): a locked-out rower cannot delete
+  in-app; Concept2 tokens are never deauthorized at Concept2; and the
+  re-registration name defect, which now has no retry in front of it.
 
-- [ ] **Step 5: Run the full gate**
+- [ ] **Step 6: Run the full gate**
 
 ```bash
 cd app && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm dist:grep
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git rev-parse --show-toplevel
@@ -1362,28 +1218,29 @@ git commit -m "Conflict copy names its recovery, and the records match what ship
 
 ## Before the PR
 
-- [ ] **Per-file coverage** for every file this PR touched. The 90×4 gate is
-      repo-wide and a new file can ship with whole branches uncovered (RF2).
+- [ ] **Per-file coverage** for every file touched. The 90×4 gate is repo-wide
+      and a new file can ship with whole branches uncovered (RF2).
 - [ ] **Every new assertion has a mutation that made it fail**, and the PR body
       states what was mutated and what the failure said (RF21).
 - [ ] **The PR body is written for James first**: line one "This PR [outcome]",
-      then ~6 one-line bullets, everything else inside a collapsed
-      `<details>` block titled "Record (for agents and audits)".
-- [ ] **The DBA gate** on Task 1 and **the PM final-PR gate** — this is TRIAD
-      work on two counts (a stored shape, and auth). Present the verdicts with
-      the artifacts they judge. Do not merge on green CI.
+      then ~6 one-line bullets, everything else inside a collapsed `<details>`
+      block titled "Record (for agents and audits)".
+- [ ] **The DBA gate** on Task 1 and **the PM final-PR gate** — TRIAD on two
+      counts (a stored shape, and auth). Present verdicts with the artifacts
+      they judge. Do not merge on green CI.
 - [ ] **The roadmap hand-back**: two lists in one message — rows this work wants
       to file, and every row anywhere in `ROADMAP.md` whose `dies` date has
       passed — then STOP. Nothing is struck without James.
-- [ ] **Check the run that the MERGE produces**, not just the PR's checks
-      (RF28), and assert its `headSha` equals the PR's head (RF39).
+- [ ] **Check the run the MERGE produces**, not just the PR's checks (RF28), and
+      assert its `headSha` equals the PR's head (RF39).
 
 ## What this PR deliberately does not do
 
 - Account merge, one-way transfer, any deactivate or grace-period state.
 - The link follow-through. That is PR2, blocked on this PR's unlink for a
-  security reason: unlink is the compensating control that makes a wrong
-  attach recoverable.
-- Concept2 deauthorization at Concept2. A row, not an oversight.
-- Fixing the two existing lockout paths (`ACCESS_MODE` and removed `APPLE_*`).
-  A row.
+  security reason: unlink is the compensating control that makes a wrong attach
+  recoverable.
+- Guaranteed revocation. Apple says *should*; a failed revoke tells the rower
+  Apple's own remedy and is not retried.
+- Concept2 deauthorization at Concept2. A row.
+- Fixing the two existing lockout paths (`ACCESS_MODE`, removed `APPLE_*`). A row.
