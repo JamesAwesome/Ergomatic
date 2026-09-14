@@ -75,6 +75,17 @@ describe("DeleteAccount", () => {
     expect(auth.confirmDelete).toHaveBeenCalledOnce();
   });
 
+  // The screen carries TWO ways out, the header's and the stack's, and
+  // they have to mean the same thing — a header control that navigated
+  // instead would leave the attempt live server-side.
+  it("cancels from the header as well as from the stack", async () => {
+    const auth = controller({ kind: "delete_ready" });
+    render(<DeleteAccount auth={auth} onDeleted={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "← CANCEL" }));
+    expect(auth.cancel).toHaveBeenCalledOnce();
+    expect(auth.confirmDelete).not.toHaveBeenCalled();
+  });
+
   it("hands the signed-out transition over once the server has confirmed", () => {
     const onDeleted = vi.fn();
     const { container, rerender } = render(
