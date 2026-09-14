@@ -517,3 +517,49 @@ is exactly what happened: every section in this file stopped growing on
     value from the factory's return to the `app.use()` call before believing
     any route exists — and require ONE test that reaches it over HTTP, because
     tests calling the store directly cannot see the gap.
+57. **A CHECK constraint is not the authority on which rows a state machine
+    admits — find the module's own consistency predicate and run the row
+    through it.** Wave A PR2's plan proved `auth_attempts_session_check` and
+    `auth_attempts_stage_check` admit `purpose='signin'` at `stage='reauth_*'`
+    and concluded "no migration". True and irrelevant: `attempts.ts`'s
+    `consistent()` refuses it at `(a.purpose === "signin") !== signup`, and it
+    is called by BOTH `load()` and `save()`, so the read path and the write
+    path each reject it. Measured on `postgres:18.4`, one row, three stages,
+    nothing else varied: `confirm` reads OK, `reauth_authorize` and
+    `reauth_exchanging` both throw `attempt_expired`.
+58. **A column a CHECK forces NULL is still being READ — grep the `!`
+    assertions over it before calling it unused.** The same plan said a signin
+    attempt "may not record which provider the rower is about to prove. It does
+    not need to." `attemptProvider()` is
+    `a.stage.startsWith("reauth_") ? a.existingProvider! : a.targetProvider`,
+    so it returns `null` for exactly that row — and the web callback's own
+    `attemptProvider(a) !== provider` guard then rejects BOTH providers with
+    `invalid_proof`. Enumerate every read of the forced-NULL column and sort
+    them into null-safe (`IS NOT DISTINCT FROM`, `if (x)`, `===`) and
+    asserting (`x!`); the asserting ones are the design's real cost.
+59. **A confirmation screen is a control only if the ACCOUNT OWNER is the one
+    reading it — name the reader, not the screen.** Moving a link confirmation
+    before the second authentication satisfies "the confirmation names the
+    provider and the address" and voids its function, because the threat model
+    the control exists for (a per-client secret collapses the attack to one
+    device, two people) puts the attacker in front of it. Ask who is holding
+    the phone at each screen before crediting any confirmation.
+60. **Two clocks guarding one lifetime: prove the new one can bite before the
+    old one.** A carried identity gated by both `expires_at` (never refreshed)
+    and a fresh `reauthenticated_at` is gated by `expires_at` alone —
+    `reauthenticated_at >= exchange time` makes its window strictly wider, so
+    its check can never fire first, and the test prescribed for it ("proved
+    more than ttl ago, expires_at still in the future") describes a state the
+    design cannot produce. RF21, applied to a redundant timer instead of an
+    assertion.
+61. **RFC 9700 contains NO account-linking section — a repo that cites it
+    correctly four times will transfer its authority to a fifth claim it does
+    not support.** Measured: 2569 lines, `grep -ci linking` = 0, the four
+    `account` hits are all "take into account", §4's TOC runs 4.1-4.17 with
+    nothing on linking. The real primary is NIST SP 800-63C-4 §3.8.1 ("the RP
+    SHALL require an authenticated session with the subscriber account for all
+    linking functions"), plus Sudhodanan & Paverd, USENIX Security 2022, for
+    the attack. Neither addresses CONSENT ORDERING — that is a genuine
+    nothing-found and therefore a judgment call, not a citable one. RF16's
+    second corollary: download the document and grep it before inheriting a
+    peer artifact's confident phrasing (technique 10).
