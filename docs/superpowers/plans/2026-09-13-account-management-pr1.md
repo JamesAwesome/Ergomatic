@@ -1655,7 +1655,9 @@ name what happens, stop. No "for good", no "cannot be undone", no "forever".
   **"Delete account"** and carries NO explanatory sentence above or below it.
 - The confirm screen heading — "Delete this account?"
 - The confirm screen body — "Deletes your workouts, session log, plan,
-  baselines, test history, and your Concept2 connection." Then, separately:
+  baselines, and test history." **Concept2 is NOT named** (James, 2026-09-14):
+  the link row is still deleted with the account, but naming it implies we
+  deauthorize at Concept2's end, which we do not. Then, separately:
   "Signs you out on this device."
 - The confirm buttons — **"Delete account"** and **"Cancel"**, not
   "Delete my account" / "Keep my account".
