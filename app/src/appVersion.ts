@@ -26,4 +26,10 @@
  * That failure mode is the whole reason this is a define rather than a
  * literal: a literal would be silently stale instead of loudly `dev`.
  */
-export const APP_VERSION: string = import.meta.env.VITE_APP_VERSION || "dev";
+// OPTIONAL-CHAINED because this module is reachable from NODE, not only
+// from a Vite bundle: `eventLog.ts` imports it, and the Playwright specs
+// import `parseLogExport` from there. `import.meta.env` does not exist
+// under the Node-side test runner, so a bare property read throws at import
+// time and takes the whole spec file with it ("No tests found"). Under Vite
+// the define replaces the whole expression, so this costs nothing there.
+export const APP_VERSION: string = import.meta.env?.VITE_APP_VERSION || "dev";

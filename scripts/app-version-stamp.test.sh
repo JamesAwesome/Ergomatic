@@ -79,7 +79,7 @@ awk '/name: Build web image/,/^$/' .github/workflows/ci.yml | grep -q 'APP_VERSI
 #    Anchored to the EXPORT line, not the file: the same string appears in
 #    this module's own doc comment, so an unanchored grep matched the prose
 #    while the code had been replaced by a literal.
-grep -qE '^export const APP_VERSION.*import\.meta\.env\.VITE_APP_VERSION' app/src/appVersion.ts ||
+grep -qE 'import\.meta\.env\??\.VITE_APP_VERSION' <<<"$(grep -A3 '^export const APP_VERSION' app/src/appVersion.ts)" ||
   fail "app/src/appVersion.ts no longer reads import.meta.env.VITE_APP_VERSION — the stamp would be a hardcoded literal"
 
 echo "app-version-stamp: OK — the define, the constant, the Dockerfile build stage (above pnpm build), ios:build, compose's web service and CI's web image all carry APP_VERSION."
