@@ -25,6 +25,9 @@ function controller(view: AuthFlowView): AuthFlowController {
     cancel: vi.fn(),
     reset: vi.fn(),
     abandon: vi.fn(),
+    removeMethod: vi.fn(),
+    startDelete: vi.fn(),
+    confirmDelete: vi.fn(),
   };
 }
 

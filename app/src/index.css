@@ -423,6 +423,125 @@ button.auth-method-row {
   margin-top: 12px;
 }
 
+/* -- Removing a method, and deleting the account (Wave A PR 1 Task 4;
+   Gate 0 approved 2026-09-14) ------------------------------------------
+   CONTRAST, computed rather than judged (RF6). Every pairing below sits on
+   `--page` (`body`'s ground; these rows and the box carry no fill of their
+   own): --accent on --page = 5.35:1, which clears AA's 4.5:1 for the
+   labels and 3:1 for the borders. Nothing here introduces a colour the
+   approved table did not already carry. */
+.auth-method-tail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-method-remove {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.auth-method-remove:hover {
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+
+.auth-method-remove:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* THE QUARANTINE BOX. James ruled that a rule was not enough separation
+   (2026-09-14): the border is the containment — it says this block is not
+   part of the list above it. */
+.auth-danger-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-top: 24px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  gap: 12px;
+}
+
+.auth-danger-zone h2 {
+  margin: 0;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+}
+
+.auth-delete-account {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.auth-delete-account:hover {
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+
+.auth-delete-account:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* `button:disabled` already recolours the label to --ink-5; the accent
+   border has to follow it, or a dead control still reads as armed. */
+.auth-delete-account:disabled,
+.auth-delete-account:disabled:hover {
+  border-color: var(--rule-3);
+  color: var(--ink-5);
+}
+
+/* THE CONFIRM SCREEN's two lines. `--ink-2` on `--page` = 9.74:1,
+   `--ink-3` on `--page` = 6.69:1. The first is the one pairing this task
+   adds that the Gate 0 table did not already list (it carried --ink-2 on
+   --surface, 10.81:1); both clear AA. */
+.auth-delete-copy {
+  max-width: 42ch;
+}
+
+.auth-delete-scope {
+  margin: 0 0 10px;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.auth-delete-aside {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
 .tagline {
   color: var(--ink-3);
   white-space: nowrap;
@@ -12636,4 +12755,53 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 .stats-trend-swatch-6k {
   background: var(--type-o2);
+}
+
+/* -- Wave A PR 1 Task 4, landscape (Gate 0 approved 2026-09-14) ---------
+   BARE `@media (orientation: landscape)`, this file's only landscape idiom
+   (see the Concept2 block's own header for the survey).
+
+   RULING 1, James 2026-09-14: the quarantine box sits BESIDE the methods
+   list in landscape, never below it. Below, on a 320px-tall screen, it
+   falls off — which is the RC-24 failure, shipped once already.
+
+   The confirm screen takes two columns for the same reason: stacked, its
+   header, its two lines and its two 44px buttons do not fit in 320px and
+   the escape hatch ends up below the fold on the one screen that most
+   needs one.
+
+   LAYOUT ONLY — no `color`, no `background`, no `border` — so every ratio
+   stated on the block above still holds here. */
+@media (orientation: landscape) {
+  .auth-account-block {
+    display: grid;
+    align-items: center;
+    gap: 20px;
+    grid-template-columns: 1fr 216px;
+  }
+
+  .auth-danger-zone {
+    margin-top: 0;
+  }
+
+  .auth-delete-account {
+    width: 100%;
+  }
+
+  .auth-delete-screen .auth-flow-body {
+    flex-direction: row;
+    align-items: center;
+    gap: 30px;
+  }
+
+  .auth-delete-screen .auth-delete-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .auth-delete-screen .auth-actions {
+    margin-top: 0;
+    padding-top: 0;
+    flex: 0 0 200px;
+  }
 }

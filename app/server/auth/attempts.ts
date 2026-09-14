@@ -4,6 +4,7 @@ import type {
   AuthProvider,
   AuthPurpose,
   AuthUser,
+  DeleteOutcome,
   SignedIn,
   UnlinkOutcome,
 } from "../../shared/auth.js";
@@ -44,16 +45,6 @@ export interface Attempt {
   verifiedName: string | null;
   appleClientId: string | null;
   appleRefreshToken: string | null;
-}
-/** A deletion has ONE success shape: the account is gone either way.
- *  `appleRevoked` says whether NOTHING IS LEFT OUTSTANDING AT APPLE — every
- *  grant we held was accepted by Apple, OR there was no grant to revoke. It
- *  is vacuously `true` for a Google-only account, because `createAppleRevoke`
- *  returns `true` on an empty list, so it never means "Apple was contacted".
- *  False means we held at least one grant and at least one revoke failed. */
-export interface DeleteOutcome {
-  outcome: "deleted";
-  appleRevoked: boolean;
 }
 export interface AttemptResult {
   attempt?: Attempt;

@@ -13,6 +13,20 @@ function Welcome({ auth }: { auth: AuthFlowController }) {
     <main className="signin">
       <h1>Ergomatic</h1>
       <p className="tagline">Rowing workout tracker &amp; planner.</p>
+      {/* AFTER A DELETION (Wave A PR 1 Task 4). The account is gone either
+          way; `appleRevoked: false` means we held at least one Apple grant
+          and at least one revoke failed, which is the only case with
+          anything left for the rower to do. The copy states the resulting
+          STATE — "is still listed" — rather than our failure to reach
+          Apple, because a rower can act on the first and not the second.
+          It is Apple's own documented remedy for this case, not ours. */}
+      {auth.view.kind === "deleted" && (
+        <p className="notice auth-notice-success" role="status">
+          {auth.view.appleRevoked
+            ? "Your account is deleted."
+            : "Your account is deleted. Ergomatic is still listed in your Apple ID settings, under Sign in with Apple. You can remove it there."}
+        </p>
+      )}
       {auth.view.kind === "error" && auth.view.purpose === "signin" && (
         <p className="notice auth-notice-error" role="alert">
           {auth.view.code === "access_denied"

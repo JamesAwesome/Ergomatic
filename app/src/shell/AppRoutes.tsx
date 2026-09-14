@@ -33,6 +33,7 @@ import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
 import BaselinesScreen from "../you/BaselinesScreen";
+import DeleteAccount from "../you/DeleteAccount";
 import Diagnostics from "../you/Diagnostics";
 import Concept2Screen from "../you/Concept2Screen";
 import SettingsScreen from "../you/SettingsScreen";
@@ -268,12 +269,21 @@ export default function AppRoutes({
               }
             />
             {authFlow && (
+              /* The one full-screen holder for an auth stage that is not
+                 sign-in: the two link steps, and — Wave A PR 1 Task 4 — the
+                 delete confirm. `deleted` keeps rendering DeleteAccount on
+                 purpose: it draws nothing, but it owns the handover to the
+                 signed-out state, and routing it away here would unmount the
+                 effect that performs it. */
               <Route
                 path="/you/sign-in-methods"
                 element={
                   authFlow.view.kind === "link_confirm" ||
                   authFlow.view.kind === "link_authorize" ? (
                     <LinkSignInMethod auth={authFlow} />
+                  ) : authFlow.view.kind === "delete_ready" ||
+                    authFlow.view.kind === "deleted" ? (
+                    <DeleteAccount auth={authFlow} onDeleted={onSignedOut} />
                   ) : (
                     <Navigate to="/you" replace />
                   )

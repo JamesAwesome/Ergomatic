@@ -28,6 +28,9 @@ function controller(view: AuthFlowView): AuthFlowController {
     cancel: vi.fn(),
     reset: vi.fn(),
     abandon: vi.fn(),
+    removeMethod: vi.fn(),
+    startDelete: vi.fn(),
+    confirmDelete: vi.fn(),
   };
 }
 
@@ -204,5 +207,39 @@ describe("SignIn front door", () => {
     expect(
       screen.getByRole("link", { name: "Continue with Google" }),
     ).toHaveAttribute("href", "/api/auth/signin");
+  });
+
+  // The deletion succeeded either way; `appleRevoked` says only whether
+  // anything is still outstanding AT APPLE. The notice states the resulting
+  // STATE the rower can act on, never our failure to reach Apple.
+  it("hands back Apple's own remedy when the revoke did not land", () => {
+    render(
+      <SignIn auth={controller({ kind: "deleted", appleRevoked: false })} />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Your account is deleted. Ergomatic is still listed in your Apple ID settings, under Sign in with Apple. You can remove it there.",
+    );
+  });
+
+  it("says nothing about Apple when the revoke landed", () => {
+    render(
+      <SignIn auth={controller({ kind: "deleted", appleRevoked: true })} />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Your account is deleted.",
+    );
+    expect(screen.queryByText(/Apple ID settings/i)).toBeNull();
+  });
+
+  it("still offers both doors after a deletion", () => {
+    render(
+      <SignIn auth={controller({ kind: "deleted", appleRevoked: true })} />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Continue with Apple" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Continue with Google" }),
+    ).toBeVisible();
   });
 });

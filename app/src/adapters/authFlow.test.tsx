@@ -18,6 +18,7 @@ const seam = vi.hoisted(() => ({
   googleProof: vi.fn(),
   nativeSignOut: vi.fn(),
   storeToken: vi.fn(),
+  clearToken: vi.fn(),
   navigateWeb: vi.fn(),
 }));
 
@@ -31,7 +32,10 @@ vi.mock("../native/signin", () => ({
   nativeGoogleProofAfterInit: seam.googleProof,
   nativeSignOut: seam.nativeSignOut,
 }));
-vi.mock("../native/session", () => ({ storeToken: seam.storeToken }));
+vi.mock("../native/session", () => ({
+  storeToken: seam.storeToken,
+  clearToken: seam.clearToken,
+}));
 vi.mock("./webNavigate", () => ({ navigateWeb: seam.navigateWeb }));
 
 import { destinationFor, useAuthFlow } from "./authFlow";
@@ -69,6 +73,8 @@ beforeEach(() => {
   seam.nativeSignOut.mockReset();
   seam.nativeSignOut.mockResolvedValue(undefined);
   seam.storeToken.mockReset();
+  seam.clearToken.mockReset();
+  seam.clearToken.mockResolvedValue(undefined);
   seam.navigateWeb.mockReset();
   window.history.replaceState(null, "", "/");
 });
@@ -1869,7 +1875,357 @@ describe("useAuthFlow", () => {
     await waitFor(() =>
       expect(result.current.view).toStrictEqual({ kind: "delete_ready" }),
     );
-    // Task 4 owns where this routes; today it deliberately routes nowhere.
-    expect(result.current.destination).toBe(null);
+    // Task 4: the confirm screen lives on the auth-flow route.
+    expect(result.current.destination).toBe("/you/sign-in-methods");
+  });
+  // RF24's seam, on the client. `removeMethod` writes server-side and
+  // `useAuthMethods` is the read; if the refresh key does not move, the row
+  // keeps rendering CONNECTED with a live Remove for a provider that is
+  // already gone. The test therefore CLICKS THROUGH the real control rather
+  // than rendering a fixture, and starts upstream of the write.
+  it("stops showing a method as connected once it is removed", async () => {
+    let reads = 0;
+    let unlinks = 0;
+    seam.api.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/methods") {
+        reads += 1;
+        return ok(
+          reads === 1
+            ? { apple: true, google: true }
+            : { apple: false, google: true },
+        );
+      }
+      if (path === "/api/auth/methods/apple" && init?.method === "DELETE") {
+        unlinks += 1;
+        return ok({ outcome: "unlinked", appleRevoked: true });
+      }
+      return new Response(null, { status: 404 });
+    });
+    let auth!: ReturnType<typeof useAuthFlow>;
+    function Harness() {
+      auth = useAuthFlow(() => {});
+      return (
+        <MemoryRouter>
+          <You
+            user={{ id: "rower", name: "Rower", email: "rower@example.test" }}
+            onSignedOut={() => {}}
+            authFlow={auth}
+          />
+        </MemoryRouter>
+      );
+    }
+    render(<Harness />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Remove Apple" }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Add Apple" }),
+    ).toBeInTheDocument();
+    expect(unlinks).toBe(1);
+    expect(reads).toBe(2);
+  });
+
+  // All four unlink outcomes are HTTP 200. Reading the status tells you
+  // nothing; only the body says what happened.
+  it.each([["last_provider"], ["not_connected"], ["account_gone"]] as const)(
+    "reads a refused unlink (%s) out of the body, not the status",
+    async (outcome) => {
+      seam.api.mockImplementation(async (path: string) => {
+        if (path === "/api/auth/options") return ok(options);
+        if (path === "/api/auth/methods/apple") return ok({ outcome });
+        return new Response(null, { status: 404 });
+      });
+      const { result } = renderHook(() => useAuthFlow(() => {}));
+      await waitFor(() => expect(result.current.options.state).toBe("ready"));
+      await act(async () => result.current.removeMethod("apple"));
+      expect(result.current.view).toStrictEqual({
+        kind: "unlink_refused",
+        provider: "apple",
+        reason: outcome,
+      });
+    },
+  );
+
+  // `appleRevoked` is vacuously true for a Google unlink -- no Apple call
+  // happens there at all -- so the view must carry no trace of it. This
+  // asserts the whole object, which is what makes the absence load-bearing.
+  it("never carries an Apple revoke claim out of a Google removal", async () => {
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/methods/google")
+        return ok({ outcome: "unlinked", appleRevoked: true });
+      return new Response(null, { status: 404 });
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+    await act(async () => result.current.removeMethod("google"));
+    expect(result.current.view).toStrictEqual({
+      kind: "unlinked",
+      provider: "google",
+    });
+  });
+
+  it("keeps a failed removal separate from a refused one, and carries the server's code", async () => {
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/methods/apple")
+        return ok({ error: "rate_limited" }, 429);
+      return new Response(null, { status: 404 });
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+    await act(async () => result.current.removeMethod("apple"));
+    expect(result.current.view).toStrictEqual({
+      kind: "unlink_failed",
+      provider: "apple",
+      code: "rate_limited",
+    });
+  });
+
+  it("survives a removal the network never answered", async () => {
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/methods/apple") throw new TypeError("offline");
+      return new Response(null, { status: 404 });
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+    await act(async () => result.current.removeMethod("apple"));
+    expect(result.current.view).toStrictEqual({
+      kind: "unlink_failed",
+      provider: "apple",
+      code: "signin_failed",
+    });
+  });
+
+  // Finding I1: the return-parameter reader used to coerce every purpose it
+  // did not recognise to "signin", so a failed delete re-auth landed a
+  // signed-in rower on a screen that renders no signin notice at all --
+  // nothing happened, as far as the rower could tell.
+  it("keeps a failed web delete on the delete purpose", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?authError=invalid_proof&authPurpose=delete&authProvider=google",
+    );
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      return new Response(null, { status: 404 });
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() =>
+      expect(result.current.view).toStrictEqual({
+        kind: "error",
+        purpose: "delete",
+        code: "invalid_proof",
+        targetProvider: "google",
+      }),
+    );
+    expect(result.current.destination).toBe("/you");
+  });
+
+  it("hands the erg's own delete route a re-proof attempt, not a sign-in", async () => {
+    const bodies: string[] = [];
+    seam.api.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts") {
+        bodies.push(String(init?.body));
+        return ok({
+          outcome: "authorize",
+          attemptId: "del-9",
+          purpose: "delete",
+          targetProvider: "google",
+          expiresAt: "2026-09-13T00:05:00.000Z",
+          provider: "google",
+          stage: "reauth",
+          nonce: "n",
+          state: "s",
+          authorizationUrl: "https://accounts.example.test/authorize",
+        });
+      }
+      return new Response(null, { status: 404 });
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+    await act(async () => result.current.startDelete("google"));
+    expect(bodies).toStrictEqual([
+      JSON.stringify({ purpose: "delete", provider: "google" }),
+    ]);
+    expect(seam.navigateWeb).toHaveBeenCalledWith(
+      "https://accounts.example.test/authorize",
+    );
+  });
+
+  it("deletes through the live session and reports Apple's own outcome", async () => {
+    const calls: string[] = [];
+    let refetched = 0;
+    // The supported producer: the web callback lands on `/?authAttempt=<id>`
+    // and the return effect reads the attempt out to `delete_ready`.
+    window.history.replaceState(null, "", "/?authAttempt=del-9");
+    seam.api.mockImplementation(async (path: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? "GET"} ${path}`);
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/del-9")
+        return ok({
+          outcome: "delete_ready",
+          attemptId: "del-9",
+          purpose: "delete",
+          targetProvider: "google",
+          expiresAt: "2026-09-13T00:05:00.000Z",
+        });
+      if (path === "/api/auth/web/attempts/del-9/delete")
+        return ok({ outcome: "deleted", appleRevoked: false });
+      return new Response(null, { status: 404 });
+    });
+    const { result } = renderHook(() => useAuthFlow(() => refetched++));
+    await waitFor(() =>
+      expect(result.current.view).toStrictEqual({ kind: "delete_ready" }),
+    );
+    await act(async () => result.current.confirmDelete());
+    expect(calls).toContain("POST /api/auth/web/attempts/del-9/delete");
+    expect(result.current.view).toStrictEqual({
+      kind: "deleted",
+      appleRevoked: false,
+    });
+    // `refetch` is how the app learns the session is gone: /api/me now 401s,
+    // useMe becomes signed out, and the Welcome screen renders the notice.
+    expect(refetched).toBe(1);
+  });
+
+  // L2-5: the OPPOSITE ordering to nativeSignOut. There the network call is
+  // best-effort cleanup and the local clear goes first; here the call IS the
+  // operation and the route is behind requireUser, so the token must still
+  // be live when it runs.
+  it("clears this device's credential only after the server confirms", async () => {
+    seam.native = true;
+    const order: string[] = [];
+    seam.clearToken.mockImplementation(async () => {
+      order.push("clear");
+    });
+    seam.appleAuthorize.mockResolvedValue({
+      idToken: "apple-id-token",
+      authorizationCode: "apple-code",
+      state: "s",
+    });
+    seam.api.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/native/attempts")
+        return ok({
+          outcome: "authorize",
+          attemptId: "del-n",
+          purpose: "delete",
+          targetProvider: "apple",
+          expiresAt: "2026-09-13T00:05:00.000Z",
+          provider: "apple",
+          stage: "reauth",
+          nonce: "n",
+          state: "s",
+          bindingSecret: "bind-n",
+        });
+      if (path === "/api/auth/native/attempts/del-n/proof")
+        return ok({
+          outcome: "delete_ready",
+          attemptId: "del-n",
+          purpose: "delete",
+          targetProvider: "apple",
+          expiresAt: "2026-09-13T00:05:00.000Z",
+        });
+      if (path === "/api/auth/native/attempts/del-n/delete") {
+        order.push(`delete:${String(init?.body)}`);
+        return ok({ outcome: "deleted", appleRevoked: true });
+      }
+      return new Response(null, { status: 404 });
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+    await act(async () => result.current.startDelete("apple"));
+    await waitFor(() =>
+      expect(result.current.view).toStrictEqual({ kind: "delete_ready" }),
+    );
+    await act(async () => result.current.confirmDelete());
+    expect(order).toStrictEqual([
+      `delete:${JSON.stringify({ bindingSecret: "bind-n" })}`,
+      "clear",
+    ]);
+    expect(result.current.view).toStrictEqual({
+      kind: "deleted",
+      appleRevoked: true,
+    });
+  });
+
+  it("carries the server's own refusal code off a failed delete", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=del-x");
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/del-x")
+        return ok({
+          outcome: "delete_ready",
+          attemptId: "del-x",
+          purpose: "delete",
+          targetProvider: "google",
+          expiresAt: "2026-09-13T00:05:00.000Z",
+        });
+      if (path === "/api/auth/web/attempts/del-x/delete")
+        return ok({ error: "account_changed" }, 409);
+      return new Response(null, { status: 404 });
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() =>
+      expect(result.current.view).toStrictEqual({ kind: "delete_ready" }),
+    );
+    await act(async () => result.current.confirmDelete());
+    expect(result.current.view).toStrictEqual({
+      kind: "error",
+      purpose: "delete",
+      code: "account_changed",
+    });
+    expect(result.current.destination).toBe("/you");
+  });
+
+  it("refuses to start a delete on a provider this surface cannot re-prove", async () => {
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options")
+        return ok({ ...options, apple: { native: false, web: false } });
+      return new Response(null, { status: 404 });
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+    await act(async () => result.current.startDelete("apple"));
+    expect(result.current.view).toStrictEqual({ kind: "idle" });
+  });
+
+  it.each([
+    ["unlinked", null],
+    ["unlink_refused", null],
+    ["unlink_failed", null],
+    ["deleted", null],
+    ["delete_ready", "/you/sign-in-methods"],
+  ] as const)("routes a %s view to %s", (kind, expected) => {
+    const view = (
+      kind === "unlinked"
+        ? { kind, provider: "apple" }
+        : kind === "unlink_refused"
+          ? { kind, provider: "apple", reason: "last_provider" }
+          : kind === "unlink_failed"
+            ? { kind, provider: "apple", code: "signin_failed" }
+            : kind === "deleted"
+              ? { kind, appleRevoked: true }
+              : { kind }
+    ) as AuthFlowView;
+    expect(destinationFor(view)).toStrictEqual(expected);
+  });
+
+  it("routes a terminal delete outcome back to the methods surface", () => {
+    expect(
+      destinationFor({ kind: "cancelled", purpose: "delete" }),
+    ).toStrictEqual("/you");
+    expect(
+      destinationFor({
+        kind: "error",
+        purpose: "delete",
+        code: "signin_failed",
+      }),
+    ).toStrictEqual("/you");
   });
 });

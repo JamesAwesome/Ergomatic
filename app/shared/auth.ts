@@ -80,3 +80,17 @@ export type UnlinkOutcome =
   | { outcome: "last_provider" }
   | { outcome: "not_connected" }
   | { outcome: "account_gone" };
+/** A deletion has ONE success shape: the account is gone either way.
+ *  `appleRevoked` says whether NOTHING IS LEFT OUTSTANDING AT APPLE — every
+ *  grant we held was accepted by Apple, OR there was no grant to revoke. It
+ *  is vacuously `true` for a Google-only account, because `createAppleRevoke`
+ *  returns `true` on an empty list, so it never means "Apple was contacted".
+ *  False means we held at least one grant and at least one revoke failed.
+ *
+ *  Task 4 moved this here from `server/auth/attempts.ts`: the client is now a
+ *  consumer, and one declaration both sides compile against is what makes a
+ *  renamed field a build error rather than a silently absent one (RF33). */
+export interface DeleteOutcome {
+  outcome: "deleted";
+  appleRevoked: boolean;
+}

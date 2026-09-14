@@ -32,7 +32,22 @@ function controller(view: AuthFlowView): AuthFlowController {
     cancel: vi.fn(),
     reset: vi.fn(),
     abandon: vi.fn(),
+    removeMethod: vi.fn(),
+    startDelete: vi.fn(),
+    confirmDelete: vi.fn(),
   };
+}
+
+/** Both providers connected — the only shape in which Remove is offered at
+ *  all, so every removal test starts from it rather than from a hand-built
+ *  minimum that cannot reach the control. */
+function bothConnected() {
+  vi.mocked(api).mockImplementation(
+    async () =>
+      new Response(JSON.stringify({ apple: true, google: true }), {
+        status: 200,
+      }),
+  );
 }
 
 describe("SignInMethods", () => {
@@ -282,5 +297,152 @@ describe("SignInMethods", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "That Apple sign-in is already connected",
     );
+  });
+
+  it("offers Remove only where removing is possible", async () => {
+    bothConnected();
+    const auth = controller({ kind: "idle" });
+    render(<SignInMethods auth={auth} />);
+    const removals = await screen.findAllByRole("button", {
+      name: /^Remove /,
+    });
+    expect(
+      removals.map((button) => button.getAttribute("aria-label")),
+    ).toStrictEqual(["Remove Apple", "Remove Google"]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Remove Google" }),
+    );
+    expect(auth.removeMethod).toHaveBeenCalledWith("google");
+  });
+
+  it("offers no Remove on the last remaining method", async () => {
+    vi.mocked(api).mockResolvedValue(
+      new Response(JSON.stringify({ apple: false, google: true }), {
+        status: 200,
+      }),
+    );
+    render(<SignInMethods auth={controller({ kind: "idle" })} />);
+    await screen.findByText("CONNECTED");
+    expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
+  });
+
+  it.each([
+    ["last_provider", "Add another sign-in method before removing this one."],
+    ["not_connected", "That sign-in method isn’t connected to this account."],
+    ["account_gone", "This account no longer exists. Nothing was changed."],
+  ] as const)(
+    "says exactly why a removal changed nothing (%s)",
+    async (reason, copy) => {
+      bothConnected();
+      render(
+        <SignInMethods
+          auth={controller({
+            kind: "unlink_refused",
+            provider: "apple",
+            reason,
+          })}
+        />,
+      );
+      expect(await screen.findByRole("alert")).toHaveTextContent(copy);
+    },
+  );
+
+  it("tells a rower whose account is gone the truth, not the last-provider line", async () => {
+    bothConnected();
+    render(
+      <SignInMethods
+        auth={controller({
+          kind: "unlink_refused",
+          provider: "apple",
+          reason: "account_gone",
+        })}
+      />,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /no longer exists/i,
+    );
+    expect(screen.queryByText(/sign-in method before removing/i)).toBeNull();
+  });
+
+  it("says the result is unknown when the removal request itself failed", async () => {
+    bothConnected();
+    render(
+      <SignInMethods
+        auth={controller({
+          kind: "unlink_failed",
+          provider: "apple",
+          code: "rate_limited",
+        })}
+      />,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We couldn’t confirm the result. Check your sign-in methods and try again.",
+    );
+  });
+
+  it("renders a failed delete re-auth instead of bouncing the rower to a silent screen", async () => {
+    bothConnected();
+    render(
+      <SignInMethods
+        auth={controller({
+          kind: "error",
+          purpose: "delete",
+          code: "invalid_proof",
+        })}
+      />,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We couldn’t confirm it was you. Nothing was deleted.",
+    );
+  });
+
+  it("quarantines deletion in its own section and starts it on a connected provider", async () => {
+    bothConnected();
+    const auth = controller({ kind: "idle" });
+    render(<SignInMethods auth={auth} />);
+    const remove = await screen.findByRole("button", {
+      name: "Delete account",
+    });
+    expect(screen.getByRole("heading", { name: "ACCOUNT" })).toBeVisible();
+    expect(remove.closest(".auth-danger-zone")).not.toBeNull();
+    await userEvent.click(remove);
+    expect(auth.startDelete).toHaveBeenCalledWith("apple");
+  });
+
+  it("starts the delete on the provider the rower actually holds", async () => {
+    vi.mocked(api).mockResolvedValue(
+      new Response(JSON.stringify({ apple: false, google: true }), {
+        status: 200,
+      }),
+    );
+    const auth = controller({ kind: "idle" });
+    render(<SignInMethods auth={auth} />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete account" }),
+    );
+    expect(auth.startDelete).toHaveBeenCalledWith("google");
+  });
+
+  it("disables Delete account when no held provider can be re-proved here", async () => {
+    vi.mocked(api).mockResolvedValue(
+      new Response(JSON.stringify({ apple: true, google: false }), {
+        status: 200,
+      }),
+    );
+    const auth = controller({ kind: "idle" });
+    auth.options = {
+      state: "ready",
+      frontDoorEnabled: true,
+      legacyGoogle: false,
+      apple: false,
+      google: true,
+    };
+    render(<SignInMethods auth={auth} />);
+    const remove = await screen.findByRole("button", {
+      name: "Delete account",
+    });
+    expect(remove).toBeDisabled();
+    await userEvent.click(remove);
+    expect(auth.startDelete).not.toHaveBeenCalled();
   });
 });
