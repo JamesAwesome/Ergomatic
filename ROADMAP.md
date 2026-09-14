@@ -1111,6 +1111,19 @@ it lands the stranger on this same denial.
       `nativeSignOut` that came out from under it. **S**
       · dies 2026-10-12 · pre-existing debt, and cheaper to clear while the file
       is already open than as its own branch.
+- [ ] **"Apple is now connected. You can sign in either way." says what the row
+      under it already says.** James, 2026-09-14, from the live screen: _"I
+      don't need this blurb here forever. Apple says connected below it."_ The
+      success notice sits directly above the SIGN-IN METHODS list, where that
+      provider's row now reads CONNECTED — so the same fact is stated twice in
+      one viewport, and the notice is the half that never goes away on its own.
+      The second sentence is doing real work the row cannot ("you can sign in
+      either way" is the consequence, not the state); the first is pure
+      duplication. **S**
+      · dies 2026-10-12 · a row and not a fix now because it is copy on a
+      rendering surface, so it carries a design gate, and the PR open when it
+      was found is docs-only — putting a product change in it would cost that
+      PR its skipped code jobs for a one-line edit.
 - [ ] **The Apple private-relay round trip has never been exercised end to
       end.** No relay-address account has ever been created, stored or deleted
       on any host. `restricted` cannot reach the case (a relay address is never
