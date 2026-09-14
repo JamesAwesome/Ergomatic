@@ -3310,59 +3310,67 @@ Each needs erg time or a deliberate recording session.
   fake store's insertion ordering — NAMED, not chosen, per this entry's own
   standard. What both signatures share is a request seeing state that some
   other test owns.
-- **THE E2E SUITE FLAKES — THREE RECORDED OCCURRENCES, AND TWO OF THEM ARE
-  THE SAME TEST.**
-  · dies 2026-10-13 · a row and not a fix now because a hunt needs a
-  reproduction and neither occurrence has one; what it needs first is a
-  COUNT, which nothing currently collects.
-  **Occurrence 1, 2026-09-12 (#419's main run):** one failure in
-  `design.spec.ts` (the doors-back assertion), green on re-run. Recorded at
-  the time as "second occurrence files a row" — **and then not written down
-  anywhere in this file**, which is why this row opens by saying so. A flake
-  remembered only in a session is a flake nobody can count.
-  **Occurrence 2, 2026-09-13 (PR #423, run 34737876236):** THREE failures
-  plus one flaky in a single run, 565 passed — `connected.spec.ts:2236` (the
-  NFC scan's `✓ Monitor found` status never appeared),
-  `design.spec.ts:7601` (a pairing locator), `design.spec.ts:776` (an axe
-  `page.evaluate` timing out at 30 s) and `stats.spec.ts:46`
-  (`LIFETIME · 54,752 M`). **All four passed on a re-run of the IDENTICAL
-  commit**, and main was green at the time, so the branch's own diff is
-  excluded — it touched only the log detail's two components plus a
-  comments-only edit to `fake.ts` (verified by filtering the diff to
-  non-comment lines, which returned nothing).
-  **What the two occurrences have in common is the only lead:** both hit
-  `design.spec.ts`, and occurrence 2's four failures span four unrelated
-  specs at once — which reads like the runner rather than any one test. The
-  axe timeout is the most suggestive single data point, since it is the
-  heaviest step in the suite.
-  **Do NOT open this as a hunt.** The first thing it needs is a count over
-  time: how often, which specs, whether it correlates with runner load. Three
-  named specs and one number are not a population, and chasing a
-  reproduction from here is how the last two days would have gone if anyone
-  had tried. **The cheap first move** is to stop discarding the evidence —
-  the `playwright-report` artifact is already uploaded on every red run
-  (occurrence 2's is artifact 10311637594), so a count is recoverable from CI
-  history without instrumenting anything.
-  **Occurrence 3, 2026-09-13 (PR #430, the ring-header branch):** ONE
-  failure — `design.spec.ts:12883`, "the stored skip (Phase RW PR C) ›
-  resetting the baselines brings the doors back", `.doorscard` never
-  appeared. 580 passed.
-  **AND IT IS THE SAME TEST AS OCCURRENCE 1.** #419's failure was recorded
-  as "design.spec:12728 doors-back" — the same test name at a line that has
-  since shifted. That changes this row's own reading: occurrences 1 and 3
-  are ONE repeat offender, not two samples of a general runner flake, and
-  occurrence 2's four-specs-at-once looks like a different phenomenon
-  sharing a row. **Whoever takes this should split it:** a named
-  order-dependent test is a different hunt from a loaded-runner flake, and
-  conflating them is why a count was asked for first.
-  Passing in isolation locally is NOT evidence either way here — see the
-  trap below, which this occurrence demonstrates rather than merely warns
-  about.
-  **The trap for whoever picks this up:** a re-run that goes green is not
-  evidence the test is flaky rather than order-dependent. Occurrence 2's
-  re-run was `--failed`, so it ran those specs in a DIFFERENT population than
-  the full suite did. Re-run the whole suite before concluding anything about
-  isolation. **S**
+- **FLAKE 1 — `design.spec.ts`'s doors-back test fails on CI and passes
+  everywhere else. TWICE, and it is the same test both times.** · dies
+  2026-10-14 · a row and not a fix now because the two failures are three
+  weeks apart with no local reproduction, and the next step is a hunt
+  someone has to sit with rather than a change anyone can make.
+  **The test:** `the stored skip (Phase RW PR C) › resetting the baselines
+  brings the doors back`. Both failures are the same assertion —
+  `.doorscard` never appears.
+  - **2026-09-12, #419's main run.** Recorded at the time as
+    "design.spec:12728 doors-back". Green on re-run.
+  - **2026-09-13, PR #430's combined head** (`3d4cde1b`), at
+    `design.spec.ts:12883` — the same test, the line having shifted. 580
+    passed beside it. A full-suite re-run of the same commit passed, and so
+    did the test in isolation locally.
+  **What that pattern means, stated because it is the useful half:** it
+  passes alone, it passes on a re-run, and it has only ever failed inside a
+  full CI suite. That is the signature of an ORDER- or TIMING-dependent
+  test, not a broken one — and it is why "it passed when I ran it" is not
+  evidence here. Whoever picks this up should reproduce it by running the
+  FULL suite in CI's own worker configuration, not by running the test.
+  **The cheap first move:** `.doorscard` is rendered after a baselines
+  reset, so the suspicion worth testing first is that the reset's write has
+  not landed when the assertion starts — i.e. a missing wait on the store,
+  not a missing element. **S**
+
+- **FLAKE 2 — one CI run failed four tests across four unrelated specs at
+  once.** · dies 2026-10-14 · a row and not a fix now because a single run
+  is an anecdote; what it needs first is a COUNT, and nothing collects one.
+  **2026-09-13, PR #423's run `34737876236`:** three failed plus one flaky
+  out of 569 — `connected.spec.ts:2236` (the NFC scan's `✓ Monitor found`
+  never appeared), `design.spec.ts:7601` (a pairing locator),
+  `design.spec.ts:776` (an axe `page.evaluate` timing out at 30 s) and
+  `stats.spec.ts:46` (`LIFETIME · 54,752 M`). **All four passed on a re-run
+  of the identical commit**, main was green, and the branch's diff touched
+  only the log detail's two components plus a comments-only edit to
+  `fake.ts` — verified by filtering that diff to non-comment lines, which
+  returned nothing.
+  **Four unrelated specs in one run reads like the RUNNER, not like any one
+  test** — the axe timeout is the most suggestive single data point, being
+  the heaviest step in the suite. But one run is not a population, and this
+  row deliberately does not open a hunt.
+  **The cheap way to get a count without instrumenting anything:** the
+  `playwright-report` artifact is already uploaded on every red run
+  (occurrence 2's is `10311637594`), so CI history holds the data.
+  **Local context worth recording:** this machine was measured at ~750 MB
+  free with swap at 3.7 of 5.1 GB while two sessions ran full suites at
+  once, and two CI watchers were killed for memory the same day. Whether
+  GitHub's runners are under comparable pressure is unknown and is exactly
+  what a count would show. **S**
+
+  **THE TRAP BOTH ROWS SHARE, and it bit during this very investigation:**
+  a re-run with `gh run rerun --failed` runs those specs in a DIFFERENT
+  population than the full suite did. A green `--failed` re-run cannot
+  distinguish flaky from order-dependent — the obvious next move is the one
+  that cannot answer the question. Re-run the WHOLE suite.
+
+  **Why these are two rows and not one.** They were filed as one on
+  2026-09-13 and split on 2026-09-14 once the doors-back repeat was
+  spotted. A named order-dependent test and a loaded-runner flake are
+  different hunts with different first moves, and holding them in one row
+  meant each one's evidence argued against the other's diagnosis.
 
 - **TWO unit-project flakes, cause UNKNOWN.** On 2026-08-30 during #233:
   `server/routes/data.test.ts` > `PATCH /api/logs/:id` > `an explicit null
