@@ -1203,6 +1203,10 @@ while we are in here.
         context and origin partition and browser storage cannot survive into a
         later run. Whatever fails a warm-stack sign-in, it is not this test's
         leftover `localStorage`. Same RF16 shape as SR-13's falsified premise.
+        **MEASURED 2026-09-14, not just grepped** — a throwaway two-test
+        serial probe wrote a key in A and read `null` in B — and the (a) row
+        above now carries that receipt, so nobody re-derives this a third
+        time. That pass also moved `fillOriginStorage` inside its own `try`.
       - **`stableBoundingBox` stands alone.** It polls the real box and throws
         after 20 rAF, so it has no proxy-signal defect; what fails is its settle
         budget against genuine layout work. Load is an amplifier, not a
