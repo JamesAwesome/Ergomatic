@@ -3336,9 +3336,9 @@ Each needs erg time or a deliberate recording session.
   name to chase and no reproduction. **The actionable half is a habit, not a
   fix:** never pipe a suite's output through a filter that can swallow the
   failure list; write it to a file and grep the file (the same lesson as
-  TESTING.md §11's `process.stdout.write` rule, one layer up). **S** · dies
-  2026-10-14 · one sighting in ten runs with no captured identity; a second
-  sighting with its name attached is what makes it fixable
+  TESTING.md §11's `process.stdout.write` rule, one layer up).
+  **S** · dies 2026-10-14 · one sighting in ten runs with no captured
+  identity; a second sighting carrying its name is what makes it fixable
 
 - [ ] **`scripts/ci-changes.sh` skips the code jobs on `docs/monitor/sessions/` changes that tests read by name.** `app/src/test/captures.ts:21` resolves that directory and `captures.test.ts` reads two named capture files at runtime, so a rename, re-gzip or deletion there is "documentation" to the script and the `app` job never runs the test it broke — the same class PS PR 1 patched for `seed.mjs`. What would fix it now: add the prefix to `CODE_UNDER_DOCS_RE` with a case in `ci-changes.test.sh` — not done because the capture corpus is append-only today and widening the regex inside a TRIAD PR mixes two risk models. **S** · dies 2026-10-12 · pre-existing, one-line fix, but it belongs in the PR that next touches the captures.
 - **Move the PM5 NFC fixture loader (`loadPm5NfcFixture`, `FIXTURE_PM5_NAME`
