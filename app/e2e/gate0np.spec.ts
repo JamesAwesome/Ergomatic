@@ -6,6 +6,7 @@
 // capture of an empty state is RF7, and nothing else here is a gate.
 //
 // Deleted with `axisProbe.spec.ts` in PR 2 (spec §10).
+import fs from "node:fs";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import {
@@ -220,3 +221,125 @@ for (const [orient, size] of [
     await shotCard(page, "figure.trace-figure", `trace-${orient}`);
   });
 }
+
+// Every colour pairing on 0A's boards, measured from the LIVE cascade
+// rather than from the token file: the element's own computed colour
+// against the first opaque background behind it, with the WCAG 2.x
+// contrast ratio (RF6 — the number goes in the report, never an eye).
+test("gate 0A: contrast", async ({ page }) => {
+  test.setTimeout(180_000);
+  await openStats(page, "contrast");
+  const measure = async (targets: readonly string[]) =>
+    page.evaluate((targets) => {
+      const parse = (c: string): [number, number, number] => {
+        const m = /rgba?\(([^)]+)\)/.exec(c);
+        if (m === null) return [0, 0, 0];
+        const [r, g, b] = m[1]!.split(",").map((v) => parseFloat(v));
+        return [r!, g!, b!];
+      };
+      const lum = ([r, g, b]: [number, number, number]) => {
+        const f = (v: number) => {
+          const s = v / 255;
+          return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+        };
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+      };
+      const bgOf = (el: Element): string => {
+        let n: Element | null = el;
+        while (n !== null) {
+          const c = getComputedStyle(n).backgroundColor;
+          const [, , , a] = /rgba?\(([^)]+)\)/.exec(c)
+            ? `${c},1`.replace(/[^0-9.,]/g, "").split(",")
+            : ["0", "0", "0", "0"];
+          if (!c.startsWith("rgba(0, 0, 0, 0)") && c !== "transparent")
+            return c;
+          void a;
+          n = n.parentElement;
+        }
+        return getComputedStyle(document.body).backgroundColor;
+      };
+      const out: unknown[] = [];
+      const seen = new Set<string>();
+      for (const sel of targets) {
+        for (const el of Array.from(document.querySelectorAll(sel))) {
+          const st = getComputedStyle(el);
+          const fg = el instanceof SVGElement ? st.fill : st.color;
+          const bg = bgOf(el);
+          const key = `${sel}|${fg}|${bg}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const [l1, l2] = [lum(parse(fg)), lum(parse(bg))].sort(
+            (a, b) => b - a,
+          );
+          out.push({
+            element: sel,
+            sample: (el.textContent ?? "").slice(0, 18),
+            fg,
+            bg,
+            fontPx: st.fontSize,
+            fontWeight: st.fontWeight,
+            ratio: Number(((l1! + 0.05) / (l2! + 0.05)).toFixed(2)),
+          });
+        }
+      }
+      return out;
+    }, targets);
+  const rows = await measure([
+    ".stats-group-title",
+    ".stats-tick",
+    ".stats-point-label",
+    ".stats-bar-label",
+    ".stats-caption",
+    ".stats-table th",
+    ".stats-table td",
+    ".stats-chip",
+    ".stats-date",
+  ]);
+  // The other screen M8 reaches: the trace chart's own tick class carries a
+  // different rule (no letter-spacing, `index.css:10921`), so its pairing is
+  // measured rather than assumed to match `.stats-tick`.
+  const traceId = await page.evaluate(async () => {
+    const series = {
+      samples: Array.from({ length: 41 }, (_, i) => ({
+        t: i * 10,
+        d: i * 4,
+        p: (140 - Math.round(i * 0.7)) * 10,
+        spm: 22 + Math.round(i / 7),
+        hr: 128 + Math.round(i * 0.6),
+      })),
+    };
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workoutId: null,
+        workoutTitle: "Gate 0A Contrast",
+        workoutType: null,
+        deviceName: "PM5 432331249",
+        source: "pm5",
+        steps: [],
+        distanceMeters: 5000,
+        timeSeconds: 1500,
+        series,
+      }),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text);
+    return (JSON.parse(text) as { id: string }).id;
+  });
+  await page.goto(`/today/log/${traceId}`);
+  await expect(page.locator(".trace-tick-label-x").last()).toBeVisible();
+  rows.push(
+    ...(await measure([
+      ".trace-tick-label",
+      ".trace-legend",
+      ".trace-toggle-button",
+    ])),
+  );
+  fs.mkdirSync(OUT, { recursive: true });
+  fs.writeFileSync(
+    path.join(OUT, "contrast.json"),
+    `${JSON.stringify(rows, null, 2)}\n`,
+  );
+  process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`);
+});
