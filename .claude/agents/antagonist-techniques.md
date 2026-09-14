@@ -563,3 +563,25 @@ is exactly what happened: every section in this file stopped growing on
     nothing-found and therefore a judgment call, not a citable one. RF16's
     second corollary: download the document and grep it before inheriting a
     peer artifact's confident phrasing (technique 10).
+62. **"Function X works unchanged" is a claim about X's CALLERS, not about X.**
+    Wave A PR2's design turned on `finalize()` needing no edit, and it does not
+    — every precondition in its body is satisfiable. But its second argument is
+    `req.sessionId` behind `requireUser`, and no route could hand the client a
+    session while keeping the attempt alive: the callback's attempt-surviving
+    branch never sets the session cookie, the shared `result()` returns one or
+    the other, the client nulls the operation on `outcome === "signed_in"`, and
+    the wire union makes `SignedIn` and `link_ready` mutually exclusive members.
+    **Trace every parameter of the "unchanged" function back to the request
+    field that fills it, and find the code that puts it there** — a
+    falsification test scoped to the store certifies a narrower claim than the
+    plan is making, and passes.
+63. **Widening a predicate that cross-checks TWO enums: run every value of the
+    OTHER enum through the widened form before believing it.** `consistent()`'s
+    first clause is `(purpose === "signin") !== stageIsSignup` — an EQUALITY, so
+    "add three stages so signin may sit there" also refuses link and delete at
+    those stages, and a stage-keyed `verified` requirement refuses rows the
+    producer inserts with those columns NULL. Extract the predicate verbatim,
+    build one row per (purpose x stage) pair the producer can actually emit, and
+    print a three-column before/naive/intended table. Measured: the literal
+    wording broke every link and every delete at its starting stage, and every
+    probe the plan prescribed entered on a signin row (RF24).

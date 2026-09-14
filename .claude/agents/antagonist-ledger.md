@@ -11017,3 +11017,64 @@ cheaper migration is widening the `signin` arm of `auth_attempts_session_check`
 to permit an adopted `original_session_id` after the second proof, so the
 EXISTING `finalize()` does the attach under its existing binding — spec
 condition 1 says that binding "must be replaced"; it can instead be earned.
+
+### Re-pass on revision 3 (2026-09-14, requested by James before Gate 0)
+
+**Verdict: NOT READY — one blocking, three high, two medium.** The fold is
+honest and corrects one of this agent's own inferences correctly
+(`attemptProvider()` needs no arm once the migration writes `existing_provider`).
+
+**Blocking, and a new failure mode rather than a survival of the old one.**
+`finalize()` really does work unchanged — every precondition walked:
+`bound()`, `same()`, the stage test, the conditional UPDATE, `grant()`, and
+`original()`'s `requireAccess` are all satisfiable by an adopted-session signin
+attempt. The seventh is not.
+`currentSessionId !== a.originalSessionId` is fed by `req.sessionId!` behind
+`requireUser`, and **nothing delivers the minted session to the client while the
+attempt is still alive**: the web callback's attempt-surviving branch never
+calls `signed()`; `result()` returns a session OR an attempt view, never both;
+`finishSignedIn` nulls `operation.current`; and `AuthStep` makes `SignedIn` and
+`link_ready` mutually exclusive union members. Task 3 Step 7 is scoped to the
+store and will PASS, certifying a narrower claim than the plan makes.
+`shared/auth.ts` is named in no task and must change twice — once for the
+session, once for the `profile` the post-proof confirmation needs (`view()`'s
+`link_ready` branch carries none). Technique 62.
+
+**High.** (a) The prescribed `consistent()` edit, read literally, refuses
+link@`reauth_authorize`, delete@`reauth_authorize`, link@`reauth_exchanging` and
+link@`link_ready` — every link and delete at its starting stage — because the
+first clause is a purpose/stage EQUALITY and `begin()` inserts those rows with
+`verified_*` NULL. Measured by extracting `consistent()` verbatim and running 14
+rows through today's form, the literal widening and a purpose-qualified one.
+Every probe in Task 1 enters on a signin row, so none can see it (RF24). Fix:
+state the widening as asymmetric and make the `verified` requirement
+purpose-qualified. Technique 63. (b) The three-state CHECK boxes the
+`reauth_exchanging -> link_ready` transition in BOTH directions, so `save()` is
+unusable for it and for `followThrough` — and `save()` is where `consistent()`
+and the version guard live. Extending `save()` to write the two columns from `a`
+is the cheaper route and is a no-op for existing callers. (c) Task 4 Step 5's
+mutation cannot go red: `req.sessionId` is undefined on the callback routes, and
+after adoption the cookie and the proven subject name the same account by
+construction. The gate that bites is `finalize`'s binding comparison itself, and
+the fold's reason for moving the gate to the route is obsolete.
+
+**Medium.** The new arm would be the only `mintSession` caller skipping
+`requireAccess`. The carried Apple grant is still never revoked on an abandoned
+attach (pre-existing; confirm-after lengthens the window). The spec's condition
+1 ("must be replaced") is left standing in contradiction to the plan that
+supersedes it. The folded DBA row says "a minted session at its 30-day TTL";
+`sessions.ts` is 60 days.
+
+**Attacked and HELD — the phase's vetted ground.** `finalize()`'s body (every
+precondition but the binding). Widening the RF34 clause does not reopen RF34 —
+both mirror rows stay refused — but the job of keeping signin out of
+`target_*`/`delete_ready` transfers entirely onto the widened signup rule's
+stage list, which the plan does not state. Invariant 2's deletion is correct and
+generalises: `finalize`'s reauth-freshness check is already dead on the LINK
+path too. **The confirmation ordering HOLDS under attack:** after the second
+proof the reader is the account owner (technique 59's own test), and an
+abandoner holds only the session their credential already entitled them to, so
+session-before-consent is not the first pass's defect relocated. NIST SP
+800-63C-4 §3.8.1 is satisfied more literally by confirm-after than by revision
+1's shape. `attemptProvider()` needs no signin arm. Adoption introduces no new
+lock cycle.

@@ -532,11 +532,15 @@ row, not cost at any row count.
 Task 0 Step 1's four cases all behave as the plan expects (admit / admit /
 refuse 23514 / refuse 23514). A fifth, unenumerated case is the design's:
 `signin` at `reauth_authorize` with `existing_provider` SET and
-`original_session_id` NULL is refused 23514, both as an INSERT and by the real
-`followThrough` UPDATE from a `confirm` row.
+`original_session_id` NULL is refused 23514, both as an INSERT and by `save()`'s
+UPDATE statement text applied to a real `confirm` row (corrected at the revision
+3 re-gate: `followThrough` does not exist yet, so the original entry's
+attribution to it was wrong; the measurement itself is sound).
 
 `attemptProvider()` reads `existing_provider` at every `reauth_*` stage, and
-three `frontDoorRoutes.ts` call sites use it at `reauth_authorize` -- while the
+FOUR `frontDoorRoutes.ts` call sites use it at `reauth_authorize` (`:101`,
+`:130`, `:307`, `:358` — corrected at the revision 3 re-gate; the original
+entry said three) -- while the
 rower is at their usual provider's consent screen, before any session can
 exist. The plan's "two-state arm, never one without the other" is a three-state
 design.
@@ -664,3 +668,70 @@ nothing.
 Production `auth_attempts`/`sessions` counts (no prod access; the cap bounds
 them). Prod host CPU/RAM (untested). The per-insert CHECK cost (below the noise
 floor). Staging's `ACCESS_MODE` -- the plan's own open item, and the PM's.
+
+### Re-gate on revision 3 (2026-09-14)
+
+**PASS WITH ROWS.** Same container recipe. The rev-3 predicate written out in
+full (signin arm replaced, `link`/`delete` arms verbatim from
+`0032_account_delete_purpose.sql`), applied to the migrated schema with real
+`users`/`sessions` rows so the FK and `auth_attempts_link_session_unique` are
+live. All seven cases reproduce the controller's isolated harness exactly:
+ADMIT / ADMIT / 23514 / 23514 / **ADMIT (the middle state)** / 23514 / 23514,
+every refusal naming `auth_attempts_session_check`.
+
+**Why an isolated arm is sound for REFUSE and not for ADMIT.** The constraint is
+a three-way OR and each arm opens with an equality on `purpose`, so no
+`purpose='signin'` row can be rescued by the `link` or `delete` disjunct — an
+isolated refusal is a refusal in company. The other direction is not safe: two
+false ADMITs measured on rows THIS design produces — `signin@link_ready` on a
+session a link attempt already holds (real: **23505**
+`auth_attempts_link_session_unique`) and on a nonexistent session (real:
+**23503** `auth_attempts_original_session_id_sessions_id_fk`). **Task 0 Step 1's
+seven rows must go into the real table.**
+
+**11 shipped states.** Seeded one row of each (3 signin / 5 link / 3 delete)
+under the SHIPPED constraint, each session-bearing row on its own session; the
+widened `DROP`+`ADD` validated clean, 11 rows surviving. They also stay
+WRITABLE: a `save()`-shaped UPDATE rewriting all of `save()`'s columns across all
+11 returned `UPDATE 11`. (`ADD` validating proves admissibility, not that the
+app's own write statement still lands — measure both.)
+
+**Every `stage` writer, enumerated mechanically.**
+`grep -rn "SET stage\|stage=\$\|,stage," app/server | grep -v '\.test\.'` returns
+exactly two: `begin()`'s INSERT and `save()`'s UPDATE. `save()` writes neither
+`existing_provider` nor `original_session_id`, so the signin transitions check
+as: `authorize->exchanging` and `exchanging->confirm` stay within disjunct 1 and
+need nothing; `confirm->reauth_authorize` crosses 1->2 and needs
+`existing_provider` in the same statement (stage alone 23514);
+**`reauth_authorize->reauth_exchanging` stays within disjunct 2 and needs
+NOTHING — stage alone is fine, on the UNCHANGED `claim()` path**;
+`reauth_exchanging->link_ready` crosses 2->3 and needs `original_session_id` in
+the same statement (stage alone 23514, session alone 23514, together ok). The
+third row is the one worth keeping: it looks like it needs a companion column
+and does not, and a stage-keyed CHECK invites an implementer to widen `save()`
+defensively when nothing requires it.
+
+**23503 -> `account_changed` is correct and narrow.** Through the real `pg`
+driver: `code: 23503 | constraint: sessions_user_id_users_id_fk | table:
+sessions`. Only ONE statement inside `transaction()` can raise it —
+`mintSession`'s `INSERT INTO sessions`; `sessions.ts`'s `createSession` runs on
+the drizzle pool OUTSIDE `transaction()` and is unreachable by the catch. No
+client collision: the producer carries `purpose: "signin"`, and `SignIn.tsx`
+enumerates only `access_denied`/`account_conflict` and defaults the rest to
+"That sign-in didn't work. Give it another try." — right for a concurrent
+delete. `SignInMethods.tsx`'s "Start linking again" copy is unreachable from
+here (its retry is gated on `purpose === "link"`). `account_changed` is already
+409. **Open:** Task 3 Step 4 does not name its code for "proven subject belongs
+to no account"; picking `account_changed` puts a user error and a concurrent
+delete behind one code on one screen. `account_conflict` fits and already has
+copy there.
+
+**Four things rev 3 states that measurement did not support; TWO ARE THIS
+AGENT'S OWN, corrected in place above.** (1) Task 0's Files line named
+`app/server/db/migrations/`, which does not exist — `app/drizzle.config.ts` is
+`out: "./drizzle"` and all 33 migrations live in `app/drizzle/`. (2) "three
+`frontDoorRoutes.ts` call sites" is FOUR. (3) "`followThrough`'s real UPDATE"
+was `save()`'s UPDATE text. (4) Task 0 Step 4 still read "all four cases hold"
+while Step 1 enumerates seven — and Step 4 is the step that reads the gate.
+
+**Which scale ruled:** none. Decided at one row, by correctness, like revision 2.

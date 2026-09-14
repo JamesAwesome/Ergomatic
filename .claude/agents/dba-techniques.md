@@ -374,3 +374,42 @@ every entry to BOTH files** — an entry only in the record is invisible here.
   every between-label gap; upper bound <1 us/row. A first NON-interleaved pass
   read 365.9 vs 429.0 ms and would have shipped a fabricated +0.63 us/row
   (RF30). **Interleave the labels or report nothing.**
+- **(2026-09-14, rev 3 re-gate) Testing ONE arm of a multi-arm CHECK in
+  isolation is sound for REFUSALS and unsound for ADMITS.** When every arm of the
+  OR opens with an equality on the same discriminator column, no row of one
+  purpose can be rescued by another arm, so an isolated refusal is a refusal in
+  company. The reverse fails hard: a bare table carrying only the arm's columns
+  has none of the real table's sibling CHECKs, FKs or partial unique indexes, and
+  admitted two rows the real schema refused with **23505** and **23503**. **Run
+  the admit cases against the migrated table with real parent rows.**
+- **(2026-09-14) A clean `ADD CONSTRAINT` proves rows are ADMISSIBLE, not that
+  the app's own write statement still lands.** Validation checks resident rows;
+  it does not exercise the UPDATE the code issues. After widening, re-run the
+  store's real statement text across one row of every live state — `UPDATE <n>`
+  is the second half of the proof.
+- **(2026-09-14) Enumerate the writers of a CHECK-governed column by grepping
+  the SQL, not by reading the call graph.**
+  `grep -rn "SET <col>\|<col>=\$\|,<col>," app/server | grep -v '\.test\.'` found
+  exactly two writers of `auth_attempts.stage` where the module has six callers
+  funnelling into them. A stage-keyed CHECK then reads off as a table of
+  disjunct transitions: only the ones CROSSING a disjunct need a companion
+  column in the same statement, and the transition that looks like it needs one
+  and does not is the one worth writing down.
+- **(2026-09-14) Before mapping a SQLSTATE in a shared `catch`, enumerate every
+  statement inside that catch's scope that can raise it.** `INSERT INTO sessions`
+  appears twice in this server; only the one inside `transaction()` is reachable
+  by the catch, so mapping 23503 on `sessions_user_id_users_id_fk` captures
+  exactly one event. Confirm the driver exposes the discriminator: real `pg`
+  gives `code`, `constraint` and `table`, so a constraint-name match is writable.
+- **(2026-09-14) An error CODE's meaning is whatever each rendering surface does
+  with it — read every surface, not the enum.** Whether a new producer
+  "collides" is a question about which surface its `purpose` routes it to.
+- **(2026-09-14) `shared_buffers` has two honest readings that look like
+  different numbers (RF11).** `select setting from pg_settings` gives `16384`
+  (8 kB pages); `setting||unit` gives `163848kB`. Same 128 MB. Say which form
+  the table used.
+- **(2026-09-14) Drizzle migrations are written to `app/drizzle/`, never under
+  `app/server/db/`.** `app/drizzle.config.ts` is
+  `schema: "./server/db/schema.ts", out: "./drizzle"` — the schema and the
+  migrations live in different trees, and a plan naming
+  `app/server/db/migrations/` names a directory that does not exist.
