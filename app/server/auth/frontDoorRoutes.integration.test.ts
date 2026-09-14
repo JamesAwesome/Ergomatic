@@ -17,6 +17,7 @@ import { createDb } from "../db/index.js";
 import { startPostgres } from "../testing/postgres.js";
 import { createApp } from "../app.js";
 import { baseDeps } from "../testDeps.js";
+import { recordingRevoke } from "../testing/fakes.js";
 import { createSessionStore } from "./sessions.js";
 import { createAccessPolicy, type AccessPolicy } from "./accessPolicy.js";
 import { createUserStore } from "./users.js";
@@ -96,7 +97,7 @@ describe("supported auth producers through Express and signed tokens", () => {
     );
     freshApp = async (policy = accessPolicy) => {
       const sessions = createSessionStore(c.db, policy);
-      attempts = createAttempts(pool, policy);
+      attempts = createAttempts(pool, policy, recordingRevoke().revoke);
       await attempts.sweep();
       const routes = createFrontDoorRoutes({
         attempts,

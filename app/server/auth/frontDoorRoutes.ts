@@ -66,7 +66,7 @@ function requestBinding(req: Request, surface: Surface) {
   }
   return requiredText(record(req.body).bindingSecret, 128);
 }
-function failure(res: Response, error: unknown) {
+export function failure(res: Response, error: unknown) {
   const code = error instanceof AuthFailure ? error.code : "signin_failed";
   res.status(authStatus[code]).json({
     error: code,

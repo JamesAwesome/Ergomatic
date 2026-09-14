@@ -41,6 +41,22 @@ export interface ProviderConfig {
   };
   google: { nativeClientId: string; webClientId: string; clientSecret: string };
 }
+// The ONE construction of this credential (Wave A PR1 Task 2, finding N4).
+// `appleRevoke.ts` and `verify()` below both call this rather than each
+// re-spelling the header/iss/sub/aud/iat/expiry, so the two can never drift.
+export function appleClientSecret(
+  config: ProviderConfig,
+  clientId: string,
+): Promise<string> {
+  return new SignJWT({})
+    .setProtectedHeader({ alg: "ES256", kid: config.apple.keyId })
+    .setIssuer(config.apple.teamId)
+    .setSubject(clientId)
+    .setAudience("https://appleid.apple.com")
+    .setIssuedAt()
+    .setExpirationTime("5m")
+    .sign(config.apple.key);
+}
 export function createProviders(
   config: ProviderConfig,
   hooks: {
@@ -176,14 +192,7 @@ export function createProviders(
         const code = requiredText(proof.authorizationCode, 4096);
         let secret = config.google.clientSecret;
         if (c.provider === "apple")
-          secret = await new SignJWT({})
-            .setProtectedHeader({ alg: "ES256", kid: config.apple.keyId })
-            .setIssuer(config.apple.teamId)
-            .setSubject(clientId(c))
-            .setAudience("https://appleid.apple.com")
-            .setIssuedAt()
-            .setExpirationTime("5m")
-            .sign(config.apple.key);
+          secret = await appleClientSecret(config, clientId(c));
         const body = new URLSearchParams({
           grant_type: "authorization_code",
           code,

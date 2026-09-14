@@ -5,11 +5,13 @@ import type {
   AuthPurpose,
   AuthUser,
   SignedIn,
+  UnlinkOutcome,
 } from "../../shared/auth.js";
 import { AuthFailure } from "./frontDoorErrors.js";
 import type { VerifiedIdentity } from "./providers.js";
 import { hashToken, SESSION_TTL_MS } from "./sessions.js";
 import type { AccessPolicy } from "./accessPolicy.js";
+import type { AppleGrant, RevokeApple } from "./appleRevoke.js";
 
 export type Surface = "native" | "web";
 export type Stage =
@@ -83,7 +85,13 @@ function consistent(a: Attempt) {
   )
     throw new AuthFailure("attempt_expired");
 }
-export function createAttempts(pool: pg.Pool, accessPolicy: AccessPolicy) {
+export function createAttempts(
+  pool: pg.Pool,
+  accessPolicy: AccessPolicy,
+  // Required, not defaulted (RF25): a defaulted no-op would silently report
+  // a revoke that never happened.
+  revokeApple: RevokeApple,
+) {
   let healthy = false;
   function requireAccess(email: string): void {
     if (!accessPolicy.allows(email))
@@ -482,6 +490,69 @@ export function createAttempts(pool: pg.Pool, accessPolicy: AccessPolicy) {
       );
       if (!result.rows[0]) throw new AuthFailure("account_changed");
       return result.rows[0];
+    },
+    async unlink(
+      userId: string,
+      provider: AuthProvider,
+    ): Promise<UnlinkOutcome> {
+      const settled = await transaction(
+        async (
+          tx,
+        ): Promise<
+          UnlinkOutcome | { outcome: "unlinked"; grants: AppleGrant[] }
+        > => {
+          const column = subjectColumn(provider);
+          const other = subjectColumn(
+            provider === "apple" ? "google" : "apple",
+          );
+          // The guard lives in the WHERE clause, not a read-then-write. The
+          // database enforces the invariant, so two tabs unlinking different
+          // providers cannot both pass.
+          const updated = await tx.query(
+            `UPDATE users SET ${column}=NULL
+            WHERE id=$1 AND ${column} IS NOT NULL AND ${other} IS NOT NULL`,
+            [userId],
+          );
+          if (!updated.rowCount) {
+            // Zero rows has three causes and a rower whose account is gone
+            // must not be told they cannot remove their last sign-in method.
+            // A second read names the cause; it cannot change the outcome,
+            // only describe it.
+            const row = (
+              await tx.query<{ mine: string | null }>(
+                `SELECT ${column} AS mine FROM users WHERE id=$1`,
+                [userId],
+              )
+            ).rows[0];
+            if (!row) return { outcome: "account_gone" };
+            if (!row.mine) return { outcome: "not_connected" };
+            return { outcome: "last_provider" };
+          }
+          if (provider !== "apple") return { outcome: "unlinked", grants: [] };
+          // BOTH grants, if the rower used phone and web. `frontDoor.ts`
+          // refuses to boot if the native and web client ids are equal, so
+          // these are distinct.
+          const grants = await tx.query<AppleGrant>(
+            `DELETE FROM apple_grants WHERE user_id=$1
+            RETURNING client_id AS "clientId", refresh_token AS "refreshToken"`,
+            [userId],
+          );
+          return { outcome: "unlinked", grants: grants.rows };
+        },
+      );
+      if (!("grants" in settled)) return settled;
+      // AFTER the commit, never inside it. Our copy of the credential is
+      // already destroyed; this only asks Apple to forget too, and a
+      // failure cannot and must not undo the unlink. The try/catch is what
+      // makes that true: the type says `Promise<boolean>`, which cannot
+      // forbid a rejection, and any injected revoker can reject.
+      let appleRevoked = false;
+      try {
+        appleRevoked = await revokeApple(settled.grants);
+      } catch {
+        console.warn(JSON.stringify({ event: "apple_revoke_threw" }));
+      }
+      return { outcome: "unlinked", appleRevoked };
     },
     async legacyGoogle(identity: VerifiedIdentity): Promise<SignedIn> {
       // `access_denied`, not `invalid_proof`: this is the SAME refusal

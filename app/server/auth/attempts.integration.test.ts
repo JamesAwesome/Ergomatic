@@ -8,6 +8,7 @@ import { createAttempts } from "./attempts.js";
 import { createSessionStore } from "./sessions.js";
 import { createUserStore } from "./users.js";
 import { createAccessPolicy } from "./accessPolicy.js";
+import { recordingRevoke } from "../testing/fakes.js";
 
 describe("front-door transactions against Postgres", () => {
   let container: StartedPostgreSqlContainer;
@@ -21,7 +22,7 @@ describe("front-door transactions against Postgres", () => {
     pool = c.pool;
     await migrate(c.db, { migrationsFolder: "drizzle" });
     const publicAccess = createAccessPolicy("public", "");
-    store = createAttempts(pool, publicAccess);
+    store = createAttempts(pool, publicAccess, recordingRevoke().revoke);
     sessions = createSessionStore(c.db, publicAccess);
     users = createUserStore(c.db);
     await store.sweep();
@@ -104,6 +105,7 @@ describe("front-door transactions against Postgres", () => {
       const restricted = createAttempts(
         pool,
         createAccessPolicy("restricted", "allowed@test"),
+        recordingRevoke().revoke,
       );
       await restricted.sweep();
       const deniedNew = await restricted.begin({
@@ -156,6 +158,7 @@ describe("front-door transactions against Postgres", () => {
     const restricted = createAttempts(
       pool,
       createAccessPolicy("restricted", "someone-else@test"),
+      recordingRevoke().revoke,
     );
     await expect(
       restricted.confirm(
@@ -351,6 +354,7 @@ describe("front-door transactions against Postgres", () => {
     const claim = createAttempts(
       claimPool,
       createAccessPolicy("public", ""),
+      recordingRevoke().revoke,
     ).claim(b.attempt);
     await ready;
     const replacement = store.begin({
@@ -452,6 +456,7 @@ describe("front-door transactions against Postgres", () => {
     const restricted = createAttempts(
       pool,
       createAccessPolicy("restricted", "relay@privaterelay.appleid.com"),
+      recordingRevoke().revoke,
     );
     await restricted.sweep();
     const b = await restricted.begin({
@@ -494,6 +499,7 @@ describe("front-door transactions against Postgres", () => {
     const restricted = createAttempts(
       pool,
       createAccessPolicy("restricted", "someone-else@test"),
+      recordingRevoke().revoke,
     );
     await expect(
       restricted.read(b.attempt.id, b.bindingSecret, "native"),
@@ -513,6 +519,7 @@ describe("front-door transactions against Postgres", () => {
     const restricted = createAttempts(
       pool,
       createAccessPolicy("restricted", "someone-else@test"),
+      recordingRevoke().revoke,
     );
     await expect(
       restricted.begin({
@@ -551,6 +558,7 @@ describe("front-door transactions against Postgres", () => {
     const restricted = createAttempts(
       pool,
       createAccessPolicy("restricted", "someone-else@test"),
+      recordingRevoke().revoke,
     );
     await expect(
       restricted.finalize(ready, b.attempt.originalSessionId!),
@@ -572,6 +580,7 @@ describe("front-door transactions against Postgres", () => {
     const restricted = createAttempts(
       pool,
       createAccessPolicy("restricted", "original@test"),
+      recordingRevoke().revoke,
     );
     const owned = await restricted.read(
       b.attempt.id,
@@ -608,6 +617,7 @@ describe("front-door transactions against Postgres", () => {
     const allowed = createAttempts(
       pool,
       createAccessPolicy("restricted", "saved@test"),
+      recordingRevoke().revoke,
     );
     const signed = await allowed.legacyGoogle({
       ...apple,
@@ -621,6 +631,7 @@ describe("front-door transactions against Postgres", () => {
     const denied = createAttempts(
       pool,
       createAccessPolicy("restricted", "changed@test"),
+      recordingRevoke().revoke,
     );
     await expect(
       denied.legacyGoogle({

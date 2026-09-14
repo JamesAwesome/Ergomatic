@@ -3,6 +3,8 @@ import type pg from "pg";
 import { createAttempts } from "./attempts.js";
 import { createProviders, type ProviderConfig } from "./providers.js";
 import { createFrontDoorRoutes } from "./frontDoorRoutes.js";
+import { createAccountRoutes } from "./accountRoutes.js";
+import { createAppleRevoke } from "./appleRevoke.js";
 import type { SessionStore } from "./sessions.js";
 import type { AccessPolicy } from "./accessPolicy.js";
 
@@ -56,7 +58,11 @@ export async function createFrontDoor(
   config: ProviderConfig,
   accessPolicy: AccessPolicy,
 ) {
-  const attempts = createAttempts(pool, accessPolicy);
+  const attempts = createAttempts(
+    pool,
+    accessPolicy,
+    createAppleRevoke(config),
+  );
   const providers = createProviders(config);
   async function sweepAttempts() {
     try {
@@ -80,13 +86,19 @@ export async function createFrontDoor(
     void sweep();
   }, 60000);
   timer.unref();
+  const routes = createFrontDoorRoutes({
+    attempts,
+    providers,
+    sessions,
+    siteUrl: config.siteUrl,
+  });
+  // Merged into the SAME router `createFrontDoorRoutes` already returns —
+  // `server/app.ts` mounts exactly one value, `deps.frontDoor.router`, so a
+  // second, separately-constructed router here would be a 404 in
+  // production with every unit test green (Task 2 brief, Step 5).
+  routes.router.use(createAccountRoutes({ attempts, sessions }));
   return {
-    ...createFrontDoorRoutes({
-      attempts,
-      providers,
-      sessions,
-      siteUrl: config.siteUrl,
-    }),
+    ...routes,
     attempts,
     providers,
     close: () => clearInterval(timer),

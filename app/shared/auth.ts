@@ -68,3 +68,13 @@ export interface AuthMethods {
   apple: boolean;
   google: boolean;
 }
+// Zero rows from the unlink UPDATE has three distinct causes (last provider,
+// already unlinked, account gone) and each gets its own rower-facing
+// message — a rower whose account is gone must never be told they cannot
+// remove their last sign-in method. `appleRevoked` rides only "unlinked":
+// it is meaningless for the other three outcomes.
+export type UnlinkOutcome =
+  | { outcome: "unlinked"; appleRevoked: boolean }
+  | { outcome: "last_provider" }
+  | { outcome: "not_connected" }
+  | { outcome: "account_gone" };
