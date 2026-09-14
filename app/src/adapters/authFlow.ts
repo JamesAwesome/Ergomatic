@@ -699,6 +699,42 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
     });
   }, [context, native]);
 
+  // A BFCACHE RESTORE IS NOT A RELOAD, and `busy` outlives it.
+  //
+  // On web, `start()` sets `busy` and then hands the browser to the provider.
+  // `busy` disables BOTH provider buttons (`SignIn.tsx`). Coming back with
+  // Back — which is also how a rower leaves Apple's sheet without finishing —
+  // restores the SAME document from the back/forward cache with React state
+  // intact: no remount, no reload, so nothing here ever ran again and both
+  // buttons stayed dead until a manual refresh. Reported from staging.
+  //
+  // `persisted: true` on `pageshow` is the only signal a restore gives us.
+  //
+  // It clears ONLY a `busy` view, and deliberately does NOT check
+  // `operation.current` — an earlier draft did, and that guard defeated the
+  // whole fix: on web `start()` stores the operation BEFORE handing the
+  // browser away, so the in-flight attempt is exactly the state this runs in.
+  // A live attempt is not a reason to keep the screen dead. It stays live
+  // server-side, its cookie is untouched, and the next tap replaces it
+  // through `start()`'s own cancel-then-mint path.
+  //
+  // Narrow to `busy` on purpose: a restore landing on a real resumable view
+  // (a confirm screen, a link step) must keep it, and the return-URL effect
+  // above owns those. This is strictly the stuck-spinner case.
+  useEffect(() => {
+    if (native) return;
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      setView((current) =>
+        current.kind === "busy" ? { kind: "idle" } : current,
+      );
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [native]);
+
   async function start(provider: AuthProvider, purpose: AuthPurpose) {
     const startGeneration = ++generation.current;
     setTargetAuthorizationBusy(false);

@@ -877,6 +877,51 @@ describe("useAuthFlow", () => {
     expect(cancellations).toBe(2);
   });
 
+  it("a bfcache restore clears a busy view left behind by navigating to the provider", async () => {
+    // THE REPORTED BUG. On web, `start()` sets `busy` and then hands the
+    // browser to Apple. `busy` disables BOTH provider buttons (SignIn.tsx).
+    // If the rower comes back with Back — or Apple's own cancel returns them
+    // that way — Safari and Chrome restore the page from the back/forward
+    // cache with React state INTACT, so `busy` is still true and both buttons
+    // are dead. Only a reload rebuilds the app at idle, which is exactly what
+    // was reported from staging. Nothing in the flow listened for `pageshow`.
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts")
+        return ok({
+          outcome: "authorize",
+          attemptId: "bfc-1",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "apple",
+          stage: "signin",
+          nonce: "n",
+          state: "s",
+          authorizationUrl: "https://appleid.apple.com/auth/authorize",
+        });
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+
+    await act(async () => {
+      await result.current.startSignIn("apple");
+    });
+    // The browser has been handed to Apple and the view is busy.
+    expect(seam.navigateWeb).toHaveBeenCalled();
+    expect(result.current.view.kind).toBe("busy");
+
+    // Back: the SAME document is restored from bfcache. No remount, no
+    // reload — `persisted: true` is the only signal there is.
+    await act(async () => {
+      window.dispatchEvent(
+        Object.assign(new Event("pageshow"), { persisted: true }),
+      );
+    });
+    expect(result.current.view.kind).not.toBe("busy");
+  });
+
   it("shows a busy view while an attempt is being minted, and routes it nowhere", async () => {
     // `busy` is what disables BOTH provider buttons during the round-trip
     // (SignIn.tsx), and nothing built it. Deleting `setView({kind:"busy"})`
