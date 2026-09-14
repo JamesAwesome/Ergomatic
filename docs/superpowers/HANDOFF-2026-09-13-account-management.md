@@ -7,11 +7,16 @@ as unverified.
 ## Where things stand in one paragraph
 
 Apple sign-in shipped and is live on staging. Two defects it caused were found
-by a real rower within the hour and are fixed and merged. The next piece —
-account deletion, unlink, and following through to a link — has an **approved,
-hardened spec** and no implementation. It is blocked on nothing for PR1. The
-single most valuable thing a human can do next is sign in with Apple **on the
-phone**, because that closes a release gate no desk test can.
+by a real rower within the hour and are fixed and merged. **The phone gate
+closed 2026-09-13**: Apple sign-in on Kaito landed on the existing account
+(`apple_grants` 1 → 2, `users` stayed 6, `with_apple` stayed 1) — native/web
+subject continuity is proven, not just designed for. **PR1 — deletion,
+unlink, and the conflict copy — is implemented and complete** on branch
+`wave-a-pr1` (Tasks 1-5; migration, unlink, deletion, the You-screen UI, the
+conflict copy and this record reconciliation all landed and reviewed clean).
+It has not yet been opened as a PR against main. The next piece is opening
+that PR and getting it reviewed and merged; PR2 (the link follow-through) is
+next after that.
 
 ## What is merged
 
@@ -19,7 +24,8 @@ phone**, because that closes a release gate no desk test can.
 |---|---|---|
 | #425 | Apple sign-in, account creation, explicit linking | MERGED `10ed2c2a`, deployed to staging, `deploy` job green |
 | #429 | Name struck from sign-in copy; bfcache fix for dead buttons; ROADMAP rows | MERGED `436c38b8`, main's run green |
-| #431 | Spec revision 2 (docs only) | **OPEN — needs review** |
+| #431 | Spec revision 2, plus this handoff (docs only) | MERGED `be7838aa` |
+| — | PR1: migration, unlink, deletion, You-screen UI, conflict copy | **Complete on `wave-a-pr1`, not yet opened as a PR** |
 
 ## What is live and PROVEN, versus assumed
 
@@ -33,13 +39,14 @@ phone**, because that closes a release gate no desk test can.
   design working: identity is the provider subject, never the email.
 - Six accounts exist. Only one has Apple.
 
-**NOT proven, and this is the gap that matters:**
+**Now also proven, closed 2026-09-13:**
 
-- **Apple sign-in on the phone has never run.** Native/web subject continuity is
-  therefore untested. If the App ID and the Services ID are not grouped under one
-  primary App ID, the same person gets two subjects and silently forks into two
-  accounts — `users.email` has no unique constraint, so nothing errors. This is a
-  PM release gate and the highest-value next action.
+- **Native/web subject continuity.** Apple sign-in on Kaito (native) landed on
+  the *existing* web-created account rather than forking a new one:
+  `apple_grants` went 1 → 2 (the web grant plus a new native grant on the same
+  `user_id`), `users` stayed at 6, and the account's Apple-linked count stayed
+  at 1. The App ID/Services ID grouping is correct. This was the PM release
+  gate; it is closed.
 
 ## The decisions that are settled (do not re-litigate)
 
@@ -51,7 +58,10 @@ All James's, 2026-09-13:
 2. **Graduated confirmation:** reauth to delete; plain confirm for unlink and for
    the link follow-through.
 3. **Delete immediately, revoke afterwards, best effort.**
-4. **Bounded retry**, and (after hardening) guarded by an Apple-subject check.
+4. **No retry.** James withdrew the `apple_revocations` outbox this decision
+   originally described, later the same day, mid-implementation: revocation is
+   synchronous, best effort, one attempt per grant, no queue, no subject
+   check. See the spec's "Revocation is synchronous and best effort" section.
 5. **Design for multiple containers from the first line** — he may run more than
    one someday.
 6. **PR split:** PR1 = deletion + unlink + conflict copy. PR2 = follow-through.
@@ -61,12 +71,15 @@ All James's, 2026-09-13:
 
 ## The spec, and what to trust about it
 
-`docs/superpowers/specs/2026-09-13-account-management-design.md`, **revision 2**.
+`docs/superpowers/specs/2026-09-13-account-management-design.md`, **revision 3**.
 
 Revision 1 was hardened and came back **NOT READY** with five blocking findings,
-three inside its own citations. Revision 2 folds all of them. Its foot carries a
-"what revision 1 got wrong" list — read it, because two of those mistakes are the
-recurring kind.
+three inside its own citations. Revision 2 folds all of them. Revision 3 strikes
+the `apple_revocations` outbox revision 2 designed, after James withdrew it
+mid-implementation, and replaces it with the three rulings that supersede it
+(new section: "Revocation is synchronous and best effort"). Its foot still
+carries "what revision 1 got wrong" — read it, with item 2 now noting the
+second stored shape it names was itself withdrawn in revision 3.
 
 **The single most important lesson from this session:** revision 1 quoted Apple
 verbatim and presented it as verified, when only the *transcription* had been
@@ -85,16 +98,25 @@ re-registered account. Six Apple documents searched; nothing addresses it.
 
 ## What to do next, in order
 
-1. **Sign in with Apple on the phone** (human). Closes native/web continuity.
-   If it lands on the existing account rather than creating a seventh, the gate
-   is closed. This blocks PR2 and nothing else.
-2. **Review and merge #431** (the spec).
-3. **Write the implementation plan for PR1** via the writing-plans skill. PR1 is
-   deletion + unlink + the conflict copy. It carries **two** stored-shape changes
-   (a migration widening `auth_attempts.purpose`, and the `apple_revocations`
-   outbox), so it needs the DBA gate and a PM final-PR gate.
-4. **PR2 only after** the phone test AND PR1, the latter for a security reason:
-   unlink is the compensating control that makes a wrong attach recoverable.
+**Steps 1 and 2 of the original list are done: the phone gate closed
+2026-09-13 (see above), and #431 (spec revision 2, plus this handoff) merged
+as `be7838aa`.** The list below replaces the original rather than extending
+it.
+
+1. **Open PR1 as a PR against main** from `wave-a-pr1` (Tasks 1-5, complete
+   and reviewed clean task-by-task). It carries the TRIAD twice — a stored
+   shape (one, not two: `auth_attempts.purpose` widened; the outbox never
+   shipped) and auth — so it needs the DBA gate and a PM final-PR gate before
+   merge, and the roadmap hand-back (five new rows Task 5 proposes, plus
+   whatever in `ROADMAP.md` is overdue) goes to James in the same message.
+2. **James reviews and merges.** No merge on green CI alone where the TRIAD
+   gate applies.
+3. **After merge:** the release recommendation and the agent-config check
+   (both standing rules), and confirm main's own post-merge CI run is green,
+   not just the PR's.
+4. **PR2 (the link follow-through) starts only after PR1 merges**, for a
+   security reason, not a sequencing one: unlink is the compensating control
+   that makes a wrong attach recoverable.
 
 ## Traps this session hit, so you do not
 
@@ -119,9 +141,16 @@ ones most likely to bite: unlink (dies 2026-10-10), the follow-through (same),
 `account_conflict` naming its recovery (2026-09-26), and the fourth denial
 surface in `native/signin.ts` that says a third different thing (2026-09-26).
 
-Plus two recorded in the spec rather than the register: a locked-out rower cannot
-delete in-app (5.1.1(v) exposure, bounded today by the household cohort), and
-Concept2 tokens are never deauthorized at Concept2 on deletion.
+**Task 5 proposes five more**, still awaiting James's hand-back approval at
+PR1's opening (not struck without him): the locked-out rower's in-app deletion
+gap and the Concept2 deauthorization gap — both previously recorded only in the
+spec, now proposed as register rows too — plus the re-registration name defect
+(now with no retry in front of it, a consequence of the outbox's removal), the
+three-times-seen `e2e/appleAuth.spec.ts` navigation flake (dies 2026-10-15,
+load-bearing because its evidence lives under the git-excluded `.superpowers/`),
+and the `--rule` hairline at 1.47:1 on `--surface` (pre-existing, decorative,
+outside WCAG's 3:1 non-text minimum, recorded so a later reader does not assume
+it was cleared).
 
 ## Operational facts worth not rediscovering
 

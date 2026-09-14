@@ -944,6 +944,11 @@ it lands the stranger on this same denial.
       **TWO CORRECTIONS to this row, both measured 2026-09-13.** (a) **ELEVEN**
       FKs cascade from `users`, not eight
       (`grep -c 'references(() => users.id, { onDelete: "cascade" })'`).
+      **A THIRD FACT, added at Task 5, does not touch the eleven — both counts
+      are right about different things:** `auth_attempts` reaches TWELVE,
+      transitively through `sessions` rather than directly from `users`, and
+      it is the one table holding a live Apple credential
+      (`auth_attempts.apple_refresh_token`).
       (b) `session_logs.workout_id`'s `onDelete: "set null"` is **IRRELEVANT to
       account deletion** and is NOT the decision that has to be argued against
       Apple's deactivation sentence: `session_logs.user_id` cascades, so the log
@@ -972,6 +977,9 @@ it lands the stranger on this same denial.
       is probably that the plan, log, baselines and Concept2 link qualify as
       significant — and "probably" is what RF16 says to stop writing. The
       spec answers it in one paragraph with the feature list beside it.
+      · dies 2026-10-10 (campsite rule, set at Task 5) · this is the wave's
+      own deadline (above); PR1 (deletion, unlink, conflict copy) is complete
+      on branch `wave-a-pr1` and awaiting review, not a fix-now gap.
 - [x] **SHIPPED 2026-09-13 (#425, main `10ed2c2a`, deployed to staging) — Apple sign-in** (moved from Phase PROD; the duplicate entry that lived
       under triggered follow-ons is deleted). **FIRST, ruled by James
       2026-09-12; design and rendered Gate 0 APPROVED the same day.** Covers
@@ -1047,6 +1055,74 @@ it lands the stranger on this same denial.
       `nativeSignOut` that came out from under it. **S**
       · dies 2026-10-12 · pre-existing debt, and cheaper to clear while the file
       is already open than as its own branch.
+- [ ] **A locked-out rower cannot delete their account in-app.** Two paths
+      already produce this: `ACCESS_MODE=restricted` with the rower's email
+      removed from `ALLOWED_EMAILS`, and the `APPLE_*` configuration being
+      removed from a host where Apple-only accounts exist. Both leave the
+      account and its providers intact but unreachable, which is a 5.1.1(v)
+      exposure — deletion "within the app" requires being able to get into
+      the app. Recorded in the account-management spec rather than solved
+      there (revision 3, "A consequence this design owes an answer to").
+      Today's cohort is a household on a restricted deployment, so the
+      exposure is bounded. **S**
+      · dies 2026-10-10 · not a fix-now because the fix is either an
+      out-of-band deletion path (an admin action, contradicting "within the
+      app") or loosening the lockout paths themselves, and both are product
+      decisions PR1 does not own; the wave's own deadline is the backstop.
+- [ ] **Concept2 tokens are never deauthorized at Concept2 on deletion.**
+      `concept2_links` rows cascade away on account deletion with nothing
+      revoked at Concept2's end, and there is no deauthorize path anywhere in
+      the repo. Stated as a decision in the account-management spec, not an
+      oversight: Concept2 is a different vendor with a different obligation,
+      and Apple's "all data associated with their account" speaks to our own
+      storage, which does go. **S**
+      · dies 2026-10-10 · not a fix-now because it requires a Concept2 OAuth
+      revocation call this PR's scope never included and Concept2's own API
+      surface for it is unresearched; the wave's own deadline is the
+      backstop.
+- [ ] **The re-registration name defect now has no retry in front of it.**
+      TN3194, verbatim: "If the manual token revocation isn't completed, the
+      next time the user authenticates with your client using Sign in with
+      Apple, they won't be presented with the initial authorization flow to
+      enter their full name, email address, or both." So a rower whose delete
+      left a FAILED revoke and later signs up again gets no name from Apple;
+      `providers.ts` falls back to `"Rower"` permanently, because nothing in
+      the product can rename an account. Revision 2's withdrawn
+      `apple_revocations` outbox would have retried the failed revoke and so
+      lowered the odds of a rower ever landing in this state; James's
+      2026-09-13 ruling removed that retry as a direct consequence of
+      removing the outbox (see the spec's "Revocation is synchronous and best
+      effort"). **S**
+      · dies 2026-10-10 · not a fix-now because the actual fix is a rename
+      surface in the product, which is unscoped work; the wave's own deadline
+      is the backstop.
+- [ ] **Watch `e2e/appleAuth.spec.ts`'s delete cases for the navigation
+      failure seen three times in Task 4 and not reproduced in 144 runs
+      since.** A real e2e failure (rower lands on Today instead of the confirm
+      screen) was traced to a `/api/me`-vs-attempt-read race via
+      `framenavigated`; the App.tsx guard now in place is argued from a
+      provable invariant (react-router's `<Navigate>` acting from an effect,
+      cited against the installed `react-router` 7.18.3 source) rather than
+      the race, and is independently gateable — but the race itself was never
+      reproduced closely enough to confirm the guard is why it stopped.
+      **This row is LOAD-BEARING**: the evidence lives in
+      `task-4-report.md` under `.superpowers/`, which is git-excluded and
+      dies with the worktree — this ROADMAP row is the only durable record.
+      **S**
+      · dies 2026-10-15 · not a fix-now because there is nothing further to
+      fix without a reproduction; this is a watch, not a defect, and the date
+      is the backstop for a trigger (a second sighting) that may never fire.
+- [ ] **The `--rule` hairline measures 1.47:1 on `--surface`.** Pre-existing
+      (`10ed2c2a`, predates PR1): `.auth-identity`'s card border
+      (`app/src/index.css:275`, `border: 1px solid var(--rule)` on
+      `background: var(--surface)`), rendered on the confirm and reauth
+      screens PR1 reuses. Decorative — it separates a card from its own
+      background, carries no text and states nothing on its own — so WCAG's
+      3:1 non-text minimum does not govern it. PR1's contrast pass looked at
+      this element and is recording the number rather than leaving a later
+      reader to assume it was cleared. **S**
+      · dies 2026-10-10 · not a fix-now because nothing requires it to clear
+      3:1; recorded, not a defect.
 
 **Exit:** a stranger installs from TestFlight, signs in with Apple or Google,
 gets an empty working account, rows a row (the "rows a row" clause is closed

@@ -27,11 +27,18 @@ function Welcome({ auth }: { auth: AuthFlowController }) {
             : "Your account is deleted. Ergomatic is still listed in your Apple ID settings, under Sign in with Apple. You can remove it there."}
         </p>
       )}
+      {/* WAVE A PR 1 TASK 5. `account_conflict` on a fresh signin attempt
+          means the provider subject already belongs to a different
+          Ergomatic account (unique-constraint conflict, attempts.ts:137).
+          The recovery deletion makes possible: sign in to THAT account,
+          delete it, then add this sign-in from You. */}
       {auth.view.kind === "error" && auth.view.purpose === "signin" && (
         <p className="notice auth-notice-error" role="alert">
           {auth.view.code === "access_denied"
             ? `${auth.view.email ?? "This account"} isn't invited to this Ergomatic. Ask the owner to add you.`
-            : "That sign-in didn’t work. Give it another try."}
+            : auth.view.code === "account_conflict"
+              ? `That ${auth.view.targetProvider ? `${providerName(auth.view.targetProvider)} ` : ""}sign-in already belongs to another Ergomatic account. To use it here, sign in to that account, delete it from You, then add this sign-in.`
+              : "That sign-in didn’t work. Give it another try."}
         </p>
       )}
       <div className="auth-stack">
