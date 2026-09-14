@@ -6858,3 +6858,59 @@ approved design/captures. No implementation or release verdict is claimed.
 - **What improved most is detectability, and the body did not say so:** eight
   of the eleven review defects were gates that could not go red, not behaviour
   bugs. `safeAreaCensus.test.ts` is the branch's best artefact.
+
+## 2026-09-13 — Wave A: auto-link follow-through and the duplicate-account question
+
+Called as a product decision on two questions to be ruled together, after Apple
+sign-in merged (#425) and went live on staging. Phase-OPEN-shaped: two new items
+added to an open wave's slate. No implementation this round.
+
+**Rulings.**
+
+1. **Auto-link follow-through: YES, with a confirmation naming both identities —
+   but not in this slice.** Ships after real Apple authorization proves
+   cross-surface subject continuity, and in the same PR as unlink.
+2. **Duplicate accounts: DELETION ONLY.** No merge, no one-way transfer.
+   Marginal cost is one copy change on the `account_conflict` screen, riding the
+   deletion PR. (James ruled the same independently, mid-engagement.)
+3. **Unlink is owed**, triggered by public activation, accelerated by auto-link.
+
+**The controller's security reasoning was rejected while its conclusion stood.**
+The claim was that follow-through demands "exactly the proof the explicit link
+flow demands — no weaker". It is weaker in the ORDER of the proofs: explicit
+linking is initiated by the account holder and gated on a fresh reauth of the
+existing provider, which an attacker holding a stolen session cannot supply;
+follow-through proves the TARGET identity first and lets the victim's own act
+complete the link. That is identity injection, and it converts a session-lifetime
+compromise into a permanent one because sessions expire and `apple_sub` does not.
+Recorded as INFERENCE and handed to the antagonist — TRIAD (auth) is not the
+PM's to settle.
+
+**The interaction claim was reversed.** Controller: "if duplicates can only be
+resolved by deletion, the confirmation matters more." Wrong — deletion recovers a
+duplicate, not a wrong link; deleting the account that holds a wrong link
+destroys the history. The real dependency is Q1 -> Q2: follow-through removes the
+recurring exposure that MANUFACTURES duplicates (today `authFlow.ts` cancels the
+attempt, so the same screen returns every time), which is what makes
+deletion-only sufficient.
+
+**The census correction that killed option (c)** is in `pm-techniques.md`: four
+tables move, six collide, not three and four. `test_history` was omitted
+entirely and is the source of #424's TEST TREND chart.
+
+**Scope correction.** Follow-through is not "one extra screen". `useUsualSignIn`
+deliberately destroys the verified subject and the Apple refresh token, so the
+work is a ninth stage in an eight-stage machine plus a new terminal transition,
+carrying the grant account deletion will need. Priced **M**, needs a lifetime
+table (RF27).
+
+**Sequencing ruled:** (1) real Apple auth + cross-surface continuity — blocks
+auto-link specifically, because an ungrouped App ID / Services ID would attach
+the wrong surface-specific sub permanently at the exact moment there is no
+unlink; (2) deletion + the conflict copy; (3) unlink; (4) auto-link with
+confirmation; (5) `ACCESS_MODE=public`.
+
+**Not established:** whether follow-through weakens the auth invariant
+(antagonist's call), whether the Apple App ID / Services ID grouping is
+configured (console fact, already a spec release gate), whether any duplicate
+account exists today.

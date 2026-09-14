@@ -26,6 +26,26 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 
 ## Product principles (no other home)
 
+- **2026-09-13 — deletion resolves DUPLICATES; unlink resolves WRONG LINKS. They
+  are not substitutes and neither raises the other's stakes.** Deleting the
+  account that holds a wrong link destroys the history the recovery was for. The
+  Wave A engagement arrived with the opposite claim ("duplicates resolvable only
+  by deletion makes the auto-link confirmation matter more") and it is a
+  conflation. State which failure a recovery path recovers before pricing it.
+- **2026-09-13 — until the cohort is external, the recovery path for every
+  identity failure is one person with psql.** Six accounts, eleven allowlisted,
+  one owner of the box, so merge / unlink / deletion are all "fix it by hand"
+  today. The trigger that makes each real is PUBLIC ACTIVATION, not the feature
+  that introduces the failure. Say which of the two a row waits on — they are
+  usually different dates.
+- **2026-09-13 — a unique constraint approved as a product ruling is not
+  plumbing a later feature may quietly undo.** A true account merge required
+  destroying one `concept2_links` row, because `c2UserId` is `.notNull().unique()`
+  by the 2026-09-02 ruling ("one Concept2 account linked to at most ONE Ergomatic
+  user per database"). When a proposed feature's cost includes relaxing a
+  constraint, grep the schema comment for the ruling that put it there — the
+  feature is a re-litigation wearing a migration's clothes.
+
 - **2026-08-13 — "let the erg drive."** The PM5 is authoritative. Match the
   machine, including in pre-row states. Do not invent a reading, a verdict or a
   state the monitor does not itself show. Generalises past the PM5: when a real
@@ -50,6 +70,19 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   that split.
 
 ## Patterns that recur (check for these every time)
+
+- **An option priced from a hand-written table census is wrong in BOTH
+  directions, and the omission is the expensive half.** Wave A's account-merge
+  question (2026-09-13) offered a "one-way transfer of the three clean tables"
+  option whose whole appeal was sidestepping collisions. Measured against
+  `app/server/db/schema.ts`: `test_history` was missing entirely (it moves
+  cleanly, and it is the source of the TEST TREND chart #424 shipped),
+  `article_reads` was called clean while its PK is composite `(user_id, slug)`,
+  and two further per-user uniques were uncounted. Four move, six collide — not
+  three and four. **Before ruling on any data-migration option, derive its
+  census with a command over `schema.ts`, never from the dispatch.** RF30's rule
+  applied to a table list, and it killed the option the dispatch called the
+  sensible middle.
 - **The gate that blocks is often the one nobody enumerated.** Wave A #425
   (2026-09-13) asked whether an incomplete code-review lens should block a
   merge. It should not — six later lenses discharged it for code. The binding
