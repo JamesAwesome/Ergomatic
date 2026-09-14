@@ -1846,4 +1846,30 @@ describe("useAuthFlow", () => {
       purpose: "signin",
     });
   });
+
+  it("resumes a web delete return into the delete_ready view", async () => {
+    // The supported producer: the delete callback redirects to
+    // `/?authAttempt=<id>` and this effect GETs the attempt. Without
+    // acceptStep's delete_ready branch nothing sets the view and the rower
+    // who has just re-proved their provider sees no transition at all.
+    window.history.replaceState(null, "", "/?authAttempt=delete-1");
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/delete-1")
+        return ok({
+          outcome: "delete_ready",
+          attemptId: "delete-1",
+          purpose: "delete",
+          targetProvider: "google",
+          expiresAt: "2026-09-13T00:05:00.000Z",
+        });
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() =>
+      expect(result.current.view).toStrictEqual({ kind: "delete_ready" }),
+    );
+    // Task 4 owns where this routes; today it deliberately routes nowhere.
+    expect(result.current.destination).toBe(null);
+  });
 });
