@@ -3637,7 +3637,35 @@ Each needs erg time or a deliberate recording session.
   to COUNT and the artifact to DIAGNOSE.
   **The sweep reproduced FLAKE 1 at 9 and FLAKE 3 at 10 branch-for-branch**,
   independently of the hand counts, which is the evidence that the method
-  is sound rather than merely thorough. **S**
+  is sound rather than merely thorough.
+  **WHAT IS ACTUALLY LEFT, and it is the number that matters.** Counting
+  only events in ISOLATED jobs (one failure in the job — a job with four
+  at once is a runner event, not a test bug) since 2026-08-15, there are
+  34, and they classify:
+
+  | events | what |
+  |---|---|
+  | 9 | FLAKE 3 — **fixed in #434** |
+  | 9 | FLAKE 1 — **fixed in #434** |
+  | 1 | FLAKE 4 (`stats.spec.ts`) — **fixed in #434** |
+  | 5 | `news.spec.ts` release-notes pin drift — **never a flake** |
+  | 4 | `connected-swipe` WIP breakage, one branch, one day — **not a flake** |
+  | 2 | `appleAuth.spec.ts` — **owned by the Apple-login session**, guard written |
+  | 2 | `onboarding.spec.ts` fresh-user arc — renamed, nothing since |
+  | 2 | true singletons (`today.spec.ts`, `log.spec.ts`), one each |
+
+  **#434 killed 19 of those 34 — 56% — and all three of the top entries.**
+  After it, the live isolated-flake population is: one test owned by
+  another session, one possibly-dormant test, and two singletons that have
+  each happened once ever. **That is the honest status of "flakes dead":
+  the named ones are dead, and what remains is either somebody else's, too
+  rare to hunt, or not a flake at all.**
+  **The real remaining work is therefore the MULTI-FAILURE RUNS, not any
+  single test** — three jobs in the corpus failed four tests at once
+  (`103829038779`, `103672406399`, `101506257739`), which is FLAKE 2's
+  territory and a runner question. That is exactly what the capacity
+  banner in `test-run.sh` was added to make answerable, and why it came
+  before any attempt to cap workers. **S**
 
 - **FLAKE 4 — the read-after-write class, censused and CLOSED 2026-09-14.**
   · dies 2026-10-14 · a row and not a fix now only as bookkeeping: the two
