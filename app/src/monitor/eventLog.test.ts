@@ -110,18 +110,32 @@ describe("createEventLog: recording and reading back", () => {
 
 describe("createEventLog: exportLog", () => {
   it("exports the exact entries as JSON — the trace a bug report pastes verbatim", () => {
+    // The ENTRIES half is unchanged and still pinned exactly. What moved is
+    // that they now sit under `entries` beside a `meta` header, because a
+    // bare array could not name the monitor, the build, or which session it
+    // came from — see `MonitorLogMeta`.
     const log = createEventLog(undefined, manualClock());
     log.record("connect", "scan started");
     log.record("disconnected", "link lost");
     const exported = log.exportLog();
-    expect(JSON.parse(exported)).toStrictEqual([
+    expect(
+      (JSON.parse(exported) as { entries: unknown[] }).entries,
+    ).toStrictEqual([
       { seq: 0, atMs: 1000, kind: "connect", detail: "scan started" },
       { seq: 1, atMs: 1010, kind: "disconnected", detail: "link lost" },
     ]);
   });
 
-  it("exports an empty array for a log with nothing recorded yet", () => {
-    expect(createEventLog().exportLog()).toBe("[]");
+  it("exports an empty entries list — and still a header — for a log with nothing recorded", () => {
+    // A log with no events is the NFC-failure case: nothing was recorded
+    // because nothing got far enough to record. That paste is still worth
+    // grounding, so the header rides even when `entries` is empty.
+    const parsed = JSON.parse(createEventLog().exportLog()) as {
+      meta: { appVersion: string };
+      entries: unknown[];
+    };
+    expect(parsed.entries).toStrictEqual([]);
+    expect(parsed.meta.appVersion).toBe("dev");
   });
 });
 
@@ -194,5 +208,57 @@ describe("a flood must not evict its own diagnosis", () => {
     // The earlier snapshot must still read as it did when it was taken.
     expect(held[0]!.repeated).toBeUndefined();
     expect(log.entries()[0]!.repeated).toBe(2);
+  });
+});
+
+describe("createEventLog: the export's grounding header", () => {
+  it("exports an object carrying meta and entries, not a bare array", () => {
+    // WHY THIS SHAPE CHANGED. The ring used to export
+    // `JSON.stringify(entries)` — a bare array with nothing identifying the
+    // session it came from. A tester pasting one told us what happened and
+    // nothing about WHERE: not which monitor, not which build, not which of
+    // three stashed sessions this was. The device name existed the whole
+    // time (it is on `capabilities`, on `session_logs.device_name`, and in
+    // the sheet's own on-screen caption) and simply never reached the bytes
+    // the COPY button copies.
+    const log = createEventLog(undefined, manualClock());
+    log.setMeta({ deviceName: "PM5 432331249", sessionId: "s-1" });
+    log.record("armed", "programmed 3 interval(s)");
+
+    const parsed = JSON.parse(log.exportLog()) as {
+      meta: Record<string, unknown>;
+      entries: { kind: string }[];
+    };
+    expect(parsed.meta.deviceName).toBe("PM5 432331249");
+    expect(parsed.meta.sessionId).toBe("s-1");
+    expect(parsed.entries).toHaveLength(1);
+    expect(parsed.entries[0]!.kind).toBe("armed");
+  });
+
+  it("stamps the app version without being told, so a paste names its build", () => {
+    // The one field no caller can supply: it comes from the BUILD. A log
+    // that cannot name its own build is why two TestFlight pastes are
+    // indistinguishable today.
+    const log = createEventLog(undefined, manualClock());
+    const parsed = JSON.parse(log.exportLog()) as {
+      meta: { appVersion: string };
+    };
+    expect(typeof parsed.meta.appVersion).toBe("string");
+    expect(parsed.meta.appVersion.length).toBeGreaterThan(0);
+  });
+
+  it("keeps the LAST value when meta is patched twice, and merges rather than replaces", () => {
+    // `deviceName` is known at connect; `ergMachineType` only once a frame
+    // has decoded. They arrive at different moments, so a second patch must
+    // not erase the first.
+    const log = createEventLog(undefined, manualClock());
+    log.setMeta({ deviceName: "PM5 432331249" });
+    log.setMeta({ ergMachineType: 0 });
+
+    const meta = (
+      JSON.parse(log.exportLog()) as { meta: Record<string, unknown> }
+    ).meta;
+    expect(meta.deviceName).toBe("PM5 432331249");
+    expect(meta.ergMachineType).toBe(0);
   });
 });

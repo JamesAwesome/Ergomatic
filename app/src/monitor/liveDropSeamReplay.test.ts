@@ -55,6 +55,7 @@
 // holds; the field COUNT in the brief's description does not, for this
 // specific armed program.
 
+import { parseLogExport } from "./eventLog";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -333,7 +334,8 @@ async function runLiveDropReplay(): Promise<LiveDropOutcome> {
     });
   }
 
-  const logEntries = JSON.parse(result.current.exportLog()) as {
+  const logEntries = parseLogExport(result.current.exportLog())
+    .entries as unknown as {
     kind: string;
   }[];
   const structureLeftLogEntries = logEntries.filter(

@@ -30,6 +30,7 @@
 import { useState, type RefObject } from "react";
 import { SheetShell } from "../../components/SheetShell";
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
+import { parseLogExport } from "../../monitor/eventLog";
 import type { MonitorLogEntry } from "../../monitor/eventLog";
 
 const TITLE_ID = "connection-log-sheet-title";
@@ -45,22 +46,13 @@ const COPY_LABEL: Record<CopyState, string> = {
   failed: "COPY FAILED",
 };
 
-/** `exportLog()`'s JSON back into entries, defensively. The string comes
- *  from `eventLog.ts`'s own `JSON.stringify(entries)` and is always an
- *  array of `{seq, kind, detail}` — but this sheet exists for the sessions
- *  where something has already gone wrong, and it must not be the thing
- *  that throws. Anything unparseable reads as "no events", which is what
- *  the empty-log case renders anyway. */
+/** `exportLog()`'s JSON back into entries. Delegates the two-shape problem
+ *  to `parseLogExport`, which owns the export format — this sheet then keeps
+ *  its own per-entry validation, because it RENDERS every entry and a
+ *  malformed one must not reach the list. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function parseLogEntries(raw: string): MonitorLogEntry[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter(
+  return parseLogExport(raw).entries.filter(
     (e): e is MonitorLogEntry =>
       typeof e === "object" &&
       e !== null &&

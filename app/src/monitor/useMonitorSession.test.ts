@@ -1,3 +1,4 @@
+import { parseLogExport } from "./eventLog";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -1255,9 +1256,9 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
   // promote anyway. See `ROWING_ACTIVE_FALLBACK_FRAMES`.
 
   function logKinds(result: Session): string[] {
-    return (JSON.parse(result.current.exportLog()) as { kind: string }[]).map(
-      (e) => e.kind,
-    );
+    return (
+      parseLogExport(result.current.exportLog()).entries as { kind: string }[]
+    ).map((e) => e.kind);
   }
 
   it("the STUCK Inactive byte does not cost the session: five frames of strictly increasing distance promote to live anyway, and the log says so", async () => {
@@ -1297,7 +1298,7 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
 
     // The one entry the hook itself writes: what a stashed trace needs to
     // answer "did the machine ever say Active?" after the fact.
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -1761,7 +1762,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // Resolves ONLY the burst condition: the split is still owed, so the
     // WHOLE hold stays up and no `handoff-released` entry exists yet.
     expect(result.current.handoffHeld).toBe(true);
-    const beforeSplit = JSON.parse(result.current.exportLog()) as {
+    const beforeSplit = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -1776,7 +1777,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // Burst already resolved (by timeout) — the split's own resolution is
     // what releases the hold now, and it is the LAST word in the ring.
     expect(result.current.handoffHeld).toBe(false);
-    const afterSplit = JSON.parse(result.current.exportLog()) as {
+    const afterSplit = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -2149,7 +2150,9 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // one that just stops (review M-1). This is the ordering, asserted
     // through the artifact the operator actually reads at the erg.
     const stashed = sessionStorage.getItem("ergomatic:last-rowed-log") ?? "[]";
-    const kinds = (JSON.parse(stashed) as { kind: string; detail: string }[])
+    const kinds = (
+      parseLogExport(stashed).entries as { kind: string; detail: string }[]
+    )
       .filter((e) => e.kind.startsWith("handoff"))
       .map((e) => `${e.kind}:${e.detail.slice(0, 8)}`);
     // Storage-spine design spec §2, Task 3: TWO `handoff-hold` entries now
@@ -2189,7 +2192,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     tick(fake, 100);
     tick(fake, 100);
 
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -2222,7 +2225,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
       timer.pendingWithMs(BURST_HANDOFF_HOLD_MS)!.fire();
     });
     expect(result.current.handoffHeld).toBe(false);
-    const afterBurst = JSON.parse(result.current.exportLog()) as {
+    const afterBurst = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -2352,7 +2355,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(steps[0]).not.toHaveProperty("spm");
 
     // ONE READ OF THE STASH ANSWERS "WHICH SOURCE FED THE RECORD".
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -2438,9 +2441,9 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
 
     // The FIRST stash (teardown's own STEP 2, still at t=0) cannot see the
     // fill — nothing has drained it yet.
-    const firstStash = JSON.parse(
+    const firstStash = parseLogExport(
       sessionStorage.getItem("ergomatic:last-monitor-log")!,
-    ) as { kind: string; detail: string }[];
+    ).entries as { kind: string; detail: string }[];
     expect(firstStash.some((e) => e.kind === "summary-reconciled")).toBe(false);
 
     // The linger's own deadline elapses. Teardown must reconcile BEFORE it
@@ -2456,7 +2459,10 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
 
     const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(stashed).not.toBeNull();
-    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const entries = parseLogExport(stashed!).entries as {
+      kind: string;
+      detail: string;
+    }[];
     const verdict = entries.find((e) => e.kind === "summary-reconciled");
     expect(verdict?.detail).toContain("filled-from-summary");
     const filed = entries.find((e) => e.kind === "record-actual");
@@ -2602,10 +2608,10 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // mutant, gated by its own test further down.
     await Promise.resolve();
 
-    const entries = JSON.parse(
+    const entries = parseLogExport(
       sessionStorage.getItem("ergomatic:last-monitor-log")!,
-    ) as { kind: string; detail: string }[];
-    const ring = JSON.parse(result.current.exportLog()) as {
+    ).entries as { kind: string; detail: string }[];
+    const ring = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -2679,10 +2685,10 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // Microtasks only — see the sibling test above.
     await Promise.resolve();
 
-    const entries = JSON.parse(
+    const entries = parseLogExport(
       sessionStorage.getItem("ergomatic:last-monitor-log")!,
-    ) as { kind: string; detail: string }[];
-    const ring = JSON.parse(result.current.exportLog()) as {
+    ).entries as { kind: string; detail: string }[];
+    const ring = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -2732,9 +2738,9 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
       burstTimer.pending()!.fire();
     });
 
-    const entries = JSON.parse(
+    const entries = parseLogExport(
       sessionStorage.getItem("ergomatic:last-monitor-log")!,
-    ) as { kind: string; detail: string }[];
+    ).entries as { kind: string; detail: string }[];
     expect(entries.some((e) => e.kind === "avg-pace-verdict")).toBe(true);
   });
 
@@ -2825,10 +2831,10 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // anywhere below.
     await Promise.resolve();
 
-    const entries = JSON.parse(
+    const entries = parseLogExport(
       sessionStorage.getItem("ergomatic:last-monitor-log")!,
-    ) as { kind: string; detail: string }[];
-    const ring = JSON.parse(result.current.exportLog()) as {
+    ).entries as { kind: string; detail: string }[];
+    const ring = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -2893,7 +2899,8 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     });
 
     const read = (): { kind: string; detail: string }[] =>
-      JSON.parse(sessionStorage.getItem("ergomatic:last-monitor-log")!) as {
+      parseLogExport(sessionStorage.getItem("ergomatic:last-monitor-log")!)
+        .entries as {
         kind: string;
         detail: string;
       }[];
@@ -2979,7 +2986,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // 2000ms backstop rather than waiting for it.
     expect(result.current.handoffHeld).toBe(false);
     expect(timer.calls[0]!.cancelled).toBe(true);
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -3070,7 +3077,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
 
     expect(result.current.handoffHeld).toBe(false);
     expect(loadMonitorRun()).toBeNull();
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -3184,7 +3191,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
       // the create, before the rower has finished the first interval, and
       // it is what §9.5 names as the counter for a memory-only session a
       // later reload loses.
-      const entries = JSON.parse(result.current.exportLog()) as {
+      const entries = parseLogExport(result.current.exportLog()).entries as {
         kind: string;
         detail: string;
       }[];
@@ -3228,7 +3235,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
       const result = await driveToTerminatedEnd();
       expect(result.current.handoffHeld).toBe(true);
       expect(result.current.holdError).toBe("storage-failed");
-      const entries = JSON.parse(result.current.exportLog()) as {
+      const entries = parseLogExport(result.current.exportLog()).entries as {
         kind: string;
         detail: string;
       }[];
@@ -3330,7 +3337,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
       });
       expect(result.current.holdError).toBeNull();
       expect(result.current.handoffHeld).toBe(false);
-      const entries = JSON.parse(result.current.exportLog()) as {
+      const entries = parseLogExport(result.current.exportLog()).entries as {
         kind: string;
         detail: string;
       }[];
@@ -3410,7 +3417,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
       // trace, which is what the staleness metric downstream reads — goes
       // red here.
       const receipts = (
-        JSON.parse(result.current.exportLog()) as {
+        parseLogExport(result.current.exportLog()).entries as {
           kind: string;
           detail: string;
         }[]
@@ -3591,7 +3598,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     expect(atRelease).not.toBeNull();
     expect(atRelease!.run.summaryTotals).toBeUndefined();
     const receiptsAtRelease = (
-      JSON.parse(result.current.exportLog()) as { kind: string }[]
+      parseLogExport(result.current.exportLog()).entries as { kind: string }[]
     ).filter((e) => e.kind === "store-receipt:commit-accepted").length;
 
     // ...AND NOW THE MACHINE'S SUMMARY, off the wire, after all of that:
@@ -3627,7 +3634,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // `store-receipt:commit-accepted` exists at an index BEYOND the last
     // `handoff-released` entry. This is the half a mutation gating the
     // commit on a release predicate cannot survive.
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -3694,7 +3701,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     tick(fake, 50);
     expect(loadMonitorRun()?.title).toBe("RACED — not the hook's own write");
     expect(result.current.actuals).toHaveLength(0);
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -3718,7 +3725,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     tick(fake, 50);
     expect(result.current.phase).toBe("ended");
     expect(result.current.handoffHeld).toBe(true);
-    const holdEntries = JSON.parse(result.current.exportLog()) as {
+    const holdEntries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -3832,7 +3839,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // ARMED HAS FIRED: retired, consumed, receipted.
     expect(currentUnretiredHandoffForTest()).toBeNull();
     expect(takeStagedRetireForTest(STAGED_ATTEMPT)).toBeNull();
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -3878,7 +3885,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
 
     expect(currentUnretiredHandoffForTest()).toBeNull();
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -3933,7 +3940,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // F-4 (Task 5 re-review, 2026-08-30): the discard itself is receipted
     // ("the module receipts rarer things") — distinct from a `retire`
     // receipt, since nothing was actually removed from either tier here.
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -3973,7 +3980,8 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // THE RETIRE ALREADY HAPPENED, before Cancel is ever pressed.
     expect(currentUnretiredHandoffForTest()).toBeNull();
     expect(loadMonitorRun()).toBeNull();
-    const entriesAtArmed = JSON.parse(result.current.exportLog()) as {
+    const entriesAtArmed = parseLogExport(result.current.exportLog())
+      .entries as {
       kind: string;
       detail: string;
     }[];
@@ -3993,7 +4001,8 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     });
     expect(currentUnretiredHandoffForTest()).toBeNull();
     expect(loadMonitorRun()).toBeNull();
-    const entriesAfterCancel = JSON.parse(result.current.exportLog()) as {
+    const entriesAfterCancel = parseLogExport(result.current.exportLog())
+      .entries as {
       kind: string;
     }[];
     expect(
@@ -4027,7 +4036,8 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     const stillThere = currentUnretiredHandoffForTest();
     expect(stillThere).not.toBeNull();
     expect(stillThere!.sessionKey).toBe(unrelatedKey);
-    const entriesAtArmed = JSON.parse(result.current.exportLog()) as {
+    const entriesAtArmed = parseLogExport(result.current.exportLog())
+      .entries as {
       kind: string;
       detail: string;
     }[];
@@ -4040,7 +4050,8 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
 
     tick(fake, 100);
     expect(result.current.phase).toBe("live");
-    const entriesAfterFrame = JSON.parse(result.current.exportLog()) as {
+    const entriesAfterFrame = parseLogExport(result.current.exportLog())
+      .entries as {
       kind: string;
       detail: string;
     }[];
@@ -4110,7 +4121,8 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // fresh create, not an update) — the defense retire's own receipt
     // (`retire`, piped to the ring as `store-receipt:retire`) is what
     // proves the leftover was cleared rather than silently overwritten.
-    const entries = JSON.parse(session2.result.current.exportLog()) as {
+    const entries = parseLogExport(session2.result.current.exportLog())
+      .entries as {
       kind: string;
       detail: string;
     }[];
@@ -4176,7 +4188,8 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // No "createMonitorRun-defense" RETIRE receipt this time — the guard
     // skipped it on purpose (retiring here would have tombstoned the key
     // this very commit needed).
-    const entries = JSON.parse(session2.result.current.exportLog()) as {
+    const entries = parseLogExport(session2.result.current.exportLog())
+      .entries as {
       kind: string;
       detail: string;
     }[];
@@ -4264,7 +4277,8 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     // THE STORE, meanwhile, holds NOTHING for that key — the divergence is
     // real, not a store that quietly accepted after all.
     expect(currentUnretiredHandoffForTest()).toBeNull();
-    const live = JSON.parse(session2.result.current.exportLog()) as {
+    const live = parseLogExport(session2.result.current.exportLog())
+      .entries as {
       kind: string;
       detail: string;
     }[];
@@ -4286,7 +4300,8 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     tick(session2.fake, 100);
     expect(session2.result.current.phase).toBe("ended");
     expect(session2.result.current.handoffHeld).toBe(true);
-    const ended = JSON.parse(session2.result.current.exportLog()) as {
+    const ended = parseLogExport(session2.result.current.exportLog())
+      .entries as {
       kind: string;
       detail: string;
     }[];
@@ -4353,7 +4368,8 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
     tick(sessionB.fake, 100);
     expect(sessionB.result.current.phase).toBe("live");
 
-    const entries = JSON.parse(sessionB.result.current.exportLog()) as {
+    const entries = parseLogExport(sessionB.result.current.exportLog())
+      .entries as {
       kind: string;
       detail: string;
     }[];
@@ -4426,7 +4442,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
       driverTimer.pending()!.fire();
     });
 
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -4512,7 +4528,7 @@ describe("useMonitorSession: the hand-off store (design spec §1/§7, plan Task 
       expect(result.current.endedBy).toBe("machine");
       expect(result.current.handoffHeld).toBe(true);
       expect(result.current.holdError).toBe("storage-failed");
-      const entries = JSON.parse(result.current.exportLog()) as {
+      const entries = parseLogExport(result.current.exportLog()).entries as {
         kind: string;
         detail: string;
       }[];
@@ -4670,7 +4686,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     // admission log line is a different function (`noteSummary`) logging
     // a different event (the arrival) under the same `summary-reconciled`
     // kind.
-    const verdicts = JSON.parse(result.current.exportLog()) as {
+    const verdicts = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -4686,7 +4702,10 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     // happened.
     const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(stashed).not.toBeNull();
-    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const entries = parseLogExport(stashed!).entries as {
+      kind: string;
+      detail: string;
+    }[];
     expect(entries.some((e) => e.kind === "summary-half")).toBe(true);
     const verdict = entries.find((e) => e.kind === "summary-reconciled");
     expect(verdict?.detail).toContain("buffered");
@@ -4753,7 +4772,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     // NO DOUBLE-FIRE: exactly one verdict in the trace, whatever it says —
     // not two, which is what the deadline ALSO firing later would have
     // produced.
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -4807,9 +4826,9 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     unmount();
     expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
 
-    const firstStash = JSON.parse(
+    const firstStash = parseLogExport(
       sessionStorage.getItem("ergomatic:last-monitor-log")!,
-    ) as { seq: number; kind: string; detail: string }[];
+    ).entries as { seq: number; kind: string; detail: string }[];
     // The ring was pre-filled to its exact cap, so it is STILL at cap here
     // (every real entry logged since — connect, program, arm, the two
     // status ticks, teardown's own first stash) evicted one filler entry
@@ -4830,9 +4849,9 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     tick(fake, 40); // t=460: past the hash's 457.8ms due time
     expect(driverTimer.pending()).toBeNull();
 
-    const secondStash = JSON.parse(
+    const secondStash = parseLogExport(
       sessionStorage.getItem("ergomatic:last-monitor-log")!,
-    ) as { seq: number; kind: string; detail: string }[];
+    ).entries as { seq: number; kind: string; detail: string }[];
     expect(secondStash).toHaveLength(500);
 
     // GUARANTEED PRESENT: the burst-era entries this second stash exists
@@ -5221,7 +5240,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     expect(stored?.actuals).toHaveLength(0);
     expect(result.current.actuals).toHaveLength(0);
 
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -5492,7 +5511,7 @@ describe("useMonitorSession: ending", () => {
     // `endedBy: "link-lost"` outright, so `endSession` here opens NOTHING,
     // unlike its `rower`-arm sibling above.
     expect(result.current.handoffHeld).toBe(false);
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -5574,7 +5593,10 @@ describe("useMonitorSession: ending", () => {
 
     const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(stashed).not.toBeNull();
-    const entries = JSON.parse(stashed!) as { seq: number; kind: string }[];
+    const entries = parseLogExport(stashed!).entries as {
+      seq: number;
+      kind: string;
+    }[];
     expect(entries.length).toBeGreaterThan(0);
     expect(entries.some((e) => e.kind === "write")).toBe(true);
     // This session OPENED A RECORD, so it also keeps the rowed-only copy —
@@ -5615,7 +5637,10 @@ describe("useMonitorSession: ending", () => {
 
     const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(stashed).not.toBeNull();
-    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const entries = parseLogExport(stashed!).entries as {
+      kind: string;
+      detail: string;
+    }[];
     const finalTotals = entries.filter((e) => e.kind === "final-totals");
     // Exactly one — but NOT because both call sites guard against a
     // double-write (I-2, final whole-branch review: `recordFinalTotals`'s
@@ -5668,7 +5693,9 @@ describe("useMonitorSession: ending", () => {
 
     const stash = localStorage.getItem("ergomatic:last-session-log");
     expect(stash).not.toBeNull();
-    expect((JSON.parse(stash!) as unknown[]).length).toBeGreaterThan(0);
+    expect(
+      (parseLogExport(stash!).entries as unknown[]).length,
+    ).toBeGreaterThan(0);
   });
 
   it("Task 1 (ring history spec §2): two full connect→teardown cycles leave two history entries, newest first, slot 1 matching the current last-session-log stash", async () => {
@@ -5722,7 +5749,10 @@ describe("useMonitorSession: ending", () => {
     await teardown();
 
     const stash = localStorage.getItem("ergomatic:last-session-log");
-    const entries = JSON.parse(stash!) as { kind: string; detail: string }[];
+    const entries = parseLogExport(stash!).entries as {
+      kind: string;
+      detail: string;
+    }[];
     const closeNoRecord = entries.find((e) => e.kind === "close-no-record");
     expect(closeNoRecord).toBeDefined();
     // Observed call parameters only — endedBy/terminated, never a reason
@@ -6698,7 +6728,7 @@ describe("Wave F PR 1 Task 2: the live arm of programDropped (design spec 2026-0
     // for a partial.
     expect(stored?.actuals).toStrictEqual([]);
     expect(measuredIntervalCount(stored!.actuals)).toBe(0);
-    const ringEntries = JSON.parse(result.current.exportLog()) as {
+    const ringEntries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -7062,9 +7092,9 @@ describe("useMonitorSession: failures", () => {
 
     await connect(result);
 
-    const entries: { kind: string; detail: string }[] = JSON.parse(
+    const entries: { kind: string; detail: string }[] = parseLogExport(
       result.current.exportLog(),
-    );
+    ).entries;
     expect(entries).toContainEqual(
       expect.objectContaining({
         kind: "already-connected-guard",
@@ -7094,7 +7124,9 @@ describe("useMonitorSession: failures", () => {
 
     await connect(result);
 
-    const entries: { kind: string }[] = JSON.parse(result.current.exportLog());
+    const entries: { kind: string }[] = parseLogExport(
+      result.current.exportLog(),
+    ).entries;
     expect(entries.some((e) => e.kind === "already-connected-guard")).toBe(
       false,
     );
@@ -7508,7 +7540,10 @@ describe("useMonitorSession: cancel", () => {
     // one session by construction, and the final entry's bytes carry
     // exactly one `latch-count` line.
     const latchCountLines = (
-      JSON.parse(entries[0]!.exported) as { kind: string; detail: string }[]
+      parseLogExport(entries[0]!.exported).entries as {
+        kind: string;
+        detail: string;
+      }[]
     ).filter((e) => e.kind === "latch-count");
     expect(latchCountLines).toHaveLength(1);
   });
@@ -7820,12 +7855,13 @@ describe("Review round 5, item 1: a cancelled pre-GATT attempt cannot clone the 
     // the entries the first stash could see. What must NOT have happened is
     // a second slot, or a second `latch-count` appended to a log this
     // attempt never owned.
-    const parsedFirst = JSON.parse(firstExport) as {
+    const parsedFirst = parseLogExport(firstExport).entries as {
       seq: number;
       kind: string;
       detail: string;
     }[];
-    const parsedNow = JSON.parse(entries[0]!.exported) as typeof parsedFirst;
+    const parsedNow = parseLogExport(entries[0]!.exported)
+      .entries as typeof parsedFirst;
     expect(parsedNow.slice(0, parsedFirst.length)).toStrictEqual(parsedFirst);
     const latchCountLines = parsedNow.filter((e) => e.kind === "latch-count");
     expect(latchCountLines).toHaveLength(1);
@@ -9136,7 +9172,10 @@ describe("useMonitorSession: frozen (the freeze predicate), end to end", () => {
     unmount();
     const stash = sessionStorage.getItem("ergomatic:last-monitor-log");
     const declared = (
-      JSON.parse(stash ?? "[]") as { kind: string; detail: string }[]
+      parseLogExport(stash ?? "[]").entries as {
+        kind: string;
+        detail: string;
+      }[]
     ).filter((e) => e.kind === "pause-declared");
     // EXACTLY ONE: the edge, not every frame the pause holds for. A per-frame
     // entry would bury the ring it is written into.
@@ -9216,7 +9255,14 @@ describe("useMonitorSession: exportLog", () => {
     const { result } = renderHook(() => useMonitorSession());
     // No null branch for a caller to get wrong — the honest empty value is
     // the same shape an empty log exports.
-    expect(result.current.exportLog()).toBe("[]");
+    // Still the honest empty value, now in the export's own shape: an
+    // `entries` list with nothing in it, under a header that names the
+    // build. A pre-connect export has no device and no session to name —
+    // but naming the BUILD is exactly what makes an otherwise empty paste
+    // locatable.
+    const preConnect = parseLogExport(result.current.exportLog());
+    expect(preConnect.entries).toStrictEqual([]);
+    expect(preConnect.meta.appVersion).toBe("dev");
   });
 
   it("returns the LIVE driver's own trace, byte-identical to the log's", async () => {
@@ -9580,7 +9626,7 @@ describe("useMonitorSession: series-truth Task 4 — the ring's own backward-buc
   function ringEntries(
     result: Session,
   ): { seq: number; kind: string; detail: string }[] {
-    return JSON.parse(result.current.exportLog()) as {
+    return parseLogExport(result.current.exportLog()).entries as {
       seq: number;
       kind: string;
       detail: string;
@@ -10422,7 +10468,7 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
     deps.onSilence(2500);
     deps.onRecovery();
 
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -10499,7 +10545,7 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
     });
 
     expect(result.current.phase).toBe("failed");
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -10558,7 +10604,7 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
       await result.current.connect();
     });
     expect(result.current.phase).toBe("failed");
-    const afterFirst = JSON.parse(result.current.exportLog()) as {
+    const afterFirst = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -10572,7 +10618,7 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
     });
     expect(result.current.phase).toBe("failed");
     expect(result.current.error?.reason).toBe("transport-missing");
-    const afterSecond = JSON.parse(result.current.exportLog()) as {
+    const afterSecond = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -10699,7 +10745,7 @@ describe("Phase LL Task 2 mechanism 3: the degraded-characteristic wiring (useMo
     // The session continues — no phase change, no error.
     expect(result.current.phase).toBe("pairing");
     expect(result.current.error).toBeNull();
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -10782,7 +10828,7 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     // back to `registerWebAppLifecycleListener`, which would flip this
     // back to `true` and log an `app-lifecycle` ring entry again.
     expect(result.current.frameSilence).toBe(false);
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -10840,7 +10886,7 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       lifecycleCb!("foreground");
     });
 
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -10944,7 +10990,7 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     // goes "lost", every judged value greys, pace and rate blank.
     expect(result.current.frameSilence).toBe(false);
 
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -10966,7 +11012,7 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       fake.tick(500);
       vi.advanceTimersByTime(500);
     });
-    const afterFrame = JSON.parse(result.current.exportLog()) as {
+    const afterFrame = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
     }[];
     expect(afterFrame.some((e) => e.kind === "liveness-recovery")).toBe(false);
@@ -11027,7 +11073,7 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       vi.advanceTimersByTime(SILENCE_THRESHOLD_MS + 1);
     });
     expect(result.current.frameSilence).toBe(true);
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
     }[];
     expect(exported.some((e) => e.kind === "liveness-silence")).toBe(true);
@@ -11505,7 +11551,7 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
     expect(result?.endedBy).toBe("link-lost");
     expect(result?.actuals).toStrictEqual(run.actuals);
 
-    const entries = JSON.parse(log.exportLog()) as {
+    const entries = parseLogExport(log.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -11947,7 +11993,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     // record itself — not a fresh one — is what's closed).
     expect(stored?.workoutId).toBe(TWO_IDENTITY.workoutId);
 
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -12044,7 +12090,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(result.current.phase).toBe("live");
     expect(loadMonitorRun()?.completedAt).toBeNull();
     expect(loadMonitorRun()?.endedBy).toBeUndefined();
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
     }[];
     expect(exported.find((e) => e.kind === "continuity-reset")).toBeUndefined();
@@ -12126,7 +12172,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(stored?.completedAt).not.toBeNull();
     expect(stored?.endedBy).toBe("link-lost");
 
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -12235,7 +12281,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(stored?.actuals).toStrictEqual([]);
     expect(measuredIntervalCount(stored!.actuals)).toBe(0);
 
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -12345,7 +12391,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(stored?.endedBy).toBe("link-lost");
     expect(stored?.partial).toBeUndefined();
 
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -12587,7 +12633,7 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
       });
     }
 
-    const exported = JSON.parse(exportLog()) as {
+    const exported = parseLogExport(exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -12645,7 +12691,7 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
 
     tick(fake, 100); // first post-resume frame — consumes the arm, identical -> stale=true
 
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -12674,7 +12720,7 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
       vi.advanceTimersByTime(500);
     }); // this session's first-ever frame, also the first post-resume frame
 
-    const exported = JSON.parse(exportLog()) as {
+    const exported = parseLogExport(exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -12713,7 +12759,7 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
       });
     }
 
-    const exported = JSON.parse(exportLog()) as {
+    const exported = parseLogExport(exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -12773,7 +12819,7 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
       vi.advanceTimersByTime(500);
     });
 
-    const exported = JSON.parse(exportLog()) as {
+    const exported = parseLogExport(exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -12822,7 +12868,10 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
 
     const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(stashed).not.toBeNull();
-    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const entries = parseLogExport(stashed!).entries as {
+      kind: string;
+      detail: string;
+    }[];
     const staleRunEntries = entries.filter(
       (e) => e.kind === "resume-stale-run",
     );
@@ -12882,7 +12931,10 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
 
     const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(stashed).not.toBeNull();
-    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const entries = parseLogExport(stashed!).entries as {
+      kind: string;
+      detail: string;
+    }[];
     const staleRunEntries = entries.filter(
       (e) => e.kind === "resume-stale-run",
     );
@@ -12924,7 +12976,7 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
       });
     }
 
-    const preProgramExport = JSON.parse(exportLog()) as {
+    const preProgramExport = parseLogExport(exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -12936,7 +12988,7 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
       program(TWO_INTERVALS, TWO_IDENTITY);
     });
 
-    const exported = JSON.parse(exportLog()) as {
+    const exported = parseLogExport(exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -12985,7 +13037,7 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
       });
     }
 
-    const preArmExport = JSON.parse(exportLog()) as {
+    const preArmExport = parseLogExport(exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -12995,7 +13047,7 @@ describe("Wave F PR 2 Task 2 (§3): the resume-edge frame instrument", () => {
       beginFreeRow();
     });
 
-    const exported = JSON.parse(exportLog()) as {
+    const exported = parseLogExport(exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -13178,7 +13230,7 @@ describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeM
     }
     expect(result.current.frozen).toBe(true);
 
-    const exported = JSON.parse(exportLog()) as {
+    const exported = parseLogExport(exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -13246,7 +13298,7 @@ describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeM
     }
     expect(result.current.frozen).toBe(true);
 
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -13288,7 +13340,7 @@ describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeM
       });
     }
 
-    const exported = JSON.parse(exportLog()) as {
+    const exported = parseLogExport(exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -13337,7 +13389,7 @@ describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeM
     unmount();
 
     const stash = sessionStorage.getItem("ergomatic:last-monitor-log");
-    const exported = JSON.parse(stash ?? "[]") as {
+    const exported = parseLogExport(stash ?? "[]").entries as {
       kind: string;
       detail: string;
     }[];
@@ -13386,7 +13438,7 @@ describe("Wave F PR 3, §3 timing addendum: pause-declared's gapsMs/sinceResumeM
       lifecycleCb("foreground");
     });
 
-    const exported = JSON.parse(exportLog()) as {
+    const exported = parseLogExport(exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -13489,7 +13541,10 @@ describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
 
     const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(stashed).not.toBeNull();
-    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const entries = parseLogExport(stashed!).entries as {
+      kind: string;
+      detail: string;
+    }[];
     const latchEntries = entries.filter((e) => e.kind === "latch-count");
     expect(latchEntries).toHaveLength(1);
     expect(latchEntries[0]!.detail).toBe("latches=2 resumes=2");
@@ -13518,7 +13573,10 @@ describe("Wave F PR 2 Task 2 (§6): the RC-29 latch counter", () => {
 
     const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(stashed).not.toBeNull();
-    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const entries = parseLogExport(stashed!).entries as {
+      kind: string;
+      detail: string;
+    }[];
     const latchEntries = entries.filter((e) => e.kind === "latch-count");
     expect(latchEntries).toHaveLength(1);
     expect(latchEntries[0]!.detail).toBe("latches=0 resumes=1");
@@ -13746,7 +13804,7 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-r
       transport.notify(GENERAL_STATUS_UUID, armedStatus());
     });
 
-    const midExport = JSON.parse(result.current.exportLog()) as {
+    const midExport = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -13765,7 +13823,8 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-r
     // used to clear `resumeStaleRunRef` with no entry at all, which is the
     // "no leaked run reaches teardown" title this test originally carried;
     // the leak is now a RECORDED close instead of a silent discard.
-    const postDropExport = JSON.parse(result.current.exportLog()) as {
+    const postDropExport = parseLogExport(result.current.exportLog())
+      .entries as {
       kind: string;
       detail: string;
     }[];
@@ -13787,7 +13846,10 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 1): resumeStaleRunRef's per-r
 
     const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(stashed).not.toBeNull();
-    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const entries = parseLogExport(stashed!).entries as {
+      kind: string;
+      detail: string;
+    }[];
     const allStaleRunEntries = entries.filter(
       (e) => e.kind === "resume-stale-run",
     );
@@ -13862,7 +13924,10 @@ describe("Wave F PR 2 Task 2, fix round 1 (finding 2), rescoped round 3 item 3: 
 
     const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(stashed).not.toBeNull();
-    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const entries = parseLogExport(stashed!).entries as {
+      kind: string;
+      detail: string;
+    }[];
     const latchEntries = entries.filter((e) => e.kind === "latch-count");
     expect(latchEntries).toHaveLength(1);
     expect(latchEntries[0]!.detail).toBe("latches=0 resumes=0");
@@ -14079,7 +14144,7 @@ describe("beginFreeRow (the free row's own arm)", () => {
 
     expect(result.current.phase).toBe("ready");
     const kinds = (
-      JSON.parse(result.current.exportLog()) as { kind: string }[]
+      parseLogExport(result.current.exportLog()).entries as { kind: string }[]
     ).map((e) => e.kind);
     expect(kinds).toContain("free-row-program-sent");
     expect(kinds).not.toContain("free-row-program-unanswered");
@@ -14142,7 +14207,7 @@ describe("beginFreeRow (the free row's own arm)", () => {
     // FALL-THROUGH, approved with Gate 0: no failure card, no stuck door.
     expect(result.current.phase).toBe("ready");
     const kinds = (
-      JSON.parse(result.current.exportLog()) as { kind: string }[]
+      parseLogExport(result.current.exportLog()).entries as { kind: string }[]
     ).map((e) => e.kind);
     expect(kinds).toContain("free-row-program-unanswered");
     expect(kinds).not.toContain("free-row-program-sent");
@@ -14173,7 +14238,7 @@ describe("beginFreeRow (the free row's own arm)", () => {
     });
 
     expect(result.current.phase).toBe("ready");
-    const ring = JSON.parse(result.current.exportLog()) as {
+    const ring = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -14282,7 +14347,7 @@ describe("beginFreeRow (the free row's own arm)", () => {
 
     // Exactly one more frame on the wire, and the ring says which.
     expect(transport.wireWrites - writesAtReady).toBe(1);
-    const ring = JSON.parse(result.current.exportLog()) as {
+    const ring = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -14368,7 +14433,7 @@ describe("beginFreeRow (the free row's own arm)", () => {
 
     expect(result.current.phase).toBe("ended");
     expect(transport.wireWrites - writesAtReady).toBe(1);
-    const ring = JSON.parse(result.current.exportLog()) as {
+    const ring = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -14735,7 +14800,7 @@ describe("Door PR B Task 2 (§5.3, I-B6): the mint refusal, diagnosed once per i
     tick(fake, 100);
     tick(fake, 100);
 
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -14829,7 +14894,7 @@ describe("Door PR B Task 2 (§5.3, I-B6): the mint refusal, diagnosed once per i
 
     // ONE refusal so far — run 1's.
     const afterRunOne = (
-      JSON.parse(result.current.exportLog()) as { kind: string }[]
+      parseLogExport(result.current.exportLog()).entries as { kind: string }[]
     ).filter((e) => e.kind === "partial-mint-refused");
     expect(afterRunOne).toHaveLength(1);
 
@@ -14841,7 +14906,7 @@ describe("Door PR B Task 2 (§5.3, I-B6): the mint refusal, diagnosed once per i
     expect(result.current.actuals).toHaveLength(1);
     tick(fake, 100);
 
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -14876,7 +14941,7 @@ describe("Door PR B Task 2 (§5.3, I-B6): the mint refusal, diagnosed once per i
     expect(result.current.phase).toBe("live");
     tick(fake, 100);
 
-    const entries = JSON.parse(result.current.exportLog()) as {
+    const entries = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
     }[];
     expect(
@@ -14931,7 +14996,7 @@ describe("Door PR B Task 3 (§5.3): the in-flight reading, banked at close", () 
   }
 
   function ring(result: Session): { kind: string; detail: string }[] {
-    return JSON.parse(result.current.exportLog()) as {
+    return parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -15641,7 +15706,7 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
       "ble-scan-timed-out",
     ]);
     // The failure screen's View connection log reads THIS, never "[]".
-    const exported = JSON.parse(result.current.exportLog()) as {
+    const exported = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -15653,7 +15718,7 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
     // A manual connect() on the same hook exports its own ring and never the
     // stale NFC trace ahead of it.
     await connect(result);
-    const manual = JSON.parse(result.current.exportLog()) as {
+    const manual = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
     }[];
     expect(manual.length).toBeGreaterThan(0);
@@ -15670,7 +15735,9 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
     await act(async () => {
       await result.current.connect(targeted(), trace);
     });
-    const ring = JSON.parse(result.current.exportLog()) as { kind: string }[];
+    const ring = parseLogExport(result.current.exportLog()).entries as {
+      kind: string;
+    }[];
     const kinds = ring.map((e) => e.kind);
     expect(kinds.indexOf("nfc-attempt:tag-event")).toBeGreaterThanOrEqual(0);
     expect(kinds.indexOf("nfc-attempt:tag-event")).toBeLessThan(
@@ -15753,7 +15820,7 @@ describe("the app cannot read this monitor: the fact belongs to the SITTING", ()
     // happened. Counted by SUMMING `repeated`, because the ring coalesces
     // consecutive identical entries: counting rows undercounts events, and
     // this assertion read 3 before that was noticed.
-    const ring = JSON.parse(result.current.exportLog()) as {
+    const ring = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       repeated?: number;
     }[];
@@ -16144,7 +16211,7 @@ describe("the lifecycle registrar dependency", () => {
       await flush();
     });
 
-    const ring = JSON.parse(result.current.exportLog()) as {
+    const ring = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];
@@ -16191,7 +16258,7 @@ describe("the lifecycle registrar dependency", () => {
       await flush();
     });
 
-    const ring = JSON.parse(result.current.exportLog()) as {
+    const ring = parseLogExport(result.current.exportLog()).entries as {
       kind: string;
       detail: string;
     }[];

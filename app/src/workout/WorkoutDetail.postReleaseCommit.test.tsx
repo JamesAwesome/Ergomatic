@@ -179,6 +179,7 @@
 // a full route tree; the two halves are deliberately split, and each says
 // so.
 
+import { parseLogExport } from "../monitor/eventLog";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, render, screen, waitFor } from "@testing-library/react";
@@ -311,7 +312,7 @@ function durableRun(): MonitorRun | null {
 function rowedLogKinds(): string[] {
   const raw = sessionStorage.getItem("ergomatic:last-rowed-log");
   if (raw === null) return [];
-  return (JSON.parse(raw) as { kind: string }[]).map((e) => e.kind);
+  return parseLogExport(raw).entries.map((e) => e.kind);
 }
 
 /** Everything the rower can read on the current screen, as one string —

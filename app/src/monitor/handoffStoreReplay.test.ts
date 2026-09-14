@@ -114,6 +114,7 @@
 // leaves the stale copy behind for `stillLive` to find) and every write to
 // any OTHER key pass straight through to the real `setItem`.
 
+import { parseLogExport } from "./eventLog";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -379,7 +380,7 @@ async function runReplay(
   return {
     divergences: replayResult.divergences,
     record: loadMonitorRun(),
-    entries: JSON.parse(result.current.exportLog()) as {
+    entries: parseLogExport(result.current.exportLog()).entries as unknown as {
       kind: string;
       detail: string;
     }[],

@@ -59,6 +59,7 @@
 // `src/monitor/` imports another (that convention is stated in
 // `connectedMetricsReplay.test.ts`'s own header).
 
+import { parseLogExport } from "./eventLog";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -300,7 +301,8 @@ async function runReplay(
   return {
     divergences: replayResult.divergences,
     frameSilence: result.current.frameSilence,
-    ring: JSON.parse(result.current.exportLog()) as RingEntry[],
+    ring: parseLogExport(result.current.exportLog())
+      .entries as unknown as RingEntry[],
   };
 }
 

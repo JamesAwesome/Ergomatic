@@ -88,7 +88,16 @@ function eventCount(exported: string): number | null {
   } catch {
     return null;
   }
-  return Array.isArray(parsed) ? parsed.length : null;
+  // Both shapes, for the same reason `parseLogEntries` takes both: the older
+  // bare array lives in `localStorage` and survives the upgrade that ships
+  // the `{meta, entries}` header. Counting only the new shape would print
+  // nothing for every log a rower already had.
+  if (Array.isArray(parsed)) return parsed.length;
+  if (typeof parsed === "object" && parsed !== null) {
+    const entries = (parsed as { entries?: unknown }).entries;
+    if (Array.isArray(entries)) return entries.length;
+  }
+  return null;
 }
 
 function LogEntryCard({

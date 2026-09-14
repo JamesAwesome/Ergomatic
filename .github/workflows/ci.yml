@@ -170,6 +170,10 @@ jobs:
         run: |
           bash -n scripts/compose-env.test.sh
           bash scripts/compose-env.test.sh
+      - name: Test the client bundle's version-stamp plumbing
+        run: |
+          bash -n scripts/app-version-stamp.test.sh
+          bash scripts/app-version-stamp.test.sh
       - name: Lint + test the ios-release probe-flag guard
         run: |
           bash -n app/scripts/ios-release.sh

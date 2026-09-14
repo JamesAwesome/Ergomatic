@@ -1,3 +1,4 @@
+import { APP_VERSION } from "../appVersion";
 // Observability ring buffer for the monitor driver (design spec §5):
 // injectable (the driver takes one as a constructor argument, never reaches
 // for a module-level singleton), fixed capacity (default 500), JSON export.
@@ -60,10 +61,54 @@ export interface MonitorLogEntry {
   lastAtMs?: number;
 }
 
+/** The grounding a pasted log needs to be reviewable at all.
+ *
+ *  WHY THIS EXISTS. The export used to be `JSON.stringify(entries)` — a bare
+ *  array saying what happened and nothing about where. A tester's paste could
+ *  not name the monitor, the build, or which of three stashed sessions it
+ *  was, so a report like "it behaved oddly on my erg" was unfalsifiable from
+ *  the bytes. Every field below except `appVersion` already existed somewhere
+ *  in the app at export time and simply never reached the clipboard.
+ *
+ *  EVERY FIELD IS OPTIONAL EXCEPT `appVersion`, and deliberately: they arrive
+ *  at different moments (`deviceName` at connect, `ergMachineType` only once
+ *  a frame has decoded, `sessionId` at the mint), and a log exported before
+ *  one of them is known must still export. */
+export interface MonitorLogMeta {
+  /** The build that produced this log — `src/appVersion.ts`. Always present:
+   *  a log that cannot name its own build is the gap that makes two
+   *  TestFlight pastes indistinguishable. */
+  appVersion: string;
+  /** The logical session's id, so three stashed pastes can be told apart —
+   *  and so a Try-again that replaced the ring is DETECTABLE rather than
+   *  silent. */
+  sessionId?: string;
+  /** The monitor's advertised BLE name, e.g. `PM5 432331249`. `null` when the
+   *  device advertised none; absent when no connect has happened yet. */
+  deviceName?: string | null;
+  /** The decoded `ergMachineType`, on EVERY path — not only refusals. Before
+   *  this, a RowErg and a pre-2018 monitor with no field at all were
+   *  indistinguishable in a log, because only the refusal recorded anything. */
+  ergMachineType?: number | null;
+}
+
 export interface MonitorEventLog {
   record(kind: string, detail: string): void;
   entries(): MonitorLogEntry[];
+  /** Merges a patch into the export header. Called more than once per
+   *  session, as each fact becomes known; later patches never erase earlier
+   *  ones. */
+  setMeta(patch: Partial<Omit<MonitorLogMeta, "appVersion">>): void;
+  meta(): MonitorLogMeta;
   exportLog(): string;
+}
+
+/** What `exportLog()` serializes. Readers must accept BOTH this and the bare
+ *  array older builds wrote — see `parseLog` in
+ *  `workout/connected/ConnectionLogSheet.tsx`. */
+export interface MonitorLogExport {
+  meta: MonitorLogMeta;
+  entries: MonitorLogEntry[];
 }
 
 /** Design spec §5: "500 entries". */
@@ -84,12 +129,72 @@ const DEFAULT_CAPACITY = 500;
  * test can bind the SAME clock (`ReplayHandle.clock.now`) the liveness
  * decorator under test is using.
  */
+/**
+ * One reader for BOTH export shapes, so nothing else has to know there are
+ * two.
+ *
+ * Since the grounding header landed, `exportLog()` writes
+ * `{meta, entries}`. A stash written by an OLDER build is a BARE ARRAY —
+ * and those outlive the upgrade, because `ergomatic:session-log-history`
+ * lives in `localStorage`. A reader that accepted only the new shape would
+ * render every log a rower already had as "no events", turning the
+ * diagnostics door blank at exactly the moment they upgraded to get better
+ * diagnostics.
+ *
+ * Anything unparseable reads as an empty log rather than throwing: every
+ * caller is a surface that exists because something already went wrong, and
+ * none of them may be the thing that breaks.
+ */
+export function parseLogExport(raw: string): MonitorLogExport {
+  return (
+    tryParseLogExport(raw) ?? { meta: { appVersion: "unknown" }, entries: [] }
+  );
+}
+
+/**
+ * As `parseLogExport`, but tells UNREADABLE apart from EMPTY.
+ *
+ * Most callers render a log and want the lenient version — an unreadable
+ * stash and an empty one both draw "no events". One caller must not conflate
+ * them: the hold-open instrument APPENDS to a stashed ring and writes it
+ * back, and it has a standing rule that a malformed prior value is left
+ * alone rather than overwritten with a partial write. Handing it an empty
+ * log for unreadable bytes would destroy exactly what it promises to
+ * preserve — which is a regression this function exists to prevent, caught
+ * by `transports/index.test.ts`'s own malformed-prior test.
+ */
+export function tryParseLogExport(raw: string): MonitorLogExport | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (Array.isArray(parsed)) {
+    // The legacy shape. It names no build, and `"unknown"` says so rather
+    // than guessing THIS build's version for bytes some older one wrote.
+    return {
+      meta: { appVersion: "unknown" },
+      entries: parsed as MonitorLogEntry[],
+    };
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const obj = parsed as { meta?: unknown; entries?: unknown };
+  if (!Array.isArray(obj.entries)) return null;
+  const meta =
+    typeof obj.meta === "object" && obj.meta !== null
+      ? (obj.meta as MonitorLogMeta)
+      : { appVersion: "unknown" };
+  return { meta, entries: obj.entries as MonitorLogEntry[] };
+}
+
 export function createEventLog(
   capacity: number = DEFAULT_CAPACITY,
   now: () => number = () => Date.now(),
 ): MonitorEventLog {
   let entries: MonitorLogEntry[] = [];
   let nextSeq = 0;
+  let meta: MonitorLogMeta = { appVersion: APP_VERSION };
 
   return {
     record(kind: string, detail: string): void {
@@ -122,8 +227,26 @@ export function createEventLog(
     entries(): MonitorLogEntry[] {
       return entries.slice();
     },
+    setMeta(patch: Partial<Omit<MonitorLogMeta, "appVersion">>): void {
+      // MERGE, never replace: the fields arrive at different moments and a
+      // later patch must not erase an earlier one. `appVersion` is omitted
+      // from the patch type because no caller may overwrite the build stamp.
+      meta = { ...meta, ...patch };
+    },
+    meta(): MonitorLogMeta {
+      return { ...meta };
+    },
     exportLog(): string {
-      return JSON.stringify(entries);
+      // DETERMINISTIC: the same log exports the same bytes every time.
+      // An `exportedAt` stamp lived here briefly and was removed — it made
+      // `exportLog()` non-idempotent, which broke the invariant that the
+      // hook's export is byte-identical to the log's (the sheet's COPY LOG
+      // copies whatever the hook returns, verbatim). It also bought little:
+      // the history entry already carries `savedAt`, and the last entry's
+      // own `atMs` says when the session ended, which is the more useful
+      // fact than when somebody pressed copy.
+      const payload: MonitorLogExport = { meta, entries };
+      return JSON.stringify(payload);
     },
   };
 }

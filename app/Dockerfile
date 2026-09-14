@@ -24,6 +24,14 @@ COPY . .
 # comment.
 ARG VITE_ENABLE_FAKE_MONITOR=""
 ENV VITE_ENABLE_FAKE_MONITOR=$VITE_ENABLE_FAKE_MONITOR
+# THE CLIENT BUNDLE'S OWN VERSION STAMP, and it must be declared in THIS
+# stage. `APP_VERSION` is already an ARG further down, but that is the `api`
+# stage — it is read at RUNTIME for `GET /api/health` and is not in scope
+# here, where `pnpm build` actually emits the client. Without this line the
+# stamp compiles to its "dev" default in every image, and a production log
+# would confidently name the wrong build (`src/appVersion.ts`).
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 RUN pnpm build
 
 # ---- api: Express, JSON-only, ships zero client assets ----

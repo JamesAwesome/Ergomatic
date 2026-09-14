@@ -315,6 +315,13 @@ const log: MonitorEventLog = {
     }
   },
   entries: () => rawLog.entries(),
+  // Delegated rather than stubbed: the lab's whole point is to exercise the
+  // real ring, and a no-op here would export a header this harness silently
+  // left empty.
+  setMeta: (patch) => {
+    rawLog.setMeta(patch);
+  },
+  meta: () => rawLog.meta(),
   exportLog: () => rawLog.exportLog(),
 };
 const transport = createWebBluetoothTransport();
