@@ -1167,6 +1167,14 @@ while we are in here.
       **That makes (b) evidence for FLAKE 2's runner hypothesis rather than
       a separate puzzle** — and unlike (a), whose stated mechanism was
       refuted, this one has a mechanism nobody has argued against yet.
+      **AND IT PASSED ON A WHOLE-SUITE RE-RUN OF THE IDENTICAL COMMIT** —
+      run `34845000865` attempt 2, all seven jobs green at head
+      `08eac824`. Stated with the attempt named, because RF42's whole point
+      is that "green on re-run" is a claim about a specific attempt or it
+      is nothing; and re-run in the WHOLE-SUITE form, never
+      `gh run rerun --failed`, which would have run a different population
+      and could not have answered the question (the trap FLAKES 1-3 share).
+      So (b) is now: two sightings, one sourced re-run, and a mechanism.
       **THE OPEN QUESTION, scheduled before the order (Phase OD's rule),
       and it took one read to find:** `vitest.config.ts:11` is
       `maxWorkers: isCI() ? undefined : workerCap(…, 4)`. The cap that
