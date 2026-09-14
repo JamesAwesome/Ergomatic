@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { signInViaBackdoor } from "./helpers";
+import { signInViaBackdoor, WORKOUT_DETAIL_URL } from "./helpers";
 
 // Golden flows through Library -> detail -> You, against the real compose
 // stack (nginx + api + postgres, seeded with the global workout library at
@@ -140,7 +140,7 @@ test.describe("library list", () => {
 
     await firstRow.click();
 
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
   });
 
@@ -425,7 +425,7 @@ test.describe("SOURCE filter", () => {
     await page.getByRole("button", { name: "Effort 3" }).click();
     await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
     await page.getByRole("button", { name: "Save to library" }).click();
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
 
     await page.goto("/library");
     await expect(rows).toHaveCount(baselineCount + 1);
@@ -610,7 +610,7 @@ test.describe("Phase SF PR3: search by name", () => {
 
     // BACK round trip: the query and the narrowed list come back.
     await rows.first().click();
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await page.goBack();
     // Not `waitForLibraryLoaded`: that helper asserts the REST count
     // ("N WORKOUTS"), and the restored query means the count is filtered.

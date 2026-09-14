@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CDPSession, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import { RUN_ID, signInViaBackdoor } from "./helpers";
+import { RUN_ID, signInViaBackdoor, WORKOUT_DETAIL_URL } from "./helpers";
 
 // news.spec.ts's own idiom, imported here for the same reason it exists
 // there — and for one more this file taught the hard way: `cleanupByTitle`
@@ -917,7 +917,7 @@ async function walkSurfaceToLog(
   await expect(
     page.locator(".connected-serif-line", { hasText: "Wrapping up" }),
   ).toBeVisible();
-  await expect(page).toHaveURL(/\/library\/[^/]+$/);
+  await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
 
   // NOW deliver the burst — a scripted 0x0039, so the release comes from
   // `burst-heard`, matching the typical hardware case, rather than from

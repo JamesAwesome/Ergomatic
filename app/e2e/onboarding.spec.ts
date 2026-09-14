@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { RUN_ID, signInViaBackdoor } from "./helpers";
+import { RUN_ID, signInViaBackdoor, WORKOUT_DETAIL_URL } from "./helpers";
 
 // Phase 6I Task 8, rebuilt for Phase BL PR C's three doors, then cut
 // down by James's 2026-08-23 ruling (the START HERE block, You › Learning
@@ -182,7 +182,7 @@ test.describe("Today onboarding — the fresh-user arc", () => {
     ).toBeVisible();
 
     await page.getByRole("link", { name: "Start" }).first().click();
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(K6_TITLE);
     // Honest back navigation: the detail's BackLink reads the carried
     // from:"/onboarding/row", never the /library fallback.

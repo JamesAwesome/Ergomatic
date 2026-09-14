@@ -386,3 +386,23 @@ export async function seedGate0Tests(
   }
   return out;
 }
+
+/** The WORKOUT DETAIL url, and the only safe way to assert "the builder
+ *  finished saving".
+ *
+ *  `/\/library\/[^/]+$/` — which every one of these call sites used until
+ *  2026-09-14 — ALSO MATCHES `/library/new` and `/library/import`, the two
+ *  non-id segments under `/library/`. A test standing on `/library/new`
+ *  therefore satisfied it on tick zero, before the POST it was meant to
+ *  wait for had even been issued: a gate that could not go red (RF21).
+ *
+ *  That is what made `library.spec.ts`'s SOURCE filter test flaky — ten CI
+ *  occurrences, always `Expected: 303 / Received: 302`. `Builder.tsx:466`
+ *  navigates to `/library/<savedId>` strictly AFTER `await api(...)`
+ *  resolves, so reaching a real detail url is proof the row is committed;
+ *  matching `/library/new` proves nothing, and the `page.goto("/library")`
+ *  that followed raced the in-flight write.
+ *
+ *  The lookaheads exclude exactly those two segments, so a site that was
+ *  already sound is unchanged and a dead one becomes live. */
+export const WORKOUT_DETAIL_URL = /\/library\/(?!new$)(?!import$)[^/]+$/;

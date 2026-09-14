@@ -8,6 +8,7 @@ import {
   stableBoundingBox,
   stubBluetoothPermissionDenied,
   stubBluetoothScanFailure,
+  WORKOUT_DETAIL_URL,
 } from "./helpers";
 import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
 import type { Step, WorkoutType } from "../domain/types.js";
@@ -1226,7 +1227,7 @@ test.describe("workout detail screen (no baselines: words, not a guard)", () => 
     await page.getByRole("button", { name: "Effort 3" }).click();
     await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
     await page.getByRole("button", { name: "Save to library" }).click();
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
   });
 
@@ -1354,7 +1355,7 @@ test.describe("workout detail screen (personal workout, owner actions)", () => {
     await page.getByRole("button", { name: "Effort 3" }).click();
     await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
     await page.getByRole("button", { name: "Save to library" }).click();
-    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page).toHaveURL(WORKOUT_DETAIL_URL);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
   });
 
