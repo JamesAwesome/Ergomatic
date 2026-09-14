@@ -6757,43 +6757,57 @@ test("justrow-log", async ({ page }) => {
   await page.getByRole("button", { name: "End session" }).click();
   await page.getByRole("button", { name: "Tap again to end" }).click();
 
-  // THE END-OF-WORKOUT SUMMARY, delivered inside the window three previous
-  // attempts missed. The window was MEASURED in a real browser (branch
-  // `td5-spike`, commit `6ea6fdb9`, four orderings) by dumping the ring the
-  // app itself stashes at `ergomatic:last-session-log` — the browser-side
-  // observable Phase TD's spec §1.3 said was missing:
+  // THE END-OF-WORKOUT SUMMARY, offered for as long as the surface is still
+  // here to take it. Three previous attempts delivered it once, on the
+  // second End tap, and missed a window whose bounds were MEASURED in a
+  // real browser (branch `td5-spike`, commit `6ea6fdb9`, four orderings)
+  // by dumping the ring the app itself stashes at
+  // `ergomatic:last-session-log` — the browser-side observable Phase TD's
+  // spec §1.3 said was missing:
   //
-  //   - it OPENS when the driver sees the `terminated` status frame, 15/24/
-  //     52/86 ms after `terminate-sent` across those four runs (the fake's
-  //     terminate auto-cycle drains one status per 100 ms `tick`);
+  //   - it OPENS once the driver has SEEN the `terminated` status frame,
+  //     15/24/52/86 ms after `terminate-sent` across those four runs. The
+  //     fake acks the terminate and delivers the synthesized `terminated`
+  //     status SYNCHRONOUSLY (`onArmedFrameComplete`, `fake.ts`) — a free
+  //     row never programs, so `queueTerminateAutoCycle`'s tick drain is
+  //     not on this path at all — which makes that spread APP-SIDE latency,
+  //     and app-side latency is exactly what a loaded runner stretches;
   //   - it CLOSES ~1800 ms after the ended hand-off opens — the hold is
   //     `BURST_LINGER_MS` (2000 ms) and `summary-recorded` lands 200 ms
   //     after the 0x0039, on the hash sub-window;
-  //   - delivering on the second End tap, which is what every earlier
-  //     attempt did, put the frame **9 ms early**: refused
-  //     `summary-reconciled :: out-of-window`, nothing filed, and the tier
-  //     block absent from the capture that exists to show it.
+  //   - delivering on the second End tap put the frame **9 ms early**:
+  //     refused `summary-reconciled :: out-of-window`, nothing filed, and
+  //     the tier block absent from the capture that exists to show it.
   //
-  // 400 ms sits ~310 ms past the opening bound and ~1.4 s inside the
-  // closing one. The URL check is the positive proof that the surface has
-  // NOT navigated at the moment of delivery — `connected.spec.ts:919`'s own
-  // idiom on the programmed arm, asserted AFTER the wait rather than before
-  // it, because a delivery into a navigated page lands nowhere.
-  // **`Wrapping up` is deliberately not that check:**
+  // SO THE DELIVERY IS A PUMP, NOT A DEADLINE. One wall-clock wait would
+  // fail in BOTH directions — too short and the frame is refused, too long
+  // and the hold has closed — and this file's other `waitForTimeout`s are
+  // one-sided settling waits that carry no such risk. The loop cannot fail
+  // that way: it keeps offering the frame across the whole window.
+  //
+  // Every offer is PRE-NAVIGATION by construction, which is the property
+  // `connected.spec.ts:919` asserts on the programmed arm: the loop's own
+  // condition is that the free-row route is still mounted. An offer made
+  // before the window opens is refused and costs one ring line; one made
+  // after the totals are filed is a write-once no-op. Exit is the
+  // consequence itself — the hand-off releases on `burst-heard` and the
+  // surface navigates. **`Wrapping up` is deliberately not the signal:**
   // `ConnectedSurface.tsx:466-472` renders that line on every ended state,
   // held or not, so it proves nothing about the hold (spec §1.3).
-  await page.waitForTimeout(400);
-  await expect(page).toHaveURL(/\/justrow$/);
-  await page.evaluate(() => {
-    // The accumulator's own reading at the End tap (0:16, 76 m — the
-    // fixture's 6 m/s leg), so every figure in the frame recomputes from the
-    // two beside it: AVG SPLIT = 500 x 16 / 76 = 1:45.3, and
-    // AVG WATTS = round(2.8 / (16/76)^3) = 300.
-    window.__pm5FakeControls__?.deliverSummary({
-      elapsedSeconds: 16,
-      meters: 76,
+  const stopOfferingAt = Date.now() + 1600;
+  while (page.url().endsWith("/justrow") && Date.now() < stopOfferingAt) {
+    await page.evaluate(() => {
+      // The accumulator's own reading at the End tap (0:16, 76 m — the
+      // fixture's 6 m/s leg), so every figure in the frame recomputes from
+      // the two beside it: AVG SPLIT = 500 x 16 / 76 = 1:45.3, and
+      // AVG WATTS = round(2.8 / (16/76)^3) = 300.
+      window.__pm5FakeControls__?.deliverSummary({
+        elapsedSeconds: 16,
+        meters: 76,
+      });
     });
-  });
+    await page.waitForTimeout(150);
+  }
 
   await expect(page).toHaveURL(/\/justrow\/log$/, { timeout: 15_000 });
   await expect(page.getByText("EFFORT", { exact: true })).toBeVisible();
@@ -6809,8 +6823,9 @@ test("justrow-log", async ({ page }) => {
   // own summary defaults (`fake.ts:928`, `:942`).
   //
   // The LOCATORS are the gate; the PNG is only the record (RF21 — a picture
-  // cannot go red). The biting mutation is this delivery's timing: at
-  // +0 ms instead of +400 the tier is absent and these assertions fail.
+  // cannot go red). The biting mutation is the pump's reach: with
+  // `stopOfferingAt` set to `Date.now()` the single remaining offer lands
+  // before the window opens, and `toHaveCount(6)` reports `Received: 0`.
   // All six, by position and exact text — `:4119-4124`'s own idiom for this
   // same block, which pins the dashes as hard as the figures.
   const tiles = page.getByTestId("summary-machine-tier").getByRole("group");
