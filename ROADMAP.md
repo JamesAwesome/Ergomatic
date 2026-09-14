@@ -3351,25 +3351,47 @@ Each needs erg time or a deliberate recording session.
   standard. What both signatures share is a request seeing state that some
   other test owns.
 - **FLAKE 1 — `design.spec.ts`'s doors-back test fails on CI and passes
-  everywhere else. TWICE, and it is the same test both times.** · dies
-  2026-10-14 · a row and not a fix now because the two failures are three
-  weeks apart with no local reproduction, and the next step is a hunt
-  someone has to sit with rather than a change anyone can make.
+  everywhere else. NINE times across seven branches, not twice.** · dies
+  2026-10-14 · a row and not a fix now because the failures had no local
+  reproduction, and the next step was a hunt someone had to sit with
+  rather than a change anyone could make. (Both halves of that clause are
+  now spent — see the diagnosis below.)
   **The test:** `the stored skip (Phase RW PR C) › resetting the baselines
-  brings the doors back`. Both failures are the same assertion —
-  `.doorscard` never appears.
-  - **2026-09-12, #419's main run.** Recorded at the time as
-    "design.spec:12728 doors-back". Green on re-run.
-  - **2026-09-13, PR #430's combined head** (`3d4cde1b`), at
-    `design.spec.ts:12883` — the same test, the line having shifted. 580
-    passed beside it. A full-suite re-run of the same commit passed, and so
-    did the test in isolation locally.
+  brings the doors back`. Every failure is the same assertion —
+  `.doorscard` never appears, `element(s) not found`, 5000 ms.
+  **THIS ROW SAID "TWICE" AND WAS WRONG BY SEVEN, FOR A REASON WORTH
+  KEEPING.** `playwright.config.ts:21` sets `retries: 1` under CI, so a
+  test that fails once and passes on the retry leaves the job GREEN and
+  prints `1 flaky`. Seven of the nine were exactly that — invisible to
+  `gh run list`, visible only inside the logs of runs that passed. The two
+  this row knew about were simply the two that went red. **Counting CI
+  failures by looking at failed runs undercounts a retried flake by
+  however often the retry saves it** — measured here at 7 of 9. The count
+  came from grepping the `e2e` job log of all 1,082 Playwright-executing
+  jobs in the repo's CI history, not from the run list.
+  - Nine occurrences, 2026-09-08 to 2026-09-14, since the test landed in
+    `4daeff32` (2026-09-07): seven `flaky` (job green), two `failed`.
+    Seven distinct branches, `main` twice. Roughly 9 in 264 e2e jobs since
+    the test existed (~3.4%, denominator slightly inflated by branches cut
+    before it).
+  - **2026-09-13, #419's main run** (`ae4d8df2`) — one of the two hard
+    failures. **This row previously said "Green on re-run". That is
+    FALSE:** that run has `attempts=1` and no other run exists for that
+    SHA. It was never re-run, and it stands red on `main` to this day.
+  - **2026-09-14, PR #430's combined head** (`3d4cde1b`) — the other hard
+    failure, 580 passed beside it. Attempt 2 of the same run passed
+    581/581 at the identical SHA. **This is the ONLY one of the nine where
+    "green on re-run" is a sourced claim**; for the seven flaky ones there
+    was nothing to re-run, because the job was already green.
+  - **Most recent: 2026-09-14 on `main`**, the merge of #430 (`d4550305`)
+    — flaky, so it left a green job and nobody saw it.
   **What that pattern means, stated because it is the useful half:** it
-  passes alone, it passes on a re-run, and it has only ever failed inside a
-  full CI suite. That is the signature of an ORDER- or TIMING-dependent
-  test, not a broken one — and it is why "it passed when I ran it" is not
-  evidence here. Whoever picks this up should reproduce it by running the
-  FULL suite in CI's own worker configuration, not by running the test.
+  passes alone and has only ever failed inside a full CI suite. That is
+  the signature of an ORDER- or TIMING-dependent test, not a broken one —
+  and it is why "it passed when I ran it" is not evidence here. The repo
+  has almost no re-run habit (6 runs in its whole history have
+  `run_attempt > 1`), so any claim of the form "it always passes on
+  re-run" cannot be sourced from CI data at all.
   **DIAGNOSED AND FIXED 2026-09-14, and the suspicion this row recorded was
   right.** `handleReset` (`you/ResetBaselineSetup.tsx`) awaits
   `DELETE /api/baselines`; the test clicked confirm and went straight to
@@ -3406,9 +3428,20 @@ Each needs erg time or a deliberate recording session.
   test** — the axe timeout is the most suggestive single data point, being
   the heaviest step in the suite. But one run is not a population, and this
   row deliberately does not open a hunt.
-  **The cheap way to get a count without instrumenting anything:** the
-  `playwright-report` artifact is already uploaded on every red run
-  (occurrence 2's is `10311637594`), so CI history holds the data.
+  **THE COUNTING METHOD, SETTLED 2026-09-14 — and the one this row used to
+  suggest is the wrong one.** It said to reach for the `playwright-report`
+  artifact, "already uploaded on every red run". That is exactly the
+  blind spot: `playwright.config.ts:21` sets `retries: 1` under CI, so a
+  test saved by its retry leaves a GREEN job, and red runs are the small
+  minority of occurrences — measured at 2 of 9 for FLAKE 1 and 0 of 10 for
+  FLAKE 3. A count built from red runs would have missed seventeen of
+  nineteen.
+  **What works:** fetch the `e2e` job log for every attempt of every CI
+  run and grep the Playwright summary lines. The whole history is 1,082
+  Playwright-executing jobs and it completes in one pass. Two traps worth
+  writing down: `gh run list --paginate` silently caps at 1000 results, so
+  the run enumeration must be windowed by date; and the log API needs
+  `--allow-escape-sequences` or `gh` writes zero bytes without erroring.
   **Local context worth recording:** this machine was measured at ~750 MB
   free with swap at 3.7 of 5.1 GB while two sessions ran full suites at
   once, and two CI watchers were killed for memory the same day. Whether
@@ -3423,8 +3456,17 @@ Each needs erg time or a deliberate recording session.
   **The test:** `SOURCE filter › selecting MY WORKOUTS narrows to an
   authored workout, and CLEAR ALL restores the full library`. Every
   failure was the same assertion and the same shape — `toHaveCount`,
-  `Expected: 303 / Received: 302`, the authored workout missing from the
-  list read.
+  `Expected: 303 / Received: 302`, the numbers identical every time, the
+  authored workout missing from the list read.
+  **Ten occurrences, and it never once turned a CI job red.** Six under
+  the current title (2026-09-06 to 2026-09-13, five branches) and four
+  more under the title it carried before `8da1e710` renamed it on
+  2026-09-04 (`selecting CUSTOM narrows…` — same file, same describe, same
+  test), the oldest 2026-08-15. Eight distinct branches, `main` three
+  times. **All ten were `flaky`: Playwright's single CI retry saved every
+  one**, so this bug lived a month in green builds and would never have
+  surfaced from the failed-run list. Same measurement as FLAKE 1's — the
+  `e2e` job log of all 1,082 Playwright-executing jobs in CI history.
   **THE CAUSE WAS A GATE THAT COULD NOT GO RED (RF21), and it was hiding in
   a regex.** After clicking "Save to library" the test waited with
   `await expect(page).toHaveURL(/\/library\/[^/]+$/)`. That pattern also
