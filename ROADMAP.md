@@ -3321,6 +3321,25 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **One unidentified `client`/`unit` test failure, seen once on 2026-09-14 and
+  not reproduced in nine runs since.** A full
+  `pnpm test --project client --project unit` at PR #445's head reported
+  `1 failed | 8535 passed`; **the name was lost** — the command was piped
+  through a `grep` that matched nothing, so the failure line never reached a
+  file, and nine consecutive full runs afterwards were green at exit 0. It is
+  a real assertion failure and NOT a kill: none of RF40's three signatures
+  applies (exit was not >= 128, the run did not go through `pnpm exec`, and
+  `app/.test-kills/` was never created). CI was green on the same tree twice.
+  Closest known relative is the vitest `doMock` race that turned main red once
+  and was fixed in #346; `StatsScreen.test.tsx` still uses `vi.doMock` in its
+  retry test. What would fix it now: nothing that can be aimed — there is no
+  name to chase and no reproduction. **The actionable half is a habit, not a
+  fix:** never pipe a suite's output through a filter that can swallow the
+  failure list; write it to a file and grep the file (the same lesson as
+  TESTING.md §11's `process.stdout.write` rule, one layer up). **S** · dies
+  2026-10-14 · one sighting in ten runs with no captured identity; a second
+  sighting with its name attached is what makes it fixable
+
 - [ ] **`scripts/ci-changes.sh` skips the code jobs on `docs/monitor/sessions/` changes that tests read by name.** `app/src/test/captures.ts:21` resolves that directory and `captures.test.ts` reads two named capture files at runtime, so a rename, re-gzip or deletion there is "documentation" to the script and the `app` job never runs the test it broke — the same class PS PR 1 patched for `seed.mjs`. What would fix it now: add the prefix to `CODE_UNDER_DOCS_RE` with a case in `ci-changes.test.sh` — not done because the capture corpus is append-only today and widening the regex inside a TRIAD PR mixes two risk models. **S** · dies 2026-10-12 · pre-existing, one-line fix, but it belongs in the PR that next touches the captures.
 - **Move the PM5 NFC fixture loader (`loadPm5NfcFixture`, `FIXTURE_PM5_NAME`
   and the capture they read) out of `src/monitor/nfc/fixtures` so
