@@ -79,6 +79,12 @@ async function report(page: Page, label: string): Promise<void> {
             (box.width / (t.textContent ?? " ").length).toFixed(2),
           ),
           overflowsLeft: box.x < vb.x,
+          overflowsRight: box.x + box.width > vb.x + vb.width,
+          rightSlack: Number(
+            (vb.x + vb.width - (box.x + box.width)).toFixed(2),
+          ),
+          weight: style.fontWeight,
+          letterSpacing: style.letterSpacing,
           fontFamily: style.fontFamily,
           fontSize: style.fontSize,
           vbX: vb.x,
@@ -94,7 +100,7 @@ async function report(page: Page, label: string): Promise<void> {
   );
   for (const r of out.rows as Record<string, unknown>[]) {
     process.stdout.write(
-      `${r.overflowsLeft ? "CLIP " : "     "}${String(r.svg).padEnd(30)} "${String(r.text)}"\tx=${r.x}\tw=${r.width}\tclearPx=${r.clearPx}\tborderL=${r.cardBorderL}\tpadL=${r.cardPadL}\tovf=${r.cardOverflow}\tperGlyph=${r.perGlyph}\n`,
+      `${r.overflowsLeft ? "CLIPL" : r.overflowsRight ? "CLIPR" : "     "}${String(r.svg).padEnd(30)} "${String(r.text)}"\tcls=${r.cls}\tx=${r.x}\tw=${r.width}\trightSlack=${r.rightSlack}\tperGlyph=${r.perGlyph}\tws=${r.weight}\tls=${r.letterSpacing}\n`,
     );
   }
   process.stdout.write(`===== [${label}] end\n`);
@@ -153,4 +159,63 @@ test("axis probe: a seven-glyph metres tick", async ({ page }) => {
   await page.getByText("2K 1:54.0").waitFor();
   await page.evaluate(() => document.fonts.ready);
   await report(page, "seven-glyph");
+});
+
+// The fourth chart the pass names, on the OTHER screen: `TraceChart`'s own
+// y ticks, whose `.trace-tick-label` carries no `letter-spacing` where
+// `.stats-tick` carries 0.06em (`index.css`). The advance quoted for the
+// Stats charts cannot be assumed here — this test measures it.
+test("axis probe: the trace chart's y ticks", async ({ page }) => {
+  test.setTimeout(120_000);
+  await signInViaBackdoor(page, {
+    email: `axis-probe-trace-${RUN_ID}@e2e.test`,
+    name: "Axis Probe",
+  });
+  const samples: {
+    t: number;
+    d: number;
+    p: number;
+    spm: number;
+    hr: number;
+  }[] = [];
+  for (let i = 0; i <= 40; i++) {
+    const pace = 140 - Math.round(i * 0.7);
+    samples.push({
+      t: i * 10,
+      d: i * 4,
+      p: pace * 10,
+      spm: 22 + Math.round(i / 7),
+      hr: 128 + Math.round(i * 0.6),
+    });
+  }
+  const logId = await page.evaluate(
+    async (series) => {
+      const res = await fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workoutId: null,
+          workoutTitle: "Axis Probe Trace",
+          workoutType: null,
+          deviceName: "PM5 432331249",
+          source: "pm5",
+          steps: [],
+          distanceMeters: 5000,
+          timeSeconds: 1500,
+          series,
+        }),
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(text);
+      return (JSON.parse(text) as { id: string }).id;
+    },
+    { samples },
+  );
+  await page.goto(`/today/log/${logId}`);
+  await expect(
+    page.getByRole("heading", { name: "Axis Probe Trace" }),
+  ).toBeVisible();
+  await page.locator(".trace-tick-label-y").first().waitFor();
+  await page.evaluate(() => document.fonts.ready);
+  await report(page, "trace");
 });
