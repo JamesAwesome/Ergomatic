@@ -1394,7 +1394,28 @@ Each mutation, with what its failure said, goes in the PR body:
 so **Gate 0 applies: James approves the rendered screens before any
 implementation step runs.**
 
-- [ ] **Step 1: Gate 0 — render the screens and stop**
+> **GATE 0 PASSED — James, 2026-09-14.** The rendered screens were approved at
+> https://claude.ai/code/artifact/4842af3a-c2f1-4948-94ea-1af88334e6b0 .
+> **Step 1 is therefore DONE; start at Step 2.** Four rulings came out of it and
+> they are requirements, not preferences:
+>
+> 1. **Deletion lives in its own QUARANTINE BOX**, not a rule-separated zone.
+>    A `1px solid var(--accent)` box, `border-radius: 3px`, containing only the
+>    `ACCOUNT` label (in `--accent`) and the `Delete account` button. The border
+>    is the containment. **In LANDSCAPE the box sits BESIDE the list, not below
+>    it** — below, it falls off a 320px-tall screen, which is the RC-24 failure.
+> 2. **Do NOT name Concept2 in the confirm copy.** The link row is still deleted
+>    with the account; the screen must not claim it, because we do not
+>    deauthorize at Concept2's end and naming it implies we do.
+> 3. **`Remove` stays an outlined 44px button** in `--accent`, as drawn.
+> 4. **The failed-web-delete surface ships** (finding I1 / N9) — it is a required
+>    change here, not a ROADMAP row.
+>
+> Contrast is already computed and approved; every pairing this UI uses passes
+> AA, tightest being white on `--accent` at **6.04**. Do not re-derive them, but
+> if you introduce a pairing not in that table, compute it and state the number.
+
+- [ ] **Step 1: Gate 0 — DONE, approved 2026-09-14. Do not re-run.**
 
 Produce, as real captures against a seeded account, in **both orientations at
 real proportions**, against what they replace, with every colour pairing's
@@ -1622,16 +1643,34 @@ is also connected** (`const removable = methods.methods.apple && methods.methods
 )}
 ```
 
-Copy, exact:
+Copy, exact. **James's standing note, 2026-09-14: state facts, not prose.**
+A sentence like "Deleting is permanent and takes everything with it" is filler —
+that is what deleting means, and it earns no line on a screen. Name what goes,
+name what happens, stop. No "for good", no "cannot be undone", no "forever".
 
-- `last_provider` — "That's your only way back in, so it has to stay. Add the other sign-in method first, then remove this one."
+- `last_provider` — "Add another sign-in method before removing this one."
 - `not_connected` — "That sign-in method isn't connected to this account."
-- `account_gone` — "This account is no longer available. Nothing was changed."
-- The confirm screen — "Your account and everything in it is deleted for good. This cannot be undone."
-- The `appleRevoked: false` notice — "Your account is deleted. We couldn't reach Apple to disconnect Ergomatic, so you can remove it yourself in your Apple ID settings, under Sign in with Apple."
+- `account_gone` — "This account no longer exists. Nothing was changed."
+- The delete entry point on the methods screen — the button reads
+  **"Delete account"** and carries NO explanatory sentence above or below it.
+- The confirm screen heading — "Delete this account?"
+- The confirm screen body — "Deletes your workouts, session log, plan,
+  baselines, test history, and your Concept2 connection." Then, separately:
+  "Signs you out on this device."
+- The confirm buttons — **"Delete account"** and **"Cancel"**, not
+  "Delete my account" / "Keep my account".
+- The `appleRevoked: false` notice — "Your account is deleted. Ergomatic is
+  still listed in your Apple ID settings, under Sign in with Apple. You can
+  remove it there."
+- A failed delete reauth — "We couldn't confirm it was you. Nothing was deleted."
+
+**The list IS the warning.** It is concrete where an adjective is not, and it is
+the only thing on that screen a rower cannot work out for themselves.
 
 **The confirm screen must not promise anything about Apple**, because the
-revoke has not happened when it is read.
+revoke has not happened when it is read. Note the `appleRevoked: false` notice
+states the resulting STATE ("is still listed") rather than our failure ("we
+couldn't reach Apple") — the rower can act on the first and not the second.
 
 - [ ] **Step 6: Run the tests, then the e2e specs and captures**
 
