@@ -343,8 +343,9 @@ export function createFrontDoorRoutes(deps: {
       // after the state/stage checks below. They only feed the failure
       // redirect's query string, and that string is what routes the rower to
       // a surface able to render the failure: `SignInMethods` returns null
-      // unless the purpose is "link", and a signed-in rower never renders a
-      // signin-purpose error at all. Assigning these later made every
+      // unless the purpose is "link" or (since Wave A PR 1 Task 4) "delete",
+      // and a signed-in rower never renders a signin-purpose error at all.
+      // Assigning these later made every
       // rejection at those two checks report a link failure as `signin`, so
       // the rower was bounced silently to Today with the whole recovery path
       // — notice, methods refetch, "Start linking again" — unreachable.

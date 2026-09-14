@@ -75,7 +75,8 @@ describe("useAuthMethods", () => {
    *
    * The effect cleanup runs on a DEPENDENCY CHANGE too, and that race is both
    * real and observable: `SignInMethods` re-keys this hook after a link
-   * result (`methodsRefreshKey`), so a slow in-flight read for the OLD key can
+   * result and, since Wave A PR 1 Task 4, after a removal
+   * (`methodsRefreshKey`), so a slow in-flight read for the OLD key can
    * land after the new one and repaint stale CONNECTED rows. That is the
    * invariant the guards actually protect, and this is the layer where
    * removing them goes red.

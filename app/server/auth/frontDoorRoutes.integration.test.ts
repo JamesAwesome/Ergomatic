@@ -958,7 +958,8 @@ describe("supported auth producers through Express and signed tokens", () => {
   it("a rejected LINK callback reports its own purpose and target, not signin", async () => {
     // The redirect's authPurpose is what routes the rower to a surface that can
     // show the failure. A signed-in rower never renders a signin-purpose error
-    // (`SignInMethods` returns null unless purpose === "link"), so reporting a
+    // (`SignInMethods` returns null unless the purpose is "link" or, since
+    // Wave A PR 1 Task 4, "delete"), so reporting a
     // link failure as signin bounces them silently to Today and makes the whole
     // recovery path — the notice, the methods refetch, "Start linking again" —
     // unreachable.
