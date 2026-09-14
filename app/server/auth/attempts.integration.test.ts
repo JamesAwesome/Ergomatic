@@ -1003,6 +1003,33 @@ describe("front-door transactions against Postgres", () => {
       "attempt_expired",
     );
   });
+  it.each([
+    { purpose: "delete", stage: "link_ready", existing: "google" },
+    { purpose: "link", stage: "delete_ready", existing: "google" },
+  ])(
+    "refuses a $purpose attempt parked at $stage, which belongs to another purpose",
+    async ({ purpose, stage, existing }) => {
+      // accept()'s tail stamps `link_ready` on anything that is not a signin,
+      // and fills every verified_* column on the way past — so without the
+      // purpose-terminal clause in consistent() a delete sitting there passes
+      // every other check. Unreachable through claim() today; this is the
+      // thing that names the precondition (RF18). reauthenticated_at and the
+      // verified_* columns are filled so the ONLY clause that can fire is the
+      // purpose-terminal one.
+      const user = await seedUser({ googleSub: "g-term", appleSub: null });
+      const session = await seedSession(user.id);
+      const secret = "terminal-stage-secret";
+      const row = (
+        await pool.query<{ id: string }>(
+          "INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,expires_at,reauthenticated_at,verified_subject,verified_email,verified_name) VALUES($1,'native',$2,'apple',$3,$4,1,gen_random_uuid()::text,gen_random_uuid()::text,$5,now()+interval '5 minutes',now(),'g-term','rower@test','Rower') RETURNING id",
+          [hashToken(secret), purpose, existing, stage, session.id],
+        )
+      ).rows[0];
+      await expect(store.read(row.id, secret, "native")).rejects.toThrow(
+        "attempt_expired",
+      );
+    },
+  );
   it("removes the account's rows from every cascading table and the account itself", async () => {
     const user = await seedUserWithDataEverywhere();
     // Seeded BEFORE the census below, because `sessions` is one of the tables
@@ -1243,6 +1270,15 @@ describe("front-door transactions against Postgres", () => {
     // statement (the brief's first shape) acquires BOTH before the deleter
     // starts, which cannot cycle under either lock order and so proves
     // nothing.
+    //
+    // INFERENCE, and the one half this test does not itself measure: that
+    // original()'s single statement takes sessions BEFORE users. Postgres
+    // applies FOR UPDATE through a LockRows node that walks the range-table
+    // entries in order, and `sessions` is RTE 1 in `FROM sessions INNER JOIN
+    // users`. The mutation below proves original() takes BOTH rows; it does
+    // not prove the order. If that inference is wrong the holder is still a
+    // legal interleaving of two real statements — it just stops being a
+    // superset of the single-statement one.
     //
     // Correct order: the deleter's first lock is the ordered sessions sweep,
     // which blocks on sessions[B] while holding NO users lock. The holder

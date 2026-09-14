@@ -45,8 +45,12 @@ export interface Attempt {
   appleClientId: string | null;
   appleRefreshToken: string | null;
 }
-/** A deletion has ONE success shape. `appleRevoked` is the only variable:
- *  the account is gone either way, and this says whether Apple was told. */
+/** A deletion has ONE success shape: the account is gone either way.
+ *  `appleRevoked` says whether NOTHING IS LEFT OUTSTANDING AT APPLE — every
+ *  grant we held was accepted by Apple, OR there was no grant to revoke. It
+ *  is vacuously `true` for a Google-only account, because `createAppleRevoke`
+ *  returns `true` on an empty list, so it never means "Apple was contacted".
+ *  False means we held at least one grant and at least one revoke failed. */
 export interface DeleteOutcome {
   outcome: "deleted";
   appleRevoked: boolean;
@@ -89,7 +93,20 @@ function consistent(a: Attempt) {
     ((a.stage.startsWith("target_") ||
       a.stage === "link_ready" ||
       a.stage === "delete_ready") &&
-      !a.reauthenticatedAt)
+      !a.reauthenticatedAt) ||
+    // A PURPOSE-TERMINAL STAGE BELONGS TO ITS PURPOSE. `accept()`'s tail
+    // reads `a.purpose === "signin" ? "confirm" : "link_ready"`, so a delete
+    // arriving there would be stamped `link_ready` — and every clause above
+    // would accept it, because the tail fills every `verified_*` column. It
+    // is unreachable today only because `claim()`'s `next` map has no
+    // `delete_ready` entry, so a delete can never reach `target_exchanging`;
+    // that is an invariant held up by the current call graph with nothing
+    // naming it (RF18). This names it, and closes the mirror case too
+    // rather than the one counterexample (RF34). The signin-only stages are
+    // already covered by the `signup` rule at the top.
+    ((a.stage.startsWith("target_") || a.stage === "link_ready") &&
+      a.purpose !== "link") ||
+    (a.stage === "delete_ready" && a.purpose !== "delete")
   )
     throw new AuthFailure("attempt_expired");
 }
@@ -630,8 +647,8 @@ export function createAttempts(
           throw new AuthFailure("account_changed");
         const session = await original(tx, currentSessionId, true);
         const row = (
-          await tx.query<{ appleSub: string | null }>(
-            `SELECT apple_sub AS "appleSub" FROM users WHERE id=$1 FOR UPDATE`,
+          await tx.query<{ id: string }>(
+            `SELECT id FROM users WHERE id=$1 FOR UPDATE`,
             [session.userId],
           )
         ).rows[0];
@@ -644,15 +661,22 @@ export function createAttempts(
         // so a stale revoke reports SUCCESS while a live credential survives
         // at Apple -- the precise outcome this design exists to prevent.
         // `unlink` already had this shape.
-        const held = row.appleSub
-          ? (
-              await tx.query<AppleGrant>(
-                `DELETE FROM apple_grants WHERE user_id=$1
-                RETURNING client_id AS "clientId", refresh_token AS "refreshToken"`,
-                [session.userId],
-              )
-            ).rows
-          : [];
+        // UNCONDITIONAL, never gated on `users.apple_sub`. That gate would
+        // rest on a cross-table invariant nothing enforces: it holds today
+        // (one writer, and `unlink` deletes every grant when it nulls
+        // `apple_sub`), but the day it stops, the grants cascade away
+        // unrevoked and `revokeApple([])` returns `true` — the rower is told
+        // `appleRevoked: true` over a live credential, exactly what the
+        // paragraph above says this design exists to prevent. The statement
+        // costs nothing: the `DELETE FROM users` below issues it by cascade
+        // regardless.
+        const held = (
+          await tx.query<AppleGrant>(
+            `DELETE FROM apple_grants WHERE user_id=$1
+            RETURNING client_id AS "clientId", refresh_token AS "refreshToken"`,
+            [session.userId],
+          )
+        ).rows;
         // The attempt's own credential, which would otherwise cascade away
         // through sessions with nothing revoked. Guarded on the grant's own
         // fields rather than on apple_sub, which an unlink can null between
