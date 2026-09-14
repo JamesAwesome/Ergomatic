@@ -418,6 +418,34 @@ button.auth-method-row {
   border-color: var(--accent);
 }
 
+/* THE CONFLICT NOTICE IS A BLOCK, NOT A SENTENCE (Gate 0, James,
+   2026-09-14). Its recovery is four steps, so it renders as an ordered list
+   and needs the vertical rhythm a bare <p> notice never had. Explicit
+   margins because `.notice`'s own 12px padding is the only spacing here:
+   the browser's 1em paragraph margins would collide with it.
+   --ink-3 on --surface is 7.43:1 (this file's own figure, computed again for
+   this pairing), clear of the 4.5:1 AA floor -- the cue line is a step back
+   from the steps, never a quieter version of the fact above it, which stays
+   --ink. */
+.auth-notice-lead {
+  margin: 0 0 10px;
+}
+
+.auth-notice-cue {
+  margin: 0 0 6px;
+  color: var(--ink-3);
+}
+
+.auth-notice-steps {
+  margin: 0;
+  /* Room for two digits, so a list that ever grows past nine does not clip
+     its own markers against the notice's padding. */
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .auth-link-retry {
   width: 100%;
   margin-top: 12px;

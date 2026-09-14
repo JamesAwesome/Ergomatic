@@ -92,12 +92,46 @@ function methodsNotice(auth: AuthFlowController): React.ReactNode {
       </p>
     );
   }
+  // THE RECOVERY IS A SEQUENCE, SO IT RENDERS AS ONE (Gate 0, James,
+  // 2026-09-14). The old single sentence was true and left the rower with
+  // nowhere to go; written as prose the four steps ran too long to act on.
+  // Every step names a label that is on a screen the rower can reach:
+  // `Sign out` and `Delete account` on You, `Add <provider>` in the list
+  // below. The screen name is quoted because unquoted "You" reads as a
+  // pronoun mid-instruction.
+  //
+  // WHY DELETION AND NOT REMOVE, which is lighter and now exists (#436):
+  // `unlink` nulls the subject only when the OTHER provider column is
+  // non-null (attempts.ts, the guard in the WHERE), so Remove is refused on
+  // an account whose only method is this one -- which is exactly the account
+  // an accidental sign-in creates, and therefore the shape that produces
+  // this conflict. Delete always works; naming both would put an "if" in a
+  // four-step list.
+  //
+  // The steps do not warn that deleting destroys that account's rowing
+  // history: `Delete account` opens a confirm screen whose list is where
+  // those facts live (see the quarantine-box note below).
   if (view.code === "account_conflict" && view.targetProvider) {
     return (
-      <p className="notice auth-notice-error" role="alert">
-        That {name(view.targetProvider)} sign-in is already connected to another
-        Ergomatic account. Nothing changed.
-      </p>
+      <div className="notice auth-notice-error" role="alert">
+        <p className="auth-notice-lead">
+          That {name(view.targetProvider)} sign-in is already connected to
+          another Ergomatic account. Nothing changed.
+        </p>
+        <p className="auth-notice-cue">
+          If that account is yours too, you can move the{" "}
+          {name(view.targetProvider)} sign-in here:
+        </p>
+        <ol className="auth-notice-steps">
+          <li>Tap Sign out.</li>
+          <li>Sign in to that account through {name(view.targetProvider)}.</li>
+          <li>On &ldquo;You&rdquo;, tap Delete account.</li>
+          <li>
+            Sign in to this account again. On &ldquo;You&rdquo;, tap Add{" "}
+            {name(view.targetProvider)}.
+          </li>
+        </ol>
+      </div>
     );
   }
   if (view.code === "signin_failed" || view.code === "attempt_expired") {
