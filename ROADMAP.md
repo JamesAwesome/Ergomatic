@@ -1116,15 +1116,34 @@ while we are in here.
       `noPropertyAccessFromIndexSignature` without a real failure class; its
       current volume is mostly access style. **M**
 - [ ] **Two more order-dependent flakes, both seen during Phase JC's release
-      (2026-09-08/09), both filed here rather than shrugged at.** Neither
+      (2026-09-08/09), both filed here rather than shrugged at.** · dies
+      2026-11-14 · dated on the way past (campsite rule) by the 2026-09-14
+      flake hunt, which refuted (a)'s stated mechanism but did not reproduce
+      any of the three; the trigger below is real but a trigger is not a
+      schedule. Neither
       reproduced alone or on a re-run of the same command, so both are
       ORDER-dependent rather than broken tests, and both were observed by
       different agents in different worktrees.
       (a) `e2e/connected.spec.ts`'s genuine-`QuotaExceededError` leg failed
       once in a full run (550/551), passed alone, then passed 551/551 twice.
-      The test fills origin storage to a real quota error, which is exactly
-      the shape that makes a suite order-sensitive — a neighbour that writes
-      to the same origin afterwards would see a full store.
+      **Its stated mechanism is REFUTED, measured 2026-09-14.** This row
+      said the test "fills origin storage to a real quota error, which is
+      exactly the shape that makes a suite order-sensitive — a neighbour
+      that writes to the same origin afterwards would see a full store".
+      A neighbour cannot: `playwright.config.ts` sets no `storageState` and
+      reuses no context, so every test gets a fresh one and localStorage is
+      partitioned per test. Proved with a throwaway two-test probe in one
+      serial file — A wrote `zz.probe.key` and read it back (so the write
+      genuinely happened), B on the next test read `null`. Whatever is
+      order-dependent about this leg, **it is not the origin store it
+      fills**, and a hunt that starts from leaked localStorage starts in the
+      wrong place.
+      **A real robustness gap it did surface, FIXED in the same pass:**
+      `fillOriginStorage` was called OUTSIDE the `try` whose `finally` cleans
+      the junk up, so a throw in the headroom-freeing block between them left
+      the store full with no cleanup at all. The fill and the freeing now sit
+      inside the `try`, with `added` declared above it so the `finally` can
+      still see it.
       (b) `src/news/Releases.test.tsx`'s "renders each release's version,
       date, and every item" failed once in a full `--project client --project
       unit` run and passed both alone (6/6) and on an immediate full re-run

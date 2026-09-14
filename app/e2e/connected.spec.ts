@@ -1724,24 +1724,31 @@ test.describe("Series capture spec, Task 4: S3's real leg — a genuine QuotaExc
       window.__pm5FakeControls__?.tick(20_000);
     });
 
-    const added = await fillOriginStorage(page);
-    // Free a SMALL, calibrated amount of headroom — see this block's own
-    // header for why this specific window (enough for the tiny retry
-    // delta, nowhere near enough for the ~1.3 KB series delta) is what
-    // makes the first write throw and the sacrifice retry succeed.
-    const TARGET_FREE_BYTES = 600;
-    const headroomKeys: string[] = [];
-    let freed = 0;
-    while (freed < TARGET_FREE_BYTES && added.length > 0) {
-      const entry = added.pop()!;
-      headroomKeys.push(entry.key);
-      freed += entry.size;
-    }
-    await page.evaluate((keys) => {
-      for (const k of keys) localStorage.removeItem(k);
-    }, headroomKeys);
+    // DECLARED OUT HERE, FILLED INSIDE THE `try` (2026-09-14): the fill and
+    // the headroom-freeing that follows it both used to sit ABOVE the
+    // `try`, so a throw in either left the origin stuffed with `s3-junk-*`
+    // and the `finally` below never ran. `added` is what that `finally`
+    // cleans up, so it has to outlive the block that assigns it.
+    let added: { key: string; size: number }[] = [];
 
     try {
+      added = await fillOriginStorage(page);
+      // Free a SMALL, calibrated amount of headroom — see this block's own
+      // header for why this specific window (enough for the tiny retry
+      // delta, nowhere near enough for the ~1.3 KB series delta) is what
+      // makes the first write throw and the sacrifice retry succeed.
+      const TARGET_FREE_BYTES = 600;
+      const headroomKeys: string[] = [];
+      let freed = 0;
+      while (freed < TARGET_FREE_BYTES && added.length > 0) {
+        const entry = added.pop()!;
+        headroomKeys.push(entry.key);
+        freed += entry.size;
+      }
+      await page.evaluate((keys) => {
+        for (const k of keys) localStorage.removeItem(k);
+      }, headroomKeys);
+
       // END — staged, two presses, identical idiom to the main walk.
       await page.getByRole("button", { name: "End session" }).click();
       await expect(

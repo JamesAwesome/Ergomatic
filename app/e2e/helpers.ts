@@ -182,9 +182,22 @@ export async function stableBoundingBox(
 ): Promise<{ x: number; y: number; width: number; height: number } | null> {
   await locator.page().evaluate(() => document.fonts.ready);
   let prev = await locator.boundingBox();
+  // EVERY reading, not just the last (2026-09-14 flake hunt). This helper
+  // has one unexplained sighting — `design.spec.ts`'s "picking a effort
+  // level does not shift the chips below it", once in a 547-test parallel
+  // run, never reproduced — and the hunt could not settle its mechanism
+  // from a message naming only the final box. A trajectory distinguishes
+  // the two candidate stories on sight: a box still travelling in one
+  // direction is layout that genuinely had not finished, while a box
+  // oscillating or jumping once and holding is something else entirely.
+  // Costs one array of at most 21 small objects per call and changes no
+  // behaviour; it exists so the NEXT occurrence is evidence rather than
+  // another datapoint (RF19 — an instrument for the thing nothing watches).
+  const trail: (typeof prev)[] = [prev];
   for (let i = 0; i < 20; i++) {
     await locator.page().evaluate(() => new Promise(requestAnimationFrame));
     const next = await locator.boundingBox();
+    trail.push(next);
     if (
       prev !== null &&
       next !== null &&
@@ -212,7 +225,8 @@ export async function stableBoundingBox(
   // fail cannot be trusted when it succeeds.
   throw new Error(
     `stableBoundingBox: never settled in 20 animation frames (last=${JSON.stringify(prev)}). ` +
-      `The element is still moving — either it genuinely animates, or the caller measured before layout settled.`,
+      `The element is still moving — either it genuinely animates, or the caller measured before layout settled.\n` +
+      `Trajectory, frame by frame: ${JSON.stringify(trail)}`,
   );
 }
 
