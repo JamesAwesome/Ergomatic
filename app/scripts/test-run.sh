@@ -27,6 +27,39 @@ if [ "${1:-}" = "--self-test" ]; then
   printf '%s' "${FAKE_ERR:-}" > "$ERR"
 else
   [ -f "$HERE/test-run-advisory.sh" ] && . "$HERE/test-run-advisory.sh"
+  # CAPACITY BANNER (2026-09-14 flake hunt). One line, before the run, so
+  # every log carries the machine it ran on.
+  #
+  # WHY: `Releases.test.tsx` timed out at 5000ms on a SYNCHRONOUS test in
+  # CI -- a render with nothing to await missing a five-second deadline is
+  # the worker not being scheduled, not the test's logic. The obvious
+  # suspect is `vitest.config.ts`'s `maxWorkers`, which caps a laptop and
+  # is `undefined` in CI by design. But NOTHING IN CI PRINTED THE CORE
+  # COUNT OR THE RESOLVED WORKER COUNT, so the suspicion could not be
+  # checked against any run we already had -- and the ROADMAP row filed on
+  # it guessed "a two-core runner" from nothing, which is the RF16 failure
+  # this banner exists to make impossible next time. Capping workers is the
+  # SECOND step; this is the first, because capping to a number nobody
+  # measured against a baseline nobody can see is guessing twice.
+  #
+  # NODE-FREE ON PURPOSE: CI's `scripts` job runs this file's gate and has
+  # no `setup-node` step, so `nproc`/`sysctl` carry the line and the Node
+  # reading is best-effort. `availableParallelism()` is the one vitest
+  # actually derives its default from, which is why it is reported
+  # separately rather than assumed equal to the core count -- it respects
+  # cgroup limits and CPU affinity, and a container runner is exactly where
+  # the two diverge.
+  _cores="$( { command -v nproc >/dev/null 2>&1 && nproc; } \
+    || sysctl -n hw.ncpu 2>/dev/null || echo '?' )"
+  _par="$(node -p 'const o=require("os"); (o.availableParallelism?o.availableParallelism():o.cpus().length)' 2>/dev/null || echo '?')"
+  if [ -n "${ERGOMATIC_TEST_WORKERS:-}" ]; then
+    _cap="$ERGOMATIC_TEST_WORKERS (ERGOMATIC_TEST_WORKERS)"
+  elif [ -n "${CI:-}" ]; then
+    _cap="none -- vitest default (the config's cap is CI-inert by design)"
+  else
+    _cap="4 (the local default in vitest.config.ts)"
+  fi
+  echo "test-run: cores=$_cores availableParallelism=$_par maxWorkers=$_cap" >&2
   # BOTH streams tee live and are captured. Vitest writes failure DETAIL to
   # stderr -- measured 2026-09-08 on one failing client test: 504 bytes
   # stderr against 351 bytes stdout -- so buffering stderr to a file and

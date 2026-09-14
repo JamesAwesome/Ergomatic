@@ -1184,14 +1184,25 @@ while we are in here.
       `maxWorkers` key sits on the ROOT `test` block, so unit, client and
       integration files share ONE pool, and each integration file starts
       its own `PostgreSqlContainer`) and CI runs an uncapped pool against
-      containers on a two-core runner. **That is a concrete, testable
-      mechanism for a synchronous render missing a 5 s deadline, and it
-      costs one config line to test.**
-      **Deliberately NOT changed here.** Capping CI workers is a claim
-      about a cost nobody has measured (RF30), it would slow every run,
-      and it belongs with a before/after measurement rather than riding an
-      e2e PR. What this row now owes is that measurement, not another
-      sighting.
+      containers, under v8 coverage instrumentation (`pnpm test:coverage`),
+      with all three projects in one invocation. **That is a concrete,
+      testable mechanism for a synchronous render missing a 5 s deadline.**
+      **CORRECTION, 2026-09-14, same day it was filed:** this row first
+      said "a two-core runner". **That was never measured** — it was the
+      shape of an explanation, which is exactly what RF16 forbids. The
+      repo is PUBLIC, and GitHub's standard `ubuntu-latest` for public
+      repositories is documented as larger than two cores, so the number
+      was probably wrong as well as unsourced. **Nothing in CI prints the
+      runner's core count or vitest's resolved worker count today**, so
+      neither figure can be recovered from the logs we already have.
+      **THE FIRST THING THIS ROW OWES IS THEREFORE THE INSTRUMENT, NOT THE
+      EXPERIMENT** — print `os.availableParallelism()` and the worker count
+      vitest actually resolved, so the next red run carries its own
+      explanation. A before/after on a capped pool is the SECOND step and
+      is meaningless before the first: capping to a number we have not
+      measured against a baseline we cannot see is guessing twice.
+      **Deliberately NOT changed in #434.** Capping CI workers is a cost
+      nobody has measured (RF30) and would slow every run.
       (c) A third, on the SAME release run: `pnpm e2e` returned `553 passed`
       with exit 1, and the two immediately following full runs both returned
       `554 passed`. **Which test failed was not captured** — the tail showed

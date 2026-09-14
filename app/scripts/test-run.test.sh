@@ -137,6 +137,38 @@ case "$fork_out" in *"MEMORY KILL"*) r=0 ;; *) r=1 ;; esac
 check "the needle survives the real pipeline"        "0" "$r"
 case "$fork_out" in *"Allocation failed"*) r=0 ;; *) r=1 ;; esac
 check "the child's stderr reaches the caller"        "0" "$r"
+
+# --- the capacity banner (2026-09-14 flake hunt) ---
+# A diagnostic nothing watches is a diagnostic that quietly stops printing,
+# and this one exists precisely because CI had no record of the machine it
+# ran on. All three arms are pinned, because the CI arm -- the only one
+# that matters for the flake it was built for -- is the one no local run
+# ever exercises.
+cat > "$PIPEDIR/prints-summary" <<'SH'
+#!/bin/sh
+echo " Test Files  1 passed (1)"
+SH
+chmod +x "$PIPEDIR/prints-summary"
+_banner() {
+  env -u CI -u ERGOMATIC_TEST_WORKERS "$@" \
+    ERGOMATIC_TEST_RUN_BIN="$PIPEDIR/prints-summary" \
+    ERGOMATIC_TEST_PEERDIR="$PIPEDIR/peers" \
+    bash "$HERE/test-run.sh" 2>&1 | grep '^test-run:'
+}
+band="$(_banner)"
+case "$band" in *"maxWorkers=4 (the local default"*) r=0 ;; *) r=1 ;; esac
+check "the banner names the LOCAL cap off CI"        "0" "$r"
+case "$band" in *cores=[0-9]*) r=0 ;; *) r=1 ;; esac
+check "the banner carries a real core count"         "0" "$r"
+case "$band" in *availableParallelism=[0-9]*) r=0 ;; *) r=1 ;; esac
+check "the banner carries availableParallelism"      "0" "$r"
+ci_band="$(_banner CI=true)"
+case "$ci_band" in *"maxWorkers=none"*) r=0 ;; *) r=1 ;; esac
+check "the banner says UNCAPPED under CI"            "0" "$r"
+ovr_band="$(_banner ERGOMATIC_TEST_WORKERS=2)"
+case "$ovr_band" in *"maxWorkers=2 (ERGOMATIC_TEST_WORKERS)"*) r=0 ;; *) r=1 ;; esac
+check "the banner names an explicit override"        "0" "$r"
+
 rm -rf "$PIPEDIR"
 
 # --- capture (Task 2) ---
