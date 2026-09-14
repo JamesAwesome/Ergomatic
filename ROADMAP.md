@@ -3425,6 +3425,12 @@ Each needs erg time or a deliberate recording session.
   only the log detail's two components plus a comments-only edit to
   `fake.ts` — verified by filtering that diff to non-comment lines, which
   returned nothing.
+  **ONE OF THE FOUR IS NOW ACCOUNTED FOR, and it was not the runner.**
+  `stats.spec.ts:46` (`LIFETIME · 54,752 M`) is the delete-then-read race
+  closed under FLAKE 4 on 2026-09-14 — a real, reproducible bug in the
+  test, not load. That leaves three, and it weakens the inference below
+  rather than refuting it: a row that reads "four unrelated specs at once"
+  is a weaker signal once one of the four has its own cause.
   **Four unrelated specs in one run reads like the RUNNER, not like any one
   test** — the axe timeout is the most suggestive single data point, being
   the heaviest step in the suite. But one run is not a population, and this
@@ -3515,6 +3521,54 @@ Each needs erg time or a deliberate recording session.
   population than the full suite did. A green `--failed` re-run cannot
   distinguish flaky from order-dependent — the obvious next move is the one
   that cannot answer the question. Re-run the WHOLE suite.
+
+- **FLAKE 4 — the read-after-write class, censused and CLOSED 2026-09-14.**
+  · dies 2026-10-14 · a row and not a fix now only as bookkeeping: the two
+  remaining sites are fixed in the same PR, and this row exists to hold the
+  census result so nobody re-derives it.
+  **FLAKES 1 and 3 turned out to be one class:** a test mutates server
+  state through the UI, then reads that state across a navigation, with
+  nothing in between that proves the write landed. 1 had no wait; 3 had a
+  wait that could not go red. **A census of all 23 files in `app/e2e/`**
+  (422 navigation sites, 245 `toHaveURL` sites across 45 patterns,
+  cross-matched against every mutating call in `src/` traced to its
+  component; 74 candidates hand-read) **found the class is exactly two
+  sites wider, and both are now closed.**
+  - **`stats.spec.ts`** deleted a log then tapped YOU with the DELETE in
+    flight. **Not hypothetical — this one had already fired:** FLAKE 2's
+    row records `stats.spec.ts:46` failing on `LIFETIME · 54,752 M`, which
+    is this test. So one of FLAKE 2's four "unrelated specs in one run" was
+    never a runner symptom, which weakens that row's own inference.
+  - **`news.spec.ts`** marked an article read through a deliberately
+    fire-and-forget PUT, then reloaded — destroying the in-module barrier
+    that made its earlier assertions honest — and read a cold GET. **This
+    site had never been observed failing**; it is latent, and is recorded
+    as such rather than as a sighting.
+  **THE STRUCTURAL FACT THAT MAKES THIS CLASS BITE, worth more than either
+  fix:** none of the data hooks poll or refetch — `useWorkouts`,
+  `useBaselines`, `usePlan`, `usePreferences` each fetch once in a mount
+  effect keyed on a generation counter. **A stale one-shot fetch never
+  becomes fresh, so Playwright's auto-retry cannot rescue any read in this
+  class** — it only converts an instant failure into a timeout failure.
+  The intuition that "asserting visibility is safe because it auto-retries,
+  only exact counts are dangerous" is FALSE here, and FLAKE 1 is the
+  counterexample: it is a `toBeVisible` and it went red on CI twice.
+  **Proved in both directions, per site, by delaying the write.** Stats: a
+  2.5 s hold on the DELETE fails without the fix (`toContainText` gets the
+  pre-delete hero) and passes with it. News needed a 10 s hold to fail —
+  at 2.5 s the unfixed test still passed, so the window is wide, which is
+  consistent with it never having been seen. Its assertion was separately
+  shown non-vacuous by ABORTING the PUT: `Expected "6 UNREAD" / Received
+  "7 UNREAD"`.
+  **NO GENERIC HELPER, deliberately.** The suite's dominant idiom — assert
+  the app's own post-write transition — is strictly STRONGER than a network
+  wait, because it proves the write landed AND that the app did the right
+  thing with it. ~70 other mutation-then-navigate sites already use it and
+  were left alone. Only a fire-and-forget write has no transition to wait
+  on, and today that is one hook (`useArticleReads`). **That hook's barrier
+  protects same-document navigation only, by design** — so any future e2e
+  that marks-read then reloads reintroduces this with no gate to catch it.
+  **S**
 
   **Why these are separate rows and not one.** 1 and 2 were filed as one on
   2026-09-13 and split on 2026-09-14 once the doors-back repeat was
