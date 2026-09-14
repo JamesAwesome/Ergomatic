@@ -13118,3 +13118,57 @@ test.describe("/you/stats", () => {
     expect(await page.locator(".stats-bar-zero").count()).toBe(7);
   });
 });
+
+// Wave A PR 1 Task 4, Gate 0 ruling 1 (James, 2026-09-14): the quarantine
+// box sits BESIDE the sign-in methods list in landscape, never below it.
+// RC-24 is the reason this is a structural gate and not a capture: a
+// layout approved on non-structural evidence shipped broken, on the exact
+// failure mode this checks — a block pushed off a 320px-tall screen.
+test.describe("the account block, landscape (Wave A PR 1 Task 4)", () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    await page.route("**/api/auth/options", (route) =>
+      route.fulfill({
+        status: 200,
+        json: {
+          frontDoorEnabled: true,
+          apple: { native: true, web: true },
+          google: { native: true, web: true },
+        },
+      }),
+    );
+    await page.route("**/api/auth/methods", (route) =>
+      route.fulfill({ status: 200, json: { apple: true, google: true } }),
+    );
+    await signInViaBackdoor(page, {
+      email: `design-account-block-${testInfo.parallelIndex}@e2e.test`,
+      name: "Account Block Tester",
+    });
+  });
+
+  test("844x390: the quarantine box sits beside the methods list, and its whole height is on screen", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto("/you");
+    const list = page.locator(".auth-methods");
+    const box = page.locator(".auth-danger-zone");
+    await expect(
+      box.getByRole("button", { name: "Delete account" }),
+    ).toBeVisible();
+
+    const listBox = await stableBoundingBox(list);
+    const deleteBox = await stableBoundingBox(box);
+    if (!listBox || !deleteBox) throw new Error("account block not laid out");
+
+    // BESIDE, not below: the box's left edge is past the list's right edge.
+    // The 1px slack is for sub-pixel layout, not for a stacked column —
+    // stacked, `deleteBox.x` equals `listBox.x`, which is ~215px out.
+    expect(deleteBox.x).toBeGreaterThan(listBox.x + listBox.width - 1);
+
+    // And the whole of it is on screen. Below the list it is not: that is
+    // the RC-24 failure this ruling exists to prevent.
+    const viewportHeight = page.viewportSize()!.height;
+    expect(deleteBox.y).toBeGreaterThanOrEqual(0);
+    expect(deleteBox.y + deleteBox.height).toBeLessThanOrEqual(viewportHeight);
+  });
+});

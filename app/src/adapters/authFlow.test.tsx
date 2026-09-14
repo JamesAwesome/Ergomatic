@@ -1926,6 +1926,50 @@ describe("useAuthFlow", () => {
     expect(reads).toBe(2);
   });
 
+  // A SECOND TAP IS NOT A SECOND REMOVAL. `removeMethod` sets `busy` and
+  // the methods screen draws nothing for it, so the control has to go
+  // inert on its own or the round trip stays tappable: two DELETEs, the
+  // second answering `not_connected`, which renders a refusal notice for a
+  // removal that actually succeeded.
+  it("goes inert for the whole removal, so one tap cannot become two DELETEs", async () => {
+    const unlink = deferred<Response>();
+    let deletes = 0;
+    seam.api.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/methods")
+        return ok({ apple: true, google: true });
+      if (path === "/api/auth/methods/apple" && init?.method === "DELETE") {
+        deletes += 1;
+        return unlink.promise;
+      }
+      return new Response(null, { status: 404 });
+    });
+    let auth!: ReturnType<typeof useAuthFlow>;
+    function Harness() {
+      auth = useAuthFlow(() => {});
+      return (
+        <MemoryRouter>
+          <You
+            user={{ id: "rower", name: "Rower", email: "rower@example.test" }}
+            onSignedOut={() => {}}
+            authFlow={auth}
+          />
+        </MemoryRouter>
+      );
+    }
+    render(<Harness />);
+    const remove = await screen.findByRole("button", { name: "Remove Apple" });
+    await userEvent.click(remove);
+    expect(screen.getByRole("button", { name: "Remove Apple" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Remove Apple" }));
+    expect(deletes).toBe(1);
+    await act(async () => {
+      unlink.resolve(ok({ outcome: "unlinked", appleRevoked: true }));
+      await unlink.promise;
+    });
+    expect(auth.view).toStrictEqual({ kind: "unlinked", provider: "apple" });
+  });
+
   // All four unlink outcomes are HTTP 200. Reading the status tells you
   // nothing; only the body says what happened.
   it.each([["last_provider"], ["not_connected"], ["account_gone"]] as const)(

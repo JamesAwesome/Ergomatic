@@ -167,6 +167,11 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
   // disabled one with no explanation — the rower has nothing to act on, so
   // there is nothing to grey out.
   const removable = methods.methods.apple && methods.methods.google;
+  // A SECOND TAP IS NOT A SECOND REMOVAL. `removeMethod` sets `busy` and
+  // this screen draws nothing for it, so without this the control stayed
+  // live for the whole round trip: two DELETEs, the second answering
+  // `not_connected` — a refusal notice for a removal that succeeded.
+  const busy = auth.view.kind === "busy";
   // A delete re-proves a provider the rower ALREADY HOLDS (attempts.ts:
   // "A delete must name a provider the rower actually holds"), and that
   // provider's proof must be available on this surface. Apple first, to
@@ -197,6 +202,7 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
                     <button
                       className="auth-method-remove"
                       aria-label={`Remove ${name(provider)}`}
+                      disabled={busy}
                       onClick={() => void auth.removeMethod(provider)}
                     >
                       Remove

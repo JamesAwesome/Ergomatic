@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { vi, describe, it, expect, afterEach } from "vitest";
 import App from "./App";
 
@@ -64,14 +64,21 @@ describe("App", () => {
   // `/api/me` is deferred so the attempt read always wins the race the two
   // of them run on every OAuth return.
   //
-  // IT DOES NOT GATE THAT ORDERING. Removing App's `me.state === "loading"`
-  // guard leaves this test green: jsdom's router picks the pushed location
-  // up either way, and the browser-only failure it was written for did not
-  // reproduce here. The ordering evidence is the traced e2e run named in
-  // `App.tsx`'s own comment, not this test.
-  it("resumes a web delete return into the confirm screen", async () => {
+  // THE MIDDLE ASSERTION IS THE POINT. The END state is identical with and
+  // without App's `me.state === "loading"` guard, because jsdom's router
+  // picks the pushed location up either way — asserting only the screen
+  // gates nothing about WHEN the URL moved. So this pins the moment
+  // between: the attempt read has resolved, `me` has not, and the route
+  // tree that owns the URL is therefore unmounted. Nothing may write the
+  // URL there, because `AppRoutes`'s own root redirect will replace
+  // whatever it finds when it mounts.
+  it("resumes a web delete return into the confirm screen, and not before the route tree exists", async () => {
     window.history.replaceState(null, "", "/?authAttempt=del-app");
     let resolveMe!: (response: Response) => void;
+    let attemptAnswered!: () => void;
+    const attemptRead = new Promise<void>((resolve) => {
+      attemptAnswered = resolve;
+    });
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -92,7 +99,7 @@ describe("App", () => {
           );
         }
         if (url.includes("/api/auth/web/attempts/del-app")) {
-          return new Response(
+          const answer = new Response(
             JSON.stringify({
               outcome: "delete_ready",
               attemptId: "del-app",
@@ -102,12 +109,23 @@ describe("App", () => {
             }),
             { status: 200 },
           );
+          attemptAnswered();
+          return answer;
         }
         return new Response(JSON.stringify({}), { status: 404 });
       }),
     );
     render(<App />);
     await waitFor(() => expect(resolveMe).toBeDefined());
+    await attemptRead;
+    // Everything the attempt read sets off — the json parse, `acceptStep`,
+    // the view commit and the navigation effect — has run by here.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    // The route tree is not mounted yet. Nothing may move the URL.
+    expect(window.location.pathname).toBe("/");
+
     resolveMe(
       new Response(
         JSON.stringify({ user: { id: "u1", email: "a@x.com", name: "Ada" } }),
