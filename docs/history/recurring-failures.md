@@ -1007,7 +1007,6 @@ repo depend on them.
     and confirm it goes red, because "the surface appeared" is the one
     observable this fake will hand you for free.
 
-
 ## RF42
 
 42. **COUNTING HOW OFTEN A TEST FAILS BY LOOKING AT FAILED CI RUNS
@@ -1023,15 +1022,16 @@ repo depend on them.
     three weeks apart, and its reasoning rested on that sparseness: "a row
     and not a fix now because the two failures are three weeks apart". A
     sweep of the `e2e` job log of every attempt of every CI run — 1,359
-    runs, 1,318 `e2e` job entries, 1,082 carrying a Playwright summary —
-    found **NINE occurrences across seven branches in six days**, seven of
+    runs, 1,318 `e2e` job entries — found **NINE occurrences across seven
+    branches in six days**, seven of
     them retry-saved greens. The row was not slightly wrong; it was wrong
     about the shape of the problem, and the scoping argument built on it
     was wrong with it.
     **The sibling was worse.** `library.spec.ts`'s SOURCE filter test had
-    failed **TEN times across eight branches over a month** — always
-    `Expected: 303 / Received: 302` — and had turned a CI job red **zero
-    times**. Nobody had filed a row, because from the run list there was
+    failed **TEN times across eight branches over a month** — always one
+    row short (`Expected: 303 / Received: 302` on nine of the ten;
+    `301 / 300` on the oldest, before the library grew) — and had turned a
+    CI job red **zero times**. Nobody had filed a row, because from the run list there was
     nothing to see. Its cause turned out to be a URL gate that could never
     go red (RF21), fixed the same day the count was taken.
     **"Green on re-run" was invention that read as evidence.** The row said
@@ -1046,13 +1046,29 @@ repo depend on them.
     **Why the obvious substitute is not one.** `ci.yml` uploads
     `playwright-report` under `if: always()`, so the artifact DOES capture
     flakes — the register's own description of it ("uploaded on every red
-    run") understated it. But `retention-days: 14` means it cannot see
-    beyond a fortnight: four of the SOURCE filter's ten occurrences predate
-    the window and are gone. Job logs reach the first CI run
-    (2026-07-27). **Use the logs; the artifact is for looking at one
-    failure, not for counting them.**
-    **Two mechanical traps in the sweep itself**, both silent: `gh run list
-    --paginate` caps at 1000 results and truncated the history to
-    2026-08-19 without saying so, which must be worked around by windowing
-    the enumeration by date; and the job-log API needs
-    `--allow-escape-sequences` or `gh` writes a zero-byte file and exits 0.
+    run") understated it. THREE of the SOURCE filter's ten are unreachable
+    anyway, and for two different reasons: two expired out of the
+    `retention-days: 14` window, and the 2026-08-15 one predates
+    `196d817e` (2026-08-22, the PR #152 flake hunt), when the step was
+    still `if: failure()` and a flake's report was never written at all.
+    Artifacts alone would have found 7 of 10. Job logs currently reach the
+    first CI run (2026-07-27) — though that is a fact about this repo being
+    younger than GitHub's 90-day log retention, not a property of logs, and
+    it stops being true around 2026-10-25. **Use the logs; the artifact is
+    for looking at one failure, not for counting them.**
+    **Two mechanical traps in the sweep itself, and the first draft of this
+    entry got BOTH of them wrong** — which is this entry's own lesson
+    applied to itself, since each was one command away from being checked.
+    (1) The cap is on the Actions run-list API, not on `gh run list`, which
+    has no `--paginate` flag at all and simply errors `unknown flag`.
+    GitHub returns at most 1,000 results **whenever you filter** by
+    `actor`, `branch`, `check_suite_id`, `created`, `event`, `head_sha` or
+    `status`; unfiltered enumeration is not capped (measured: 1,396 runs
+    unfiltered, exactly 1000 with `&status=completed`). Date-windowing
+    works, but `created` is itself one of the seven capped parameters —
+    keep each window under 1,000 runs. (2) The job-log API failure is LOUD,
+    not silent: without `--allow-escape-sequences` `gh` writes a zero-byte
+    file and **exits 1**, with `the response contains terminal escape
+    sequences…` on stderr naming the exact flag. What hides it is a pipe —
+    `| tee`, `| grep` — because the pipeline's status is the last
+    command's, which is almost certainly how the wrong version was written.

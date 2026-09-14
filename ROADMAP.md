@@ -3367,8 +3367,9 @@ Each needs erg time or a deliberate recording session.
   this row knew about were simply the two that went red. **Counting CI
   failures by looking at failed runs undercounts a retried flake by
   however often the retry saves it** — measured here at 7 of 9. The count
-  came from grepping the `e2e` job log of all 1,082 Playwright-executing
-  jobs in the repo's CI history, not from the run list.
+  came from grepping the `e2e` job log of every attempt of every CI run in
+  the repo's history — 1,359 runs, 1,318 `e2e` job entries — not from the
+  run list.
   - Nine occurrences, 2026-09-08 to 2026-09-14, since the test landed in
     `4daeff32` (2026-09-07): seven `flaky` (job green), two `failed`.
     Seven distinct branches, `main` twice. Roughly 9 in 264 e2e jobs since
@@ -3435,18 +3436,27 @@ Each needs erg time or a deliberate recording session.
   matters enormously, because `playwright.config.ts:21` sets
   `retries: 1` under CI and a test saved by its retry leaves the job green
   (2 of 9 FLAKE 1 occurrences went red; 0 of 10 for FLAKE 3). So the
-  artifact is not blind to flakes. **What it IS blind to is anything older
-  than a fortnight:** `ci.yml:146` sets `retention-days: 14`. FLAKE 3's
-  oldest four occurrences are from 2026-08-15 onward and are simply gone.
-  A count from artifacts alone would have found 6 of that row's 10.
+  artifact is not blind to flakes. **THREE of FLAKE 3's ten are
+  unreachable anyway, for two different reasons:** two expired out of the
+  `retention-days: 14` window (`ci.yml:146`), and the 2026-08-15 one
+  predates `196d817e` (2026-08-22, the #152 flake hunt), when the step was
+  still `if: failure()` and a flake's report was never written at all.
+  Artifacts alone would have found 7 of 10.
   **What works, and what was actually used here:** fetch the `e2e` JOB LOG
-  for every attempt of every CI run and grep the Playwright summary lines.
-  Logs go back to the first CI run (2026-07-27) where artifacts do not,
-  it is 1,082 Playwright-executing jobs across the whole history, and it
-  completes in one pass. Two traps worth writing down: `gh run list
-  --paginate` silently caps at 1000 results, so the run enumeration must be
-  windowed by date; and the log API needs `--allow-escape-sequences` or
-  `gh` writes zero bytes without erroring.
+  for every attempt of every CI run (1,359 runs, 1,318 `e2e` job entries)
+  and grep the Playwright summary lines. Logs currently reach the first CI
+  run (2026-07-27) where artifacts do not — though that is this repo being
+  younger than GitHub's 90-day log retention, not a property of logs, and
+  it expires around 2026-10-25.
+  **Two traps, and the first write-up of this paragraph got both wrong.**
+  `gh run list` has no `--paginate` flag and errors `unknown flag`; the
+  1,000-result cap belongs to the Actions run-list API and applies only
+  when you FILTER (by `actor`, `branch`, `check_suite_id`, `created`,
+  `event`, `head_sha` or `status`) — unfiltered enumeration returned all
+  1,396. Date-windowing works, but `created` is itself a capped parameter,
+  so keep each window under 1,000. And the log API's failure is LOUD, not
+  silent: without `--allow-escape-sequences` `gh` writes zero bytes and
+  **exits 1** naming the flag on stderr. A pipe is what hides it.
   **Local context worth recording:** this machine was measured at ~750 MB
   free with swap at 3.7 of 5.1 GB while two sessions ran full suites at
   once, and two CI watchers were killed for memory the same day. Whether
@@ -3461,7 +3471,8 @@ Each needs erg time or a deliberate recording session.
   **The test:** `SOURCE filter › selecting MY WORKOUTS narrows to an
   authored workout, and CLEAR ALL restores the full library`. Every
   failure was the same assertion and the same shape — `toHaveCount`,
-  `Expected: 303 / Received: 302`, the numbers identical every time, the
+  `Expected: 303 / Received: 302` on nine of the ten and `301 / 300` on
+  the oldest (before the library grew) — always exactly one row short, the
   authored workout missing from the list read.
   **Ten occurrences, and it never once turned a CI job red.** Six under
   the current title (2026-09-06 to 2026-09-13, five branches) and four
@@ -3471,7 +3482,7 @@ Each needs erg time or a deliberate recording session.
   times. **All ten were `flaky`: Playwright's single CI retry saved every
   one**, so this bug lived a month in green builds and would never have
   surfaced from the failed-run list. Same measurement as FLAKE 1's — the
-  `e2e` job log of all 1,082 Playwright-executing jobs in CI history.
+  `e2e` job log of every attempt of every CI run.
   **THE CAUSE WAS A GATE THAT COULD NOT GO RED (RF21), and it was hiding in
   a regex.** After clicking "Save to library" the test waited with
   `await expect(page).toHaveURL(/\/library\/[^/]+$/)`. That pattern also

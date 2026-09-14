@@ -1194,24 +1194,16 @@ describes.
     test that fails once and passes on the retry leaves the job GREEN and
     prints `1 flaky` — invisible to `gh run list`, to `gh pr checks`, and
     to anyone reading the red runs. **The count lives in the JOB LOG, not
-    in the run list: fetch the `e2e` log for every ATTEMPT of every run and
-    grep Playwright's own summary lines.** The artifact is not the
-    substitute it looks like — `ci.yml` uploads `playwright-report` on
-    `if: always()` so it does see flakes, but `retention-days: 14` means it
-    cannot see last month at all, while logs reach the first CI run.
-    **Two mechanical traps in that sweep:** `gh run list --paginate`
-    silently caps at 1000 results and must be windowed by date, and the log
-    API needs `--allow-escape-sequences` or `gh` writes zero bytes without
-    erroring. **And never write "it passes on re-run" without pointing at
-    the attempt that passed** — a flaky occurrence was never re-run at all,
-    because the job was already green. _A ROADMAP row said a flake had
-    happened "TWICE"; the log sweep found NINE, seven of them retry-saved
-    greens. A sibling row's test had failed TEN times in a month and turned
-    a job red zero times. The same row called one failure "green on
-    re-run": that run has `attempts=1`, no second run exists for its SHA,
-    and it is still red on `main`. This repo has six runs in its entire
-    history with `run_attempt > 1`, so "it always passes on re-run" was
-    never sourceable from CI data._
+    the run list: fetch the `e2e` log for every ATTEMPT of every run and
+    grep Playwright's own summary lines.** The report artifact is not the
+    substitute it looks like — `ci.yml:146` keeps it only 14 days.
+    **And never write "it passes on re-run" without pointing at the
+    attempt that passed.** RF39 is this one's sibling — there the run is
+    ABSENT, here it is green and lying. _A ROADMAP row said a flake had
+    happened TWICE; the log sweep found NINE, seven of them retry-saved
+    greens. Of nineteen occurrences across two tests, SEVENTEEN were never
+    re-run at all, because the job was already green — so "it passes on
+    re-run" was never a statement about them._
 
 ## Commands
 
