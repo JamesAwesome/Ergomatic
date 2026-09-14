@@ -3428,20 +3428,25 @@ Each needs erg time or a deliberate recording session.
   test** — the axe timeout is the most suggestive single data point, being
   the heaviest step in the suite. But one run is not a population, and this
   row deliberately does not open a hunt.
-  **THE COUNTING METHOD, SETTLED 2026-09-14 — and the one this row used to
-  suggest is the wrong one.** It said to reach for the `playwright-report`
-  artifact, "already uploaded on every red run". That is exactly the
-  blind spot: `playwright.config.ts:21` sets `retries: 1` under CI, so a
-  test saved by its retry leaves a GREEN job, and red runs are the small
-  minority of occurrences — measured at 2 of 9 for FLAKE 1 and 0 of 10 for
-  FLAKE 3. A count built from red runs would have missed seventeen of
-  nineteen.
-  **What works:** fetch the `e2e` job log for every attempt of every CI
-  run and grep the Playwright summary lines. The whole history is 1,082
-  Playwright-executing jobs and it completes in one pass. Two traps worth
-  writing down: `gh run list --paginate` silently caps at 1000 results, so
-  the run enumeration must be windowed by date; and the log API needs
-  `--allow-escape-sequences` or `gh` writes zero bytes without erroring.
+  **THE COUNTING METHOD, SETTLED 2026-09-14 — and this row's own
+  description of the artifact was wrong in BOTH directions.** It said the
+  `playwright-report` artifact is "already uploaded on every red run".
+  `ci.yml:141` is `if: always()`, so it uploads on GREEN runs too — which
+  matters enormously, because `playwright.config.ts:21` sets
+  `retries: 1` under CI and a test saved by its retry leaves the job green
+  (2 of 9 FLAKE 1 occurrences went red; 0 of 10 for FLAKE 3). So the
+  artifact is not blind to flakes. **What it IS blind to is anything older
+  than a fortnight:** `ci.yml:146` sets `retention-days: 14`. FLAKE 3's
+  oldest four occurrences are from 2026-08-15 onward and are simply gone.
+  A count from artifacts alone would have found 6 of that row's 10.
+  **What works, and what was actually used here:** fetch the `e2e` JOB LOG
+  for every attempt of every CI run and grep the Playwright summary lines.
+  Logs go back to the first CI run (2026-07-27) where artifacts do not,
+  it is 1,082 Playwright-executing jobs across the whole history, and it
+  completes in one pass. Two traps worth writing down: `gh run list
+  --paginate` silently caps at 1000 results, so the run enumeration must be
+  windowed by date; and the log API needs `--allow-escape-sequences` or
+  `gh` writes zero bytes without erroring.
   **Local context worth recording:** this machine was measured at ~750 MB
   free with swap at 3.7 of 5.1 GB while two sessions ran full suites at
   once, and two CI watchers were killed for memory the same day. Whether

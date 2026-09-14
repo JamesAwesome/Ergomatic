@@ -1007,3 +1007,52 @@ repo depend on them.
     and confirm it goes red, because "the surface appeared" is the one
     observable this fake will hand you for free.
 
+
+## RF42
+
+42. **COUNTING HOW OFTEN A TEST FAILS BY LOOKING AT FAILED CI RUNS
+    (2026-09-14, the pre-Wave-A flake hunt).** `playwright.config.ts:21` is
+    `retries: process.env.CI ? 1 : 0`. A test that fails once and passes on
+    the retry leaves the job GREEN and prints `1 flaky` in a log nobody
+    opens. It does not appear in `gh run list`, in `gh pr checks`, or in
+    any sweep of red runs — and the retry is precisely the mechanism that
+    makes a flake tolerable enough to go unhunted for a month.
+    **What the register believed, and what was true.** The doors-back row
+    (`design.spec.ts`, "resetting the baselines brings the doors back") was
+    filed on 2026-09-13 and again on 2026-09-14 as having failed **TWICE**,
+    three weeks apart, and its reasoning rested on that sparseness: "a row
+    and not a fix now because the two failures are three weeks apart". A
+    sweep of the `e2e` job log of every attempt of every CI run — 1,359
+    runs, 1,318 `e2e` job entries, 1,082 carrying a Playwright summary —
+    found **NINE occurrences across seven branches in six days**, seven of
+    them retry-saved greens. The row was not slightly wrong; it was wrong
+    about the shape of the problem, and the scoping argument built on it
+    was wrong with it.
+    **The sibling was worse.** `library.spec.ts`'s SOURCE filter test had
+    failed **TEN times across eight branches over a month** — always
+    `Expected: 303 / Received: 302` — and had turned a CI job red **zero
+    times**. Nobody had filed a row, because from the run list there was
+    nothing to see. Its cause turned out to be a URL gate that could never
+    go red (RF21), fixed the same day the count was taken.
+    **"Green on re-run" was invention that read as evidence.** The row said
+    so of #419's main run. That run has `attempts=1`, no other run exists
+    for `ae4d8df2`, and it stands red on `main`. Of nineteen occurrences
+    across the two tests, exactly ONE has a re-run anyone can point at
+    (#430 attempt 2 at `3d4cde1b`, 581/581). For the seventeen flaky ones
+    there was nothing to re-run: the job was already green. This repo has
+    **six runs in its entire history** with `run_attempt > 1`, so the claim
+    was never sourceable from CI data at all — it was the shape of an
+    explanation, restated until it sounded measured (RF16).
+    **Why the obvious substitute is not one.** `ci.yml` uploads
+    `playwright-report` under `if: always()`, so the artifact DOES capture
+    flakes — the register's own description of it ("uploaded on every red
+    run") understated it. But `retention-days: 14` means it cannot see
+    beyond a fortnight: four of the SOURCE filter's ten occurrences predate
+    the window and are gone. Job logs reach the first CI run
+    (2026-07-27). **Use the logs; the artifact is for looking at one
+    failure, not for counting them.**
+    **Two mechanical traps in the sweep itself**, both silent: `gh run list
+    --paginate` caps at 1000 results and truncated the history to
+    2026-08-19 without saying so, which must be worked around by windowing
+    the enumeration by date; and the job-log API needs
+    `--allow-escape-sequences` or `gh` writes a zero-byte file and exits 0.
