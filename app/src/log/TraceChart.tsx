@@ -61,7 +61,20 @@ const CHART_WIDTH = 320;
  *  scale, rate at `28`, heart rate at `152`:
  *  `labelRoom(["1:50"], ADVANCE.plain, 6)` = ceil(4 x 5.40) + 6 = 28.
  *  The 42 it replaces was a hand bump from 36 after a clipped `1` read as
- *  `L` (`L:40.0`) on two committed captures. */
+ *  `L` (`L:40.0`) on two committed captures.
+ *
+ *  THE BOUND, STATED RATHER THAN ASSUMED (review finding). Four glyphs is
+ *  not a property of the format, it is a property of the DATA: nothing
+ *  clamps pace, and `traceModel` builds `domainY` from any non-zero work
+ *  reading, so a light-paddle stretch slower than 9:59 per 500 m puts a
+ *  five-glyph `10:00` on this axis and clips it by ~1 unit. **Not a
+ *  regression** — the 42 this replaces broke at the identical 600 s
+ *  threshold, with `fmtSplit`'s seven-glyph `10:00.0`. Left fixed rather
+ *  than derived per render because the y gutter sets the plot's left edge
+ *  and Gate 0A approved that frame; a per-render gutter is PR 3's to
+ *  propose, where the axis is already being reopened. Rate tops out at two
+ *  glyphs and heart rate at three, so pace is the only measure that can
+ *  reach this bound at all. */
 const LEFT_PAD = labelRoom(["1:50"], ADVANCE.plain, 6);
 const RIGHT_PAD = 8;
 const TOP_PAD = 10;
@@ -344,17 +357,26 @@ export default function TraceChart({
             is this axis's own selector — the shared `.trace-tick-label`
             class alone can't distinguish an x-label from a y-label now
             that both exist. */}
-        {ticksX.map((tick, i) => {
+        {ticksX.map((tick) => {
           const x = xScale(tick);
-          // Gate 0A, member M8: the last tick lands ON the plot's right
-          // edge and a CENTRED four-glyph label overhangs the viewBox by
-          // 2.80 units there, cutting its final glyph (`0:4(` — measured
-          // 2026-09-14, `axisProbe.spec.ts`, and visible in the committed
-          // before-capture). Anchoring the two extremes inward costs no
-          // layout: the mark stays where it was, only the text hangs the
-          // other way.
+          const label = formatTick(tick * 10, "time");
+          // Gate 0A, member M8: a tick sitting ON the plot's right edge
+          // carries a CENTRED label that overhangs the viewBox by 2.80
+          // units and loses its final glyph (`0:4(` — measured 2026-09-14,
+          // and visible in this branch's own before-capture). The mark
+          // never moves; only the text hangs the other way, and ONLY when
+          // it has to.
+          //
+          // DERIVED FROM THE LABEL, not from its index (invariant I4, and
+          // review caught the first draft doing the latter). A tick lands
+          // on the edge only when the trace's duration is an exact
+          // multiple of the chosen step, and the first tick — `chooseTicks`
+          // always emits `0` — never reaches an edge at all, so anchoring
+          // by index pulled labels off their own marks on every other
+          // trace to prevent a clip that was not happening there.
+          const half = (label.length * ADVANCE.plain) / 2;
           const anchor =
-            i === 0 ? "start" : i === ticksX.length - 1 ? "end" : "middle";
+            x - half < 0 ? "start" : x + half > CHART_WIDTH ? "end" : "middle";
           return (
             <g key={tick}>
               <line
@@ -372,7 +394,7 @@ export default function TraceChart({
                 textAnchor={anchor}
                 dominantBaseline="hanging"
               >
-                {formatTick(tick * 10, "time")}
+                {label}
               </text>
             </g>
           );

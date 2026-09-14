@@ -239,8 +239,11 @@ async function assertNoChartLabelEscapesItsViewBox(
       chart: string;
       text: string;
       x: number;
+      y: number;
       width: number;
+      height: number;
       vbWidth: number;
+      vbHeight: number;
       side: string;
     }[] = [];
     for (const svg of Array.from(document.querySelectorAll("svg"))) {
@@ -248,16 +251,26 @@ async function assertNoChartLabelEscapesItsViewBox(
       if (vb.width === 0) continue;
       for (const t of Array.from(svg.querySelectorAll("text"))) {
         const box = (t as SVGGraphicsElement).getBBox();
+        // All four edges, not two: the first draft compared x only while
+        // its name and its proof contract claimed the whole viewBox, so a
+        // label pushed past the top or bottom would have passed a gate
+        // that said it could not (review finding; RF26 — never let a gate
+        // be written up as proving more than it checks).
         const left = box.x < vb.x;
         const right = box.x + box.width > vb.x + vb.width;
-        if (!left && !right) continue;
+        const above = box.y < vb.y;
+        const below = box.y + box.height > vb.y + vb.height;
+        if (!left && !right && !above && !below) continue;
         bad.push({
           chart: svg.getAttribute("aria-label")?.slice(0, 40) ?? "(unlabelled)",
           text: t.textContent ?? "",
           x: Number(box.x.toFixed(2)),
+          y: Number(box.y.toFixed(2)),
           width: Number(box.width.toFixed(2)),
+          height: Number(box.height.toFixed(2)),
           vbWidth: vb.width,
-          side: left ? "left" : "right",
+          vbHeight: vb.height,
+          side: left ? "left" : right ? "right" : above ? "above" : "below",
         });
       }
     }

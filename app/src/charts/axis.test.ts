@@ -7,7 +7,6 @@ import {
   niceMax,
 } from "./axis.js";
 import { domainFromReadings } from "./scale.js";
-import { fmtSplit } from "../../domain/format.js";
 
 describe("chooseTicks", () => {
   it("returns round values that fall inside the domain", () => {
@@ -66,11 +65,6 @@ describe("chooseTicks", () => {
 });
 
 describe("formatTick", () => {
-  it("formats a pace tick with the house fmtSplit formatter, never a bespoke one", () => {
-    expect(formatTick(130, "pace")).toBe("2:10.0");
-    expect(formatTick(130, "pace")).toBe(fmtSplit(130));
-  });
-
   it("formats a rate tick as a rounded stroke-rate number", () => {
     expect(formatTick(28.4, "rate")).toBe("28");
     expect(formatTick(28.6, "rate")).toBe("29");

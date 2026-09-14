@@ -20,8 +20,9 @@
 // present."
 //
 // UNITS: `Sample.p`/`Sample.t` are stored in TENTHS (spec 2's own C2
-// logbook shape) — `axis.ts`'s `formatTick("pace")` delegates straight to
-// `fmtSplit`, which takes TOTAL SECONDS, and §3's own minimum-domain-height
+// logbook shape) — `axis.ts`'s pace gridline (`formatTick(…, "split")`
+// since Gate 0A; it was `"pace"`) takes TOTAL SECONDS, and §3's own
+// minimum-domain-height
 // table is stated in seconds ("pace 10 s/500m"), not tenths. This module
 // converts `p`/`t` to real seconds ONCE, at the boundary, so every
 // downstream consumer (the domain, the ticks, the SVG scale, the summary)
