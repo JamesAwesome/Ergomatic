@@ -6539,6 +6539,12 @@ test("countdown-blocked-start-landscape", async ({ page }) => {
 // every number on screen is one the pipeline computed, not one the capture
 // seeded.
 //
+// ONE EXCEPTION, STATED RATHER THAN IMPLIED (Phase TD, TD-5): `justrow-log`
+// delivers a bare 0x0039, so three of its six machine tiles read a dash —
+// hardware sends 0x003A too and renders five of six. See that test's own
+// comment for the measured delivery window and why the frame is not a
+// picture of what the erg produces.
+//
 // THE FIXTURE'S RATE VARIES ON PURPOSE (PM final gate, B4): the first cut
 // held 4 m/s at every frame, which made the reviewer instruction
 // "recompute AVG = 500 × t ÷ d by eye" unfalsifiable — the arithmetic
@@ -6750,8 +6756,72 @@ test("justrow-log", async ({ page }) => {
   await openJustRowLive(page, "screenshots-justrow-log@e2e.test");
   await page.getByRole("button", { name: "End session" }).click();
   await page.getByRole("button", { name: "Tap again to end" }).click();
+
+  // THE END-OF-WORKOUT SUMMARY, delivered inside the window three previous
+  // attempts missed. The window was MEASURED in a real browser (branch
+  // `td5-spike`, commit `6ea6fdb9`, four orderings) by dumping the ring the
+  // app itself stashes at `ergomatic:last-session-log` — the browser-side
+  // observable Phase TD's spec §1.3 said was missing:
+  //
+  //   - it OPENS when the driver sees the `terminated` status frame, 15/24/
+  //     52/86 ms after `terminate-sent` across those four runs (the fake's
+  //     terminate auto-cycle drains one status per 100 ms `tick`);
+  //   - it CLOSES ~1800 ms after the ended hand-off opens — the hold is
+  //     `BURST_LINGER_MS` (2000 ms) and `summary-recorded` lands 200 ms
+  //     after the 0x0039, on the hash sub-window;
+  //   - delivering on the second End tap, which is what every earlier
+  //     attempt did, put the frame **9 ms early**: refused
+  //     `summary-reconciled :: out-of-window`, nothing filed, and the tier
+  //     block absent from the capture that exists to show it.
+  //
+  // 400 ms sits ~310 ms past the opening bound and ~1.4 s inside the
+  // closing one. The URL check is the positive proof that the surface has
+  // NOT navigated at the moment of delivery — `connected.spec.ts:919`'s own
+  // idiom on the programmed arm, asserted AFTER the wait rather than before
+  // it, because a delivery into a navigated page lands nowhere.
+  // **`Wrapping up` is deliberately not that check:**
+  // `ConnectedSurface.tsx:466-472` renders that line on every ended state,
+  // held or not, so it proves nothing about the hold (spec §1.3).
+  await page.waitForTimeout(400);
+  await expect(page).toHaveURL(/\/justrow$/);
+  await page.evaluate(() => {
+    // The accumulator's own reading at the End tap (0:16, 76 m — the
+    // fixture's 6 m/s leg), so every figure in the frame recomputes from the
+    // two beside it: AVG SPLIT = 500 x 16 / 76 = 1:45.3, and
+    // AVG WATTS = round(2.8 / (16/76)^3) = 300.
+    window.__pm5FakeControls__?.deliverSummary({
+      elapsedSeconds: 16,
+      meters: 76,
+    });
+  });
+
   await expect(page).toHaveURL(/\/justrow\/log$/, { timeout: 15_000 });
   await expect(page.getByText("EFFORT", { exact: true })).toBeVisible();
+
+  // THREE OF THE SIX TILES CARRY FIGURES AND THREE READ A DASH, which is
+  // the state this frame deliberately shows (spec §4.3, ruled by James
+  // 2026-09-12 on this exact cost): CALORIES and CAL / HOUR live on 0x003A,
+  // which a bare `deliverSummary` never writes, and all 90 fixture frames
+  // carry `heartRateBpm: null`. **So this capture is NOT what the hardware
+  // renders** — a real free row carries 0x003A, and the 2026-08-31 walk's
+  // own bytes render five of six through the real driver, hook and store
+  // (`justRowReplay.test.ts:350-355`). RATE 24 and DRAG 128 are the fake's
+  // own summary defaults (`fake.ts:928`, `:942`).
+  //
+  // The LOCATORS are the gate; the PNG is only the record (RF21 — a picture
+  // cannot go red). The biting mutation is this delivery's timing: at
+  // +0 ms instead of +400 the tier is absent and these assertions fail.
+  // All six, by position and exact text — `:4119-4124`'s own idiom for this
+  // same block, which pins the dashes as hard as the figures.
+  const tiles = page.getByTestId("summary-machine-tier").getByRole("group");
+  await expect(tiles).toHaveCount(6);
+  await expect(tiles.nth(0)).toHaveText("AVG WATTS300");
+  await expect(tiles.nth(1)).toHaveText("CALORIES—");
+  await expect(tiles.nth(2)).toHaveText("CAL / HOUR—");
+  await expect(tiles.nth(3)).toHaveText("RATE24");
+  await expect(tiles.nth(4)).toHaveText("DRAG128");
+  await expect(tiles.nth(5)).toHaveText("AVG HR—");
+
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "justrow-log.png"),
   });
