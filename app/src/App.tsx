@@ -28,6 +28,11 @@ function AppContent() {
   // from here — the push is not merely late, it is gone. Waiting for
   // `me.state` is what puts the two in a defined order: the tree mounts and
   // does its redirect, and only then does this effect move the URL.
+  // PRIMARY, read in our own installed copy rather than the docs:
+  // react-router 7.18.3 (this repo's lockfile), function `Navigate` at
+  // `dist/development/chunk-7SIULPXI.js:9945`, whose body ends
+  // `React.useEffect(() => { navigate(JSON.parse(jsonPath), { replace:
+  // replace2, state, relative }); }, [...])` — an effect, and `replace`.
   //
   // WHAT MOTIVATED IT (2026-09-14, Wave A PR 1 Task 4).
   // `/api/auth/web/attempts/<id>` and `/api/me` resolve independently on
