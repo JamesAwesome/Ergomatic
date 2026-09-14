@@ -430,6 +430,17 @@ button.auth-method-row {
    own): --accent on --page = 5.35:1, which clears AA's 4.5:1 for the
    labels and 3:1 for the borders. Nothing here introduces a colour the
    approved table did not already carry. */
+/* The notice sits above BOTH columns, not inside the list. `.auth-methods`
+   loses its own top margin when the notice supplies one, so the portrait
+   spacing is unchanged from before this task. */
+.auth-account-notice {
+  margin-top: 16px;
+}
+
+.auth-account-notice + .auth-methods {
+  margin-top: 0;
+}
+
 .auth-method-tail {
   display: flex;
   align-items: center;
@@ -12778,6 +12789,10 @@ section:not(.news-pinned) .news-row:last-of-type {
     align-items: center;
     gap: 20px;
     grid-template-columns: 1fr 216px;
+  }
+
+  .auth-account-notice {
+    grid-column: 1 / -1;
   }
 
   .auth-danger-zone {

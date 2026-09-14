@@ -179,8 +179,11 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
         : undefined;
   return (
     <div className="auth-account-block">
+      {/* OUTSIDE the list section, so it spans both columns in landscape.
+          Inside it, the notice wraps to three lines in a half-width column
+          and drags the quarantine box beside it off the fold. */}
+      {notice && <div className="auth-account-notice">{notice}</div>}
       <section className="auth-methods" aria-labelledby="auth-methods-heading">
-        {notice}
         <h2 id="auth-methods-heading">SIGN-IN METHODS</h2>
         <div className="auth-method-list">
           {(["apple", "google"] as const).map((provider) => {

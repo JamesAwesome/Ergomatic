@@ -437,3 +437,202 @@ test("a cancelled link return sends the rower to You once and releases ordinary 
     page.getByRole("link", { name: "LIBRARY", exact: true }),
   ).toHaveAttribute("aria-current", "page");
 });
+
+// -- Wave A PR 1 Task 4: removing a method, and deleting the account -------
+
+test("removing a method re-reads the list rather than trusting the screen", async ({
+  page,
+}, testInfo) => {
+  let removed = false;
+  let unlinks = 0;
+  await enableFrontDoor(page);
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({
+      status: 200,
+      json: removed
+        ? { apple: false, google: true }
+        : { apple: true, google: true },
+    }),
+  );
+  await page.route("**/api/auth/methods/apple", async (route) => {
+    unlinks += 1;
+    removed = true;
+    // EVERY unlink outcome is HTTP 200 — a screen that reads the status
+    // learns nothing. The refusal case below proves the other half.
+    await route.fulfill({
+      status: 200,
+      json: { outcome: "unlinked", appleRevoked: true },
+    });
+  });
+  await signInViaBackdoor(page, {
+    email: `remove-method-${testInfo.parallelIndex}@e2e.test`,
+    name: "Remove Tester",
+  });
+
+  await page.goto("/you");
+  const removals = page.getByRole("button", { name: /^Remove / });
+  await expect(removals).toHaveCount(2);
+  // 44px is a hard requirement, and an inline control's own box cannot
+  // prove it — this is a real button, so its bounding box is the answer.
+  const box = await page
+    .getByRole("button", { name: "Remove Apple" })
+    .boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+
+  await page.getByRole("button", { name: "Remove Apple" }).click();
+  await expect(page.getByRole("button", { name: "Add Apple" })).toBeVisible();
+  // The last remaining method offers no Remove at all, rather than a
+  // disabled control with no explanation.
+  await expect(page.getByRole("button", { name: /^Remove / })).toHaveCount(0);
+  expect(unlinks).toBe(1);
+});
+
+test("a removal the server refuses says which of the three things happened", async ({
+  page,
+}, testInfo) => {
+  await enableFrontDoor(page);
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({ status: 200, json: { apple: true, google: true } }),
+  );
+  await page.route("**/api/auth/methods/apple", (route) =>
+    route.fulfill({ status: 200, json: { outcome: "account_gone" } }),
+  );
+  await signInViaBackdoor(page, {
+    email: `remove-refused-${testInfo.parallelIndex}@e2e.test`,
+    name: "Refusal Tester",
+  });
+
+  await page.goto("/you");
+  await page.getByRole("button", { name: "Remove Apple" }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "This account no longer exists. Nothing was changed.",
+  );
+});
+
+test("the delete confirm names what goes, and its outcome reaches the Welcome screen", async ({
+  page,
+}, testInfo) => {
+  let deleted = false;
+  await enableFrontDoor(page);
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({ status: 200, json: { apple: true, google: true } }),
+  );
+  await page.route("**/api/auth/web/attempts/delete-e2e", (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        outcome: "delete_ready",
+        attemptId: "delete-e2e",
+        purpose: "delete",
+        targetProvider: "apple",
+        expiresAt: "2026-09-14T00:05:00.000Z",
+      },
+    }),
+  );
+  await page.route("**/api/auth/web/attempts/delete-e2e/delete", (route) => {
+    deleted = true;
+    return route.fulfill({
+      status: 200,
+      json: { outcome: "deleted", appleRevoked: false },
+    });
+  });
+  // The real session survives the mocked delete, so this is what makes the
+  // re-read answer the way a deleted account's would.
+  await page.route("**/api/me", (route) =>
+    deleted
+      ? route.fulfill({ status: 401, json: { error: "unauthenticated" } })
+      : route.fallback(),
+  );
+  await signInViaBackdoor(page, {
+    email: `delete-account-${testInfo.parallelIndex}@e2e.test`,
+    name: "Delete Tester",
+  });
+
+  // The supported producer: the web callback lands the rower back here.
+  await page.goto("/?authAttempt=delete-e2e");
+  await expect(page).toHaveURL(/\/you\/sign-in-methods$/);
+  await expect(
+    page.getByRole("heading", { name: "Delete this account?" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Deletes your workouts, session log, plan, baselines, and test history.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByText("Signs you out on this device.")).toBeVisible();
+  // Gate 0 ruling 2: the link row goes with the account, but this screen
+  // does not claim it — we never deauthorize at Concept2's end.
+  await expect(page.getByText(/concept ?2/i)).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Delete account" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Your account is deleted. Ergomatic is still listed in your Apple ID settings, under Sign in with Apple. You can remove it there.",
+  );
+  await expect(
+    page.getByRole("button", { name: "Continue with Apple" }),
+  ).toBeVisible();
+});
+
+test("a failed web delete says so instead of bouncing the rower to a silent screen", async ({
+  page,
+}, testInfo) => {
+  await enableFrontDoor(page);
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({ status: 200, json: { apple: true, google: true } }),
+  );
+  await signInViaBackdoor(page, {
+    email: `delete-failed-${testInfo.parallelIndex}@e2e.test`,
+    name: "Delete Failure Tester",
+  });
+
+  // Exactly what `frontDoorRoutes.ts`'s callback redirect builds when a
+  // delete re-auth fails (finding I1).
+  await page.goto(
+    "/?authError=invalid_proof&authPurpose=delete&authProvider=apple",
+  );
+  await expect(page).toHaveURL(/\/you$/);
+  await expect(page.getByRole("alert")).toHaveText(
+    "We couldn’t confirm it was you. Nothing was deleted.",
+  );
+});
+
+// THE ORDERING THIS FLOW RACES ON. `/api/me` and the attempt read fire
+// together on every web OAuth return; whichever wins is chance. Holding
+// `/api/me` back makes the attempt win EVERY run, which is the ordering
+// that used to strand the rower on Today.
+test("a delete return that outruns the session read still reaches the confirm screen", async ({
+  page,
+}, testInfo) => {
+  await enableFrontDoor(page);
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({ status: 200, json: { apple: true, google: true } }),
+  );
+  await page.route("**/api/auth/web/attempts/delete-slow-me", (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        outcome: "delete_ready",
+        attemptId: "delete-slow-me",
+        purpose: "delete",
+        targetProvider: "apple",
+        expiresAt: "2026-09-14T00:05:00.000Z",
+      },
+    }),
+  );
+  await signInViaBackdoor(page, {
+    email: `delete-slow-me-${testInfo.parallelIndex}@e2e.test`,
+    name: "Slow Session Tester",
+  });
+
+  // Registered AFTER the backdoor sign-in, so only the return load pays it.
+  await page.route("**/api/me", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await route.fallback();
+  });
+  await page.goto("/?authAttempt=delete-slow-me");
+  await expect(
+    page.getByRole("heading", { name: "Delete this account?" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/you\/sign-in-methods$/);
+});

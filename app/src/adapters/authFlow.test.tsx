@@ -2183,6 +2183,80 @@ describe("useAuthFlow", () => {
     expect(result.current.destination).toBe("/you");
   });
 
+  it("deletes nothing when no re-proved attempt is live", async () => {
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      throw new Error(`unexpected ${path}`);
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+    await act(async () => result.current.confirmDelete());
+    expect(result.current.view).toStrictEqual({ kind: "idle" });
+  });
+
+  // AN ATTEMPT IS NOT AN AUTHORISATION. A live LINK attempt carries the
+  // same `attemptId` shape, and the guard is what stops `confirmDelete`
+  // posting a delete against it — `!active` alone cannot, because here
+  // there is an active operation.
+  it("refuses to delete against a live attempt that proved something else", async () => {
+    const posts: string[] = [];
+    seam.api.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (init?.method === "POST") posts.push(path);
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts")
+        return ok({
+          outcome: "authorize",
+          attemptId: "link-live",
+          purpose: "link",
+          targetProvider: "apple",
+          expiresAt: "2026-09-14T00:05:00.000Z",
+          provider: "google",
+          stage: "reauth",
+          nonce: "n",
+          state: "s",
+        });
+      return new Response(null, { status: 404 });
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+    await act(async () => result.current.prepareLink("apple"));
+    await act(async () => result.current.startPreparedLink());
+    await act(async () => result.current.confirmDelete());
+    expect(posts).not.toContain("/api/auth/web/attempts/link-live/delete");
+    expect(result.current.view).not.toStrictEqual({
+      kind: "deleted",
+      appleRevoked: false,
+    });
+  });
+
+  it("says nothing was deleted when the delete request never reached the server", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=del-offline");
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/del-offline")
+        return ok({
+          outcome: "delete_ready",
+          attemptId: "del-offline",
+          purpose: "delete",
+          targetProvider: "google",
+          expiresAt: "2026-09-14T00:05:00.000Z",
+        });
+      if (path === "/api/auth/web/attempts/del-offline/delete")
+        throw new TypeError("offline");
+      return new Response(null, { status: 404 });
+    });
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() =>
+      expect(result.current.view).toStrictEqual({ kind: "delete_ready" }),
+    );
+    await act(async () => result.current.confirmDelete());
+    expect(result.current.view).toStrictEqual({
+      kind: "error",
+      purpose: "delete",
+      code: "signin_failed",
+    });
+  });
+
   it("refuses to start a delete on a provider this surface cannot re-prove", async () => {
     seam.api.mockImplementation(async (path: string) => {
       if (path === "/api/auth/options")
