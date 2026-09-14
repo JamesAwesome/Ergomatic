@@ -89,11 +89,26 @@ export type UnlinkOutcome =
   | { outcome: "not_connected" }
   | { outcome: "account_gone" };
 /** A deletion has ONE success shape: the account is gone either way.
- *  `appleRevoked` says whether NOTHING IS LEFT OUTSTANDING AT APPLE — every
- *  grant we held was accepted by Apple, OR there was no grant to revoke. It
- *  is vacuously `true` for a Google-only account, because `createAppleRevoke`
+ *  `appleRevoked` says whether EVERY CREDENTIAL THIS DELETION REVOKED was
+ *  accepted by Apple — the account's own `apple_grants` rows, plus this
+ *  attempt's own credential — or there was nothing to revoke. It is
+ *  vacuously `true` for a Google-only account, because `createAppleRevoke`
  *  returns `true` on an empty list, so it never means "Apple was contacted".
- *  False means we held at least one grant and at least one revoke failed.
+ *  False means at least one of those revokes failed.
+ *
+ *  IT IS NOT "nothing is left outstanding at Apple", and the difference is
+ *  reachable. `deleteAccount` revokes exactly the set above
+ *  (`server/auth/attempts.ts`, the `held` array). A rower signed in on both
+ *  phone and web can hold a SECOND live attempt on the other session,
+ *  carrying its own `auth_attempts.apple_refresh_token`, and that row is
+ *  not in the set: `DELETE FROM users` takes it by cascade through
+ *  `sessions` (`db/schema.ts` — `sessions.user_id` and
+ *  `auth_attempts.original_session_id` are both `onDelete: "cascade"`) with
+ *  no revoke call, while this flag still reads `true`. Deferred on James's
+ *  ruling, not overlooked — closing it edits the deletion transaction,
+ *  which is triad work; the reasoning is in the ROADMAP row "A cancelled or
+ *  discarded attempt's `auth_attempts.apple_refresh_token` is never revoked
+ *  at Apple".
  *
  *  Task 4 moved this here from `server/auth/attempts.ts`: the client is now a
  *  consumer, and one declaration both sides compile against is what makes a
