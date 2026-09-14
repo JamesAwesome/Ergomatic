@@ -125,7 +125,7 @@ test("axis probe: a seven-glyph metres tick", async ({ page }) => {
   await seedGate0(page);
   // One more row, big enough that the season's own niceMax crosses 100,000
   // and the gridline labels grow a seventh glyph.
-  const created = await page.evaluate(async () => {
+  const bigId = await page.evaluate(async () => {
     const res = await fetch("/api/logs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -139,9 +139,15 @@ test("axis probe: a seven-glyph metres tick", async ({ page }) => {
         distanceMeters: 120000,
       }),
     });
-    return { ok: res.ok, text: await res.text() };
+    const text = await res.text();
+    if (!res.ok) throw new Error(text);
+    return (JSON.parse(text) as { id: string }).id;
   });
-  if (!created.ok) throw new Error(created.text);
+  // INSIDE the season window: `seasonSummary` filters `{from: season.start,
+  // to: today}` and `today` is the BROWSER's clock (the seed's own
+  // 2026-09-12). A row left at server-now lands AFTER today and is excluded,
+  // which is why the first attempt at this frame did not move the maximum.
+  await backdateLog(bigId, "2026-09-10T16:00:00Z");
   await page.goto("/you/stats");
   await expect(page.getByRole("heading", { name: "Stats" })).toBeVisible();
   await page.getByText("2K 1:54.0").waitFor();
