@@ -28,7 +28,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     version: "v0.49.0",
     date: "2026-09-14",
     items: [
-      "Chart numbers stop losing their first digit. Once a season passed 100,000 m the labels down the side of the Stats charts were cut off at the card edge — they now read 150k, and every chart works out how much room its own widest label needs instead of guessing.",
+      "Chart numbers stop losing their first digit. Once a season passed 100,000 m the labels down the side of the Stats charts were cut off at the card edge. They now read 150k, and every chart works out how much room its own widest label needs instead of guessing.",
       "Picking a custom date range on Stats no longer repeats those dates back at you underneath the two pickers. It still speaks up when a range holds nothing, so an empty stretch still reads NO ROWS.",
       "If a sign-in belongs to another Ergomatic account, the recovery on You is now four numbered steps instead of a paragraph, and each one names a button you can actually find.",
     ],
