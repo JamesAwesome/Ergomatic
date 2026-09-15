@@ -414,6 +414,51 @@ export function createAttempts(
         return save(tx, { ...a, stage });
       });
     },
+    /** WAVE A PR2: the `confirm` stage's THIRD exit.
+     *
+     *  Today `confirm` has two — `confirm()` creates the account, and the
+     *  client cancels the attempt outright, destroying a subject the rower
+     *  just proved. This carries the attempt forward instead: the proven
+     *  identity stays in its `verified_*` columns while the rower takes a
+     *  second trip to the provider they usually use.
+     *
+     *  ONE STATEMENT, AND THAT IS NOT A STYLE CHOICE. A CHECK is evaluated
+     *  per statement, and `auth_attempts_session_check`'s signin arm is
+     *  keyed on stage: `SET stage='reauth_authorize'` ALONE lands on a row
+     *  with no `existing_provider`, which the arm refuses with 23514. The
+     *  stage and the provider have to cross together. `save()` cannot do it
+     *  — it writes neither governed column — so this transition owns its own
+     *  UPDATE.
+     *
+     *  `state` AND `nonce` ARE FRESHLY MINTED. The second authorization is a
+     *  new round trip to a provider; reusing the first's values would accept
+     *  a replayed callback.
+     *
+     *  `expires_at` IS UNTOUCHED HERE. Gate 0 ruling 2 (James, 2026-09-15)
+     *  refreshes the window at the SECOND EXCHANGE, where the rower is about
+     *  to be shown a screen they have to read — not at this transition,
+     *  which costs them nothing but a redirect. */
+    async followThrough(expected: Attempt): Promise<AttemptResult> {
+      return transaction(async (tx) => {
+        const a = await bound(tx, expected);
+        if (a.purpose !== "signin" || a.stage !== "confirm")
+          throw new AuthFailure("attempt_expired");
+        // Two providers, so the rower's usual one is the other one. If a
+        // third is ever added this stops being derivable and becomes an
+        // argument the caller has to supply.
+        const existingProvider =
+          a.targetProvider === "apple" ? "google" : "apple";
+        const row = (
+          await tx.query<Attempt>(
+            `UPDATE auth_attempts SET stage='reauth_authorize',existing_provider=$2,version=version+1,state=$3,nonce=$4 WHERE id=$1 AND version=$5 AND expires_at>now() RETURNING ${projection}`,
+            [a.id, existingProvider, random(), random(), a.version],
+          )
+        ).rows[0];
+        if (!row) throw new AuthFailure("attempt_expired");
+        consistent(row);
+        return { attempt: row };
+      });
+    },
     async accept(
       expected: Attempt,
       identity: VerifiedIdentity,

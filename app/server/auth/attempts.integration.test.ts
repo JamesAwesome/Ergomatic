@@ -1509,6 +1509,75 @@ describe("front-door transactions against Postgres", () => {
       await expect(read(id)).rejects.toThrow(/attempt_expired/);
     });
 
+    // --- TASK 2: the transition itself, driven through the REAL producer
+    //     (begin -> claim -> accept) rather than seeded at `confirm`, so the
+    //     test starts upstream of the thing it asserts about (RF24).
+    async function atConfirm() {
+      const b = await signin();
+      const claimed = await store.claim(b.attempt);
+      const pending = await store.accept(claimed, apple);
+      return pending.attempt!;
+    }
+
+    it("followThrough carries the proven identity into a second authorization", async () => {
+      const before = await atConfirm();
+      const after = (await store.followThrough(before)).attempt!;
+      expect(after.stage).toBe("reauth_authorize");
+      // The carried identity SURVIVES. This is the design's whole claim.
+      expect(after.verifiedSubject).toBe(before.verifiedSubject);
+      expect(after.verifiedEmail).toBe(before.verifiedEmail);
+      expect(after.verifiedName).toBe(before.verifiedName);
+      // The usual provider is written, and it is the OTHER one.
+      expect(before.targetProvider).toBe("apple");
+      expect(after.existingProvider).toBe("google");
+      // No session yet: this is the middle state, and the rower is away at
+      // their provider for the whole of it.
+      expect(after.originalSessionId).toBeNull();
+      // THE CLOCK IS NOT TOUCHED HERE. Gate 0 ruling 2 refreshes it at the
+      // SECOND EXCHANGE (Task 3), not at this transition — asserted as
+      // byte-identical so a refresh added in the wrong place goes red.
+      expect(after.expiresAt.getTime()).toBe(before.expiresAt.getTime());
+      // THE REPLAY SURFACE. A second authorization reusing the first's
+      // state or nonce would accept a replayed callback; assert explicitly.
+      expect(after.state).not.toBe(before.state);
+      expect(after.nonce).not.toBe(before.nonce);
+    });
+
+    it("followThrough refuses any stage but confirm", async () => {
+      const b = await signin();
+      await expect(store.followThrough(b.attempt)).rejects.toThrow(
+        /attempt_expired/,
+      );
+      const claimed = await store.claim(b.attempt);
+      await expect(store.followThrough(claimed)).rejects.toThrow(
+        /attempt_expired/,
+      );
+    });
+
+    it("followThrough refuses a link and a delete", async () => {
+      const link = await insert({
+        purpose: "link",
+        stage: "reauth_authorize",
+        existingProvider: "google",
+        sessionId: (await freshSession("ft-l")).id,
+        verified: false,
+      });
+      await expect(store.followThrough(await read(link))).rejects.toThrow(
+        /attempt_expired/,
+      );
+      const del = await insert({
+        purpose: "delete",
+        stage: "reauth_authorize",
+        targetProvider: "google",
+        existingProvider: "google",
+        sessionId: (await freshSession("ft-d")).id,
+        verified: false,
+      });
+      await expect(store.followThrough(await read(del))).rejects.toThrow(
+        /attempt_expired/,
+      );
+    });
+
     // --- Step 6: no edit expected. If this needs one, the migration is wrong.
     it("attemptProvider resolves to the USUAL provider for a follow-through", async () => {
       const id = await insert({
