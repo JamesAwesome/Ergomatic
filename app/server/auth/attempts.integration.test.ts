@@ -475,6 +475,18 @@ describe("front-door transactions against Postgres", () => {
     const running = restricted.confirm(
       await restricted.read(b.attempt.id, b.bindingSecret, "native"),
     );
+    // A HANDLER BEFORE THE POLLING LOOP, NOT AFTER IT. `running` is left in
+    // flight for up to a second below while we watch for the lock; if it
+    // rejects inside that window — which it does whenever the insert does
+    // not block — the rejection is unhandled for a turn, and Node reports it
+    // at the process level. Vitest then fails the JOB with
+    // `Tests <n> passed | Errors 1 error`, which reads as a red run with no
+    // red test: seen once on this branch at `d2409c09`, from
+    // `attempts.ts:145`'s `access_denied`. This changes nothing the test
+    // asserts — `running` still rejects, and the assertion below still reads
+    // it — it only means the same conditions now surface as the honest
+    // failure of `expect(waiting)` instead of a confusing job-level error.
+    void running.catch(() => {});
     let waiting = false;
     for (let i = 0; i < 100; i++) {
       const rows = await pool.query<{ waiting: boolean }>(
@@ -1346,5 +1358,510 @@ describe("front-door transactions against Postgres", () => {
     } finally {
       holder.release();
     }
+  });
+  // WAVE A PR2, Task 1. THE SCHEMA IS NOT THE AUTHORITY on which rows the
+  // machine admits — `consistent()` is, and it runs on both the read path
+  // (`load()`) and the write path (`save()`). Task 0 widened the CHECK; until
+  // this widens too, a follow-through row is refused with `attempt_expired`
+  // by the module itself.
+  //
+  // THE WIDENING IS ASYMMETRIC AND THAT IS THE WHOLE DIFFICULTY. The stages
+  // are SHARED: `begin()` starts a link and a delete at `reauth_authorize`
+  // (`attempts.ts`, `input.purpose === "signin" ? "authorize" : "reauth_authorize"`),
+  // and the rule is `(purpose === "signin") !== signup`. So simply adding the
+  // three stages to the `signup` array admits the signin AND refuses every
+  // link and every delete at a stage they legitimately occupy. The guard
+  // tests below are the five cells that would break; they pass today and must
+  // still pass afterwards.
+  describe("PR2: consistent() admits a signin follow-through", () => {
+    const SECRET = "pr2-binding-secret";
+
+    async function insert(row: {
+      purpose: "signin" | "link" | "delete";
+      stage: string;
+      targetProvider?: AuthProvider;
+      existingProvider?: AuthProvider | null;
+      sessionId?: string | null;
+      verified?: boolean;
+      reauthenticated?: boolean;
+    }) {
+      const id = crypto.randomUUID();
+      const verified = row.verified ?? true;
+      await pool.query(
+        `INSERT INTO auth_attempts(id,binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,reauthenticated_at,verified_subject,verified_email,verified_name,expires_at)
+         VALUES($1,$2,'native',$3,$4,$5,$6,1,$7,$8,$9,$10,$11,$12,$13,now()+interval '5 min')`,
+        [
+          id,
+          hashToken(SECRET),
+          row.purpose,
+          row.targetProvider ?? "apple",
+          row.existingProvider ?? null,
+          row.stage,
+          `state-${id}`,
+          `nonce-${id}`,
+          row.sessionId ?? null,
+          (row.reauthenticated ?? false) ? new Date() : null,
+          verified ? "carried-subject" : null,
+          verified ? "relay@privaterelay.appleid.com" : null,
+          verified ? "Rower" : null,
+        ],
+      );
+      return id;
+    }
+    const read = (id: string) => store.read(id, SECRET, "native");
+
+    // --- Step 1: the three the design produces. Red before the widening.
+    it("reads a signin at reauth_authorize, its usual provider written", async () => {
+      const id = await insert({
+        purpose: "signin",
+        stage: "reauth_authorize",
+        existingProvider: "google",
+      });
+      expect((await read(id)).stage).toBe("reauth_authorize");
+    });
+
+    it("reads a signin at reauth_exchanging", async () => {
+      const id = await insert({
+        purpose: "signin",
+        stage: "reauth_exchanging",
+        existingProvider: "google",
+      });
+      expect((await read(id)).stage).toBe("reauth_exchanging");
+    });
+
+    it("reads a signin at link_ready once a session is adopted", async () => {
+      const session = await freshSession("pr2");
+      const id = await insert({
+        purpose: "signin",
+        stage: "link_ready",
+        existingProvider: "google",
+        sessionId: session.id,
+        reauthenticated: true,
+      });
+      expect((await read(id)).stage).toBe("link_ready");
+    });
+
+    // --- Step 2b: THE GUARD. Five cells the naive widening breaks, measured
+    //     over 27 purpose x stage combinations. Revision 4 named two of them;
+    //     the link flow's own TERMINAL stage is the third, and it is the one
+    //     a careless widening would take out of production entirely.
+    // ONE SESSION PER ROW, because `auth_attempts_link_session_unique` is a
+    // partial unique index on `original_session_id` and permits exactly one
+    // live attempt per session. Sharing one session across the three link
+    // rows below raised 23505 — the real schema refusing a row a scratch
+    // table carrying only the CHECK's five columns would have admitted,
+    // which is precisely why these run against the migrated table.
+    async function freshSession(tag: string) {
+      const user = await seedUser({ googleSub: `g-${tag}`, appleSub: null });
+      return seedSession(user.id);
+    }
+
+    it("still reads a link at every stage it occupies today", async () => {
+      const authorize = await insert({
+        purpose: "link",
+        stage: "reauth_authorize",
+        existingProvider: "google",
+        sessionId: (await freshSession("l1")).id,
+        verified: false,
+      });
+      expect((await read(authorize)).purpose).toBe("link");
+      const exchanging = await insert({
+        purpose: "link",
+        stage: "reauth_exchanging",
+        existingProvider: "google",
+        sessionId: (await freshSession("l2")).id,
+        verified: false,
+      });
+      expect((await read(exchanging)).stage).toBe("reauth_exchanging");
+      // The link flow's own TERMINAL stage — the cell revision 4 missed, and
+      // the one a naive widening would take out of production entirely.
+      const ready = await insert({
+        purpose: "link",
+        stage: "link_ready",
+        existingProvider: "google",
+        sessionId: (await freshSession("l3")).id,
+        reauthenticated: true,
+      });
+      expect((await read(ready)).stage).toBe("link_ready");
+    });
+
+    it("still reads a delete at every stage it occupies today", async () => {
+      const authorize = await insert({
+        purpose: "delete",
+        stage: "reauth_authorize",
+        targetProvider: "google",
+        existingProvider: "google",
+        sessionId: (await freshSession("d1")).id,
+        verified: false,
+      });
+      expect((await read(authorize)).purpose).toBe("delete");
+      const exchanging = await insert({
+        purpose: "delete",
+        stage: "reauth_exchanging",
+        targetProvider: "google",
+        existingProvider: "google",
+        sessionId: (await freshSession("d2")).id,
+        verified: false,
+      });
+      expect((await read(exchanging)).stage).toBe("reauth_exchanging");
+    });
+
+    // --- Step 4: the OTHER half. The carried identity is what the whole
+    //     design rests on, so the machine must keep requiring it at exactly
+    //     the stages that carry it — FOR A SIGNIN. A link at its first stage
+    //     legitimately carries none, which is why the clause is
+    //     purpose-qualified rather than stage-only.
+    it("refuses a signin follow-through that has lost its carried identity", async () => {
+      const id = await insert({
+        purpose: "signin",
+        stage: "reauth_exchanging",
+        existingProvider: "google",
+        verified: false,
+      });
+      await expect(read(id)).rejects.toThrow(/attempt_expired/);
+    });
+
+    // --- TASK 2: the transition itself, driven through the REAL producer
+    //     (begin -> claim -> accept) rather than seeded at `confirm`, so the
+    //     test starts upstream of the thing it asserts about (RF24).
+    async function atConfirm() {
+      const b = await signin();
+      const claimed = await store.claim(b.attempt);
+      const pending = await store.accept(claimed, apple);
+      return pending.attempt!;
+    }
+
+    it("followThrough carries the proven identity into a second authorization", async () => {
+      const seeded = await atConfirm();
+      // PIN THE EXPIRY TO AN INDEPENDENT LITERAL FIRST (RF21). The attempt
+      // TTL is 5 minutes, so a bug that REFRESHES `expires_at` by the same
+      // 5 minutes — which is exactly what copying the sibling reauth arm
+      // would do — lands within a millisecond of the original and a
+      // byte-identical assertion cannot see it. Measured: that mutation left
+      // this test green; the same mutation with 9 minutes reddened it. So the
+      // row is moved to a value no refresh would reproduce, and ANY refresh
+      // now goes red.
+      await pool.query(
+        "UPDATE auth_attempts SET expires_at=now()+interval '11 min' WHERE id=$1",
+        [seeded.id],
+      );
+      const pinned = (
+        await pool.query<{ expiresAt: Date }>(
+          'SELECT expires_at AS "expiresAt" FROM auth_attempts WHERE id=$1',
+          [seeded.id],
+        )
+      ).rows[0]!.expiresAt;
+      // `bound()` compares the whole row, so the expected attempt has to
+      // carry the pinned value too.
+      const before = { ...seeded, expiresAt: pinned };
+      const after = (await store.followThrough(before)).attempt!;
+      expect(after.stage).toBe("reauth_authorize");
+      // The carried identity SURVIVES. This is the design's whole claim.
+      expect(after.verifiedSubject).toBe(before.verifiedSubject);
+      expect(after.verifiedEmail).toBe(before.verifiedEmail);
+      expect(after.verifiedName).toBe(before.verifiedName);
+      // The usual provider is written, and it is the OTHER one.
+      expect(before.targetProvider).toBe("apple");
+      expect(after.existingProvider).toBe("google");
+      // No session yet: this is the middle state, and the rower is away at
+      // their provider for the whole of it.
+      expect(after.originalSessionId).toBeNull();
+      // THE CLOCK IS NOT TOUCHED HERE. Gate 0 ruling 2 refreshes it at the
+      // SECOND EXCHANGE (Task 3), not at this transition — asserted as
+      // byte-identical so a refresh added in the wrong place goes red.
+      expect(after.expiresAt.getTime()).toBe(pinned.getTime());
+      // THE REPLAY SURFACE. A second authorization reusing the first's
+      // state or nonce would accept a replayed callback; assert explicitly.
+      expect(after.state).not.toBe(before.state);
+      expect(after.nonce).not.toBe(before.nonce);
+    });
+
+    it("followThrough refuses any stage but confirm", async () => {
+      const b = await signin();
+      await expect(store.followThrough(b.attempt)).rejects.toThrow(
+        /attempt_expired/,
+      );
+      const claimed = await store.claim(b.attempt);
+      await expect(store.followThrough(claimed)).rejects.toThrow(
+        /attempt_expired/,
+      );
+    });
+
+    // THE STAGE CHECK IS WHAT REFUSES THESE, not the purpose check — and the
+    // purpose check cannot be tested, because neither authority will let a
+    // link or a delete exist at `confirm` in the first place. Asserting the
+    // refusal is still right; claiming it proves the purpose guard would not
+    // be (RF21). The guard's own comment records that it is unreachable.
+    it("followThrough refuses a link and a delete", async () => {
+      const link = await insert({
+        purpose: "link",
+        stage: "reauth_authorize",
+        existingProvider: "google",
+        sessionId: (await freshSession("ft-l")).id,
+        verified: false,
+      });
+      await expect(store.followThrough(await read(link))).rejects.toThrow(
+        /attempt_expired/,
+      );
+      const del = await insert({
+        purpose: "delete",
+        stage: "reauth_authorize",
+        targetProvider: "google",
+        existingProvider: "google",
+        sessionId: (await freshSession("ft-d")).id,
+        verified: false,
+      });
+      await expect(store.followThrough(await read(del))).rejects.toThrow(
+        /attempt_expired/,
+      );
+    });
+
+    // --- TASK 3: the second exchange resolves the account, mints a session
+    //     and ADOPTS it onto the attempt. Driven end to end from `begin()`
+    //     so the test starts upstream of every producer it asserts about
+    //     (RF24) — seeding a row at `reauth_exchanging` would skip exactly
+    //     the transitions Tasks 1 and 2 built.
+    async function followedThrough(googleSub: string) {
+      const user = await seedUser({ googleSub, appleSub: null });
+      const b = await signin();
+      const claimed = await store.claim(b.attempt);
+      const confirmStage = (await store.accept(claimed, apple)).attempt!;
+      const carried = (await store.followThrough(confirmStage)).attempt!;
+      const exchanging = await store.claim(carried);
+      return { user, exchanging };
+    }
+    const usual = (sub: string) => ({
+      sub,
+      email: "rower@test",
+      emailVerified: true,
+      name: "Rower",
+    });
+
+    it("the second exchange adopts a session for the resolved account, keeping the carried identity", async () => {
+      const { user, exchanging } = await followedThrough("g-follow");
+      const result = await store.accept(exchanging, usual("g-follow"));
+      const after = result.attempt!;
+      expect(after.stage).toBe("link_ready");
+      // The attempt now holds a session, and it belongs to the account the
+      // rower just proved — not to whoever happened to be signed in.
+      expect(after.originalSessionId).not.toBeNull();
+      const owner = (
+        await pool.query<{ userId: string }>(
+          'SELECT user_id AS "userId" FROM sessions WHERE id=$1',
+          [after.originalSessionId],
+        )
+      ).rows[0]!;
+      expect(owner.userId).toBe(user.id);
+      // THE CARRIED APPLE IDENTITY IS UNTOUCHED. The second exchange's
+      // identity is CONSUMED, never stored — that is what makes
+      // confirm-after-the-proof affordable at all.
+      expect(after.verifiedSubject).toBe(apple.sub);
+      expect(after.reauthenticatedAt).not.toBeNull();
+    });
+
+    it("the second exchange REFRESHES the attempt window (Gate 0 ruling 2)", async () => {
+      const { exchanging } = await followedThrough("g-clock");
+      // Pin to an independent literal first, so "refreshed" cannot be
+      // confused with "left at a coincidentally similar value" — the trap
+      // Task 2's own probe fell into.
+      await pool.query(
+        "UPDATE auth_attempts SET expires_at=now()+interval '11 min' WHERE id=$1",
+        [exchanging.id],
+      );
+      const pinned = (
+        await pool.query<{ expiresAt: Date }>(
+          'SELECT expires_at AS "expiresAt" FROM auth_attempts WHERE id=$1',
+          [exchanging.id],
+        )
+      ).rows[0]!.expiresAt;
+      const after = (
+        await store.accept(
+          { ...exchanging, expiresAt: pinned },
+          usual("g-clock"),
+        )
+      ).attempt!;
+      // James, 2026-09-15: "what 300 second clock I don't see a clock".
+      // The rower is about to be shown a screen they have to READ, and
+      // nothing on it counts down, so the window restarts here.
+      expect(after.expiresAt.getTime()).toBeLessThan(pinned.getTime());
+      expect(after.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    });
+
+    // THE GUARD THE PLAN ASKED FOR AND I FIRST SHIPPED WITHOUT. Deleting
+    // `requireAccess` from the new arm reddened ZERO tests until this
+    // existed — the module's other two mints are covered, and this one was
+    // not, which is exactly the census the plan told me to check (RF21).
+    // Nothing else on this path calls `requireAccess`: `load()` only reaches
+    // `original()` when `original_session_id` is set, and it is NULL until
+    // the adopt this arm performs.
+    it("the second exchange refuses an account outside the access policy, minting nothing", async () => {
+      const { user, exchanging } = await followedThrough("g-denied");
+      const restricted = createAttempts(
+        pool,
+        createAccessPolicy("restricted", "someone-else@test"),
+        recordingRevoke().revoke,
+      );
+      const before = await pool.query(
+        "SELECT id FROM sessions WHERE user_id=$1",
+        [user.id],
+      );
+      await expect(
+        restricted.accept(exchanging, usual("g-denied")),
+      ).rejects.toThrow(/access_denied/);
+      // NOTHING WAS MINTED. A refusal that still left a live session behind
+      // would be the whole point of the guard defeated, and the transaction
+      // is what makes this assertable.
+      const after = await pool.query(
+        "SELECT id FROM sessions WHERE user_id=$1",
+        [user.id],
+      );
+      expect(after.rowCount).toBe(before.rowCount);
+      // And the attempt did not advance.
+      const row = (
+        await pool.query<{ stage: string; originalSessionId: string | null }>(
+          'SELECT stage, original_session_id AS "originalSessionId" FROM auth_attempts WHERE id=$1',
+          [exchanging.id],
+        )
+      ).rows[0]!;
+      expect(row.stage).toBe("reauth_exchanging");
+      expect(row.originalSessionId).toBeNull();
+    });
+
+    it("the second exchange refuses a proven subject that belongs to no account", async () => {
+      const { exchanging } = await followedThrough("g-known");
+      await expect(
+        store.accept(exchanging, usual("g-stranger")),
+      ).rejects.toThrow(/account_changed/);
+    });
+
+    // TASK 0 STEP 6, which shipped unimplemented and the DBA gate measured.
+    // A delete landing between the resolve and the `INSERT INTO sessions`
+    // violates `sessions_user_id_users_id_fk`; before the mapping that
+    // propagated as a raw DatabaseError and `failure()` rendered it 500,
+    // where 409 `account_changed` is right.
+    //
+    // HELD TRANSACTION, NEVER A RACE (RF21). The deleter holds a lock on the
+    // user row so the adopt blocks deterministically, then commits the
+    // delete; the adopter unblocks into the FK violation.
+    it("the second exchange answers account_changed when the account is deleted under it", async () => {
+      const { user, exchanging } = await followedThrough("g-vanish");
+      const holder = await pool.connect();
+      try {
+        await holder.query("BEGIN");
+        await holder.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
+          user.id,
+        ]);
+        const pending = store.accept(exchanging, usual("g-vanish"));
+        // Let the adopt reach the lock before the row disappears.
+        await new Promise((r) => setTimeout(r, 250));
+        await holder.query("DELETE FROM users WHERE id=$1", [user.id]);
+        await holder.query("COMMIT");
+        await expect(pending).rejects.toThrow(/account_changed/);
+      } finally {
+        holder.release();
+      }
+      // AND NOTHING WAS LEFT BEHIND. The rollback takes the just-minted
+      // session with it.
+      const sessions = await pool.query(
+        "SELECT id FROM sessions WHERE user_id=$1",
+        [user.id],
+      );
+      expect(sessions.rowCount).toBe(0);
+    });
+
+    // THE CONTROL. Same hold, same timing, deleter releases WITHOUT deleting
+    // — so the refusal above is a measurement of the delete rather than a
+    // probe that throws whatever happens.
+    it("the same held lock WITHOUT a delete lets the adopt through", async () => {
+      const { user, exchanging } = await followedThrough("g-survive");
+      const holder = await pool.connect();
+      try {
+        await holder.query("BEGIN");
+        await holder.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
+          user.id,
+        ]);
+        const pending = store.accept(exchanging, usual("g-survive"));
+        await new Promise((r) => setTimeout(r, 250));
+        await holder.query("COMMIT");
+        const after = (await pending).attempt!;
+        expect(after.stage).toBe("link_ready");
+        expect(after.originalSessionId).not.toBeNull();
+      } finally {
+        holder.release();
+      }
+    });
+
+    // --- THE FALSIFICATION TEST (Task 3 Steps 6-7). The design's central
+    //     claim is that `finalize()` attaches UNCHANGED once the attempt has
+    //     EARNED the session its `currentSessionId === originalSessionId`
+    //     binding already requires. If this needs an edit to `finalize`, the
+    //     claim is wrong and the plan goes back to James rather than being
+    //     patched. Nothing below touches `finalize`.
+    it("finalize then attaches with NO edit to finalize itself", async () => {
+      const { user, exchanging } = await followedThrough("g-finalize");
+      const ready = (await store.accept(exchanging, usual("g-finalize")))
+        .attempt!;
+      // The rower presents the session the attempt adopted — which is the
+      // only session this flow ever put in their hands.
+      const result = await store.finalize(ready, ready.originalSessionId!);
+      expect(result.linked).toBe(true);
+      const row = (
+        await pool.query<{ appleSub: string | null; googleSub: string | null }>(
+          'SELECT apple_sub AS "appleSub", google_sub AS "googleSub" FROM users WHERE id=$1',
+          [user.id],
+        )
+      ).rows[0]!;
+      // ONE account, BOTH subjects. The Apple one is the identity the attempt
+      // carried the whole way from the first exchange.
+      expect(row.googleSub).toBe("g-finalize");
+      expect(row.appleSub).toBe(apple.sub);
+      // And the Apple grant is written, so a later deletion has something to
+      // revoke.
+      const grants = await pool.query(
+        "SELECT client_id FROM apple_grants WHERE user_id=$1",
+        [user.id],
+      );
+      expect(grants.rowCount).toBe(1);
+      // The attempt is consumed.
+      const left = await pool.query(
+        "SELECT id FROM auth_attempts WHERE id=$1",
+        [ready.id],
+      );
+      expect(left.rowCount).toBe(0);
+    });
+
+    it("finalize still refuses a session that is not the one the attempt adopted", async () => {
+      const { exchanging } = await followedThrough("g-other");
+      const ready = (await store.accept(exchanging, usual("g-other"))).attempt!;
+      // A live session belonging to a DIFFERENT account. Invariant 1: the
+      // attach follows the PROVEN subject, never whatever cookie the client
+      // happens to be holding.
+      const stranger = await seedUser({
+        googleSub: "g-stranger2",
+        appleSub: null,
+      });
+      const strangerSession = await seedSession(stranger.id);
+      await expect(store.finalize(ready, strangerSession.id)).rejects.toThrow(
+        /account_changed/,
+      );
+    });
+
+    // --- Step 6: no edit expected. If this needs one, the migration is wrong.
+    // RENAMED (RF4). This asserts the two COLUMNS, which is what it always
+    // did; `attemptProvider` is not exported and the title claimed a function
+    // works while the body proved a row exists. What actually exercises
+    // `attemptProvider` on this path is the route test that follows the
+    // authorize target back to the usual provider.
+    it("a follow-through row carries the usual provider beside the target", async () => {
+      const id = await insert({
+        purpose: "signin",
+        stage: "reauth_authorize",
+        targetProvider: "apple",
+        existingProvider: "google",
+      });
+      const a = await read(id);
+      expect(a.existingProvider).toBe("google");
+      expect(a.targetProvider).toBe("apple");
+    });
   });
 });

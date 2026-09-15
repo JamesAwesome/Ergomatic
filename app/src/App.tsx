@@ -21,7 +21,7 @@ function AppContent() {
   //     which means no `<Routes>` is mounted while the session read is in
   //     flight;
   //   - `AppRoutes.tsx`'s root route, `<Route path="/" element={<Navigate
-  //     to="/today" replace />} />` (line 170 at this commit), the only
+  //     to="/today" replace />} />`, the only
   //     thing that writes `/today` WHEN THE URL IS `/`. (Not the only
   //     writer of `/today` at all — `AppRoutes` alone has four, and a dozen
   //     screens navigate there. `path="/"` outranks `path="*"`, so at `/`
@@ -67,20 +67,58 @@ function AppContent() {
   // runs, with this guard and without), so the trace is the motivation and
   // the two writers above are the reason.
   //
-  // The destination is held, not dropped: this effect re-runs when
-  // `me.state` changes, and the ref is only consumed on a run that
-  // actually navigates.
+  // The destination is not lost while the tree is unmounted: this effect
+  // re-runs when `me.state` changes, and a held destination is still there
+  // when it does. (The ref is consumed on EVERY signed-in run, navigating or
+  // not — the assignment sits above the navigate guard — so it records "this
+  // effect has seen this destination", not "this effect acted on it". An
+  // earlier version of this sentence claimed the narrower thing and was
+  // wrong.)
   //
-  // THE TEST IS NARROWER THAN THE INVARIANT, deliberately. `out` leaves
-  // `<Routes>` equally unmounted (it renders `SignIn` instead), so the
-  // stated rule covers it too — but `SignIn` owns no routes and no root
-  // redirect, and the only destinations `destinationFor` yields to a
-  // signed-out rower are `/` and `null`, so there is nothing there for a
-  // redirect to eat. Widen this to `me.state !== "in"` the day `SignIn`
-  // grows routes of its own, or the day a signed-out view routes anywhere
-  // but `/`.
+  // IT COVERS `out` TOO SINCE WAVE A PR2, AND ITS OWN COMMENT ASKED FOR THAT.
+  // This gated on `loading` alone, under a note saying to widen it "the day a
+  // signed-out view routes anywhere but `/`" — true until then, because the
+  // only destinations a signed-out rower could yield were `/` and `null` and
+  // `SignIn` owns no routes for a redirect to eat. `attach_confirm` is that
+  // day: it routes to `/you/sign-in-methods`, and on NATIVE the rower sits
+  // there SIGNED OUT for the whole confirmation, because `onSignedIn` is
+  // withheld until they choose. `SignIn` draws that screen itself, so the URL
+  // move bought nothing and wrote a path under a tree that owns no routes.
+  //
+  // Nothing is lost by not navigating there: `SignIn` draws every screen a
+  // signed-out destination names, and the destination itself is still
+  // current when `me` resolves IN — see the next paragraph, which is the
+  // half this one originally got wrong.
+  //
+  // AND `out` FORGETS, WHICH IS NOT THE SAME AS CONSUMING. Three cases have
+  // to hold at once, and only this form holds all three:
+  //
+  //   - A destination from a PREVIOUS signed-in period must not linger.
+  //     Returning bare leaves the ref carrying whatever that flow put there,
+  //     and `/` is exactly what an attach terminal writes — so a rower who
+  //     attaches, signs out, and attaches again in the same document reaches
+  //     `attached` with destination `/`, matches the stale ref, takes the
+  //     early return below, and stands still on `/you`.
+  //   - A destination produced WHILE OUT and still current when `me`
+  //     resolves IN must still be acted on. That is the native attach:
+  //     `confirmAttach` sets the terminal and calls `onSignedIn` in one tick,
+  //     so the destination is `/` a full `/api/me` round trip before `me`
+  //     catches up. CONSUMING it here marks it done while the rower is still
+  //     on the sign-in tree — the same missed landing through the opposite
+  //     door, and the first draft of this fix did exactly that.
+  //   - `loading` must still HOLD, untouched: that is the race the whole
+  //     guard was written for, and consuming there reds the delete-return
+  //     test that pins it.
+  //
+  // Forgetting satisfies all three: the ref stops describing the last
+  // session, and whatever is current when `me` returns is compared against
+  // nothing and therefore acted on.
   useEffect(() => {
     if (me.state === "loading") return;
+    if (me.state === "out") {
+      consumedAuthDestination.current = null;
+      return;
+    }
     if (consumedAuthDestination.current === auth.destination) return;
     consumedAuthDestination.current = auth.destination;
     if (auth.destination && auth.destination !== location.pathname) {

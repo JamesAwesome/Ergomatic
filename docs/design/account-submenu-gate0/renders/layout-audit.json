@@ -1,0 +1,179 @@
+[
+  {
+    "name": "01-today-you",
+    "viewport": "390x844",
+    "requested": "390x844",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "deleteButton": {
+      "fromTopPx": 433,
+      "visibleWithoutScrolling": true
+    },
+    "contentBelowFoldPx": 0,
+    "tappableCount": 2,
+    "undersized": []
+  },
+  {
+    "name": "02-today-where-delete-sits",
+    "viewport": "390x844",
+    "requested": "390x844",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "deleteButton": {
+      "fromTopPx": 451,
+      "visibleWithoutScrolling": true
+    },
+    "contentBelowFoldPx": 0,
+    "tappableCount": 2,
+    "undersized": []
+  },
+  {
+    "name": "03-options-side-by-side",
+    "viewport": "844x691",
+    "requested": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "deleteButton": {
+      "fromTopPx": 522,
+      "visibleWithoutScrolling": true
+    },
+    "contentBelowFoldPx": 55,
+    "tappableCount": 0,
+    "undersized": []
+  },
+  {
+    "name": "04-option-a-you",
+    "viewport": "390x844",
+    "requested": "390x844",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "deleteButton": null,
+    "contentBelowFoldPx": 0,
+    "tappableCount": 1,
+    "undersized": []
+  },
+  {
+    "name": "05-option-a-subpage",
+    "viewport": "390x844",
+    "requested": "390x844",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "deleteButton": {
+      "fromTopPx": 362,
+      "visibleWithoutScrolling": true
+    },
+    "contentBelowFoldPx": 0,
+    "tappableCount": 2,
+    "undersized": []
+  },
+  {
+    "name": "06-option-b-you",
+    "viewport": "390x844",
+    "requested": "390x844",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "deleteButton": null,
+    "contentBelowFoldPx": 0,
+    "tappableCount": 1,
+    "undersized": []
+  },
+  {
+    "name": "07-option-b-subpage",
+    "viewport": "390x844",
+    "requested": "390x844",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "deleteButton": {
+      "fromTopPx": 216,
+      "visibleWithoutScrolling": true
+    },
+    "contentBelowFoldPx": 0,
+    "tappableCount": 2,
+    "undersized": []
+  },
+  {
+    "name": "08-option-c-under-settings",
+    "viewport": "390x844",
+    "requested": "390x844",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "deleteButton": {
+      "fromTopPx": 492,
+      "visibleWithoutScrolling": true
+    },
+    "contentBelowFoldPx": 0,
+    "tappableCount": 2,
+    "undersized": []
+  },
+  {
+    "name": "09-four-consequences",
+    "viewport": "844x949",
+    "requested": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "deleteButton": null,
+    "contentBelowFoldPx": 0,
+    "tappableCount": 0,
+    "undersized": []
+  },
+  {
+    "name": "10-route-name-clash",
+    "viewport": "844x526",
+    "requested": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "deleteButton": null,
+    "contentBelowFoldPx": 0,
+    "tappableCount": 0,
+    "undersized": []
+  },
+  {
+    "name": "11-option-a-you-landscape",
+    "viewport": "844x390",
+    "requested": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 123,
+    "deleteButton": null,
+    "contentBelowFoldPx": 92,
+    "tappableCount": 1,
+    "undersized": []
+  },
+  {
+    "name": "12-option-b-you-landscape",
+    "viewport": "844x390",
+    "requested": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 269,
+    "deleteButton": null,
+    "contentBelowFoldPx": 238,
+    "tappableCount": 1,
+    "undersized": []
+  },
+  {
+    "name": "13-today-you-landscape",
+    "viewport": "844x390",
+    "requested": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 341,
+    "deleteButton": {
+      "fromTopPx": 390,
+      "visibleWithoutScrolling": false
+    },
+    "contentBelowFoldPx": 310,
+    "tappableCount": 2,
+    "undersized": []
+  }
+]

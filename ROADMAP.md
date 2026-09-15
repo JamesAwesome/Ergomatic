@@ -1071,12 +1071,24 @@ it lands the stranger on this same denial.
       cross-surface subject continuity proven on real hardware" — that closed
       2026-09-13, when Apple sign-in on Kaito landed on the existing account
       (`apple_grants` 1→2, `users` stayed at 6).
-      **NOT READY as of 2026-09-14, and not next.** Plan revision 3 lives at
-      `docs/superpowers/plans/2026-09-14-wave-a-pr2-follow-through.md`. Three
-      gates ran: DBA PASS WITH ROWS, PM shape-approved but sequencing NOT NOW,
-      antagonist NOT READY — nothing can hand the client the minted session
-      while the attempt is alive, because `AuthStep` makes `SignedIn` and
-      `link_ready` mutually exclusive union members. **And the defect is smaller
+      **BUILT 2026-09-15, PR #453, all seven tasks.** The plan is at
+      `docs/superpowers/plans/2026-09-14-wave-a-pr2-follow-through.md`, now
+      REVISION 5. Every gate that blocked it has been answered:
+      - the antagonist's NOT READY was the transport — nothing could hand the
+        client the minted session while the attempt was alive, because
+        `AuthStep` made `SignedIn` and `link_ready` mutually exclusive union
+        members. Closed in Task 4: `link_ready` now carries the session and the
+        carried profile, and `result()` gained a both-at-once branch that has
+        to come FIRST or the bare `signedIn` branch clears the attempt cookie.
+      - the PM's sequencing NOT NOW was voided by James's 2026-09-14 ruling
+        deferring public sign-up, which removed the only row ahead of it.
+      - the DBA's PASS WITH ROWS was at PLAN; the PR gate is owed on #453.
+      **The design's central claim was falsifiable and held:** `finalize()`
+      attaches with ZERO edits to itself, which the plan said would otherwise
+      send the work back to James.
+      **Copy round (Task 7) is HELD**, not dropped — it rides the account
+      submenu above, because its delete disclosure sits in a box that Option A
+      relocates. **And the defect is smaller
       than this row says:** `SignIn.tsx` has printed the two-step recovery above
       the two buttons since #436, so this turns a two-step recovery into one
       step rather than unsticking anyone.
@@ -1148,6 +1160,115 @@ it lands the stranger on this same denial.
       is a design-gate question across five strings on three surfaces, and
       because #444 shipped one answer to it without ever asking — applying that
       answer more widely by reflex is how a house style gets set by accident.
+      **TREATMENT RULED 2026-09-15 (Gate 0 ruling 4): "the You tab", applied to
+      every live string INCLUDING the two `SignInMethods.tsx` ones #444 shipped
+      as quoted, so that answer is superseded rather than extended.** The
+      question is settled; the SWEEP is what remains, and it rides the copy
+      round behind the account submenu. Census note: it has moved every time
+      anyone counted (five here, seven at the gate, six after PR2 deleted the
+      dead-end screen that held one), which is why the test pins "strings NOT
+      in the chosen form" at zero rather than pinning a total.
+- [ ] **The attempt-surviving redirects drop their purpose, so a link or
+      delete return is indistinguishable from a sign-in.** `/?authAttempt=<id>`
+      carries no `authPurpose` (the failure and cancel redirects do), so
+      `consumeReturnParams()` defaults it to `"signin"` and a signed-in rower
+      returning from a LINK or DELETE briefly holds a `busy`/`signin` view
+      that belongs to neither flow. RF18's shape exactly: an invariant held up
+      by the current call graph rather than by the data.
+      **The one consumer this had already bitten is FIXED, not deferred.**
+      `ownsAttachScreen` used to match that view, shadowing
+      `<Navigate to="/you">` with a screen that had nothing to draw — safe
+      only by location, and argued in a comment. PR #453's verify round keyed
+      the predicate on the carried identities instead, so the shadow is gone
+      by construction rather than by argument. What remains is the ambiguity
+      itself. `authFlow.ts:930` reads the same defaulted purpose a second time
+      (`step.outcome === "signed_in" ? returned.purpose : step.purpose`); it
+      looks unreachable for a link or delete return, since those attempt reads
+      never answer `signed_in` — INFERENCE, not run, and the reason this row
+      does not claim the ambiguity has no readers.
+      **The root fix was tried and backed out in PR #453**, deliberately:
+      adding `authPurpose` to both redirects changes a contract four
+      integration tests pin by exact location, two of them about
+      stale-callback safety, and that is not a change to make late in a PR
+      that has already had three review rounds. **S**
+      · dies 2026-11-15 · a row and not a fix now because it is a redirect
+      contract change with unaudited consumers, and with the attach predicate
+      no longer keyed on purpose, the one consumer this had bitten is fixed.
+- [ ] **After an attach, Back goes to the You subpage the landing ruling
+      avoids.** Measured through the web landing by instrumenting
+      `history.pushState`/`replaceState`: `push /you/sign-in-methods` →
+      **`replace /you`** → `push /` → `replace /today`. The `/you` is the
+      route arm's own `<Navigate to="/you" replace>` fallback firing in the
+      same effect flush as `attached`, before App's effect corrects it. The
+      rower lands on Today, which is the ruling — but the history entry
+      underneath says `/you`, so one Back tap puts them on the settings
+      subpage the ruling exists to keep them off. Introduced by the
+      `attached` terminal in #453, found by its fourth verify pass. **S**
+      · dies 2026-11-15 · a row and not a fix now because every candidate
+      fix is another navigation change to this flow, and the last three
+      review rounds were each a defect inside the previous round's
+      navigation fix — the landing itself is correct and gated, and this
+      costs a rower one extra tap on a screen they reach once.
+
+- [ ] **A failed provider attach tells the rower nothing, ever.** PR2's
+      `confirmAttach` catch deliberately swallows the failure and lands the
+      rower in the app signed in — correct, because by then the sign-in HAS
+      worked and a sign-in error screen would lie about what failed. But the
+      attach failure is then surfaced on no surface at all, and a
+      `account_conflict` (that provider already belongs to another Ergomatic
+      account) will fail identically on every future sign-in with no message
+      ever produced. The code comment says it "belongs on the methods list",
+      which is a decide-later ruling rather than a row (RF29), so here it is.
+      **S** · dies 2026-11-15 · a row and not a fix now because the methods
+      list is the surface the account submenu relocates, so writing the
+      notice before that lands means writing it twice — and the only failure
+      that repeats deterministically is `account_conflict`, whose recovery
+      copy the sign-in screen already prints.
+- [ ] **`begin()`'s pre-sweep silently destroys an in-flight follow-through.**
+      Measured by the DBA gate on the shipped schema (2026-09-15, PR #453):
+      starting a link or a delete from a session whose provider attach has not
+      been confirmed runs
+      `DELETE FROM auth_attempts WHERE original_session_id=$1` and leaves **0
+      attempts and 1 session** — the rower stays signed in and the pending
+      attach vanishes with no error anywhere. The sweep exists to dodge
+      `auth_attempts_link_session_unique`, and narrowing it by purpose
+      reinstates exactly the 23505 it was written to avoid (reproduced).
+      Three sibling paths were measured and are benign: signout and the
+      session-expiry sweep both cascade to a consistent signed-out state, and
+      the attempt-expiry sweep is the designed abandon.
+      **S** · dies 2026-11-15 · a row and not a fix now because the fix is a
+      PRODUCT ruling — whether a rower should be offered "Add a provider" or
+      "Delete account" at all while an attach is pending — not a SQL change,
+      and the race needs a rower doing both at once on one device.
+- [ ] **Move the account block behind an ACCOUNT door on You. GATE 0 IS DONE
+      AND JAMES RULED OPTION A (2026-09-15); nothing has built it.** He asked
+      for it in as many words: _"I want to also move the account settings into
+      a submenu because 'delete your account' is FAR too prominent."_ Measured
+      on the shipped screen: `Delete account` sits **433 px from the top of You
+      and is visible without scrolling** at 390x844, as a red button inside a
+      red-bordered box — the loudest element on the page, louder than
+      `Sign out`. That box is itself the 2026-09-14 quarantine ruling, so this
+      is the same concern escalating: quarantining it on the page did not make
+      it quieter, because a quarantine box is a visually loud object.
+      **What A means:** the sign-in methods list AND the delete box move to a
+      new `/you/account`, leaving You with identity, the career hero and the
+      doors. The row sits FIRST, above BASELINES. The re-auth disclosure rides
+      the box to the subpage (ruling 3), and the delete confirm screen stays
+      untouched.
+      **Two constraints already measured, so nobody re-derives them:**
+      `/you/sign-in-methods` is NOT available as the path — it is a flow-only
+      route that redirects to `/you` unless the auth flow is mid-link or
+      mid-delete, and it sits in `HIDDEN_TABBAR_PREFIXES`. `/you/account` is
+      free. And the You-initiated link needs no decision: `prepareLink` is
+      called only from `SignInMethods`, so "Add Apple" starts and ends inside
+      that one component and its success notice follows it.
+      Pack and rulings: `docs/design/account-submenu-gate0/`. **S**
+      · dies 2026-10-12 · a row and not a fix now because it is a navigation
+      change and PR2 is an auth state machine plus a stored shape — bundling
+      them would make a reviewer hold two unrelated risk models at once, which
+      is this repo's own split test. Dated to match the three copy rows below,
+      because Task 7 Step 1's disclosure rides this and the four should land
+      together.
 - [ ] **Delete account does not say that it will ask you to prove it is you.**
       James, 2026-09-14, immediately after running the deletion twice on a real
       account: _"we really need to make it more obvious that the reauth is
@@ -1162,8 +1283,21 @@ it lands the stranger on this same denial.
       rendering surface and carries a design gate, and because the right fix is
       probably not one sentence: the confirm screen's whole shape is in
       question once the re-auth is disclosed up front.
-- [ ] **"Apple is now connected. You can sign in either way." says what the row
-      under it already says.** James, 2026-09-14, from the live screen: _"I
+      **RULED 2026-09-15 (Gate 0 ruling 3), and it IS one sentence.** The
+      disclosure goes at the TAP, in the ACCOUNT quarantine box on You, naming
+      the provider the account holds — because the re-auth happens BEFORE the
+      confirm screen, so a warning there arrives after the cost is paid. **The
+      confirm screen is left untouched**, which is what keeps its own
+      2026-09-14 ruling (state facts, not prose) intact. Rendered at
+      `docs/design/pr2-gate0/renders/08-delete-reauth-options.png`. The box it
+      lives in MOVES under the account-submenu row above, which is why this
+      rides that work rather than landing first.
+- [x] **DONE 2026-09-15 (PR #453). "Apple is now connected. You can sign in
+      either way." said what the row under it already said.** The first
+      sentence is deleted; the notice now reads only "You can sign in either
+      way." — the half the row cannot say. Its test asserts the provider name
+      is ABSENT, which is the assertion that would have caught this being
+      re-added. James, 2026-09-14, from the live screen: _"I
       don't need this blurb here forever. Apple says connected below it."_ The
       success notice sits directly above the SIGN-IN METHODS list, where that
       provider's row now reads CONNECTED — so the same fact is stated twice in
@@ -1308,7 +1442,27 @@ it lands the stranger on this same denial.
       · dies 2026-10-15 · a row and not a fix-now because the fix already
       shipped here and only the confirming measurement is outstanding, and it
       needs post-merge CI jobs that do not exist yet.
-- [ ] **Raise the `--rule` hairline: it measures 1.47:1 on `--surface`.**
+- [x] **Raise the `--rule` hairline: it measures 1.47:1 on `--surface`.**
+      **CLOSED 2026-09-15 BY GATE 0 RULING 5 (PR #453) — THE SWEEP THIS ROW
+      DESCRIBES MUST NOT BE DONE.** The policy it was reduced to is now written
+      down beside `--rule` in `app/src/theme/tokens.css`, with the numbers, so
+      the question cannot come back as a fresh observation. Left as a ticked
+      record rather than struck, because striking is James's call. He reversed the 2026-09-14 ruling below after
+      seeing both options rendered: `--rule` STAYS at 1.47:1, and the durable
+      half is a policy instead — **a boundary that carries meaning uses
+      `--ink-4`** (4.76:1 on page, computed) **and `--rule` stays decorative.**
+      Two measurements decided it: the minimum only governs boundaries needed
+      to IDENTIFY a component or its state, and this one sits between rows
+      their own labels already separate; and the obvious small step does not
+      even work — `#a39c88` is 2.69:1 on `--surface` and 2.42:1 on `--page`,
+      while the lightest value clearing both is `#928a78` (3.37:1 / 3.03:1),
+      which no longer reads as a hairline at all.
+      Pack and numbers: `docs/design/account-submenu-gate0/` and
+      `docs/design/pr2-gate0/contrast.json`. **What this row still owes is the
+      POLICY WRITE-DOWN in `app/src/theme/tokens.css`, not the sweep** — it
+      rides the copy round (that plan's Task 7 Step 4). Left open for that one
+      line, annotated rather than struck, because striking is James's call and
+      the write-down has not happened.
       Pre-existing (`10ed2c2a`, predates PR1): `.auth-identity`'s card border
       (`app/src/index.css:275`, `border: 1px solid var(--rule)` on
       `background: var(--surface)`), rendered on the confirm and reauth
@@ -1514,7 +1668,9 @@ while we are in here.
       standing between that and eleven hours of nobody reading it. Twice in
       fifteen minutes on the same afternoon.
       So (b) is now: four sightings, two sourced whole-run re-runs, and a
-      mechanism.
+      mechanism — and with (d) below, the family has its first LOCAL
+      occurrence, which is what makes "starved scheduler" rather than
+      "uncapped pool" the shape worth instrumenting.
       **THE OPEN QUESTION, scheduled before the order (Phase OD's rule),
       and it took one read to find:** `vitest.config.ts:11` is
       `maxWorkers: isCI() ? undefined : workerCap(…, 4)`. The cap that
@@ -1588,6 +1744,39 @@ while we are in here.
       measured against a baseline we cannot see is guessing twice.
       **Deliberately NOT changed in #434.** Capping CI workers is a cost
       nobody has measured (RF30) and would slow every run.
+      **(d) THE FIRST LOCAL SIGHTING, 2026-09-15, and it is evidence FOR the
+      runner hypothesis rather than against it.** During Wave A PR2's Task 1,
+      `attempts.integration.test.ts`'s neighbour
+      `"refuses a contradiction — manual with a deviceName — with a 400
+      naming the field, and persists nothing"` failed once in a full
+      `--project integration` run and passed on the next TWO runs of the
+      identical command and tree.
+      **And a SECOND local test, same day, same shape:**
+      `frontDoorRoutes.integration.test.ts`'s `"anonymous start request 121
+      is rejected after 120 shared admissions"` failed twice in separate
+      probe runs and passed on two consecutive re-runs of the identical tree
+      (532/532 both times). **Ruled out as a budget collision, not assumed:**
+      it lives in a different file from the work in flight, builds its own
+      app in `beforeEach`, and TRUNCATEs — so a neighbouring file's `begin()`
+      calls cannot consume its 120 admissions. Different tests, different
+      projects from (b); same shape.
+      **Why it matters more than a fifth tally mark:** every prior sighting
+      was in CI, where the hypothesis is an UNCAPPED worker pool
+      (`vitest.config.ts:11` makes the cap CI-inert). This one ran with
+      `ERGOMATIC_TEST_WORKERS=2` on a laptop the same session had just
+      measured at **58 MB of free pages, 3.1 GB inactive, Docker's VM at
+      1.1 GB RSS**, with a background task KILLED for low memory minutes
+      earlier. So the common factor across CI and local is not the worker
+      COUNT, which differed by an order of magnitude — it is a starved
+      scheduler. **That narrows the instrument this row already owes:**
+      printing `os.availableParallelism()` and vitest's resolved worker
+      count is still step one, but memory pressure at the moment of failure
+      belongs beside them, or the local half of this evidence stays
+      unexplainable.
+      **RF40 check, stated because it is the trap here:** this was NOT a
+      signal death. Exit was a normal vitest failure with a `Test Files`
+      summary and no `Allocation failed` on stderr, so it is a test result
+      and re-running it was legitimate.
       (c) A third, on the SAME release run: `pnpm e2e` returned `553 passed`
       with exit 1, and the two immediately following full runs both returned
       `554 passed`. **Which test failed was not captured** — the tail showed

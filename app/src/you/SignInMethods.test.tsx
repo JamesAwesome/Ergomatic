@@ -26,6 +26,8 @@ function controller(view: AuthFlowView): AuthFlowController {
     startSignIn: vi.fn(),
     confirmAccount: vi.fn(),
     useUsualSignIn: vi.fn(),
+    confirmAttach: vi.fn(),
+    declineAttach: vi.fn(),
     prepareLink: vi.fn(),
     startPreparedLink: vi.fn(),
     authorizeLinkTarget: vi.fn(),
@@ -141,9 +143,13 @@ describe("SignInMethods", () => {
     );
     const auth = controller({ kind: "linked", targetProvider: "apple" });
     const { rerender } = render(<SignInMethods auth={auth} />);
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Apple is now connected. You can sign in either way.",
-    );
+    // The notice says only the CONSEQUENCE now (James, 2026-09-15). Asserting
+    // the provider name is ABSENT is the half that matters: the row beneath
+    // already reads CONNECTED, and this notice duplicating it was the
+    // complaint.
+    const notice = await screen.findByRole("status");
+    expect(notice).toHaveTextContent("You can sign in either way.");
+    expect(notice).not.toHaveTextContent("Apple is now connected");
     await waitFor(() => expect(api).toHaveBeenCalled());
     const retryAuth = controller({
       kind: "error",

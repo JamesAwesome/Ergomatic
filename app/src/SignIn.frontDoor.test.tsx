@@ -22,6 +22,8 @@ function controller(view: AuthFlowView): AuthFlowController {
     startSignIn: vi.fn(),
     confirmAccount: vi.fn(),
     useUsualSignIn: vi.fn(),
+    confirmAttach: vi.fn(),
+    declineAttach: vi.fn(),
     prepareLink: vi.fn(),
     startPreparedLink: vi.fn(),
     authorizeLinkTarget: vi.fn(),
@@ -121,22 +123,93 @@ describe("SignIn front door", () => {
     expect(screen.queryByText(EMAIL_NEEDED_COPY)).not.toBeInTheDocument();
   });
 
-  it("renders the usual-provider guidance and both provider variants", async () => {
-    const apple = controller({ kind: "usual", provider: "apple" });
-    const { rerender } = render(<SignIn auth={apple} />);
-    expect(screen.getByText(/add Google/)).toBeVisible();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Continue with Apple" }),
-    );
-    expect(apple.startSignIn).toHaveBeenCalledWith("apple");
+  // WAVE A PR2 DELETED THE SCREEN THIS TESTED. `useUsualSignIn` no longer
+  // parks the rower on "Sign in to your account / then open You → Sign-in
+  // methods to add {provider}" — it carries the attempt through the second
+  // authorization and returns to the post-proof confirmation, so nothing
+  // produces `kind: "usual"` any more. The test constructed that view BY
+  // HAND, which is what kept an unreachable screen looking covered.
+  // Its replacement is the attach confirmation below.
+  it("PR2: renders the post-proof confirmation naming both identities", async () => {
+    const auth = controller({
+      kind: "attach_confirm",
+      targetProvider: "apple",
+      carried: { email: "9m3x@privaterelay.appleid.com", name: "Rower" },
+      account: { id: "u1", email: "maya@example.com", name: "Maya Chen" },
+    });
+    render(<SignIn auth={auth} />);
+    expect(
+      screen.getByRole("heading", { name: "Attach Apple to this account?" }),
+    ).toBeVisible();
+    // THE RELAY ADDRESS IN FULL. The spec's constraint is that the
+    // confirmation names the provider AND the relay address; a truncated one
+    // does not name it.
+    expect(screen.getByText("9m3x@privaterelay.appleid.com")).toBeVisible();
+    // AND THE DESTINATION, which is what makes this a control rather than a
+    // notice: "attach this to WHICH account?"
+    expect(screen.getByText("maya@example.com")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Attach Apple" }));
+    expect(auth.confirmAttach).toHaveBeenCalledOnce();
+  });
 
-    const google = controller({ kind: "usual", provider: "google" });
-    rerender(<SignIn auth={google} />);
-    expect(screen.getByText(/add Apple/)).toBeVisible();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Continue with Google" }),
-    );
-    expect(google.startSignIn).toHaveBeenCalledWith("google");
+  it("PR2: Not now declines the attach rather than cancelling the sign-in", async () => {
+    const auth = controller({
+      kind: "attach_confirm",
+      targetProvider: "apple",
+      carried: { email: "9m3x@privaterelay.appleid.com", name: "Rower" },
+      account: { id: "u1", email: "maya@example.com", name: "Maya Chen" },
+    });
+    render(<SignIn auth={auth} />);
+    await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(auth.declineAttach).toHaveBeenCalledOnce();
+    expect(auth.cancel).not.toHaveBeenCalled();
+  });
+
+  // THE SAME SCREEN, THROUGH ITS OWN REQUEST, ON THE SURFACE THAT MATTERS.
+  // `AppRoutes` keeps the confirmation mounted while `finalize` runs, but
+  // `AppRoutes` only exists once `me` resolves IN — and on native it never
+  // does before the rower chooses. `SignIn` is the whole tree there, so if
+  // its dispatch drops the screen the moment the view goes `busy`, the
+  // native rower watches the confirmation vanish into the Ergomatic welcome
+  // screen and back out to Today. `disabled={busy}` cannot save a component
+  // that is not on screen.
+  it("PR2: keeps the confirmation drawn and inert through its own request", () => {
+    const auth = controller({
+      kind: "busy",
+      purpose: "signin",
+      attaching: {
+        targetProvider: "apple",
+        carried: { email: "9m3x@privaterelay.appleid.com", name: "Rower" },
+        account: { id: "u1", email: "maya@example.com", name: "Maya Chen" },
+      },
+    });
+    render(<SignIn auth={auth} />);
+    expect(
+      screen.getByRole("heading", { name: "Attach Apple to this account?" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Attach Apple" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Not now" })).toBeDisabled();
+    // AND THE WELCOME SCREEN IS NOT UNDERNEATH IT. This is the assertion
+    // that fails on the bounce: the provider buttons are what the rower saw
+    // instead of the confirmation.
+    expect(
+      screen.queryByRole("button", { name: "Continue with Apple" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // THE OTHER HALF, AND THE REASON THE DISCRIMINATOR IS ON THE VIEW RATHER
+  // THAN ON `purpose`. An ordinary sign-in is `busy`/`signin` too, and it has
+  // never been near this flow. Owning every such view would hand a rower
+  // waiting on a plain sign-in a confirmation with no identities to name.
+  it("PR2: an ordinary sign-in in flight still shows the welcome screen", () => {
+    const auth = controller({ kind: "busy", purpose: "signin" });
+    render(<SignIn auth={auth} />);
+    expect(
+      screen.getByRole("button", { name: "Continue with Apple" }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByRole("heading", { name: "Attach Apple to this account?" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a bounded retry and starts Google from the welcome screen", async () => {

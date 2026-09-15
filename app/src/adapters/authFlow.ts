@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  AuthUser,
   AuthError,
   AuthErrorCode,
   AuthOptions,
@@ -26,15 +27,32 @@ export type AuthOptionsView =
       google: boolean;
     };
 
+/** THE TWO IDENTITIES THE ATTACH CONFIRMATION NAMES, hoisted because two
+ *  view members carry the same payload and the screen must not care which
+ *  one it is reading. `carried` is the identity about to be ATTACHED (the one
+ *  proved first and held ever since); `account` is the one it attaches TO. */
+export type AttachingIdentities = {
+  targetProvider: AuthProvider;
+  carried: { email: string; name: string };
+  account: AuthUser;
+};
+
 export type AuthFlowView =
   | { kind: "idle" }
-  | { kind: "busy"; purpose: AuthPurpose }
+  // `attaching` IS PRESENT ONLY WHILE THE ATTACH CONFIRMATION'S OWN REQUEST
+  // IS IN FLIGHT, and it is the discriminator that lets the screen stay on
+  // screen through it. `purpose` cannot do that job: an ordinary sign-in is
+  // `busy`/`signin` too and has never been near this flow, so owning every
+  // such view hands a plain sign-in a confirmation with no identities to
+  // name. Carrying the payload rather than remembering it in the component
+  // also means the screen has ONE source of truth — a remembered copy is a
+  // second one, and nothing could prove it stayed equal to the first.
+  | { kind: "busy"; purpose: AuthPurpose; attaching?: AttachingIdentities }
   | {
       kind: "confirm";
       targetProvider: AuthProvider;
       profile: { email: string; name: string };
     }
-  | { kind: "usual"; provider: AuthProvider }
   | { kind: "link_confirm"; targetProvider: AuthProvider }
   | {
       kind: "link_authorize";
@@ -42,6 +60,24 @@ export type AuthFlowView =
       provider: AuthProvider;
     }
   | { kind: "linked"; targetProvider: AuthProvider }
+  // THE TERMINAL FOR BOTH EXITS OF THE ATTACH CONFIRMATION, and it exists
+  // for ROUTING, not for drawing — James ruled no notice. Without it the
+  // rower is stranded: they are standing on `/you/sign-in-methods`, the view
+  // goes `idle`, `destinationFor(idle)` is `null` so nothing navigates, and
+  // the route's own fallback sends them to `/you`. That silently reversed his
+  // "Today, signed in" ruling as a side effect of giving the screen a frame,
+  // and no test caught it because they all asserted the VIEW and never a
+  // location.
+  | { kind: "attached" }
+  // WAVE A PR2: THE POST-PROOF CONFIRMATION. The rower signed in with a
+  // provider Ergomatic did not recognise, said "I already have an account",
+  // and has now proved that account with their usual provider — so they are
+  // ALREADY SIGNED IN when this renders. That is why it is not a `confirm`:
+  // `confirm` asks whether to create an account, this asks whether to attach
+  // one identity to another, and refusing it is not a cancel. The identities
+  // it names are `AttachingIdentities` above, shared with the `busy` that
+  // carries it through its own request.
+  | ({ kind: "attach_confirm" } & AttachingIdentities)
   // Wave A PR 1 Task 3: the rower has re-proved their provider and the
   // account may now be deleted. Task 4 gave it a screen (`you/DeleteAccount`)
   // and `destinationFor` a route.
@@ -92,6 +128,9 @@ export interface AuthFlowController {
   startSignIn(provider: AuthProvider): Promise<void>;
   confirmAccount(): Promise<void>;
   useUsualSignIn(): Promise<void>;
+  /** WAVE A PR2, the post-proof confirmation's two exits. */
+  confirmAttach(): Promise<void>;
+  declineAttach(): Promise<void>;
   prepareLink(provider: AuthProvider): Promise<void>;
   startPreparedLink(): Promise<void>;
   authorizeLinkTarget(): Promise<void>;
@@ -191,15 +230,90 @@ export function destinationFor(
   // NOWHERE. The first three are answered in place on the methods list the
   // rower is already looking at; `deleted` hands over to the signed-out
   // transition, which replaces the whole tree (App.tsx).
+  // THE ATTACH CONFIRMATION NEEDS A ROUTE, NOT "/" — and getting this wrong
+  // is what made the whole flow invisible on web. `onSignedIn` is withheld
+  // until the rower chooses, so on NATIVE `me` stays `out` and `App` renders
+  // `SignIn` directly, ignoring routes entirely. On WEB the callback sets the
+  // session cookie before its 303, so the next document load resolves `me`
+  // IN, `AppRoutes` renders instead, and a destination of "/" is Today — the
+  // rower lands in the app, signed in, provider unattached, confirmation
+  // never shown. Routing to the full-bleed auth surface works on both: when
+  // signed out the route is ignored, when signed in it is the only frame
+  // this screen has.
+  // ONLY `attach_confirm` NAVIGATES, not the whole of `ownsAttachScreen`.
+  // Its `busy` arm keeps the route's ELEMENT rendering through the request;
+  // routing on it too would send every signin `busy` — including the ordinary
+  // sign-in that has not reached this flow — to the auth surface.
+  if (view.kind === "attach_confirm") return "/you/sign-in-methods";
+  // TODAY, per the ruling. Both exits land here — attaching and declining
+  // reach the same end state, and the rower set out to sign in, not to visit
+  // settings.
+  if (view.kind === "attached") return "/";
   if (
     view.kind === "confirm" ||
-    view.kind === "usual" ||
     (view.kind === "cancelled" && view.purpose === "signin") ||
     (view.kind === "error" && view.purpose === "signin")
   ) {
     return "/";
   }
   return null;
+}
+
+/** THE VIEWS THE ATTACH CONFIRMATION OWNS — the same shape as
+ *  `ownsDeleteScreen` below and for the same reason: `AppRoutes` decides
+ *  whether the route renders the screen, `SignIn` decides whether the
+ *  signed-out tree renders it, the screen decides whether it draws, and a
+ *  disagreement between any two of them is invisible.
+ *
+ *  A `busy` IS INCLUDED WHEN IT CARRIES `attaching`, and that is what makes
+ *  `AttachConfirm`'s disabled controls reachable at all. Without it the
+ *  screen unmounts the moment its own request starts, which is a weaker
+ *  guard wearing an attribute that can never be true.
+ *
+ *  IT IS KEYED ON THE PAYLOAD RATHER THAN ON `purpose`, and an earlier
+ *  version keyed on `busy`/`signin` alone. That was too wide in a way no
+ *  test could see: the web link and delete SUCCESS redirect is
+ *  `/?authAttempt=<id>` with NO `authPurpose` (unlike the failure and cancel
+ *  redirects, which carry one), `consumeReturnParams()` defaults an absent
+ *  purpose to `"signin"`, and the return effect sets exactly that view — so
+ *  a signed-in rower mid-link matched this predicate, shadowed the
+ *  `<Navigate to="/you">` fallback, and would have got a blank route if that
+ *  redirect ever landed anywhere but `/`. Keying on `attaching` removes the
+ *  shadow instead of arguing that nothing can reach it: only the two calls
+ *  in `confirmAttach`/`declineAttach` ever set it, and both run from the
+ *  confirmation itself.
+ *
+ *  The redirect's missing `authPurpose` is still a real ambiguity, just no
+ *  longer this predicate's problem. Carrying it on both attempt-surviving
+ *  redirects was tried and backed out — it changes a contract four
+ *  integration tests pin by exact location, two of them about stale-callback
+ *  safety — and is filed in ROADMAP.md. */
+export function ownsAttachScreen(view: AuthFlowView): boolean {
+  return attachingIn(view) !== null;
+}
+
+/** THE IDENTITIES THE ATTACH CONFIRMATION SHOULD DRAW, or `null` when this
+ *  view is not its business. One function so the router, the signed-out
+ *  screen and the component itself cannot disagree about which views belong
+ *  to the flow — and so the screen never has to remember a payload the view
+ *  already carries. */
+export function attachingIn(view: AuthFlowView): AttachingIdentities | null {
+  if (view.kind === "attach_confirm") return view;
+  if (view.kind === "busy") return view.attaching ?? null;
+  return null;
+}
+
+/** The confirmation's own identities, copied out of the view it arrived on
+ *  so the `busy` that replaces it carries exactly those three fields and not
+ *  a nested `kind`. */
+function attaching(
+  view: Extract<AuthFlowView, { kind: "attach_confirm" }>,
+): AttachingIdentities {
+  return {
+    targetProvider: view.targetProvider,
+    carried: view.carried,
+    account: view.account,
+  };
 }
 
 /** THE VIEWS `you/DeleteAccount` OWNS, in one place because two callers
@@ -445,6 +559,61 @@ async function finalizeLink(
   context.setView({ kind: "linked", targetProvider });
 }
 
+/** WAVE A PR2. `link_ready` HAS TWO PRODUCERS NOW and they want opposite
+ *  things, so every call site has to choose.
+ *
+ *  A LINK reached `link_ready` from You, where the rower was already looking
+ *  at their own methods list and already consented on the way in — finalizing
+ *  immediately is right and is what shipped.
+ *
+ *  A SIGNIN reached it from the sign-in screen, and James ruled on 2026-09-14
+ *  that the confirmation comes AFTER the proof. Finalizing immediately would
+ *  attach the identity with no confirmation shown, defeating that ruling in
+ *  the client while every server test stayed green. It nearly did: revision 4
+ *  of the plan qualified ONE of the two call sites, and the one it missed
+ *  (`authorizeNative`) is the only route the phone takes.
+ *
+ *  AND THE SIGNIN ARM MUST CONSUME THE SESSION. The server delivers it beside
+ *  the live attempt; nothing here used to store it, so `finalize`'s
+ *  `requireUser` would have answered 401 on native and the web rower would
+ *  have landed back on a sign-in screen holding a live 60-day cookie. No type
+ *  catches this — widening `AuthStep` produces zero client errors. */
+async function linkReady(
+  context: FlowContext,
+  active: ActiveOperation,
+  generation: number,
+  owner?: symbol,
+): Promise<void> {
+  if (active.step.outcome !== "link_ready") return;
+  if (active.step.purpose === "link") {
+    await finalizeLink(context, active, generation, owner);
+    return;
+  }
+  const step = active.step;
+  if (context.native) {
+    if (!step.session?.token) throw new AuthRequestError("signin_failed");
+    const { storeToken } = await import("../native/session");
+    // BETWEEN THE IMPORT AND THE STORE, not only after. `finishSignedIn` has
+    // checked here since it was written, and for the same reason: an abandon
+    // or a fresh `startSignIn` landing while the dynamic import resolves
+    // would otherwise store a token this flow has disowned, leaving the app
+    // silently signed in as the follow-through account while the UI starts
+    // over (RF27).
+    if (context.generation.current !== generation) return;
+    await storeToken(step.session.token);
+    if (context.generation.current !== generation) return;
+  }
+  if (!ownsOperation(context, active, generation, owner)) return;
+  if (!step.session) throw new AuthRequestError("signin_failed");
+  context.setTargetAuthorizationBusy(false);
+  context.setView({
+    kind: "attach_confirm",
+    targetProvider: step.targetProvider,
+    carried: step.profile,
+    account: step.session.user,
+  });
+}
+
 async function acceptStep(
   context: FlowContext,
   step: AuthStep,
@@ -474,7 +643,7 @@ async function acceptStep(
     return;
   }
   if (step.outcome === "link_ready") {
-    await finalizeLink(context, active, generation);
+    await linkReady(context, active, generation);
     return;
   }
   // BEFORE the `step.stage` read below: a delete_ready member carries no
@@ -550,7 +719,11 @@ async function authorizeNative(
     if (!ownsOperation(context, active, generation, owner)) return;
     if (next.outcome === "link_ready") {
       active.step = next;
-      await finalizeLink(context, active, generation, owner);
+      // NATIVE NEVER REACHES `acceptStep` FOR THIS OUTCOME — this returns
+      // first — so qualifying only the branch there would have left the
+      // phone attaching with no confirmation. Both sites route through
+      // `linkReady`.
+      await linkReady(context, active, generation, owner);
       return;
     }
     if (!releaseAuthorization(context, active, generation, owner)) return;
@@ -904,27 +1077,117 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
         );
       }
     },
+    /** WAVE A PR2. This USED to cancel the attempt outright, which destroyed
+     *  a subject the rower had just proved and sent them back to the sign-in
+     *  screen — so the same "Create your account" screen returned on every
+     *  future sign-in with that provider until they went to You and added it
+     *  by hand. It now carries the attempt forward instead: one trip, not
+     *  two. */
     async useUsualSignIn() {
       const active = operation.current;
       if (!active || active.step.outcome !== "confirm") return;
       const usualGeneration = generation.current;
-      const provider =
-        active.step.targetProvider === "apple" ? "google" : "apple";
       setView({ kind: "busy", purpose: "signin" });
-      const cleaned = await cancelActive(context, active);
-      if (generation.current !== usualGeneration) return;
-      if (!cleaned) {
+      try {
+        const surface = context.native ? "native" : "web";
+        const step = await postJson<AuthStep>(
+          `/api/auth/${surface}/attempts/${encodeURIComponent(active.step.attemptId)}/follow-through`,
+          context.native ? { bindingSecret: active.bindingSecret } : {},
+        );
+        if (generation.current !== usualGeneration) return;
+        // `autoAuthorize` so the rower goes straight to their provider —
+        // they already chose it by tapping "I already have an account".
+        await acceptStep(
+          context,
+          step,
+          active.bindingSecret,
+          true,
+          usualGeneration,
+          active,
+        );
+      } catch (error) {
         setFailure(
           context,
           usualGeneration,
           "signin",
-          new AuthRequestError("signin_failed"),
+          error,
           active.step.targetProvider,
           true,
         );
-        return;
       }
-      setView({ kind: "usual", provider });
+    },
+    /** Attach the carried identity, then go to Today SIGNED IN. */
+    async confirmAttach() {
+      const active = operation.current;
+      if (!active || view.kind !== "attach_confirm") return;
+      const attachGeneration = generation.current;
+      // THE BUSY CARRIES THE IDENTITIES FORWARD, which is what keeps the
+      // confirmation on screen — and inert — for the length of this request
+      // on BOTH surfaces. The guard above is why it is always available
+      // here: this only runs from the confirmation itself.
+      setView({ kind: "busy", purpose: "signin", attaching: attaching(view) });
+      try {
+        const surface = context.native ? "native" : "web";
+        const result = await postJson<{ outcome: "linked" }>(
+          `/api/auth/${surface}/attempts/${encodeURIComponent(active.step.attemptId)}/finalize`,
+          context.native ? { bindingSecret: active.bindingSecret } : {},
+        );
+        if (generation.current !== attachGeneration) return;
+        if (result.outcome !== "linked")
+          throw new AuthRequestError("signin_failed");
+        operation.current = null;
+        setTargetAuthorizationBusy(false);
+        // NO NOTICE, AND TODAY RATHER THAN THE ACCOUNT SCREEN (Gate 0 ruling,
+        // James, 2026-09-15). The rower set out to sign in and now is; the
+        // screen they just approved named both identities, and the proof it
+        // worked is being in the app. Landing them on a settings subpage
+        // would put one navigation between them and rowing.
+        //
+        // `attached` RATHER THAN `idle`, because `idle` routes nowhere and
+        // the rower is standing on the auth surface — they would be left on
+        // You, which is the subpage this ruling exists to avoid.
+        setView({ kind: "attached" });
+        onSignedInRef.current();
+      } catch {
+        // THE ROWER IS ALREADY SIGNED IN, SO A SIGN-IN ERROR SCREEN LIES
+        // ABOUT WHAT FAILED. By this point the session is minted and, on
+        // native, its token is already stored — `linkReady` did both before
+        // this screen rendered. Routing to `setFailure(… "signin" …)` left an
+        // authenticated rower reading "That sign-in didn't work", which is
+        // false twice over: the sign-in worked, and the thing that failed was
+        // the attach.
+        //
+        // The end state of a failed attach is the same as "Not now": signed
+        // in, nothing attached, and the offer returns on the next sign-in
+        // with the unattached provider. So it lands the same way. The failure
+        // is NOT surfaced, deliberately — it is not actionable here, and the
+        // rower can retry from You whenever they like. If that ever needs to
+        // be visible it belongs on the methods list, next to the thing that
+        // did not happen.
+        if (generation.current !== attachGeneration) return;
+        operation.current = null;
+        setTargetAuthorizationBusy(false);
+        setView({ kind: "attached" });
+        onSignedInRef.current();
+      }
+    },
+    /** "Not now". NOT a cancel — the rower is already signed in, and that
+     *  session was earned by their own credential at their own provider.
+     *  The attempt is discarded and they go to Today; the same screen will
+     *  offer again on their next sign-in with the unattached provider. */
+    async declineAttach() {
+      const active = operation.current;
+      if (!active || view.kind !== "attach_confirm") return;
+      const declineGeneration = generation.current;
+      setView({ kind: "busy", purpose: "signin", attaching: attaching(view) });
+      await cancelActive(context, active);
+      if (generation.current !== declineGeneration) return;
+      operation.current = null;
+      setTargetAuthorizationBusy(false);
+      // Same terminal as a successful attach: the end state is identical, so
+      // the landing is too.
+      setView({ kind: "attached" });
+      onSignedInRef.current();
     },
     async prepareLink(provider) {
       if (

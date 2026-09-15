@@ -10,9 +10,13 @@ function methodsNotice(auth: AuthFlowController): React.ReactNode {
   const view = auth.view;
   if (view.kind === "linked") {
     return (
+      // THE FIRST SENTENCE WAS DELETED (James, 2026-09-15): "{Provider} is now
+      // connected" duplicated the row directly beneath it, which already reads
+      // CONNECTED — the same fact twice in one viewport, and the notice is the
+      // half that never goes away on its own. What survives is the half the
+      // row cannot say: the CONSEQUENCE.
       <p className="notice auth-notice-success" role="status">
-        {name(view.targetProvider)} is now connected. You can sign in either
-        way.
+        You can sign in either way.
       </p>
     );
   }

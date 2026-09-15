@@ -1,0 +1,158 @@
+{
+  "formula": "WCAG 2.x relative luminance",
+  "tokens": {
+    "page": "#f4f1e8",
+    "surface": "#fffdf7",
+    "sunken": "#efeade",
+    "ink": "#1b1a17",
+    "ink2": "#3f3c35",
+    "ink3": "#57544c",
+    "ink4": "#6f6a5f",
+    "rule": "#d8d3c4",
+    "ruleRaised": "#928a78",
+    "accent": "#b5341f",
+    "accentHover": "#9c2c19",
+    "onColor": "#fffdf7",
+    "focus": "#1d4e89",
+    "success": "#49624f",
+    "apple": "#000000",
+    "white": "#ffffff"
+  },
+  "checks": [
+    {
+      "name": "Delete account label on surface",
+      "foreground": "#b5341f",
+      "background": "#fffdf7",
+      "role": "text",
+      "ratio": 5.94,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Delete account border on page",
+      "foreground": "#b5341f",
+      "background": "#f4f1e8",
+      "role": "ui",
+      "ratio": 5.35,
+      "floor": 3,
+      "passes": true
+    },
+    {
+      "name": "ACCOUNT heading on page",
+      "foreground": "#57544c",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 6.69,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Re-auth disclosure on page",
+      "foreground": "#57544c",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 6.69,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Door row label on page",
+      "foreground": "#57544c",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 6.69,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Door row label, promoted to ink",
+      "foreground": "#1b1a17",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 15.41,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Door row separator on page",
+      "foreground": "#d8d3c4",
+      "background": "#f4f1e8",
+      "role": "decorative",
+      "ratio": 1.32,
+      "floor": 3,
+      "passes": null
+    },
+    {
+      "name": "Subpage title on page",
+      "foreground": "#1b1a17",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 15.41,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Back link on page",
+      "foreground": "#57544c",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 6.69,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Name on page",
+      "foreground": "#1b1a17",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 15.41,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Email on page",
+      "foreground": "#57544c",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 6.69,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Sign out label on page",
+      "foreground": "#1b1a17",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 15.41,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Sign out border on page",
+      "foreground": "#1b1a17",
+      "background": "#f4f1e8",
+      "role": "ui",
+      "ratio": 15.41,
+      "floor": 3,
+      "passes": true
+    },
+    {
+      "name": "CONNECTED mark on page",
+      "foreground": "#49624f",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 5.92,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Focus ring beside page",
+      "foreground": "#1d4e89",
+      "background": "#f4f1e8",
+      "role": "focus",
+      "ratio": 7.43,
+      "floor": 3,
+      "passes": true
+    }
+  ]
+}

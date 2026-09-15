@@ -80,6 +80,8 @@ function idleAuthFlow(): AuthFlowController {
     startSignIn: vi.fn(),
     confirmAccount: vi.fn(),
     useUsualSignIn: vi.fn(),
+    confirmAttach: vi.fn(),
+    declineAttach: vi.fn(),
     prepareLink: vi.fn(),
     startPreparedLink: vi.fn(),
     authorizeLinkTarget: vi.fn(),
@@ -93,6 +95,110 @@ function idleAuthFlow(): AuthFlowController {
 }
 
 describe("AppRoutes", () => {
+  // THE GATE THAT WAS MISSING, AND ITS ABSENCE LET THE WEB FLOW SHIP TWICE
+  // BROKEN. `attach_confirm`'s only mount point was `SignIn`, which `App`
+  // renders ONLY when `me.state === "out"`. On web the callback sets the
+  // session cookie before its 303, so the return resolves `me` IN and
+  // `AppRoutes` renders instead — and nothing in the suite rendered this
+  // tree with that view. The first fix made the client set the view; it
+  // still had no frame.
+  it("PR2: the attach confirmation has a frame in the SIGNED-IN tree", () => {
+    const auth = idleAuthFlow();
+    auth.view = {
+      kind: "attach_confirm",
+      targetProvider: "apple",
+      carried: { email: "9m3x@privaterelay.appleid.com", name: "Rower" },
+      account: { id: "u1", email: "maya@example.com", name: "Maya Chen" },
+    };
+    render(
+      <MemoryRouter initialEntries={["/you/sign-in-methods"]}>
+        <AppRoutes
+          user={{ id: "u1", email: "maya@example.com", name: "Maya Chen" }}
+          onSignedOut={vi.fn()}
+          authFlow={auth}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Attach Apple to this account?" }),
+    ).toBeVisible();
+    expect(screen.getByText("9m3x@privaterelay.appleid.com")).toBeVisible();
+    expect(screen.getByText("maya@example.com")).toBeVisible();
+  });
+
+  // AND IT SURVIVES ITS OWN REQUEST. `confirmAttach` flips the view to a
+  // `busy` that CARRIES the same two identities forward; if the route drops
+  // the screen there, the disabled controls are an attribute on something
+  // already unmounted — which is what `disabled={busy}` was before this.
+  it("PR2: the confirmation stays mounted, and disabled, while its request runs", () => {
+    const auth = idleAuthFlow();
+    auth.view = {
+      kind: "attach_confirm",
+      targetProvider: "apple",
+      carried: { email: "9m3x@privaterelay.appleid.com", name: "Rower" },
+      account: { id: "u1", email: "maya@example.com", name: "Maya Chen" },
+    };
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/you/sign-in-methods"]}>
+        <AppRoutes
+          user={{ id: "u1", email: "maya@example.com", name: "Maya Chen" }}
+          onSignedOut={vi.fn()}
+          authFlow={auth}
+        />
+      </MemoryRouter>,
+    );
+    const busy = {
+      ...auth,
+      view: {
+        kind: "busy",
+        purpose: "signin",
+        attaching: {
+          targetProvider: "apple",
+          carried: { email: "9m3x@privaterelay.appleid.com", name: "Rower" },
+          account: { id: "u1", email: "maya@example.com", name: "Maya Chen" },
+        },
+      } as const,
+    };
+    rerender(
+      <MemoryRouter initialEntries={["/you/sign-in-methods"]}>
+        <AppRoutes
+          user={{ id: "u1", email: "maya@example.com", name: "Maya Chen" }}
+          onSignedOut={vi.fn()}
+          authFlow={busy}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Attach Apple to this account?" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Attach Apple" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Not now" })).toBeDisabled();
+  });
+
+  // AND A `busy` THAT IS NOT THIS FLOW'S DOES NOT GET THE SCREEN. The web
+  // link and delete SUCCESS redirect carries no `authPurpose`, so a
+  // signed-in rower mid-link sits at `busy`/`signin` — a view this predicate
+  // used to own. Owning it shadowed the route's own `<Navigate to="/you">`
+  // fallback with a component that had nothing to draw. The rower belongs on
+  // You, which is where the link notice is.
+  it("PR2: a signin busy that carries no identities falls through to You", () => {
+    const auth = idleAuthFlow();
+    auth.view = { kind: "busy", purpose: "signin" };
+    render(
+      <MemoryRouter initialEntries={["/you/sign-in-methods"]}>
+        <AppRoutes
+          user={{ id: "u1", email: "maya@example.com", name: "Maya Chen" }}
+          onSignedOut={vi.fn()}
+          authFlow={auth}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Attach Apple to this account?" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "You" })).toBeVisible();
+  });
+
   it("keeps an invalid selected review at its honest unavailable state rather than redirecting to Today", async () => {
     render(
       <MemoryRouter initialEntries={["/session/review?source=monitor"]}>

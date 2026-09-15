@@ -1,10 +1,24 @@
 import { useState } from "react";
 import { SignInButton } from "./adapters/auth";
+import { attachingIn, ownsAttachScreen } from "./adapters/authFlow";
 import type { AuthFlowController } from "./adapters/authFlow";
 import AuthProviderButton from "./auth/AuthProviderButton";
 
 function providerName(provider: "apple" | "google") {
   return provider === "apple" ? "Apple" : "Google";
+}
+
+/** The same two-initial fallback the confirm screen uses inline, lifted so
+ *  both identity cards on the attach confirmation can share it. */
+function initialsOf(name: string) {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]!.toUpperCase())
+      .join("") || "R"
+  );
 }
 
 function Welcome({ auth }: { auth: AuthFlowController }) {
@@ -120,6 +134,99 @@ function ConfirmAccount({
   );
 }
 
+/** WAVE A PR2: the post-proof confirmation. It has TWO FRAMES, because the
+ *  two surfaces put the rower in different trees: on web the callback sets
+ *  the session cookie before its 303, so `me` resolves IN and `AppRoutes`
+ *  renders it at `/you/sign-in-methods`; on native nothing reloads, `me`
+ *  stays out — `onSignedIn` is withheld until the rower chooses — and
+ *  `SignIn` renders it directly, routes ignored. Both frames ask
+ *  `ownsAttachScreen`, which is the only thing keeping them from disagreeing.
+ *
+ *  IT NAMES THREE THINGS, and the third is what makes it a control rather
+ *  than a notice: the identity being attached, the account it attaches TO,
+ *  and that the rower is already signed in. "Attach this to WHICH account?"
+ *  is a question they cannot answer without the second. */
+export function AttachConfirm({ auth }: { auth: AuthFlowController }) {
+  // THE PAYLOAD COMES OFF THE VIEW, INCLUDING THE `busy` ONE. The screen has
+  // to keep drawing through its own request, or the disabled controls below
+  // are an attribute on a component that has already unmounted — so
+  // `confirmAttach` carries the identities onto the `busy` it sets and this
+  // reads them from wherever they are. An earlier version remembered them in
+  // component state instead: that was a second source of truth, and nothing
+  // in the suite could prove it stayed equal to the first.
+  const view = attachingIn(auth.view);
+  if (!view) return null;
+  const target = providerName(view.targetProvider);
+  // BOTH CONTROLS GO INERT FOR THE REQUEST'S WHOLE LENGTH, the same guard
+  // `DeleteAccount` uses. Relying on this component unmounting when the view
+  // flips to `busy` is weaker: `confirmAttach` and `declineAttach` share a
+  // generation, so a second tap landing in the same tick would be guarded
+  // only by a render closure.
+  const busy = auth.view.kind === "busy" && auth.view.purpose === "signin";
+  return (
+    <main className="auth-flow-screen">
+      <header className="auth-flow-header">
+        <h1>Attach {target} to this account?</h1>
+        <p className="auth-intro">
+          You are signed in. Nothing has been attached yet.
+        </p>
+      </header>
+      <div className="auth-flow-body">
+        <p className="auth-field-label">ATTACHING</p>
+        <section className="auth-identity">
+          <div className="avatar" aria-hidden="true">
+            {initialsOf(view.carried.name)}
+          </div>
+          <div className="auth-identity-copy">
+            <p className="auth-identity-name">{view.carried.name}</p>
+            <p className="auth-identity-email auth-identity-email-full">
+              {view.carried.email}
+            </p>
+          </div>
+          <span className="auth-identity-mark">{target.toUpperCase()}</span>
+        </section>
+        <p className="auth-attach-arrow" aria-hidden="true">
+          &darr; TO &darr;
+        </p>
+        <p className="auth-field-label">THIS ACCOUNT</p>
+        <section className="auth-identity">
+          <div className="avatar" aria-hidden="true">
+            {initialsOf(view.account.name)}
+          </div>
+          <div className="auth-identity-copy">
+            <p className="auth-identity-name">{view.account.name}</p>
+            <p className="auth-identity-email auth-identity-email-full">
+              {view.account.email}
+            </p>
+          </div>
+        </section>
+        <div className="auth-explain">
+          <p>
+            After this you can sign in either way. Your workouts, plan and log
+            are unchanged.
+          </p>
+        </div>
+        <div className="auth-actions">
+          <button
+            className="button-l1"
+            disabled={busy}
+            onClick={() => void auth.confirmAttach()}
+          >
+            Attach {target}
+          </button>
+          <button
+            className="button-l2"
+            disabled={busy}
+            onClick={() => void auth.declineAttach()}
+          >
+            Not now
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
 function EmailNeeded({ auth }: { auth: AuthFlowController }) {
   return (
     <main className="auth-flow-screen">
@@ -154,32 +261,6 @@ function EmailNeeded({ auth }: { auth: AuthFlowController }) {
           </button>
         </div>
       </div>
-    </main>
-  );
-}
-
-function UsualSignIn({
-  auth,
-  provider,
-}: {
-  auth: AuthFlowController;
-  provider: "apple" | "google";
-}) {
-  const add = provider === "apple" ? "Google" : "Apple";
-  return (
-    <main className="signin">
-      <h1>Sign in to your account</h1>
-      <p className="auth-intro">
-        Use your usual sign-in. Then open You → Sign-in methods to add {add}.
-        Your workouts stay with the account you already have.
-      </p>
-      <AuthProviderButton
-        provider={provider}
-        onClick={() => void auth.startSignIn(provider)}
-      />
-      <button className="auth-back" onClick={auth.reset}>
-        ← ALL SIGN-IN OPTIONS
-      </button>
     </main>
   );
 }
@@ -238,8 +319,13 @@ export default function SignIn({
     if (auth.view.kind === "confirm") {
       return <ConfirmAccount auth={auth} view={auth.view} />;
     }
-    if (auth.view.kind === "usual") {
-      return <UsualSignIn auth={auth} provider={auth.view.provider} />;
+    // THE SAME PREDICATE THE ROUTER USES, not `kind === "attach_confirm"`.
+    // Dispatching on the kind alone dropped the screen the instant
+    // `confirmAttach` flipped the view to `busy`, and on native — where this
+    // component IS the whole tree — the rower watched the confirmation
+    // bounce to the Ergomatic welcome screen for the length of the request.
+    if (ownsAttachScreen(auth.view)) {
+      return <AttachConfirm auth={auth} />;
     }
     if (
       auth.view.kind === "error" &&

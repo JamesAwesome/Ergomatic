@@ -310,9 +310,13 @@ test("linking Apple proves Google then Apple and preserves the signed-in account
     await page.getByRole("button", { name: "Confirm with Google" }).click();
     await expect(page.getByLabel("Usual sign-in confirmed")).toBeVisible();
     await page.getByRole("button", { name: "Continue with Apple" }).click();
-    await expect(page.getByRole("status")).toHaveText(
-      "Apple is now connected. You can sign in either way.",
-    );
+    // The notice says only the CONSEQUENCE now (James, 2026-09-15): the row
+    // beneath already reads CONNECTED, and this notice repeating it was the
+    // complaint. Asserting the provider name is ABSENT is the half that
+    // catches it being re-added; matching the new string alone would not.
+    const notice = page.getByRole("status");
+    await expect(notice).toHaveText("You can sign in either way.");
+    await expect(notice).not.toContainText("Apple is now connected");
     await expect(page.locator(".auth-method-connected")).toHaveCount(2);
 
     const account = await page.evaluate(async (workoutTitle) => {
@@ -635,4 +639,94 @@ test("a delete return that outruns the session read still reaches the confirm sc
     page.getByRole("heading", { name: "Delete this account?" }),
   ).toBeVisible();
   await expect(page).toHaveURL(/\/you\/sign-in-methods$/);
+});
+
+// WAVE A PR2, Task 6. WHAT THIS LEG CAN AND CANNOT PROVE, said plainly so the
+// claim is not read as stronger than it is (RF26).
+//
+// It CANNOT assert "the account afterwards holds both providers", which is
+// what the plan's Task 6 Step 1 asked for. A browser cannot drive a real
+// OAuth exchange against the real stack — there is no fake provider seam —
+// so every front-door e2e leg in this file stubs the API, and a stubbed
+// server has no account to inspect. THAT claim is gated in
+// `server/auth/frontDoorRoutes.integration.test.ts`, which runs
+// begin -> proof -> follow-through -> proof -> finalize over real HTTP
+// against real Postgres and asserts one user row holding both subjects.
+//
+// What it DOES prove is the part jsdom cannot see: the confirmation renders
+// in a real engine at phone width, both of its controls are reachable without
+// scrolling, and the relay address is not clipped by the ellipsis rule that
+// governs every other identity card in the app.
+test("PR2: the post-proof confirmation renders both identities and both controls at phone width", async ({
+  page,
+}) => {
+  // 360, NOT 390, AND THE DIFFERENCE IS THE WHOLE GATE. Measured against this
+  // stack: at 390 the relay address is 211px in a 211px box and fits, so an
+  // anti-clipping assertion there can never go red — it passed with the fix
+  // deliberately removed. At 360 the same address is 208px in a 181px box and
+  // the shared ellipsis takes it. 360 is an ordinary Android width and the
+  // narrowest common phone; asserting at 390 was measuring the case that
+  // cannot fail (RF21).
+  await page.setViewportSize({ width: 360, height: 800 });
+  await enableFrontDoor(page);
+  await page.route("**/api/me", (route) =>
+    route.fulfill({ status: 401, json: { error: "unauthenticated" } }),
+  );
+  await page.route("**/api/auth/web/attempts/pr2-e2e", (route) =>
+    route.fulfill({
+      status: 200,
+      json: {
+        outcome: "link_ready",
+        attemptId: "pr2-e2e",
+        purpose: "signin",
+        targetProvider: "apple",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        profile: {
+          email: "9m3x7k2p1r@privaterelay.appleid.com",
+          name: "Rower",
+        },
+        // TOKEN-LESS, matching what `view()` actually returns on a web
+        // re-read — the browser holds the cookie. A fixture carrying a token
+        // here would be asserting against a field production never sends.
+        session: {
+          outcome: "signed_in",
+          user: { id: "u1", email: "maya.chen@example.com", name: "Maya Chen" },
+          expiresAt: "2099-01-01T00:00:00.000Z",
+        },
+      },
+    }),
+  );
+
+  await page.goto("/?authAttempt=pr2-e2e");
+
+  await expect(
+    page.getByRole("heading", { name: "Attach Apple to this account?" }),
+  ).toBeVisible();
+
+  // THE RELAY ADDRESS IN FULL. The shared `.auth-identity-email` rule
+  // ellipsises, which would cut this at "…appleid…" and lose the half that
+  // says it IS a relay. Assert the rendered width is not clipped rather than
+  // that the text node exists — jsdom resolves no layout, so it would pass
+  // either way. Probed: removing `.auth-identity-email-full` from
+  // `SignIn.tsx` reds this line here, and did NOT at 390px.
+  const relay = page.getByText("9m3x7k2p1r@privaterelay.appleid.com");
+  await expect(relay).toBeVisible();
+  const clipped = await relay.evaluate(
+    (el) => el.scrollWidth > el.clientWidth + 1,
+  );
+  expect(clipped).toBe(false);
+
+  // THE DESTINATION ACCOUNT, which is what makes this a control.
+  await expect(page.getByText("maya.chen@example.com")).toBeVisible();
+
+  // BOTH CONTROLS REACHABLE WITHOUT SCROLLING. RC-24's failure was the one
+  // control a screen exists for sitting below the fold.
+  for (const name of ["Attach Apple", "Not now"]) {
+    const button = page.getByRole("button", { name });
+    await expect(button).toBeVisible();
+    const box = await button.boundingBox();
+    if (!box) throw new Error(`${name} has no box`);
+    expect(box.y + box.height).toBeLessThanOrEqual(800);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
 });

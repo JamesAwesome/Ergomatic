@@ -39,7 +39,7 @@ vi.mock("../native/session", () => ({
 vi.mock("./webNavigate", () => ({ navigateWeb: seam.navigateWeb }));
 
 import { destinationFor, useAuthFlow } from "./authFlow";
-import type { AuthFlowView } from "./authFlow";
+import type { AuthFlowController, AuthFlowView } from "./authFlow";
 import LinkSignInMethod from "../auth/LinkSignInMethod";
 import You from "../You";
 import DeleteAccount from "../you/DeleteAccount";
@@ -759,8 +759,15 @@ describe("useAuthFlow", () => {
     expect(onSignedIn).toHaveBeenCalledOnce();
   });
 
-  it("cancels confirmation before directing an existing rower to the usual provider", async () => {
+  // WAVE A PR2 REPLACES BOTH OF THE TESTS THAT WERE HERE. They asserted the
+  // dead end: `useUsualSignIn` cancelled the attempt, destroying a subject the
+  // rower had just proved, and the second covered a retry of that cancel. The
+  // attempt is now carried forward, so a cancel on this path is not a step
+  // whose failure needs retrying — it is not a step at all. Replaced rather
+  // than deleted, so the change of contract is visible in the file.
+  it("PR2: useUsualSignIn carries the attempt forward instead of cancelling it", async () => {
     window.history.replaceState(null, "", "/?authAttempt=usual");
+    let cancelled = false;
     seam.api.mockImplementation(async (path: string) => {
       if (path === "/api/auth/options") return ok(options);
       if (path === "/api/auth/web/attempts/usual") {
@@ -773,7 +780,22 @@ describe("useAuthFlow", () => {
           profile: { email: "relay@apple.test", name: "Rower" },
         });
       }
+      if (path === "/api/auth/web/attempts/usual/follow-through") {
+        return ok({
+          outcome: "authorize",
+          attemptId: "usual",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "google",
+          stage: "reauth",
+          nonce: "n2",
+          state: "s2",
+          authorizationUrl: "https://accounts.google.test/authorize",
+        });
+      }
       if (path === "/api/auth/web/attempts/usual/cancel") {
+        cancelled = true;
         return new Response(null, { status: 204 });
       }
       throw new Error(`unexpected ${path}`);
@@ -781,57 +803,331 @@ describe("useAuthFlow", () => {
     const { result } = renderHook(() => useAuthFlow(() => {}));
     await waitFor(() => expect(result.current.view.kind).toBe("confirm"));
     await act(async () => result.current.useUsualSignIn());
-    expect(result.current.view).toStrictEqual({
-      kind: "usual",
-      provider: "google",
-    });
-    act(() => result.current.reset());
-    expect(result.current.view).toStrictEqual({ kind: "idle" });
-    await act(async () => result.current.prepareLink("google"));
-    act(() => result.current.abandon());
-    expect(result.current.view).toStrictEqual({ kind: "idle" });
+    // THE CONSEQUENCE, not the absence of a call: the attempt survived and
+    // the flow advanced to the rower's usual provider carrying it.
+    expect(cancelled).toBe(false);
+    expect(seam.navigateWeb).toHaveBeenCalledWith(
+      "https://accounts.google.test/authorize",
+    );
   });
 
-  it("keeps confirmation active when usual-sign-in cleanup is uncertain, then advances after a successful retry", async () => {
-    window.history.replaceState(null, "", "/?authAttempt=usual-retry");
-    let cancellations = 0;
+  // THE TESTS NO TYPE CAN REPLACE. Widening `AuthStep`'s `link_ready` member
+  // breaks the SERVER producer and produces ZERO client errors (measured), so
+  // the client's obligation to consume the delivered session is covered here
+  // or nowhere. Both drive the REAL resume path — `?authAttempt=` is exactly
+  // how a web rower returning from their provider arrives — rather than a
+  // seam added to production for a test's convenience.
+  // NO `token`, BECAUSE `view()` SENDS NONE. This fixture is served from
+  // `/api/auth/web/attempts/ft`, the web RE-READ endpoint, and the browser
+  // already holds the session cookie — so a token here would be a field
+  // production never sends, and asserting against it is RF24's exact shape:
+  // a gate that cannot fail on the one defect that matters. An earlier
+  // version of this fixture carried one, and the whole web follow-through
+  // was dead behind it.
+  const session = {
+    outcome: "signed_in",
+    user: { id: "u1", email: "maya@test", name: "Maya Chen" },
+    expiresAt: "later",
+  };
+  function resumeAs(step: Record<string, unknown>, onFinalize?: () => void) {
+    return async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/ft") return ok(step);
+      if (path === "/api/auth/web/attempts/ft/finalize") {
+        onFinalize?.();
+        return ok({ outcome: "linked" });
+      }
+      if (path === "/api/auth/web/attempts/ft/cancel")
+        return new Response(null, { status: 204 });
+      throw new Error(`unexpected ${path}`);
+    };
+  }
+  const readyStep = (purpose: "signin" | "link") => ({
+    outcome: "link_ready",
+    attemptId: "ft",
+    purpose,
+    targetProvider: "apple",
+    expiresAt: "soon",
+    profile: { email: "relay@apple.test", name: "Rower" },
+    session: purpose === "signin" ? session : null,
+  });
+
+  it("PR2: a signin link_ready shows the confirmation and attaches NOTHING", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=ft");
+    let finalized = false;
+    seam.api.mockImplementation(
+      resumeAs(readyStep("signin"), () => {
+        finalized = true;
+      }),
+    );
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() =>
+      expect(result.current.view.kind).toBe("attach_confirm"),
+    );
+    // James's confirm-after-the-proof ruling, gated in the client: NO attach
+    // happened, and the screen names BOTH identities — the carried one and
+    // the account it would join.
+    expect(finalized).toBe(false);
+    expect(result.current.view).toStrictEqual({
+      kind: "attach_confirm",
+      targetProvider: "apple",
+      carried: { email: "relay@apple.test", name: "Rower" },
+      account: { id: "u1", email: "maya@test", name: "Maya Chen" },
+    });
+  });
+
+  // THE WINDOW BETWEEN THE TAP AND THE ANSWER, which is where this defect
+  // has now hidden four times. Both exits leave the confirmation on screen,
+  // inert, until their request answers — and BOTH FRAMES that draw it read
+  // the identities off the `busy` view, so a `busy` that drops them is the
+  // native rower watching the screen fall through to the welcome page.
+  //
+  // It is asserted at THIS layer, and for both exits, because the screen
+  // tests can only assert what a view already carries. Dropping the payload
+  // from `declineAttach` alone reddened nothing across 163 of them.
+  it.each([
+    ["confirmAttach", (flow: AuthFlowController) => flow.confirmAttach()],
+    ["declineAttach", (flow: AuthFlowController) => flow.declineAttach()],
+  ])(
+    "PR2: %s keeps the identities on screen until its request answers",
+    async (_name, exit) => {
+      window.history.replaceState(null, "", "/?authAttempt=ft");
+      const held = deferred<Response>();
+      seam.api.mockImplementation(async (path: string) => {
+        if (path === "/api/auth/options") return ok(options);
+        if (path === "/api/auth/web/attempts/ft")
+          return ok(readyStep("signin"));
+        // BOTH EXITS' REQUESTS ARE HELD, so the in-flight view is observable
+        // rather than raced past. Releasing them is the last step.
+        if (
+          path === "/api/auth/web/attempts/ft/finalize" ||
+          path === "/api/auth/web/attempts/ft/cancel"
+        )
+          return held.promise;
+        throw new Error(`unexpected ${path}`);
+      });
+      const { result } = renderHook(() => useAuthFlow(() => {}));
+      await waitFor(() =>
+        expect(result.current.view.kind).toBe("attach_confirm"),
+      );
+      act(() => void exit(result.current));
+      await waitFor(() => expect(result.current.view.kind).toBe("busy"));
+      expect(result.current.view).toStrictEqual({
+        kind: "busy",
+        purpose: "signin",
+        attaching: {
+          targetProvider: "apple",
+          carried: { email: "relay@apple.test", name: "Rower" },
+          account: { id: "u1", email: "maya@test", name: "Maya Chen" },
+        },
+      });
+      await act(async () => {
+        held.resolve(ok({ outcome: "linked" }));
+      });
+      await waitFor(() => expect(result.current.view.kind).toBe("attached"));
+    },
+  );
+
+  it("PR2: a LINK link_ready still finalizes immediately, unchanged", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=ft");
+    let finalized = false;
+    seam.api.mockImplementation(
+      resumeAs(readyStep("link"), () => {
+        finalized = true;
+      }),
+    );
+    const { result } = renderHook(() => useAuthFlow(() => {}));
+    await waitFor(() => expect(result.current.view.kind).toBe("linked"));
+    // The shipped behaviour, protected. A rower who started from You already
+    // consented on the way in; making THEM confirm twice would be the fix
+    // overshooting into the flow it was not about.
+    expect(finalized).toBe(true);
+  });
+
+  it("PR2: confirming the attach signs the rower in and lands them on Today", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=ft");
+    const onSignedIn = vi.fn();
+    seam.api.mockImplementation(resumeAs(readyStep("signin")));
+    const { result } = renderHook(() => useAuthFlow(onSignedIn));
+    await waitFor(() =>
+      expect(result.current.view.kind).toBe("attach_confirm"),
+    );
+    await act(async () => result.current.confirmAttach());
+    // Gate 0 ruling: Today, signed in, NO notice. ASSERT THE DESTINATION,
+    // not just the view — every earlier version of this test checked
+    // `{kind:"idle"}` and `onSignedIn`, which stayed true while the rower was
+    // silently being left on You. A view assertion cannot see a landing.
+    expect(result.current.view).toStrictEqual({ kind: "attached" });
+    expect(result.current.destination).toBe("/");
+    expect(onSignedIn).toHaveBeenCalledOnce();
+  });
+
+  it("PR2: a failed attach still lands a signed-in rower in the app", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=ft");
+    const onSignedIn = vi.fn();
+    let finalizeAttempts = 0;
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/web/attempts/ft/finalize") {
+        finalizeAttempts += 1;
+        return ok({ error: "signin_failed" }, 503);
+      }
+      return resumeAs(readyStep("signin"))(path);
+    });
+    const { result } = renderHook(() => useAuthFlow(onSignedIn));
+    await waitFor(() =>
+      expect(result.current.view.kind).toBe("attach_confirm"),
+    );
+    await act(async () => result.current.confirmAttach());
+    // By this point the session was minted and the rower is authenticated.
+    // A "That sign-in didn't work" screen would be false twice over — the
+    // sign-in worked, and what failed was the attach.
+    expect(result.current.view).toStrictEqual({ kind: "attached" });
+    expect(result.current.destination).toBe("/");
+    expect(onSignedIn).toHaveBeenCalledOnce();
+    // THE END STATE ALONE CANNOT TELL A FAILED ATTACH FROM A SUCCESSFUL ONE —
+    // the success test asserts the same `attached` + one `onSignedIn`. Pin the
+    // attempt itself, so a mutation that stops `postJson` throwing is caught
+    // here rather than passing as "the rower ended up in the app".
+    expect(finalizeAttempts).toBe(1);
+  });
+
+  it("PR2: Not now leaves them signed in, with nothing attached", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=ft");
+    const onSignedIn = vi.fn();
+    let finalized = false;
+    seam.api.mockImplementation(
+      resumeAs(readyStep("signin"), () => {
+        finalized = true;
+      }),
+    );
+    const { result } = renderHook(() => useAuthFlow(onSignedIn));
+    await waitFor(() =>
+      expect(result.current.view.kind).toBe("attach_confirm"),
+    );
+    await act(async () => result.current.declineAttach());
+    // REFUSING IS NOT CANCELLING. The session was earned by the rower's own
+    // credential at their own provider, so they stay signed in; only the
+    // attach is declined.
+    expect(finalized).toBe(false);
+    expect(result.current.view).toStrictEqual({ kind: "attached" });
+    expect(result.current.destination).toBe("/");
+    expect(onSignedIn).toHaveBeenCalledOnce();
+  });
+
+  // NATIVE, AND IT IS THE HALF THAT MATTERS. The web tests above left two
+  // things ungated, measured with mutations: deleting `storeToken` reddened
+  // nothing, and reverting `authorizeNative`'s call site to `finalizeLink` —
+  // the exact incomplete fix revision 4 prescribed — also reddened nothing,
+  // because nothing drove the native route. Native is the primary surface and
+  // `authorizeNative` RETURNS before `acceptStep` is reached, so a web-only
+  // suite cannot see either.
+  it("PR2 native: the follow-through stores the session and confirms before attaching", async () => {
+    seam.native = true;
+    let finalized = false;
+    seam.googleProof.mockResolvedValue({ idToken: "google-id-token" });
     seam.api.mockImplementation(async (path: string) => {
       if (path === "/api/auth/options") return ok(options);
-      if (path === "/api/auth/web/attempts/usual-retry") {
+      if (path === "/api/auth/native/attempts")
         return ok({
           outcome: "confirm",
-          attemptId: "usual-retry",
+          attemptId: "nft",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          profile: { email: "relay@apple.test", name: "Rower" },
+          bindingSecret: "binding",
+        });
+      if (path === "/api/auth/native/attempts/nft/follow-through")
+        return ok({
+          outcome: "authorize",
+          attemptId: "nft",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "google",
+          stage: "reauth",
+          nonce: "n2",
+          state: "s2",
+        });
+      if (path === "/api/auth/native/attempts/nft/proof")
+        return ok({
+          outcome: "link_ready",
+          attemptId: "nft",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          profile: { email: "relay@apple.test", name: "Rower" },
+          session: {
+            outcome: "signed_in",
+            user: { id: "u1", email: "maya@test", name: "Maya Chen" },
+            expiresAt: "later",
+            token: "adopted-token",
+          },
+        });
+      if (path === "/api/auth/native/attempts/nft/finalize") {
+        finalized = true;
+        return ok({ outcome: "linked" });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    const onSignedIn = vi.fn();
+    const { result } = renderHook(() => useAuthFlow(onSignedIn));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+    await act(async () => result.current.startSignIn("apple"));
+    await waitFor(() => expect(result.current.view.kind).toBe("confirm"));
+
+    await act(async () => result.current.useUsualSignIn());
+    await waitFor(() =>
+      expect(result.current.view.kind).toBe("attach_confirm"),
+    );
+    // THE TOKEN IS STORED BEFORE ANYTHING ELSE. `finalize` sits behind
+    // `requireUser`; without this the phone would answer 401 on a flow that
+    // had already succeeded on the server.
+    expect(seam.storeToken).toHaveBeenCalledWith("adopted-token");
+    // AND NOTHING WAS ATTACHED YET, on the surface where the missed call
+    // site would have attached silently.
+    expect(finalized).toBe(false);
+    expect(onSignedIn).not.toHaveBeenCalled();
+
+    await act(async () => result.current.confirmAttach());
+    expect(finalized).toBe(true);
+    expect(result.current.view).toStrictEqual({ kind: "attached" });
+    expect(result.current.destination).toBe("/");
+    expect(onSignedIn).toHaveBeenCalledOnce();
+  });
+
+  it("PR2: a failed follow-through leaves the rower a way forward", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=usual-fail");
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/web/attempts/usual-fail") {
+        return ok({
+          outcome: "confirm",
+          attemptId: "usual-fail",
           purpose: "signin",
           targetProvider: "apple",
           expiresAt: "soon",
           profile: { email: "relay@apple.test", name: "Rower" },
         });
       }
-      if (path === "/api/auth/web/attempts/usual-retry/cancel") {
-        cancellations += 1;
-        return cancellations === 1
-          ? ok({ error: "signin_failed" }, 503)
-          : new Response(null, { status: 204 });
+      if (path === "/api/auth/web/attempts/usual-fail/follow-through") {
+        return ok({ error: "signin_failed" }, 503);
       }
       throw new Error(`unexpected ${path}`);
     });
     const { result } = renderHook(() => useAuthFlow(() => {}));
     await waitFor(() => expect(result.current.view.kind).toBe("confirm"));
-
     await act(async () => result.current.useUsualSignIn());
+    // PR #444 spent a Gate 0 on this screen's dead ends. A follow-through
+    // that fails does not get to grow a new one: the rower lands on an
+    // error state that names the purpose and the provider, which is what
+    // the sign-in screen renders its recovery from.
     expect(result.current.view).toStrictEqual({
       kind: "error",
       purpose: "signin",
       code: "signin_failed",
       targetProvider: "apple",
     });
-
-    await act(async () => result.current.useUsualSignIn());
-    expect(result.current.view).toStrictEqual({
-      kind: "usual",
-      provider: "google",
-    });
-    expect(cancellations).toBe(2);
   });
 
   it("retains a rejected explicit cancellation for a later successful cleanup", async () => {
@@ -1030,7 +1326,18 @@ describe("useAuthFlow", () => {
 
   it.each([
     ["confirm", "/"],
-    ["usual", "/"],
+    // `attach_confirm` ROUTES TO THE AUTH SURFACE, not "/", and the reason is
+    // the defect it was shipped with. `onSignedIn` is withheld until the
+    // rower chooses, so on NATIVE `me` stays out and `App` renders `SignIn`
+    // directly, ignoring routes. On WEB the callback sets the session cookie
+    // before its 303, so the return resolves `me` IN — and "/" in the
+    // signed-in tree is Today, which left the rower in the app with the
+    // confirmation set on a component that had no frame.
+    ["attach_confirm", "/you/sign-in-methods"],
+    // The terminal both exits reach. It draws nothing — it exists so the
+    // rower is routed HOME rather than left standing on the auth surface,
+    // where the route's own fallback would send them to You.
+    ["attached", "/"],
     ["link_confirm", "/you/sign-in-methods"],
     ["link_authorize", "/you/sign-in-methods"],
     ["linked", "/you"],
@@ -1041,8 +1348,13 @@ describe("useAuthFlow", () => {
     const view = (
       kind === "confirm"
         ? { kind, targetProvider: "apple", profile: { email: "", name: "" } }
-        : kind === "usual"
-          ? { kind, provider: "apple" }
+        : kind === "attach_confirm"
+          ? {
+              kind,
+              targetProvider: "apple",
+              carried: { email: "", name: "" },
+              account: { id: "u1", email: "", name: "" },
+            }
           : kind === "link_confirm" || kind === "linked"
             ? { kind, targetProvider: "apple" }
             : kind === "link_authorize"

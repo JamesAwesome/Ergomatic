@@ -93,7 +93,11 @@ it either way is yours; I have not silently removed it.
   so the duplication is on screen rather than described.
 - **`renders/10-naming-you-options.png` — naming the "You" screen.** **The
   census was wrong in the row and is corrected here: seven live strings, not
-  five, and three treatments, not two.** `SignIn.tsx:173` was missed, and
+  five, and three treatments, not two.** **AND IT MOVED AGAIN AFTER THIS PACK
+  WAS RENDERED:** Task 5 deleted `SignIn.tsx:173` with the dead-end screen it
+  lived on, so the live count is now SIX. The board shows the census as it
+  stood at the gate; the treatment decision is unaffected, and the plan orders
+  a re-measure at implementation time for exactly this reason. `SignIn.tsx:173` was missed, and
   `Concept2SendBlock.tsx:226` uses a third form ("the You tab") that the row
   never mentioned. Three undated News strings use that form too, across two article
   bodies (`yourFirstRow.tsx:28` and `:36`, `baselines.tsx:63`), which Phase

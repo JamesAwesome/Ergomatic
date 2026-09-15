@@ -74,10 +74,37 @@ function same(a: Attempt, b: Attempt) {
   );
 }
 function consistent(a: Attempt) {
-  const signup = ["authorize", "exchanging", "confirm"].includes(a.stage);
-  const verified = ["confirm", "link_ready"].includes(a.stage);
+  // THE STAGES ARE SHARED, SO THE RULE IS ASYMMETRIC (Wave A PR2). A signin
+  // used to live only at these three; the follow-through carries it through
+  // `reauth_authorize`, `reauth_exchanging` and `link_ready` as well. But
+  // `begin()` starts a LINK and a DELETE at `reauth_authorize`, and the link
+  // flow ENDS at `link_ready` — so the widening cannot be "add three stages
+  // to the signup set". Measured over 27 purpose x stage cells: doing that
+  // refuses five rows the shipped machine produces, including the link
+  // flow's own terminal stage.
+  //
+  // Read it as two statements rather than one equality:
+  //   a signin must be at a stage a signin can occupy;
+  //   a link or a delete must NOT be at a signup-only stage.
+  const signupOnly = ["authorize", "exchanging", "confirm"].includes(a.stage);
+  const followThrough = [
+    "reauth_authorize",
+    "reauth_exchanging",
+    "link_ready",
+  ].includes(a.stage);
+  const stageFitsPurpose =
+    a.purpose === "signin" ? signupOnly || followThrough : !signupOnly;
+  // AND THE `verified` CLAUSE IS PURPOSE-QUALIFIED FOR THE SAME REASON. The
+  // carried identity is what the whole follow-through rests on, so it must
+  // be required at the stages that carry it — but only for a signin. A link
+  // at `reauth_authorize` legitimately has no `verified_*` yet; requiring it
+  // there would refuse every link at its first stage.
+  const verified =
+    ["confirm", "link_ready"].includes(a.stage) ||
+    (a.purpose === "signin" &&
+      ["reauth_authorize", "reauth_exchanging"].includes(a.stage));
   if (
-    (a.purpose === "signin") !== signup ||
+    !stageFitsPurpose ||
     (verified &&
       (!a.verifiedSubject || a.verifiedEmail === null || !a.verifiedName)) ||
     Boolean(a.appleClientId) !== Boolean(a.appleRefreshToken) ||
@@ -93,10 +120,14 @@ function consistent(a: Attempt) {
     // `delete_ready` entry, so a delete can never reach `target_exchanging`;
     // that is an invariant held up by the current call graph with nothing
     // naming it (RF18). This names it, and closes the mirror case too
-    // rather than the one counterexample (RF34). The signin-only stages are
-    // already covered by the `signup` rule at the top.
-    ((a.stage.startsWith("target_") || a.stage === "link_ready") &&
-      a.purpose !== "link") ||
+    // rather than the one counterexample (RF34). The signup-only stages are
+    // already covered by `stageFitsPurpose` above.
+    // `link_ready` IS NO LONGER LINK-ONLY: a signin follow-through ends
+    // there too, holding an adopted session. `target_*` stays link-only.
+    (a.stage.startsWith("target_") && a.purpose !== "link") ||
+    (a.stage === "link_ready" &&
+      a.purpose !== "link" &&
+      a.purpose !== "signin") ||
     (a.stage === "delete_ready" && a.purpose !== "delete")
   )
     throw new AuthFailure("attempt_expired");
@@ -135,6 +166,36 @@ export function createAttempts(
         )
       )
         throw new AuthFailure("account_conflict");
+      // THE ACCOUNT WENT AWAY MID-TRANSACTION, AND UNTIL NOW THAT WAS A 500.
+      // Wave A PR2's follow-through mints a session for an account it just
+      // resolved; a delete landing between the resolve and the
+      // `INSERT INTO sessions` violates the FK. Measured through the real
+      // `accept()` against a HELD delete transaction: `code=23503`,
+      // `constraint=sessions_user_id_users_id_fk`, not an `AuthFailure`, so
+      // `failure()` rendered `signin_failed` = 500 where 409
+      // `account_changed` is exactly right — it is the same fact `original()`
+      // reports when it finds no session.
+      //
+      // Constraint-named, not bare 23503: any OTHER foreign key failing here
+      // would be a bug in this module rather than a race with a rower, and
+      // swallowing it as `account_changed` would hide it.
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "23503" &&
+        "constraint" in error &&
+        [
+          "sessions_user_id_users_id_fk",
+          // THE SAME RACE HAS A SIBLING (found at review). `finishSignin`
+          // runs `grant()` BEFORE `mintSession`, so an Apple sign-in whose
+          // account is deleted mid-transaction trips the grant's FK first,
+          // not the session's. Same cause, same right answer; leaving it out
+          // would have been this fix half-applied (RF34).
+          "apple_grants_user_id_users_id_fk",
+        ].includes(String(error.constraint))
+      )
+        throw new AuthFailure("account_changed");
       throw error;
     } finally {
       tx.release();
@@ -232,18 +293,26 @@ export function createAttempts(
   async function mintSession(
     tx: pg.PoolClient,
     user: AuthUser,
-  ): Promise<SignedIn> {
+  ): Promise<{ signedIn: SignedIn; sessionId: string }> {
     const token = random();
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
-    await tx.query(
-      "INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)",
-      [user.id, hashToken(token), expiresAt],
-    );
+    // RETURNING id, because Wave A PR2's follow-through has to ADOPT this
+    // session onto the attempt. The id stays out of `SignedIn`, which is a
+    // wire type — a session's row id is not something a client should hold.
+    const sessionId = (
+      await tx.query<{ id: string }>(
+        "INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3) RETURNING id",
+        [user.id, hashToken(token), expiresAt],
+      )
+    ).rows[0]!.id;
     return {
-      outcome: "signed_in",
-      user,
-      token,
-      expiresAt: expiresAt.toISOString(),
+      signedIn: {
+        outcome: "signed_in",
+        user,
+        token,
+        expiresAt: expiresAt.toISOString(),
+      },
+      sessionId,
     };
   }
   async function finishSignin(
@@ -253,7 +322,7 @@ export function createAttempts(
   ): Promise<AttemptResult> {
     requireAccess(user.email);
     await grant(tx, user.id, a);
-    const signedIn = await mintSession(tx, user);
+    const { signedIn } = await mintSession(tx, user);
     await tx.query("DELETE FROM auth_attempts WHERE id=$1", [a.id]);
     return { signedIn };
   }
@@ -360,6 +429,41 @@ export function createAttempts(
         return { attempt: row, bindingSecret };
       });
     },
+    /** WAVE A PR2: who owns an adopted session, for a RE-READ of a
+     *  follow-through.
+     *
+     *  `result()` delivers the session once, at the moment it is minted. The
+     *  WEB surface then bounces through a redirect and re-reads the attempt
+     *  with `GET /api/auth/web/attempts/:id`, which is served by `view()` —
+     *  and `view()` mints nothing. Without this the re-read returned
+     *  `session: null` and the client threw, so the whole follow-through was
+     *  dead on web while every native test passed.
+     *
+     *  NO TOKEN, and that is not an omission. The browser already holds the
+     *  session cookie `signed()` set on the callback; handing the token back
+     *  in a JSON body would put a bearer credential somewhere the web surface
+     *  has never needed one. Native never takes this path — it resumes
+     *  through `/proof`, which carries the token in its own response. */
+    async adoptedSession(
+      sessionId: string,
+    ): Promise<{ user: AuthUser; expiresAt: Date } | undefined> {
+      const row = (
+        await pool.query<{
+          id: string;
+          email: string;
+          name: string;
+          expiresAt: Date;
+        }>(
+          `SELECT users.id,users.email,users.name,sessions.expires_at AS "expiresAt" FROM sessions INNER JOIN users ON sessions.user_id=users.id WHERE sessions.id=$1 AND sessions.expires_at>now()`,
+          [sessionId],
+        )
+      ).rows[0];
+      if (!row) return undefined;
+      return {
+        user: { id: row.id, email: row.email, name: row.name },
+        expiresAt: row.expiresAt,
+      };
+    },
     async read(
       id: string,
       bindingSecret: string,
@@ -383,6 +487,63 @@ export function createAttempts(
         return save(tx, { ...a, stage });
       });
     },
+    /** WAVE A PR2: the `confirm` stage's THIRD exit.
+     *
+     *  Today `confirm` has two — `confirm()` creates the account, and the
+     *  client cancels the attempt outright, destroying a subject the rower
+     *  just proved. This carries the attempt forward instead: the proven
+     *  identity stays in its `verified_*` columns while the rower takes a
+     *  second trip to the provider they usually use.
+     *
+     *  ONE STATEMENT, AND THAT IS NOT A STYLE CHOICE. A CHECK is evaluated
+     *  per statement, and `auth_attempts_session_check`'s signin arm is
+     *  keyed on stage: `SET stage='reauth_authorize'` ALONE lands on a row
+     *  with no `existing_provider`, which the arm refuses with 23514. The
+     *  stage and the provider have to cross together. `save()` cannot do it
+     *  — it writes neither governed column — so this transition owns its own
+     *  UPDATE.
+     *
+     *  `state` AND `nonce` ARE FRESHLY MINTED. The second authorization is a
+     *  new round trip to a provider; reusing the first's values would accept
+     *  a replayed callback.
+     *
+     *  `expires_at` IS UNTOUCHED HERE. Gate 0 ruling 2 (James, 2026-09-15)
+     *  refreshes the window at the SECOND EXCHANGE, where the rower is about
+     *  to be shown a screen they have to read — not at this transition,
+     *  which costs them nothing but a redirect. */
+    async followThrough(expected: Attempt): Promise<AttemptResult> {
+      return transaction(async (tx) => {
+        const a = await bound(tx, expected);
+        // THE PURPOSE HALF OF THIS GUARD IS UNREACHABLE, AND IT SAYS SO
+        // RATHER THAN PRETENDING TO BE TESTED. `confirm` is a signup-only
+        // stage in both authorities — `auth_attempts_session_check` admits
+        // it for `purpose='signin'` alone, and `consistent()`'s
+        // `stageFitsPurpose` refuses a link or a delete there on both the
+        // read and the write path. So no link or delete row can exist at
+        // `confirm` to reach this line. Measured: deleting `a.purpose !==
+        // "signin"` reddens ZERO tests, because the stage check alone
+        // already turns away every fixture that can be built.
+        // It stays as defence in depth against a future stage rename making
+        // `confirm` reachable by another purpose, which is the failure the
+        // CHECK and `consistent()` would both have to miss together.
+        if (a.purpose !== "signin" || a.stage !== "confirm")
+          throw new AuthFailure("attempt_expired");
+        // Two providers, so the rower's usual one is the other one. If a
+        // third is ever added this stops being derivable and becomes an
+        // argument the caller has to supply.
+        const existingProvider =
+          a.targetProvider === "apple" ? "google" : "apple";
+        const row = (
+          await tx.query<Attempt>(
+            `UPDATE auth_attempts SET stage='reauth_authorize',existing_provider=$2,version=version+1,state=$3,nonce=$4 WHERE id=$1 AND version=$5 AND expires_at>now() RETURNING ${projection}`,
+            [a.id, existingProvider, random(), random(), a.version],
+          )
+        ).rows[0];
+        if (!row) throw new AuthFailure("attempt_expired");
+        consistent(row);
+        return { attempt: row };
+      });
+    },
     async accept(
       expected: Attempt,
       identity: VerifiedIdentity,
@@ -399,6 +560,57 @@ export function createAttempts(
         if (identity.grant) {
           a.appleClientId = identity.grant.clientId;
           a.appleRefreshToken = identity.grant.refreshToken;
+        }
+        // WAVE A PR2: THE SIGNIN ARM RUNS FIRST, and it must, because the
+        // existing branch's first statement is
+        // `original(tx, a.originalSessionId!, true)` — and a signin
+        // follow-through reaches here with `original_session_id` NULL by
+        // design. That `!` is why this arm sits ahead of it rather than
+        // inside it.
+        //
+        // The second exchange's identity is CONSUMED, NEVER STORED. It
+        // resolves the account and is then discarded; the attempt keeps
+        // carrying the target provider's identity in its single set of
+        // `verified_*` columns, which is what makes confirming AFTER the
+        // proof affordable without a second identity slot.
+        if (a.stage === "reauth_exchanging" && a.purpose === "signin") {
+          const user = await find(tx, a.existingProvider!, identity.sub);
+          // A STATED OUTCOME, NOT A 500. The rower proved a real identity at
+          // a real provider; it simply is not on any account here. Same code
+          // the link flow uses when the account moves underneath it.
+          if (!user) throw new AuthFailure("account_changed");
+          // BEFORE THE MINT, like every other mint in this module
+          // (`finishSignin` and `legacyGoogle` both guard first). Without it
+          // this would be the only path that puts a session in a rower's
+          // hands without consulting the access policy.
+          requireAccess(user.email);
+          const { sessionId, signedIn } = await mintSession(tx, user);
+          // ONE STATEMENT AGAIN. `auth_attempts_session_check`'s signin arm
+          // requires `original_session_id` NOT NULL at `link_ready` and NULL
+          // at `reauth_exchanging`, so the stage and the session must cross
+          // together or the row is refused with 23514 mid-transition.
+          // `save()` does not write `original_session_id`, so this owns its
+          // UPDATE.
+          //
+          // THE WINDOW RESTARTS HERE (Gate 0 ruling 2, James, 2026-09-15:
+          // "what 300 second clock I don't see a clock"). The rower is about
+          // to be shown a confirmation they have to READ, and nothing on
+          // screen counts the attempt down — so the clock they cannot see
+          // does not get to expire while they read it.
+          const row = (
+            await tx.query<Attempt>(
+              `UPDATE auth_attempts SET stage='link_ready',original_session_id=$2,reauthenticated_at=$3,expires_at=$4,version=version+1 WHERE id=$1 AND version=$5 AND expires_at>now() RETURNING ${projection}`,
+              [a.id, sessionId, now, new Date(now.getTime() + ttl), a.version],
+            )
+          ).rows[0];
+          if (!row) throw new AuthFailure("attempt_expired");
+          consistent(row);
+          // BOTH, and that is the point. `AttemptResult` already carried the
+          // two fields; nothing had ever returned them together, and the
+          // transport treated them as mutually exclusive. The rower needs
+          // the session to reach `finalize` while the attempt is still
+          // alive — that is the whole transport gap.
+          return { attempt: row, signedIn };
         }
         if (a.stage === "reauth_exchanging") {
           const session = await original(tx, a.originalSessionId!, true);
@@ -726,7 +938,7 @@ export function createAttempts(
           )
         ).rows[0];
         requireAccess(user.email);
-        return mintSession(tx, user);
+        return (await mintSession(tx, user)).signedIn;
       });
     },
   };

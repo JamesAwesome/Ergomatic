@@ -368,7 +368,10 @@ is re-litigated from memory:
 - **Lock:** `AccessExclusiveLock`, and it blocks READS as well as writes. The
   whole DROP+ADD transaction is **0.564 ms** at realistic size; the ADD scans at
   ~49 µs per 1,000 rows. `auth_attempts` is CAPPED at ~512 signin rows plus one
-  per live session — **160 kB** at that ceiling — so no migration cost on this
+  per live session — **240 kB** at that ceiling (the plan's original 160 kB was
+  measured BEFORE signin rows could hold sessions; re-measured at the PR gate
+  with `link_session_unique` up from 16 kB to 32 kB, heap 104, `state_unique`
+  48, `pkey` 32, `expires_at_idx` 16) — so no migration cost on this
   table can matter. It was judged on correctness.
 - **The ADD validates against live rows and aborts the whole Drizzle
   transaction if any fails.** One row of each of the 11 states the shipped
@@ -476,9 +479,15 @@ modify `app/server/db/schema.ts`; test
       (23505 on `auth_attempts_link_session_unique`, 23503 on the sessions FK).
 - [ ] **Step 5** — DBA gate at PLAN: DONE 2026-09-14, verdict FAIL, folded
       above. What remains for the PR gate is the migration as actually written.
-- [ ] **Step 6** — map 23503 on `sessions_user_id_users_id_fk` to
-      `account_changed` in `transaction()`'s catch, with a held-transaction test
-      rather than a race: a concurrent account delete is the only producer.
+- [x] **Step 6 — DONE, but only after the DBA gate caught it MISSING.** It
+      shipped unimplemented and the PR gate measured the consequence through
+      the real `accept()` against a held delete: `code=23503`,
+      `constraint=sessions_user_id_users_id_fk`, not an `AuthFailure`, so
+      `failure()` rendered 500 where 409 `account_changed` is right. Now
+      mapped by CONSTRAINT NAME, not bare 23503 — any other FK failing there
+      would be a bug in this module, and swallowing it would hide one. Test is
+      a held transaction with a control that releases WITHOUT deleting, and the
+      mutation neutering the arm reds it.
 - [ ] **Step 7** — commit.
 
 ### Task 1: the machine admits the state
@@ -524,13 +533,22 @@ modify `app/server/db/schema.ts`; test
       expected; if one is needed, the migration is wrong.
 - [ ] **Step 7** — mutation probe: revert the `verified` clause alone and
       confirm Step 4 goes red while Step 1 stays green. Record the failure.
-- [ ] **Step 7b (revision 4)** — second mutation probe, on the asymmetry: make
-      the widening symmetric (add the three stages to the `signup` array
-      outright) and confirm Step 2b goes red while Step 1 stays green. This is
-      the one mutation that separates a correct widening from the one revision
-      3's wording described. **Record WHICH of Step 2b's five cells went red**
-      — with revision 4's two-cell fixture set the probe would have missed
-      three of them and still read as a passing proof (RF21).
+- [x] **Step 7b — DONE 2026-09-15, and the measured blast radius is bigger
+      than this plan claimed.** Three probes, each biting precisely:
+      reverting the `verified` clause to stage-only reds exactly ONE test (the
+      carried-identity refusal); dropping `link_ready` from the signin-allowed
+      set reds exactly ONE (the adopted-session read); and **making the
+      widening SYMMETRIC — the naive form — reds THIRTY-FIVE.**
+      **The correction that matters:** this plan said the naive widening
+      "refuses five rows". Five CELLS is right, and the consequence is the
+      whole link flow — the 35 include `links Google to Apple and retains
+      existing-provider refresh grant`, `rechecks original-account access at
+      link finalization`, `links Apple relay identity by the saved account
+      email` and the claim/lock-order tests. So the honest statement is that
+      the existing suite would have caught this on its own; the two guard
+      tests are still worth having because they name the invariant and fail
+      fast, but "no gate could have seen it" would be false and is not
+      claimed.
 - [ ] **Step 8** — commit.
 
 ### Task 2: the follow-through transition
@@ -772,10 +790,15 @@ as open questions and came back decided.
       two `SignInMethods.tsx` ones #444 shipped as quoted**, so those change
       too; #444's answer is superseded rather than extended.
       **Re-measure the census at implementation time rather than trusting any
-      number written here** — it moved once already, from the row's five to
-      the Gate 0 pack's seven. At the time of the gate: two quoted
-      (`you/SignInMethods.tsx:128`, `:130`), four unquoted (`SignIn.tsx:40`,
-      `:101`, `:173`, `today/Today.tsx:1479`), one already in the chosen form
+      number written here** — it has now moved TWICE: the row said five, the
+      Gate 0 pack measured seven, and Task 5 DELETED one of the seven.
+      `SignIn.tsx:173` ("Then open You → Sign-in methods to add {provider}")
+      lived in `UsualSignIn`, the dead-end screen this PR removed, so the live
+      count is SIX. **That this number has moved every time anyone counted is
+      the argument for the test pinning "strings NOT in the chosen form" at
+      zero rather than pinning a total.** As it stands: two quoted
+      (`you/SignInMethods.tsx:128`, `:130`), three unquoted (`SignIn.tsx:53`,
+      `:114`, `today/Today.tsx:1479`), one already in the chosen form
       (`log/Concept2SendBlock.tsx:226`), plus three UNDATED News strings across TWO
       article bodies (`news/content/bodies/yourFirstRow.tsx:28` and `:36`,
       `baselines.tsx:63`) which Phase JC's ruling makes rendering surfaces.
