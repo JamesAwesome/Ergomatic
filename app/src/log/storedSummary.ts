@@ -827,7 +827,7 @@ function storedMachineTier(
     sources: {
       ...FIXED_SOURCES,
       rate: rateProvenance(finished),
-      avgHr: heartRateProvenance(ms?.avgHeartRateBpm !== undefined),
+      avgHr: heartRateProvenance(ms?.avgHeartRateBpm != null),
     },
   };
 }

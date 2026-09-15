@@ -135,6 +135,12 @@ const EXIT7_STEPS: StoredLog["steps"] = [
   },
 ];
 
+import {
+  FIXED_SOURCES,
+  heartRateProvenance,
+  rateProvenance,
+} from "../session/tileProvenance";
+
 describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL line", () => {
   // Phase LP (spec §3): the stored row's machine tier, same arithmetic as
   // the live door. 6000 m in 1550.1 s → watts round(2.80/(1550.1/6000)³) =
@@ -172,7 +178,47 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
       targetRate: 26,
       drag: 101,
       avgHr: 142,
+      // Both doors stamp from their own predicates, and this row's monitor
+      // DID send a heart rate (142), so AVG HR is measured here where the
+      // live door's fixture has it derived. That difference is the point:
+      // the label follows the row, not the door.
+      sources: {
+        ...FIXED_SOURCES,
+        rate: rateProvenance(true),
+        avgHr: heartRateProvenance(true),
+      },
     });
+  });
+
+  it("stamps RATE as DERIVED on a stored TERMINATED row, matching the live door's branch", () => {
+    const heroes = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "rower",
+        machineWorkSeconds: 1550.1,
+        machineWorkMeters: 6000,
+        machineSummary: {
+          avgPaceSecondsPer500m: 129.2,
+          avgStrokeRate: 54,
+          avgHeartRateBpm: 142,
+          dragFactorAverage: 101,
+          totalCalories: 372,
+          avgWatts: 162,
+          avgCalPerHour: 864,
+          totalRestMeters: 0,
+        },
+        steps: [
+          { ...measuredStep(313.5, 1200, 130.6), spm: 26, actualSpm: 27 },
+          { ...measuredStep(309.0, 1200, 128.8), spm: 26, actualSpm: 27 },
+        ],
+      }),
+    ).heroes;
+    // 54 on the wire is the doubled 0x0039 average (§27.6). The guard drops
+    // it for the splits' own 27, and the stamp now SAYS so.
+    expect(heroes.machine!.rate).toBe(27);
+    expect(heroes.machine!.sources.rate.source).toBe("derived");
+    expect(heroes.machine!.sources.rate.label).toBe("RATE");
   });
 
   it("Phase LP §3 (PR 2): a stored row's machineRows come off its pm5 steps, REST from the step's own machineRestMeters; a manual row has none", () => {

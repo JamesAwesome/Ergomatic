@@ -116,7 +116,12 @@ import {
 } from "./logbookDerived";
 import type { SessionRun } from "./run";
 import { deriveAverageHeartRate } from "../../domain/monitor/derivedHeartRate.js";
-import type { MachineTileProvenance } from "./tileProvenance";
+import {
+  FIXED_SOURCES,
+  heartRateProvenance,
+  rateProvenance,
+  type MachineTileProvenance,
+} from "./tileProvenance";
 
 /** Per §2A: `AUG 10 · 18:57 · PM5 <id>` / `· TIMER` / `· LOGGED BY HAND`,
  *  plus Phase LM Task 4's fourth answer `· NO MONITOR READING`
@@ -205,8 +210,9 @@ export interface MachineTier {
    *  `avgHr`'s branch from the values alone and two copies of a predicate
    *  drift. Optional only while this is a prototype: the implementing PR
    *  must stamp it in BOTH producers — here and `storedMachineTier` — or
-   *  the sheet tells the truth on one door and not the other (RF24). */
-  sources?: MachineTileProvenance;
+   *  the sheet would tell the truth on one door and not the other (RF24).
+   *  REQUIRED, so the compiler is that gate rather than this comment. */
+  sources: MachineTileProvenance;
 }
 
 /** Phase LP §3: one MACHINE SUMMARY row. `index` is the INTERVALS table's
@@ -1242,6 +1248,16 @@ export function machineTierFromRun(run: MonitorRun): MachineTier {
   const d = run.summaryTotals!.workDistanceMeters;
   const detail = run.summaryDetail;
   const calories = detail?.totalCalories;
+  // HOISTED so the value below and the label in `sources` read ONE predicate.
+  // Re-deriving it for the label would be two copies that drift, and this
+  // function's own comment already records that happening once this phase.
+  const finished = run.endedBy === "finished" || run.mode === "justrow";
+  // `!= null`, NOT `!== undefined`: the VALUE below uses `??`, which falls
+  // through on null AND undefined, and `avgHeartRateBpm: null` is the wire's
+  // "a belt that reported nothing". Checking only undefined labelled a
+  // derived number as measured — caught by `summaryModel.test.ts`, which is
+  // why the stamp is asserted at the producer and not just at the sheet.
+  const monitorSentHeartRate = detail?.avgHeartRateBpm != null;
   return {
     avgWatts: logbookWatts(t, d),
     calories,
@@ -1260,7 +1276,7 @@ export function machineTierFromRun(run: MonitorRun): MachineTier {
       // its own live 0x0032 frames, time-weighted across the rowing state,
       // give 26.8 — a 1.8 spm delta, not the ~2x a doubled figure shows. The
       // monitor's own average is honest on a free row.
-      finished: run.endedBy === "finished" || run.mode === "justrow",
+      finished,
       avgStrokeRate: detail?.avgStrokeRate,
       splits: run.actuals
         .filter((a) => a.index !== null && a.avgSpm !== null)
@@ -1276,6 +1292,11 @@ export function machineTierFromRun(run: MonitorRun): MachineTier {
       detail?.avgHeartRateBpm ??
       deriveAverageHeartRate(run.series?.samples ?? []) ??
       undefined,
+    sources: {
+      ...FIXED_SOURCES,
+      rate: rateProvenance(finished),
+      avgHr: heartRateProvenance(monitorSentHeartRate),
+    },
   };
 }
 

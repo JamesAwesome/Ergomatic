@@ -12,6 +12,11 @@ import PostWorkoutSummary, {
   singleTargetHint,
 } from "./PostWorkoutSummary";
 import type { SummaryModel } from "./summaryModel";
+import {
+  FIXED_SOURCES,
+  heartRateProvenance,
+  rateProvenance,
+} from "./tileProvenance";
 
 // A realistic monitor-door-shaped model: an unjudged opening row plus two
 // judged work rows (one faster, one slower than the working average). Phase
@@ -173,6 +178,18 @@ function renderSummary(
   );
 }
 
+/** A default `sources` for fixtures whose subject is the TILE FACES, not
+ *  provenance. Spelled once here rather than inline per fixture, and built
+ *  from the real producers so it cannot drift from what ships. Fixtures that
+ *  are ABOUT provenance pass their own. */
+function tileSources() {
+  return {
+    ...FIXED_SOURCES,
+    rate: rateProvenance(true),
+    avgHr: heartRateProvenance(true),
+  };
+}
+
 describe("PostWorkoutSummary — title block (§2A)", () => {
   it("renders the WORKOUT COMPLETE eyebrow, the workout title as the heading, and a ← DONE back link falling back to /today", () => {
     renderSummary();
@@ -318,6 +335,7 @@ describe("PostWorkoutSummary — heroes (§2B)", () => {
             targetRate: 26,
             drag: 101,
             avgHr: undefined,
+            sources: tileSources(),
           },
         },
       }),
@@ -346,7 +364,7 @@ describe("PostWorkoutSummary — heroes (§2B)", () => {
       model: monitorModel({
         heroes: {
           time: "25:50",
-          machine: { rate: 26, avgHr: 142 },
+          machine: { rate: 26, avgHr: 142, sources: tileSources() },
         },
       }),
     });
