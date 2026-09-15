@@ -5,6 +5,35 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.49.0: git log v0.48.0..main --oneline — NINE merges besides this
+    // notes PR itself, each accounted for (RF15; no --merges, which returns
+    // empty on this squash-merged repo). TWO reach a rower:
+    //   #445 the chart labels — items 1 and 2. A gutter hand-sized for six
+    //     glyphs clipped the leading digit off every metres tick once a
+    //     season passed 100,000 m; James photographed it. The same pass
+    //     found two more of the class nobody had seen (the trace chart's
+    //     last x tick, and the season's own TODAY label at the far end of
+    //     its rule). The CUSTOM echo is the same PR's appendix.
+    //   #444 the sign-in recovery — item 3. v0.48.0 already shipped the
+    //     recovery COPY; this turns it from a paragraph into four numbered
+    //     steps that each name a control, and makes the fourth denial
+    //     surface (native sign-in) end the same sentence as the other
+    //     three.
+    //   #447 #443 #441 docs and records — the deploy failure write-up, the
+    //     TD-5 flake sightings, two command footguns. Agent-facing; no note.
+    //   #442 a committed capture (TD-5's free-row machine tiles). Changes
+    //     what a REVIEWER sees in docs/screenshots, not what a rower sees
+    //     on a device. No note.
+    //   #440 #439 #438 dependency and CI-action bumps. No note.
+    version: "v0.49.0",
+    date: "2026-09-14",
+    items: [
+      "Chart numbers stop losing their first digit. Once a season passed 100,000 m the labels down the side of the Stats charts were cut off at the card edge — they now read 150k, and every chart works out how much room its own widest label needs instead of guessing.",
+      "Picking a custom date range on Stats no longer repeats those dates back at you underneath the two pickers. It still speaks up when a range holds nothing, so an empty stretch still reads NO ROWS.",
+      "If a sign-in belongs to another Ergomatic account, the recovery on You is now four numbered steps instead of a paragraph, and each one names a button you can actually find.",
+    ],
+  },
+  {
     // v0.48.0: git log v0.47.0..main --oneline — FOUR merges besides this
     // notes PR itself, each accounted for (RF15; no --merges, which returns
     // empty on this squash-merged repo). ONE reaches a rower:
