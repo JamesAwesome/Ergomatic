@@ -46,9 +46,15 @@ export interface MachineTileProvenance {
   avgHr: TileProvenance;
 }
 
+/** The tiles whose source is the same on every row. */
+export type FixedTile = "avgWatts" | "calories" | "calPerHour" | "drag";
+
 /** The four that never switch. Stated once so the conditional two are the
- *  only thing a reader has to think about. */
-export const FIXED_SOURCES = {
+ *  only thing a reader has to think about. Typed as `TileProvenance` rather
+ *  than `as const` so `detail` is readable on every entry — a caller asking
+ *  "which of these name Concept2's formula?" should not have to know which
+ *  literal it is holding. */
+export const FIXED_SOURCES: Record<FixedTile, TileProvenance> = {
   avgWatts: {
     label: "AVG WATTS",
     source: "derived",
@@ -63,7 +69,7 @@ export const FIXED_SOURCES = {
       "Concept2's published logbook formula, from the monitor's calorie count.",
   },
   drag: { label: "DRAG", source: "measured" },
-} as const satisfies Record<string, TileProvenance>;
+} satisfies Record<FixedTile, TileProvenance>;
 
 /** RATE, per row. `finished` is the same flag `sessionStrokeRate` branches
  *  on — a free row counts as finished (James, 2026-09-07). */
