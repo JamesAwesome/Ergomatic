@@ -913,7 +913,15 @@ it lands the stranger on this same denial.
       enforces any individual guideline in practice — the text binds, the
       folklore that beta review is lighter has no Apple page behind it and is
       not planned on in either direction.
-- [ ] **An open sign-up policy, replacing deny-by-default.** **James approved
+- [ ] **An open sign-up policy, replacing deny-by-default.**
+      **PROVEN TO WORK, NOT YET SHIPPED (2026-09-14 activation session).** With
+      `ACCESS_MODE=public` on staging, a brand-new Gmail with no allowlist entry
+      created an account, and the same identity was refused once `restricted`
+      returned. Accounts went 6 -> 7 -> 6 across the session and `LOCKED OUT`
+      returned to none. The policy itself is unchanged: the host is `restricted`
+      again, so this row stays open on the DECISION to leave the door open, not
+      on whether the door works. Evidence and protocol:
+      `docs/superpowers/runsheets/2026-09-14-public-activation-v3.md`. **James approved
       new rowers creating accounts on 2026-09-12**, while choosing Apple
       sign-in as the first slice. **Access-policy amendment approved
       2026-09-13:** `ACCESS_MODE=restricted|public` replaces the front-door
@@ -1111,6 +1119,20 @@ it lands the stranger on this same denial.
       `nativeSignOut` that came out from under it. **S**
       · dies 2026-10-12 · pre-existing debt, and cheaper to clear while the file
       is already open than as its own branch.
+- [ ] **Delete account does not say that it will ask you to prove it is you.**
+      James, 2026-09-14, immediately after running the deletion twice on a real
+      account: _"we really need to make it more obvious that the reauth is
+      required to delete the account."_ The button reads `Delete account`, the
+      confirm screen lists what goes, and nothing warns that the next thing to
+      happen is a full sign-in round trip with the provider. A rower who taps it
+      on a flaky connection, or who has just lost the provider, meets the
+      requirement at the worst moment — and the deletion is the one flow App
+      Review requires be easy to find and complete. Found on the first real
+      operator run of the flow, not in review. **S**
+      · dies 2026-10-12 · a row and not a fix now because it is copy on a
+      rendering surface and carries a design gate, and because the right fix is
+      probably not one sentence: the confirm screen's whole shape is in
+      question once the re-auth is disclosed up front.
 - [ ] **"Apple is now connected. You can sign in either way." says what the row
       under it already says.** James, 2026-09-14, from the live screen: _"I
       don't need this blurb here forever. Apple says connected below it."_ The

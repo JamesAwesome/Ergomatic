@@ -207,3 +207,46 @@ counts rather than addresses for this reason.
 ## What this session does NOT do
 
 No rebuild, no deploy, no tag, no code change, no migration, no relay test.
+
+---
+
+# RESULT — run 2026-09-14
+
+**Primary target: PASSED.** A brand-new Gmail with no allowlist entry created
+an Ergomatic account with `ACCESS_MODE=public`, and the same identity was
+refused once `restricted` returned. Counts: 6 accounts before, 7 with the
+stranger, 6 after; `LOCKED OUT` 0 -> 1 -> 0; `ACCESS_MODE` restricted at close;
+`git status --porcelain` empty; the `.env` backup removed. Per the PII rule the
+address is not recorded here.
+
+**The session did not run in the order this runsheet specifies, and both
+departures are worth more than the run itself.**
+
+1. **Stage 1 was skipped.** The operator flipped to `public` and created the
+   account before taking that identity to the denial screen under `restricted`.
+   The control leg was recovered BACKWARDS afterwards — same identity, admitted
+   under public, denied under restricted — which is a real differential and
+   weaker than the designed one: run forwards, the denial is observed on a gate
+   nobody has touched; run backwards, it is observed after two container
+   recreates. The conclusion stands; the evidence is second-best, and is
+   recorded as such rather than written up as the contrast that was planned.
+2. **A4 was skipped, and it produced exactly the defect it exists to prevent.**
+   The stranger account was still alive when the door closed, so it became a
+   locked-out account that could neither sign in nor delete itself — the
+   exposure the ROADMAP already carries a row for. The check block caught it
+   (`LOCKED OUT : 1 <-- FIX BEFORE DEPLOY`) and it was recovered with a second
+   open / delete-in-app / close cycle.
+
+   **This is the strongest evidence in the session.** The ordering rule —
+   delete the account BEFORE restoring the restrictive mode — was not a
+   theoretical nicety; skipping it by accident reproduced the failure within
+   minutes, and the runsheet's own check block was what detected it.
+
+**One observable this runsheet got wrong, found during the run.** The denial
+string cannot discriminate "account deleted, sign-in tries to create, denied"
+from "account still exists, sign-in resolves it, denied" — both render the same
+sentence. The runsheet treated seeing the denial as sufficient. It is not; only
+the account count answers it, which is what the check block is for.
+
+**Operator feedback, filed as a ROADMAP row:** the Delete account flow does not
+disclose that it will require a full provider re-auth.
