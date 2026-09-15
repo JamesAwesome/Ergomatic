@@ -1239,15 +1239,23 @@ describes.
     skipped `app`/`docker`/`e2e`; lint-staged's globs are `app/**`, so no
     formatter ever opened them; and they are prose, so no compiler or test
     could. The markers survived a merge commit, a review and a PM gate, and
-    landed as instructions every future agent reads. **`scripts/conflict-
-    markers.sh` is the gate now, in CI's always-run `scripts` job** — it
-    checks CONTENT of tracked files, not conflict STATE, because a checkout
-    mid-rebase is the human's business and a marker in a commit is not.
-    **And resolve a conflict in a NUMBERED list by keeping BOTH sides and
-    renumbering one** — both sides here began at 57, because both branches
-    appended to the same list, so "pick a side" silently deletes seven real
-    entries. _Found the same day, by an agent appending to one of the three
-    files and reading its tail._
+    landed as instructions every future agent reads.
+    **`scripts/conflict-markers.sh` is the gate now**, in CI's always-run
+    `scripts` job — it checks CONTENT of tracked files, not conflict STATE,
+    because a checkout mid-rebase is the human's business and a marker in a
+    commit is not.
+    **Resolve a conflict in a NUMBERED list by keeping BOTH sides and
+    renumbering one.** In `antagonist-techniques.md` — the one of the three
+    that holds a list; the other two are dated prose sections — both sides
+    had appended to the same list and both began at 57, so "pick a side"
+    silently deletes seven or eight real entries. **Then sweep the OLD
+    numbers**: the first fix renumbered and did not, leaving eight citations
+    inside `antagonist-ledger.md`'s own entry pointing at unrelated
+    techniques. That is this file's existing rule about withdrawn claims —
+    correcting where a claim is ARGUED and leaving it where it is USED — with
+    an integer instead of a phrase. _Found the same day, by an agent
+    appending to one of the three files and reading its tail; the dangling
+    citations were found by the branch review, after the PR had merged._
 
 ## Commands
 

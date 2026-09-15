@@ -11035,7 +11035,7 @@ nothing else varied:
 both refuse. A second clause of the same function
 (`(stage.startsWith("target_") || stage === "link_ready") && purpose !== "link"`)
 refuses the `link_ready` terminal the plan's decision 2 also names. See
-technique 57.
+technique 65.
 
 **Second blocking find, independent of the first.** Decision 2 said the signin
 arm "does not need" to record the provider. `attemptProvider()` returns
@@ -11043,7 +11043,7 @@ arm "does not need" to record the provider. `attemptProvider()` returns
 `null`, and `frontDoorRoutes.ts`'s callback guard `attemptProvider(a) !==
 provider` then rejected BOTH providers with `invalid_proof`. Four consumers:
 `context()`, `view()`, the native authorization-code gate, the web callback.
-Technique 58.
+Technique 66.
 
 **Third.** Decision 2c named the wrong arm. `accept()` tests
 `a.stage === "reauth_exchanging"` FIRST with an early return; the `else if` the
@@ -11060,7 +11060,7 @@ the control in victim terms. Counterweight recorded honestly: `attachProven`
 mints a session either way, so the marginal loss is the victim's chance to
 refuse the PERMANENT attach, for which spec condition 4 already names PR1's
 unlink as the compensating control. Decision 3 may be right; its argument is
-not. Technique 59.
+not. Technique 67.
 
 **Research.** RFC 9700 — cited by the spec, the plan and the 2026-09-14 handoff
 as the authority for "the OAuth pre-account-linking attack" — contains no such
@@ -11077,10 +11077,10 @@ NOTHING FOUND, across nine sources, on consent ORDERING or on shared-device
 binding — so decision 3 is not citable either way. Also unrecorded: NIST
 800-63C-4 §3.8's notice SHALL and 800-63B-4 §4.1.2's "mechanism independent of
 the transaction", from which the spec's "the You screen is the only detection
-channel" is an accepted deviation with no citation beside it. Technique 61.
+channel" is an accepted deviation with no citation beside it. Technique 69.
 
 **Also found:** invariant 2's second clock can never bite before `expires_at`,
-and Step 3b's test state is unconstructible (technique 60); `followThrough`
+and Step 3b's test state is unconstructible (technique 68); `followThrough`
 omits the `state`/`nonce` mint its own lifetime table requires and its sibling
 transition performs; invariant 1's gate is prescribed at a layer whose function
 signature takes no session, so it cannot go red (RF21); Task 5 ticks a ROADMAP
@@ -11131,7 +11131,7 @@ calls `signed()`; `result()` returns a session OR an attempt view, never both;
 store and will PASS, certifying a narrower claim than the plan makes.
 `shared/auth.ts` is named in no task and must change twice — once for the
 session, once for the `profile` the post-proof confirmation needs (`view()`'s
-`link_ready` branch carries none). Technique 62.
+`link_ready` branch carries none). Technique 70.
 
 **High.** (a) The prescribed `consistent()` edit, read literally, refuses
 link@`reauth_authorize`, delete@`reauth_authorize`, link@`reauth_exchanging` and
@@ -11141,7 +11141,7 @@ first clause is a purpose/stage EQUALITY and `begin()` inserts those rows with
 rows through today's form, the literal widening and a purpose-qualified one.
 Every probe in Task 1 enters on a signin row, so none can see it (RF24). Fix:
 state the widening as asymmetric and make the `verified` requirement
-purpose-qualified. Technique 63. (b) The three-state CHECK boxes the
+purpose-qualified. Technique 71. (b) The three-state CHECK boxes the
 `reauth_exchanging -> link_ready` transition in BOTH directions, so `save()` is
 unusable for it and for `followThrough` — and `save()` is where `consistent()`
 and the version guard live. Extending `save()` to write the two columns from `a`
@@ -11165,7 +11165,7 @@ both mirror rows stay refused — but the job of keeping signin out of
 stage list, which the plan does not state. Invariant 2's deletion is correct and
 generalises: `finalize`'s reauth-freshness check is already dead on the LINK
 path too. **The confirmation ordering HOLDS under attack:** after the second
-proof the reader is the account owner (technique 59's own test), and an
+proof the reader is the account owner (technique 67's own test), and an
 abandoner holds only the session their credential already entitled them to, so
 session-before-consent is not the first pass's defect relocated. NIST SP
 800-63C-4 §3.8.1 is satisfied more literally by confirm-after than by revision

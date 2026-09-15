@@ -685,7 +685,19 @@ is exactly what happened: every section in this file stopped growing on
     `antagonist-techniques.md`, `antagonist-ledger.md` and `pm-ledger.md`:
     `.claude/` paths, so `ci-changes.sh` correctly skipped app/docker/e2e;
     lint-staged's globs are `app/**`, so no formatter opened them; prose, so
-    no compiler or test could. **After resolving a conflict in a NUMBERED
-    list, both sides usually renumber from the same integer** — here both
-    began at 57 — so the resolution is to keep both and renumber one, never to
-    pick. `scripts/conflict-markers.sh` is now the gate.
+    no compiler or test could. **Where the conflict is in a NUMBERED list,
+    both sides usually appended from the same integer** — in
+    `antagonist-techniques.md` both began at 57 — so the resolution is to keep
+    both and renumber one, never to pick. `scripts/conflict-markers.sh` is now
+    the gate.
+77. **RENUMBERING A LIST IS A CLAIM ABOUT EVERY CITATION OF THE OLD NUMBERS,
+    and the ledger that cites them is usually the file you are standing in.**
+    The fix for 76 renumbered seven techniques 57-63 to 65-71 and swept
+    nothing; eight citations inside this ledger's OWN Wave A PR2 entry still
+    said 57-63, and each then resolved to an unrelated technique — a record
+    citing seven wrong techniques about itself, shipped. **The one-command
+    check:** `grep -nE '[Tt]echnique #?(<old range>)' .claude/agents/*.md`
+    before the renumbering commit, not after. It is RF16's
+    correct-it-where-it-is-USED rule with an integer instead of a phrase, and
+    an integer is worse, because a wrong number still resolves to something
+    that reads like evidence.

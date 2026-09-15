@@ -1,0 +1,122 @@
+[
+  {
+    "name": "01-flow-today-vs-proposed",
+    "viewport": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "undersized": []
+  },
+  {
+    "name": "02-create-account-portrait",
+    "viewport": "390x844",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "undersized": []
+  },
+  {
+    "name": "03-proving-portrait",
+    "viewport": "390x844",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "undersized": []
+  },
+  {
+    "name": "03-proving-landscape",
+    "viewport": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "undersized": []
+  },
+  {
+    "name": "04-attach-portrait",
+    "viewport": "390x844",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "undersized": []
+  },
+  {
+    "name": "04-attach-landscape",
+    "viewport": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 19,
+    "undersized": []
+  },
+  {
+    "name": "04-attach-web-portrait",
+    "viewport": "390x844",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "undersized": []
+  },
+  {
+    "name": "05-attached-portrait",
+    "viewport": "390x844",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "undersized": []
+  },
+  {
+    "name": "05-attached-landscape",
+    "viewport": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 2,
+    "undersized": []
+  },
+  {
+    "name": "06-no-button-options",
+    "viewport": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "undersized": []
+  },
+  {
+    "name": "07-the-300s-clock",
+    "viewport": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 0,
+    "undersized": []
+  },
+  {
+    "name": "08-delete-reauth-options",
+    "viewport": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 73,
+    "undersized": []
+  },
+  {
+    "name": "09-link-notice-options",
+    "viewport": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 195,
+    "undersized": []
+  },
+  {
+    "name": "10-naming-you-options",
+    "viewport": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 565,
+    "undersized": []
+  },
+  {
+    "name": "11-hairline-options",
+    "viewport": "844x390",
+    "horizontalOverflow": false,
+    "screenHorizontalOverflow": false,
+    "verticalOverflowPx": 208,
+    "undersized": []
+  }
+]

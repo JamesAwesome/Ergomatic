@@ -1,0 +1,212 @@
+{
+  "formula": "WCAG 2.x relative luminance",
+  "tokens": {
+    "page": "#f4f1e8",
+    "surface": "#fffdf7",
+    "sunken": "#efeade",
+    "ink": "#1b1a17",
+    "ink2": "#3f3c35",
+    "ink3": "#57544c",
+    "ink4": "#6f6a5f",
+    "rule": "#d8d3c4",
+    "ruleRaised": "#928a78",
+    "accent": "#b5341f",
+    "accentHover": "#9c2c19",
+    "onColor": "#fffdf7",
+    "focus": "#1d4e89",
+    "success": "#49624f",
+    "apple": "#000000",
+    "white": "#ffffff"
+  },
+  "checks": [
+    {
+      "name": "Attach title on page",
+      "foreground": "#1b1a17",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 15.41,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Attach intro on page",
+      "foreground": "#57544c",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 6.69,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Carried/destination name on surface",
+      "foreground": "#1b1a17",
+      "background": "#fffdf7",
+      "role": "text",
+      "ratio": 17.11,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Relay address on surface",
+      "foreground": "#57544c",
+      "background": "#fffdf7",
+      "role": "text",
+      "ratio": 7.43,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "ATTACHING / THIS ACCOUNT label on page",
+      "foreground": "#57544c",
+      "background": "#f4f1e8",
+      "role": "text",
+      "ratio": 6.69,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Avatar initials on ink",
+      "foreground": "#fffdf7",
+      "background": "#1b1a17",
+      "role": "text",
+      "ratio": 17.11,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Attach Apple label on accent",
+      "foreground": "#fffdf7",
+      "background": "#b5341f",
+      "role": "text",
+      "ratio": 5.94,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Attach Apple hover label",
+      "foreground": "#fffdf7",
+      "background": "#9c2c19",
+      "role": "text",
+      "ratio": 7.41,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "No-button label on surface",
+      "foreground": "#1b1a17",
+      "background": "#fffdf7",
+      "role": "text",
+      "ratio": 17.11,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Explain card body on sunken",
+      "foreground": "#3f3c35",
+      "background": "#efeade",
+      "role": "text",
+      "ratio": 9.16,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Identity card edge (ink-4) on page",
+      "foreground": "#6f6a5f",
+      "background": "#f4f1e8",
+      "role": "ui",
+      "ratio": 4.76,
+      "floor": 3,
+      "passes": true
+    },
+    {
+      "name": "Primary button edge on page",
+      "foreground": "#b5341f",
+      "background": "#f4f1e8",
+      "role": "ui",
+      "ratio": 5.35,
+      "floor": 3,
+      "passes": true
+    },
+    {
+      "name": "No-button edge on page",
+      "foreground": "#1b1a17",
+      "background": "#f4f1e8",
+      "role": "ui",
+      "ratio": 15.41,
+      "floor": 3,
+      "passes": true
+    },
+    {
+      "name": "Focus ring beside page",
+      "foreground": "#1d4e89",
+      "background": "#f4f1e8",
+      "role": "focus",
+      "ratio": 7.43,
+      "floor": 3,
+      "passes": true
+    },
+    {
+      "name": "Focus ring beside surface",
+      "foreground": "#1d4e89",
+      "background": "#fffdf7",
+      "role": "focus",
+      "ratio": 8.25,
+      "floor": 3,
+      "passes": true
+    },
+    {
+      "name": "CONNECTED mark on surface",
+      "foreground": "#49624f",
+      "background": "#fffdf7",
+      "role": "text",
+      "ratio": 6.57,
+      "floor": 4.5,
+      "passes": true
+    },
+    {
+      "name": "Success notice edge on page",
+      "foreground": "#49624f",
+      "background": "#f4f1e8",
+      "role": "ui",
+      "ratio": 5.92,
+      "floor": 3,
+      "passes": true
+    },
+    {
+      "name": "Hairline TODAY: --rule on surface",
+      "foreground": "#d8d3c4",
+      "background": "#fffdf7",
+      "role": "decorative",
+      "ratio": 1.47,
+      "floor": 3,
+      "passes": null
+    },
+    {
+      "name": "Hairline TODAY: --rule on page",
+      "foreground": "#d8d3c4",
+      "background": "#f4f1e8",
+      "role": "decorative",
+      "ratio": 1.32,
+      "floor": 3,
+      "passes": null
+    },
+    {
+      "name": "Hairline RAISED: #928a78 on surface",
+      "foreground": "#928a78",
+      "background": "#fffdf7",
+      "role": "ui",
+      "ratio": 3.37,
+      "floor": 3,
+      "passes": true
+    },
+    {
+      "name": "Hairline RAISED: #928a78 on page",
+      "foreground": "#928a78",
+      "background": "#f4f1e8",
+      "role": "ui",
+      "ratio": 3.03,
+      "floor": 3,
+      "passes": true
+    }
+  ]
+}

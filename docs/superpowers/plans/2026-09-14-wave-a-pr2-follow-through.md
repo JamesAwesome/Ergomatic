@@ -116,7 +116,11 @@ reproduced by the antagonist at `34589267`:
 **This is an editing pass, not a redesign.** The design's shape survives; what
 was missing is the transport that carries it. Revision 4 names the edits.
 
-### The fifth confirmation, which no gate had found: the client auto-finalizes
+### The client auto-finalizes, which no gate had found
+
+_(Revision 4 called this "the fifth confirmation" when the list above had four
+bullets; the list is five, and revision 5 counts this as the SIXTH place. The
+heading is renamed rather than renumbered, so no count has to stay in sync.)_
 
 `acceptStep`'s `link_ready` branch (`src/adapters/authFlow.ts:476-479`) calls
 `finalizeLink` **unconditionally, with no pause.** Today that is right: the only
@@ -136,11 +140,17 @@ test.
    proven: the rower is confirming the Apple identity the attempt has held since
    its first exchange.
 2. **`app/shared/auth.ts`, edit two — the `link_ready` member carries the
-   adopted session** beside the attempt. One declaration both sides compile
+   adopted session** beside the attempt. ~~One declaration both sides compile
    against, so a renamed field is a build error rather than a silently absent
-   one (RF33). The web surface's copy of it carries no token — `signed()`
-   strips it and sets the cookie (`frontDoorRoutes.ts:144-149`) — and native's
-   does, which is the existing asymmetry, not a new one.
+   one (RF33).~~ **WITHDRAWN in revision 5, measured:** widening this member
+   breaks one PRODUCER (`frontDoorRoutes.ts(121,35) TS2322`) and produces
+   ZERO output from `tsc -b`, so the type binds the writer and not the reader
+   — and the reader is the half that has to store a native token and refetch
+   `me`. The declaration is still shared, but it is not a gate; Task 5 Step 2c
+   carries the client-layer tests that are. The web surface's copy of it
+   carries no token — `signed()` strips it and sets the cookie
+   (`frontDoorRoutes.ts:144-149`) — and native's does, which is the existing
+   asymmetry, not a new one.
 3. **`result()` gains the both-at-once case**, and the web callback's
    attempt-surviving branch gains the session `Set-Cookie` it does not emit
    today. Whichever shape these take, the test that decides them is the one in
@@ -780,8 +790,11 @@ nothing is implemented until James rules.
   **Revision 5 gives it four decisions to carry besides the rendered screen:**
   whether the second exchange refreshes `expires_at` (Task 3 Step 3c), what the
   No button does now that refusing leaves the rower signed in (Task 5 Step 5b),
-  the "You" naming treatment across six strings and three shapes (Task 7 Step
-  3), and whether the 1.47:1 hairline is worth changing (Task 7 Step 4).
+  the "You" naming treatment across the live strings Task 7 Step 3 enumerates
+  (six in the app's own screens plus a seventh using a third form, and three
+  undated article bodies — the step orders a re-measure at implementation
+  time rather than trusting any count written here), and whether the 1.47:1
+  hairline is worth changing (Task 7 Step 4).
 - **PM, BEFORE Gate 0 (revision 5):** the `ACCESS_MODE` build-now call. Staging
   stays `restricted` (James, 2026-09-14), `compose.yml:48` and
   `accessPolicy.ts:14` both default to it, and `requireAccess(identity.email)`

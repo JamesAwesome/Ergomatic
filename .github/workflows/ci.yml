@@ -171,6 +171,10 @@ jobs:
         run: |
           bash -n scripts/conflict-markers.sh
           bash scripts/conflict-markers.test.sh
+      # Its own step, so a real failure prints the offending file and line
+      # rather than only the test harness's "want 0 got 1".
+      - name: No conflict markers in tracked files
+        run: bash scripts/conflict-markers.sh
       - name: Lint + test the stack-env guard
         run: |
           bash -n app/scripts/stack-env.sh
