@@ -101,4 +101,40 @@ describe("App's auth destination across a sign-out", () => {
     await settle(() => rerender(<App />));
     expect(window.location.pathname).toBe("/today");
   });
+
+  // THE NATIVE ORDERING, WHICH IS THE OTHER HALF AND PULLS THE OPPOSITE WAY.
+  // On native `confirmAttach` sets `attached` and calls `onSignedIn` in one
+  // tick, so the destination is `/` a whole `/api/me` round trip before `me`
+  // catches up — the rower is still on the sign-in tree when this effect
+  // first sees it. The destination must SURVIVE that window and be acted on
+  // when `me` returns.
+  //
+  // IT IS THE REASON THE SIGNED-OUT BRANCH FORGETS RATHER THAN CONSUMES, and
+  // it is not hypothetical: the first draft of that fix consumed, which
+  // marked this destination done while nobody could act on it and left the
+  // rower on `/you` — the same missed landing as the test above, through the
+  // opposite door. The two tests fail under opposite mutations, which is
+  // what makes them a pair rather than a repetition.
+  it("acts on a destination that arrived while the rower was still signed out", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })),
+    );
+    window.history.replaceState(null, "", "/you");
+    stub.me = { state: "out" };
+    stub.destination = null;
+    const { rerender } = render(<App />);
+
+    // `attached`, with the session read still in flight.
+    stub.destination = "/";
+    await settle(() => rerender(<App />));
+
+    // `/api/me` answers.
+    stub.me = {
+      state: "in",
+      user: { id: "u1", email: "a@x.com", name: "Ada" },
+    };
+    await settle(() => rerender(<App />));
+    expect(window.location.pathname).toBe("/today");
+  });
 });

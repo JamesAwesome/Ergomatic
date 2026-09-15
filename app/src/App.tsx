@@ -85,19 +85,33 @@ function AppContent() {
   // by the time `me` resolves IN the flow has reached `attached`, whose
   // destination is `/` — the landing James ruled.
   //
-  // BUT `loading` HOLDS AND `out` CONSUMES, AND THE DIFFERENCE IS A REAL BUG.
-  // Returning bare on both leaves `consumedAuthDestination` carrying whatever
-  // the last signed-in flow put there, for the whole signed-out period — and
-  // `/` is exactly what an attach terminal writes. A rower who attaches,
-  // signs out, and signs in again in the SAME document (native never
-  // reloads) reaches `attached` a second time with destination `/`, matches
-  // the stale ref, takes the early return below, and is left standing on
-  // `/you` — the subpage this landing ruling exists to avoid. `loading` must
-  // still hold, because that is the race the whole guard was written for.
+  // AND `out` FORGETS, WHICH IS NOT THE SAME AS CONSUMING. Three cases have
+  // to hold at once, and only this form holds all three:
+  //
+  //   - A destination from a PREVIOUS signed-in period must not linger.
+  //     Returning bare leaves the ref carrying whatever that flow put there,
+  //     and `/` is exactly what an attach terminal writes — so a rower who
+  //     attaches, signs out, and attaches again in the same document reaches
+  //     `attached` with destination `/`, matches the stale ref, takes the
+  //     early return below, and stands still on `/you`.
+  //   - A destination produced WHILE OUT and still current when `me`
+  //     resolves IN must still be acted on. That is the native attach:
+  //     `confirmAttach` sets the terminal and calls `onSignedIn` in one tick,
+  //     so the destination is `/` a full `/api/me` round trip before `me`
+  //     catches up. CONSUMING it here marks it done while the rower is still
+  //     on the sign-in tree — the same missed landing through the opposite
+  //     door, and the first draft of this fix did exactly that.
+  //   - `loading` must still HOLD, untouched: that is the race the whole
+  //     guard was written for, and consuming there reds the delete-return
+  //     test that pins it.
+  //
+  // Forgetting satisfies all three: the ref stops describing the last
+  // session, and whatever is current when `me` returns is compared against
+  // nothing and therefore acted on.
   useEffect(() => {
     if (me.state === "loading") return;
     if (me.state === "out") {
-      consumedAuthDestination.current = auth.destination;
+      consumedAuthDestination.current = null;
       return;
     }
     if (consumedAuthDestination.current === auth.destination) return;
