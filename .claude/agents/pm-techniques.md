@@ -258,6 +258,31 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   the gate, because the card is what the operator follows and a rehearsal
   finding lands after he already has the script.
 
+- **A PR body corrected at head can still be false about the TREE, and the
+  ROADMAP is the artefact James rules on.** #452 (2026-09-15) rewrote its body
+  to say the naming row "is withdrawn, because the work is done here"; the row
+  was still in `ROADMAP.md`, live, and its "what would fix it now" still
+  prescribed the WRONG vendor document that the PR's own last commit had just
+  convicted. The fix arrived as a paragraph appended eleven lines BELOW the
+  prescription — the shape CLAUDE.md forbids by name. **At every hand-back
+  gate, grep every row the body claims to have added, withdrawn or fixed
+  against the tree at head, and read the row from its FIRST line — a
+  correction a reader reaches second is a contradiction a reader reaches
+  first.**
+- **A bundling decision made after the gate plan is written does not update
+  the gate plan, and the bundled half is where the defects are.** #452's Gates
+  block still read "PM / antagonist / dba: skipped" twenty-one lines below a
+  sentence crediting the antagonist with two finds — both of which landed
+  entirely in the half James had asked to bundle in. **At any gate on a PR
+  whose scope changed after its gate list was written, re-derive the required
+  gates from the scope AT HEAD rather than reading the list.**
+- **A finished item with a `dies` stamp in a queued section is an obligation
+  the sweep cannot tell from a record.** #452 left two done rows in "Small,
+  queued, rides the next PR in its area" carrying live stamps; the `tr`-grep
+  sweep is a string match and will hand both back to James as live work.
+  Completed work belongs where completed work lives, or its stamp goes — and
+  that is his ruling, never the gate's.
+
 ## Recommendations that turned out wrong
 - **2026-09-13 — the disabled-button contrast fold (#425).** I measured the
   disabled provider button at 2.16:1 (`--ink-5 #a09a8c` on `--accent #b5341f`)
