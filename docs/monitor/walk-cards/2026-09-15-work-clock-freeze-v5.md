@@ -1,4 +1,4 @@
-# Walk card — does the work clock freeze? (v4)
+# Walk card — does the work clock freeze? (v5)
 
 **One question, one piece, one observable.** Written 2026-09-14 for a walk
 James offered for the morning of 2026-09-15. Gates nothing; it UNBLOCKS Gate
@@ -206,8 +206,7 @@ rather than re-counting, so it carried v3's error forward; 9 is what the
 table holds.)
 
 **Ending the session navigates for him** — `WorkoutDetail.tsx:445-447`,
-`handleConnectedEnded` → `navigate('/library/<id>/log?from=monitor')`. v1 claimed 5 taps over a table listing 4, and left out
-the navigations and the Bluetooth chooser entirely.
+`handleConnectedEnded` → `navigate('/library/<id>/log?from=monitor')`.
 
 | # | When | What | Kind |
 | --- | --- | --- | --- |
@@ -262,21 +261,43 @@ have started while the stack built.
 1. `bash scripts/walk-lab.sh up` from this worktree's `app/`, to green,
    and the printed HEAD confirmed as this branch. (Cold `--build --wait` is
    minutes; it happens before he is asked.)
-2. **The whole capture path rehearsed with the FAKE monitor, no erg** —
+2. **The CONTROL path rehearsed with the FAKE monitor, no erg** —
    `VITE_ENABLE_FAKE_MONITOR=1` is already a build arg of this stack
-   (`compose.e2e.yml`), and `transports/index.ts` wraps the real web
-   transport in the recording tap behind that same gate. So connect →
-   program → session → **END → TAP AGAIN** → `RECORDING · DOWNLOAD` is
-   walked end to end at the desk and the downloaded file is decoded by the
-   same script the walk will use. If the export is broken, it is found
-   tonight, not at the erg.
-   **[v4] The rehearsal takes the END path, not a natural finish.** The
-   fake's default is a natural finish, so a rehearsal as v2 and v3 wrote it
-   would confirm the one path this walk no longer takes, and the transition
-   the ending ADDED — END → TAP AGAIN → saved row → download on a TERMINATED
-   session — would go unrehearsed. Broken there, the walk would find out
-   after James had already rowed, and the abort condition would fire on
-   evidence that was never gathered.
+   (`compose.e2e.yml`). Walk connect → program → session → **END → TAP
+   AGAIN** → the app navigating itself to the log screen → the saved row
+   rendering. **That is the whole transition the ending ADDED**, which is
+   where this card's new risk lives, and it is fully rehearsable at the desk.
+
+   **[v5] The EXPORT half CANNOT be rehearsed with the fake, and v2 through
+   v4 said it could.** `transports/index.ts:312-330` — an injected
+   `__pm5FakeScript__` takes the fake arm and **returns before the recording
+   tap is created**:
+
+   ```js
+   if (fakeMonitorEnabled) {
+     const script = window.__pm5FakeScript__;
+     if (script) {
+       return import("./fake").then(...)   // returns HERE
+     }
+     // no injected script: wrap the REAL web transport in a recording tap
+   ```
+
+   So `__pm5Recording__` is never set, and that global is what the download
+   control reads to decide whether to render at all. **A fake-driven
+   rehearsal finds no `RECORDING · DOWNLOAD` row — and this card's own abort
+   condition reads that absence as "the evidence is broken", so the step
+   meant to de-risk the walk would manufacture a false abort the night
+   before.** The tap wraps the REAL web transport, which needs a real PM5.
+
+   What is rehearsed instead: the decode script runs against an existing
+   committed recording (step 5), so the ANALYSIS half is proven even though
+   the EXPORT half is first exercised at the erg. The missing-download-row
+   abort is the compensating control and it stays.
+
+   *(The split falls the right way: the half that cannot be rehearsed is the
+   one every prior walk has already exercised and that this card does not
+   change.)*
+
 3. The Keystone block pasted into `/library/import` on this stack, so the
    grammar is proven before he pastes it.
 4. The evidence directory created with its README prefilled — date, branch,
