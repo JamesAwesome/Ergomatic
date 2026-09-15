@@ -90,6 +90,15 @@ export interface MonitorLogMeta {
    *  this, a RowErg and a pre-2018 monitor with no field at all were
    *  indistinguishable in a log, because only the refusal recorded anything. */
   ergMachineType?: number | null;
+  /** The VENDOR's own token for that value (`STATIC_D`, `MULTIERG_ROW`) —
+   *  absent when the vendor names none, and never a fallback, because
+   *  naming an unnamed value as rowing is the allowlist `ergMachine.ts`'s
+   *  denylist exists to refuse. Written in LOCKSTEP with `ergMachineType`
+   *  and only ever from the same reading, so the pair cannot disagree: a
+   *  header saying `0` beside `MULTIERG_SKI` would be worse than either
+   *  alone. The token carries no support semantics — whether a machine is
+   *  ALLOWED is the `unsupported-machine` event's business. */
+  ergMachineName?: string;
 }
 
 export interface MonitorEventLog {

@@ -91,7 +91,10 @@ import {
   type RawPm5Status,
   type WorkoutSummary,
 } from "../../domain/monitor/pm5/parse.js";
-import { unsupportedErgMachine } from "../../domain/monitor/pm5/ergMachine.js";
+import {
+  ergMachineToken,
+  unsupportedErgMachine,
+} from "../../domain/monitor/pm5/ergMachine.js";
 import {
   parseCsafeResponse,
   type CsafeFrameStatus,
@@ -2601,7 +2604,16 @@ export function createPm5Driver(
       }
       return;
     }
-    log.setMeta({ ergMachineType: value });
+    // The raw byte and the vendor's token for it are written TOGETHER, from
+    // the same reading, so the pair can never disagree — a header reading
+    // `0` beside `MULTIERG_SKI` would be worse than either field alone.
+    // `ergMachineToken` returns `undefined` for a value rev 1.30 does not
+    // name, and that absence is deliberate: naming an unnamed value as
+    // rowing builds the allowlist the denylist exists to refuse.
+    log.setMeta({
+      ergMachineType: value,
+      ergMachineName: ergMachineToken(value),
+    });
     const machine = unsupportedErgMachine(value);
     if (machine === null) return;
     unsupportedMachineFired = true;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { unsupportedErgMachine } from "./ergMachine.js";
+import { ergMachineToken, unsupportedErgMachine } from "./ergMachine.js";
 
 /**
  * THE TABLE IS WRITTEN FROM THE VENDOR ENUM, NOT FROM THE MODULE'S OWN MAP
@@ -109,5 +109,54 @@ describe("unsupportedErgMachine", () => {
    */
   it("null (the field was absent from the frame) proceeds", () => {
     expect(unsupportedErgMachine(null)).toBeNull();
+  });
+});
+
+describe("ergMachineToken — the vendor's own name for a value", () => {
+  // Spot-checked against the FIRST-PARTY document in this repo, not against
+  // the map under test: `docs/monitor/PM5_CSAFECommunicationDefinition.pdf`
+  // rev 0.27, `OBJ_ERGMACHINETYPE_T`, read with `pdftotext -layout`.
+  it("names the values the vendor names, verbatim", () => {
+    expect(ergMachineToken(0)).toBe("STATIC_D");
+    expect(ergMachineToken(3)).toBe("STATIC_B");
+    expect(ergMachineToken(20)).toBe("SLIDES_E");
+    expect(ergMachineToken(128)).toBe("STATIC_SKI");
+    expect(ergMachineToken(224)).toBe("MULTIERG_ROW");
+    expect(ergMachineToken(226)).toBe("MULTIERG_BIKE");
+  });
+
+  // THE DOCUMENT'S OWN COMMENT IS WRONG HERE and this test is the record of
+  // it: `ERGMACHINE_TYPE_STATIC_DYNO = 64` carries `/**< Dynomometer, static
+  // type (32). */`, while 32 is `LINKED_DYNAMIC`. Transcribing from the
+  // parentheticals rather than the assignments would swap these two.
+  it("reads the assignment, not the parenthetical, where the PDF disagrees with itself", () => {
+    expect(ergMachineToken(64)).toBe("STATIC_DYNO");
+    expect(ergMachineToken(32)).toBe("LINKED_DYNAMIC");
+  });
+
+  // An unnamed value must stay unnamed. Naming one as rowing would build the
+  // allowlist this module's denylist exists to refuse — a RowErg model added
+  // after rev 1.30 has to read as unknown, not as a rower.
+  it("returns undefined for every value the enum does not name", () => {
+    for (const gap of [4, 6, 9, 15, 21, 31, 33, 63, 65, 127, 195, 223, 255]) {
+      expect(ergMachineToken(gap)).toBeUndefined();
+    }
+  });
+
+  // 227 is `ERGMACHINE_TYPE_NUM`, a count sentinel the enum ends on — not a
+  // machine, and a transcription that walked the enum mechanically would
+  // include it.
+  it("does not treat the count sentinel as a machine", () => {
+    expect(ergMachineToken(227)).toBeUndefined();
+  });
+
+  // The two maps must agree on membership: every value the denylist refuses
+  // is one the vendor named, or the denylist is refusing something the
+  // document does not describe.
+  it("every denied value is a named value", () => {
+    for (const denied of [64, 128, 143, 192, 193, 194, 207, 225, 226]) {
+      expect(ergMachineToken(denied)).toBeDefined();
+      expect(unsupportedErgMachine(denied)).not.toBeNull();
+    }
   });
 });

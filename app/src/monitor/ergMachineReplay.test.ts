@@ -91,6 +91,29 @@ describe("ergMachineType survives a real session's characteristic interleave", (
       // ERGMACHINE_TYPE_STATIC_D — a rower, so nothing is refused and the
       // header is the only place the reading can show up.
       expect(log.meta().ergMachineType).toBe(0);
+      // And the vendor's own token for it, so a human reading the exported
+      // header does not have to look `0` up. `STATIC_D` is Model D, static —
+      // NOT the word "row", which the vendor never uses for any value.
+      expect(log.meta().ergMachineName).toBe("STATIC_D");
     },
   );
+});
+
+describe("the header's machine fields move together or not at all", () => {
+  it("an unnamed value records the byte and NO name, rather than guessing", () => {
+    const log = createEventLog();
+    // 9 is a gap in rev 1.30's enum — exactly the shape of a RowErg model
+    // Concept2 might add later. It must record as a number nobody has named,
+    // never fall back to a rowing word.
+    log.setMeta({ ergMachineType: 9, ergMachineName: undefined });
+    expect(log.meta().ergMachineType).toBe(9);
+    expect(log.meta().ergMachineName).toBeUndefined();
+  });
+
+  it("a monitor too old to carry the field records neither", () => {
+    const log = createEventLog();
+    log.setMeta({ ergMachineType: null });
+    expect(log.meta().ergMachineType).toBeNull();
+    expect(log.meta().ergMachineName).toBeUndefined();
+  });
 });

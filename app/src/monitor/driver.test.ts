@@ -13773,6 +13773,23 @@ describe("Phase MT: unsupported erg machine", () => {
     // 0x0033: the one that actually bit — last in every hardware tick.
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
     expect(log.meta().ergMachineType).toBe(0);
+    // The vendor token rides the same floor and survives with it.
+    expect(log.meta().ergMachineName).toBe("STATIC_D");
+  });
+
+  it("records the vendor's own token beside the byte, and NOTHING for a value rev 1.30 does not name", () => {
+    const named = subscribed();
+    named.transport.notify(ADDITIONAL_STATUS_1_UUID, as1(128));
+    expect(named.log.meta().ergMachineType).toBe(128);
+    expect(named.log.meta().ergMachineName).toBe("STATIC_SKI");
+
+    // 9 is a gap in the enum — the shape of a RowErg model added after rev
+    // 1.30. It records as a number nobody has named. Calling it a rower here
+    // would be the allowlist `ergMachine.ts`'s denylist exists to refuse.
+    const unnamed = subscribed();
+    unnamed.transport.notify(ADDITIONAL_STATUS_1_UUID, as1(9));
+    expect(unnamed.log.meta().ergMachineType).toBe(9);
+    expect(unnamed.log.meta().ergMachineName).toBeUndefined();
   });
 
   it("records NULL for a monitor too old to carry the field, which is itself the answer", () => {

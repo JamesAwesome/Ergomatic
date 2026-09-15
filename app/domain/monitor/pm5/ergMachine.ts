@@ -112,3 +112,75 @@ export function unsupportedErgMachine(
   if (value === null) return null;
   return UNSUPPORTED.get(value) ?? null;
 }
+
+/**
+ * THE VENDOR'S OWN TOKEN FOR A VALUE, or `undefined` when the vendor names
+ * none (James, 2026-09-15: "I want to be specific when we can identify the
+ * erg").
+ *
+ * WHY THE VENDOR'S TOKEN AND NOT A PRODUCT WORD. The enum names no value
+ * "row" or "rowerg". `0` is `ERGMACHINE_TYPE_STATIC_D` — a MODEL (A-E) and a
+ * RIG (static, slides, linked-dynamic) — and the enum distinguishes eleven
+ * rowing configurations. Collapsing them into one invented word would be
+ * LESS specific than the byte it replaces, which is the opposite of the ask.
+ * A token also carries no support semantics: `STATIC_D` reads as "the enum
+ * calls this STATIC_D", never as "we decided this is a rower". Whether a
+ * value is ALLOWED is `unsupportedErgMachine`'s judgement, and judgements
+ * belong in the `unsupported-machine` event where they already live.
+ *
+ * AN UNNAMED VALUE IS `undefined`, NEVER A FALLBACK. Naming an unnamed value
+ * as rowing would build exactly the allowlist this module's denylist exists
+ * to refuse — a RowErg model Concept2 adds after rev 1.30 must read as
+ * unnamed rather than be asserted to be a rower. The gaps are real: 4, 6,
+ * 9-15, 21-31, 33-63, 65-127, 129-142, 144-191, 195-206 and 208-223 are all
+ * absent from the enum.
+ *
+ * TRANSCRIBED FROM THE FIRST-PARTY DOCUMENT in this repo,
+ * `docs/monitor/PM5_CSAFECommunicationDefinition.pdf` rev 0.27,
+ * `OBJ_ERGMACHINETYPE_T` (`pdftotext -layout`, 2026-09-15). Implicit values
+ * are expanded by C enum rules.
+ *
+ * **THE VALUES ARE AUTHORITATIVE; ONE OF THE DOCUMENT'S OWN COMMENTS IS
+ * WRONG.** `ERGMACHINE_TYPE_STATIC_DYNO = 64` carries a comment reading
+ * "Dynomometer, static type (32)" — and 32 is `LINKED_DYNAMIC`. Read
+ * from the assignments, never the parentheticals. (`UNSUPPORTED` above
+ * already records a sibling oddity: 192 and 194 are both described as "no
+ * arms".)
+ *
+ * `ERGMACHINE_TYPE_NUM` (227) is a COUNT SENTINEL, not a machine, and is
+ * deliberately absent.
+ *
+ * A MULTIERG VALUE CAN CHANGE MID-SESSION — footnote 23 on 0x003C: the value
+ * names what the CURRENT INTERVAL is on. A single scalar in an export header
+ * cannot say "it changed"; it reports the latest reading the log floor
+ * accepted. Said here rather than left for a reader to assume stability.
+ */
+const VENDOR_TOKENS: ReadonlyMap<number, string> = new Map([
+  [0, "STATIC_D"],
+  [1, "STATIC_C"],
+  [2, "STATIC_A"],
+  [3, "STATIC_B"],
+  [5, "STATIC_E"],
+  [7, "STATIC_SIMULATOR"],
+  [8, "STATIC_DYNAMIC"],
+  [16, "SLIDES_A"],
+  [17, "SLIDES_B"],
+  [18, "SLIDES_C"],
+  [19, "SLIDES_D"],
+  [20, "SLIDES_E"],
+  [32, "LINKED_DYNAMIC"],
+  [64, "STATIC_DYNO"],
+  [128, "STATIC_SKI"],
+  [143, "STATIC_SKI_SIMULATOR"],
+  [192, "BIKE"],
+  [193, "BIKE_ARMS"],
+  [194, "BIKE_NOARMS"],
+  [207, "BIKE_SIMULATOR"],
+  [224, "MULTIERG_ROW"],
+  [225, "MULTIERG_SKI"],
+  [226, "MULTIERG_BIKE"],
+]);
+
+export function ergMachineToken(value: number): string | undefined {
+  return VENDOR_TOKENS.get(value);
+}
