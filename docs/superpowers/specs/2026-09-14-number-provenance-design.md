@@ -132,13 +132,67 @@ work-only is recoverable from the series alone, and it has a machine oracle
 (0x0039) that wall clock does not.
 
 **The question that is genuinely open, and PR 3 needs it:** does 0x0031's
-elapsed freeze during a **work** interval when the rower stops? The Just Row
-capture proves the freeze mechanism exists; every work interval in the
-rest-bearing capture was rowed continuously (wall and elapsed agreeing to
-0.65 s), so nothing there discriminates. **If it does freeze,
-`wall = work + machineRest` breaks for programmed rows too.** Answerable at
-a desk from any capture holding a mid-interval pause; **it is PR 3's first
-task, not Gate 0A's business.**
+elapsed freeze during a **work** interval when the rower stops? **If it does,
+`wall = work + machineRest` breaks for programmed rows too.**
+
+**[ANSWERED 2026-09-15 at the erg: the clock RAN. It does NOT freeze during
+a programmed work interval, so `wall = work + machineRest` HOLDS and board
+2's candidate B is alive.]** 60.48 s stopped dead in `INTERVALWORKDISTANCE`
+and elapsed moved 60.51 s; the wire recording and the diagnostics ring agree
+independently. Record and decode:
+`docs/monitor/sessions/walk-2026-09-15-work-clock/`.
+
+**The free-row freeze does not generalise, and that was the whole risk.** A
+free row is `WORKOUTTYPE_JUSTROW` (1) and freezes; a programmed piece is
+`WORKOUTTYPE_VARIABLE_INTERVAL` (8) and does not. **James, at the erg:**
+*"if you stopped like that during a timed interval the ergometer would keep
+its clock ticking"* — which closes the scope the walk could not measure, a
+time interval's clock having to run through a stop or the piece could never
+terminate. Distance measured plus time by that argument covers both kinds.
+
+**And it handed board 2 a number it did not have.** That interval stores as
+250 m in 129.2 s — about 68 s rowed, about 61 s standing still — so the saved
+row reads a split of roughly **4:18/500m** for a piece pulled at about
+**2:15**, with nothing on screen saying why. A mid-interval stop poisons the
+split silently. That is M3's axis question with a real figure attached.
+
+**[CORRECTED 2026-09-14, and now superseded by the walk above — kept because
+the sweep it records is still the reason the walk was needed.] It was NOT
+answerable at a desk, and this spec said it was.** Both halves of the corpus
+were swept and neither could settle it:
+
+- **The wire recordings: 13 of them, zero instances.** Decoding 0x0031 per
+  §10 (elapsed `0-2` at 0.01 s, distance `3-5` at 0.1 m, workout state byte
+  8, rowing state byte 9) and looking for elapsed frozen across consecutive
+  frames while the workout state is an ACTIVE WORK state (§5's 1, 4, 5, 6,
+  7) and elapsed is already past zero: **every hit is `wstate = 1`,
+  `WORKOUTROW` — a free row.** Not one frame pair anywhere sits in
+  `INTERVALWORKTIME` or `INTERVALWORKDISTANCE` with a stopped clock. The
+  programmed walks were all rowed continuously. (PRIMARY — measured
+  2026-09-14.)
+- **Two apparent hits are false, and both are worth naming** so the next
+  sweep does not re-find them. `walk-2026-08-23/keystone`'s 89.64 s freeze
+  at elapsed 68.55 / 250.0 m is `wstate = 12`, `WORKOUTLOGGED` — it is that
+  walk's README's own "90.3 s held-open window" AFTER the piece ended.
+  `walk-2026-08-31-justrow/waiting`'s 896.77 s is a free row, and its
+  filename says what it is. A sweep that filters only on "elapsed stopped"
+  reports both as pauses.
+- **The saved rows cannot settle it either, and the reason generalises.**
+  `seriesRecorder` emits one sample per work-clock SECOND, and the work
+  clock IS 0x0031's elapsed — so a frozen clock emits NOTHING for the pause
+  and the trace is seamless, while a running clock emits a run of samples
+  whose distance sits flat. **The signature of "it froze" is therefore
+  indistinguishable from "the rower never stopped".** Measured on staging
+  2026-09-14: across every `source = 'pm5'` row carrying steps and a
+  series, **the longest flat-distance run in the whole database is 4
+  seconds** — ordinary between-stroke coasting, not a pause. That is
+  evidence only if paired with a rower who remembers stopping in a named
+  row, and James does not (asked 2026-09-14, "not sure").
+
+**So the honest options are a hardware walk leg (one programmed piece, stop
+mid-interval ~30 s, resume) or an assumption carried at Gate 0B.** The
+consequence for the board is in §4: exactly one of the three axis candidates
+is immune to the answer.
 
 ### 1.3 What this spec measured
 
@@ -246,6 +300,22 @@ cal/hr. The eyebrow names the monitor for all of it. **Agrees when** the
 label says whose arithmetic each column is, or the columns are split so one
 eyebrow is true of what it covers.
 
+**[SHARPENED 2026-09-14, building Gate 0B's board 1.] The table is six data
+columns and two of them are ours**, which `summaryModel.ts:204-210` states in
+its own words: "`watts`/`calPerHour` are the LOGBOOK's arithmetic off the
+step's own seconds/metres/calories (§3.1); `calories`/`drag`/`restMeters` are
+the machine's own." `hr` is the machine's per-split reading. So under one
+eyebrow reading `PM5 · PER INTERVAL`:
+
+| column | whose arithmetic |
+| --- | --- |
+| HR | the monitor's (0x0038 per-interval) |
+| **WATTS** | **ours** (`logbookWatts`) |
+| CAL | the monitor's |
+| **CAL / HOUR** | **ours** (`logbookCalPerHour`) |
+| DRAG | the monitor's |
+| REST m | the monitor's |
+
 ### M2 — AVG HR is derived from the trace
 
 The tile is our time-weighted mean over working strokes; the HR column
@@ -255,6 +325,93 @@ beneath it is the monitor's own 0x0038 per-interval reading, measured
 same source the column does" arm is option C and was rejected at a Gate 0 on
 2026-09-07** (§1.1) — reopening it needs James, and it would make PR 1
 TRIAD, because a number a rower has already saved would render differently.
+
+**[RENDERED 2026-09-14] M1 and M2 in ONE frame, readable by eye:**
+`gate0b/before/block-hr-portrait.png`. The tiles read **AVG HR 140** directly
+above a table whose HR column reads **152** and **148** — a ~10 bpm gap, both
+figures on the same screen, nothing saying they are different quantities. The
+eyebrow over that table reads `PM5 · PER INTERVAL` while its WATTS (140/248)
+and CAL/HOUR (848/1026) columns are OURS. And the tiles' own AVG WATTS reads
+**184** above table rows of 140 and 248. One capture, three unstated
+provenance changes — which is why RF7's "put it in one frame and check it by
+eye" is the only discipline that catches this class.
+
+### M1b — two of the six TILES change whose arithmetic they are, per row (NEW)
+
+**[FOUND 2026-09-14 building Gate 0B's board 1, and it changes what board 1
+can propose.]** `MachineTierBlock`'s six tiles are unlabelled (§1.4), and
+labelling them is not simply a matter of writing six labels, because **two of
+them are not a fixed source at all:**
+
+| tile | whose arithmetic | fixed? |
+| --- | --- | --- |
+| AVG WATTS | ours (`logbookWatts`) | yes |
+| CALORIES | the monitor's | yes |
+| CAL / HOUR | ours (`logbookCalPerHour`) | yes |
+| **RATE** | **the monitor's own `avgStrokeRate` IF the piece finished; OUR time-weighted mean over the splits if it did not** | **NO — switches on `endedBy`** |
+| DRAG | the monitor's | yes |
+| **AVG HR** | **the monitor's `avgHeartRateBpm` if present; OURS from the trace otherwise** — and no capture we hold carries one, so in practice always ours | **NO — switches on data presence** |
+
+(PRIMARY — `logbookDerived.ts:38-53`'s `sessionStrokeRate`, whose first line
+is `if (input.finished) return input.avgStrokeRate;`, and
+`storedSummary.ts:816`'s `ms?.avgHeartRateBpm ?? deriveAverageHeartRate(...)`.)
+
+**[SHARPENED] Neither conditional is an accident, and one has a photographed
+receipt — so "remove the conditional" is NOT on the table for RATE.**
+`pm5-interface-notes.md` §27.6: **"0x0039's Average Stroke Rate reads exactly
+DOUBLE on a terminate"**, with the monitor's own View Detail screen siding
+against the wire (46 on 0x0039, 23 on 0x0038, **23 photographed on the PM5**),
+and a second terminate capture showing the same 2×. Its stated operational
+rule is "never display 0x0039's average stroke rate for a terminated piece."
+**The RATE tile switches source because the monitor lies by exactly 2× on one
+arm.** (PRIMARY.)
+
+The two conditionals are therefore different in KIND, and a board that treats
+them alike gets the design wrong:
+
+- **RATE switches because the monitor is WRONG** on terminated pieces. Ours is
+  the better number there, and the switch protects the rower.
+- **AVG HR falls back because the monitor sends NOTHING** — not because it is
+  wrong. It is a gap-filler, and `derivedHeartRate.ts` records how narrow the
+  evidence for "always empty" really is (two belted recordings, one walk).
+
+**[RENDERED 2026-09-14, board 1's core evidence.] The conditional is
+INVISIBLE because it works, and that is the actual defect.** Three frames,
+`docs/design/number-provenance/gate0b/`, the same row twice plus one
+prototype:
+
+| frame | what the wire said | what the screen says | source |
+| --- | --- | --- | --- |
+| `before/tiles-finished-portrait.png` | `avgStrokeRate: 26` | **RATE 26** | the monitor's |
+| `before/tiles-terminated-portrait.png` | `avgStrokeRate: 52` | **RATE 26** | **ours** — the guard dropped the monitor's |
+| `guard-removed/tiles-terminated-portrait.png` | `avgStrokeRate: 52` | **RATE 52** | the monitor's, which is the §27.6 double |
+
+Verified in the database rather than inferred: `ended_by = 'rower'` stored on
+the second row and `machine_summary->>'avgStrokeRate'` reads `52`, while the
+screen reads 26 — so the branch fired. **The first two frames are
+pixel-identical in the RATE tile.** A rower cannot tell which number they are
+looking at, and the reason the screen looks fine is that the guard is
+silently declining the monitor's own field. The third frame is what that tile
+says without it.
+
+**So the design question is narrower and harder than labelling six tiles: can
+one label be true of a tile whose source switches for a documented reason?**
+And board 1 must answer it knowing the switch produces no visible symptom —
+there is no wrong number on screen to point at, only an unstated one.
+
+**The house's existing mark does NOT answer it.** The tilde is already a
+provenance-adjacent mark here — `Builder.tsx:633`, `WorkoutRow`, and the
+baselines article's own words: "distance workouts show a rough length marked
+with a tilde". But it means ESTIMATED, not OURS, and most of these figures
+are not estimates: `logbookWatts` is exact arithmetic on measured inputs, and
+so is `logbookCalPerHour`. Reusing it would conflate the two axes this pass
+exists to separate. (Asked and answered per the brainstorming rule: the house
+has a mark, and it is the wrong one.)
+Three ways out, and the board shows them rather than assuming one — compute
+the label per row from the same predicate the value came from; group the tiles
+so one honest eyebrow covers each group; or say the switch out loud on the
+rows where it happens. **Removing the conditional is ruled out for RATE by
+§27.6** and for AVG HR would mean showing a dash where a real number exists.
 
 ### M3 — the chart's axis is a quantity with no name
 
@@ -431,13 +588,29 @@ provenance vocabulary verbatim or states a deviation.
 
 **0B's boards:**
 
-1. The post-workout summary / log detail: tiles + eyebrow + table (M1, M2).
-2. The trace chart: work-only and wall-clock candidates, with five equal
-   rests drawn under each, **and the free row's frozen 104 s (M9)**, and
-   **the option nobody argued** (PM, 2026-09-14): a work-only axis with
-   rests as FIXED-WIDTH gaps printing the interval's own rest duration — it
-   asserts nothing, the gap is a separator, the number is a fact about the
-   program, and it fixes M6 completely.
+1. The post-workout summary / log detail: tiles + eyebrow + table (M1, M1b,
+   M2) — and because two tiles switch source per row (M1b), the board draws
+   the SAME screen twice, once for a finished piece and once for a
+   terminated one, so a static label's falsehood is visible rather than
+   argued.
+2. The trace chart: **three candidates**, five equal rests drawn under each,
+   **and the free row's frozen 104 s (M9)**, which every one of them must be
+   shown against because it is invisible to all three and to today's axis.
+
+   | candidate | what the x axis is | survives the open freeze question? |
+   | --- | --- | --- |
+   | **A · work-only, named** | today's quantity, finally labelled | **yes** — recoverable from the series alone, and 0x0039 is its oracle |
+   | **B · wall clock** | `work + machineRest` | **NO** — it is exactly what a frozen work clock breaks (§1.2) |
+   | **C · work-only + fixed-width rest gaps** (PM, unargued) | work-only, each rest a separator printing the interval's own rest seconds | **yes** — asserts nothing about time during a rest |
+
+   **[ADDED 2026-09-14] The open question is now a decision input, not a
+   footnote.** Since it cannot be settled at a desk (§1.2), candidate B
+   goes to the gate carrying an unquantified risk that A and C do not: if
+   elapsed freezes during work, B silently under-reports the session's real
+   duration by however long the rower stood still, and nothing on the
+   screen would say so. **C is the only candidate that both fixes M6
+   completely AND is immune** — the gap is a separator, the number is a
+   fact about the program.
 3. The connected live surface's total beside the stored total for the same
    session (M4, M5).
 
@@ -535,9 +708,12 @@ plan.
 - **dba — PR 4 only.** PRs 1-3 touch no `app/server/db`, no store, no bulk
   read: SKIP, said aloud.
 - **Gate 0A — required before PR 2. Gate 0B — required before PRs 1, 3, 4.**
-- **Hardware walk — none.** Nothing here reaches the wire. The one open
-  hardware-shaped question (§1.2) is answerable at a desk from a committed
-  capture.
+- **Hardware walk — [CORRECTED] none for PRs 1, 2 and 4; PR 3 may need one.**
+  Nothing in this pass reaches the wire, but §1.2's open question is NOT
+  desk-answerable after all — the corpus was swept and cannot discriminate.
+  A walk leg for it would be one programmed piece with a ~30 s mid-interval
+  stop, and it is PR 3's to propose with a PM readiness PASS, not this
+  pass's to assume.
 
 ## 9. Exit criteria
 
