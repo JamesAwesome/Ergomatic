@@ -1,10 +1,20 @@
-# Walk card — does the work clock freeze? (v2)
+# Walk card — does the work clock freeze? (v3)
 
 **One question, one piece, one observable.** Written 2026-09-14 for a walk
 James offered for the morning of 2026-09-15. Gates nothing; it UNBLOCKS Gate
 0B's board 2, which otherwise goes to the gate carrying an assumption.
 
-**v2 supersedes v1, which the PM gated NOT READY on 2026-09-14** — three
+**v3 supersedes v2, which the PM gated NOT READY on one item: the v2 fix
+introduced an operator action the card did not carry.** Abandoning an `x2`
+block does not end anything — the Keystone carries no rest token
+(`restSeconds: 0`; `walk-2026-08-23/keystone` is states `{0, 5, 12}` with no
+state 3), so interval 1 rolls straight into interval 2 and the session must
+be ENDED by hand. v1's single 250 m piece finished on its own and owed no
+such tap. **A substitution inherits the new artifact's obligations, and the
+ones that bite are the ones the old artifact discharged for free.** Fixed
+below and marked **[v3]**.
+
+**v2 superseded v1, which the PM gated NOT READY on 2026-09-14** — three
 defects inside its own contingency machinery (a retry that could not return a
 verdict, a retry that could destroy the first attempt's evidence, and a
 workout state assumed rather than observed), plus a wrong interaction count
@@ -109,7 +119,7 @@ shortest interval that reaches the state.
 | | |
 | --- | --- |
 | **Workout** | the Keystone block (`x2` / `w 250m 6k @24`), **abandoned after interval 1** — see the state section above for why this block and not a new one |
-| **Action** | Row. About 20 seconds in, stop completely: hands off the handle, let the flywheel die. Hold. Then resume and row interval 1 out. |
+| **Action** | Row. About 20 seconds in, stop completely: hands off the handle, let the flywheel die. Hold. Then resume and row interval 1 out. **[v3] Then end the session: tap `END` in the header, then `TAP AGAIN` within 4 seconds.** Do not row interval 2. |
 | **Hold** | Hold the stop until **30 seconds** on the controller's clock, **at most 45**, then resume rowing. |
 | **Primary observable** | The wire recording's 0x0031 frames, decoded per §10 (elapsed bytes 0-2 at 0.01 s; workout state byte 8; rowing state byte 9). **Controller-gathered** from `RECORDING · DOWNLOAD`. |
 | **Secondary observable** | What the PM5's own display does during the stop — James reads it aloud once, after resuming. **Corroborating only:** that the displayed time and 0x0031's elapsed are the same field is NOT established, and this walk does not establish it. |
@@ -155,6 +165,7 @@ Either outcome is a result. There is no "we need another walk" branch.
 | The stop hold | 30 s target, 45 s hard | James's hands leave the handle | he resumes rowing | James, by holding past 45 s |
 | PM5 inactivity | **[v2] ≥36 s measured in a type-8 workout; ≥896 s in type-1; never measured in states 4/5** | flywheel stops | rowing resumes | the monitor, if it sleeps or terminates mid-hold |
 | The piece itself | 250 m | first stroke | 250 m reached | nobody — distance cannot accrue while stopped |
+| **[v3] END's arm window** | **4 s** (`ARM_TIMEOUT_MS`, `useStagedDiscard.ts:14`) | the first `END` tap | the confirming `TAP AGAIN` | **the controller, by talking during it** — or the button losing focus, which disarms it (`onBlur={end.disarm}`) |
 
 **[v2] The inactivity limit is BOUNDED from the corpus, not asserted.** v1
 wrote "NOT ESTABLISHED" and justified 30 s as "well clear of any plausible
@@ -174,8 +185,8 @@ thresholds made unreadable).
 
 ## Every operator interaction, counted
 
-**[v2] 2 pastes, 9 taps + 1 browser chooser, 1 spoken reading, 1 photo —
-nothing mid-piece.** v1 claimed 5 taps over a table listing 4, and left out
+**[v3] 2 pastes, 11 taps + 1 browser chooser, 1 spoken reading, 1 photo —
+nothing mid-piece.** (v2 said 9 and had no ending at all.) v1 claimed 5 taps over a table listing 4, and left out
 the navigations and the Bluetooth chooser entirely.
 
 | # | When | What | Kind |
@@ -189,15 +200,23 @@ the navigations and the Bluetooth chooser entirely.
 | 7 | setup | **Chrome's Bluetooth device chooser — pick the PM5** | browser dialog |
 | 8 | setup | the workout, then Start | tap ×2 |
 | 9 | during | *(nothing — he is rowing)* | — |
-| 10 | after | navigate to the log screen | tap |
-| 11 | after | read the PM5's time aloud | spoken |
-| 12 | after | `RECORDING · DOWNLOAD` | tap |
-| 13 | after | one same-frame photo: PM5 + laptop | photo |
+| 10 | after | **[v3] `END` in the header** — the button top-right on the connected surface, beside the connection line | tap |
+| 11 | after | **[v3] `TAP AGAIN`** — the SAME button, relabelled, **within 4 seconds** | tap |
+| 12 | after | navigate to the log screen | tap |
+| 13 | after | read the PM5's time aloud | spoken |
+| 14 | after | `RECORDING · DOWNLOAD` | tap |
+| 15 | after | one same-frame photo: PM5 + laptop | photo |
 
 **The chooser is guaranteed, not possible:** `stack-env.sh` derives
 `APP_PORT` from the worktree path, so this origin has never been granted this
 device and no stored permission can suppress it. v1 would have surprised him
 with it.
+
+**[v3] It is the HEADER's end button, not the one in the slot below.** Two
+end controls exist off the same armed state and their armed labels differ:
+the header's reads `TAP AGAIN` (`ConnectedSurface.tsx:704-716`), the slot's
+reads `AGAIN` (`:916`). The card names the header one so there is no guessing
+at the erg.
 
 **No DevTools.** Nothing in this walk needs a console.
 
