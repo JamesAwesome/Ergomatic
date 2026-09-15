@@ -3510,8 +3510,9 @@ Each needs erg time or a deliberate recording session.
   and `32` is `SLIDES_DYNAMIC` in BLE rev 1.30 (which defines the field) but
   `LINKED_DYNAMIC` in CSAFE rev 0.27; and a spot-check of 8 of 23 tokens let
   both a one-character typo and a deleted row ship green.
-  **S** · dies 2026-11-15 · row kept as the record of a shipped change, not
-  as owed work
+  **DONE 2026-09-15, PR #452** (James: "Mark them done"). **No `dies`
+  stamp**, for the same reason as the row above — a finished item carrying a
+  live stamp is handed back as an obligation at the next sweep.
 
 - **`ergMachineType` is recorded as `null` in every exported log, on a
   monitor that reports it 174 times a session.** Found by James reading the
@@ -3543,11 +3544,11 @@ Each needs erg time or a deliberate recording session.
   produced a number. Not done in the PR that found it because that is a
   branch of docs, a walk card and a design board, and a `src/monitor/driver`
   behaviour change would make a reviewer hold two risk models at once.
-  **S** · dies 2026-10-15 · a one-site fix with a real test, queued as a
-  quick follow to the number-provenance work rather than bundled into a
-  docs branch. **FIXED — see the PR that carries this correction.** The
-  row's own proposed fix ("only write `null` when no characteristic has ever
-  produced a number") was the right one and is what shipped.
+  **DONE 2026-09-15, PR #452** (James: "Mark them done"). The row's own
+  proposed fix — "only write `null` when no characteristic has ever produced
+  a number" — was the right one and is what shipped. **No `dies` stamp: this
+  is a RECORD, not owed work**, and the overdue sweep is a string grep that
+  cannot tell the two apart (PM gate, #452).
 
 - **`deploy.sh` treats a git lock collision as an unhealthy build, so a
   momentary one silently costs a deploy.** First sighting 2026-09-14, run
