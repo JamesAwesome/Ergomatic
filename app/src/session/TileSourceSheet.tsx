@@ -13,19 +13,31 @@
 // for why the sheet performs no lookup of its own.
 import { useId, useRef, useState } from "react";
 import { SheetShell } from "../components/SheetShell";
+import { DASH } from "../workout/connected/surfaceModel";
 import type { MachineTileProvenance, TileProvenance } from "./tileProvenance";
 
 function Row({ p, value }: { p: TileProvenance; value: string }) {
+  // A row with no number gets NO source sentence. Every `detail` and
+  // `because` is an unconditional positive claim — "from the monitor's
+  // calorie count", "the average of your splits" — and against a dash each
+  // one asserts a quantity that does not exist. That is the same defect as
+  // `PM5 · PER INTERVAL`, one level down, and it was in the fix for it.
+  const hasNumber = value !== DASH;
   return (
     <div className="tile-source-row">
       <div className="tile-source-line">
         <span className="tile-source-label">{p.label}</span>
         <span className="tile-source-value">{value}</span>
       </div>
-      {p.detail !== undefined && (
+      {!hasNumber && (
+        <p className="tile-source-because">
+          This piece has no {p.label.toLowerCase()} to show.
+        </p>
+      )}
+      {hasNumber && p.detail !== undefined && (
         <p className="tile-source-because">{p.detail}</p>
       )}
-      {p.because !== undefined && (
+      {hasNumber && p.because !== undefined && (
         <p className="tile-source-because">{p.because}</p>
       )}
     </div>
@@ -43,11 +55,28 @@ export function TileSourceSheet({
   const opener = useRef<HTMLButtonElement>(null);
   const titleId = useId();
 
-  const keys = Object.keys(sources) as (keyof MachineTileProvenance)[];
+  // ORDER IS THE TILE GRID'S ORDER, spelled out rather than taken from
+  // `Object.keys`, which returned whatever order the producers' object
+  // literals happened to have and did not match the tiles (MEASURED listed
+  // CALORIES, DRAG, RATE while the grid reads AVG WATTS, CALORIES,
+  // CAL / HOUR, RATE, DRAG, AVG HR). A producer written
+  // `{rate, avgHr, ...FIXED_SOURCES}` would have reordered this silently.
+  const ORDER = [
+    "avgWatts",
+    "calories",
+    "calPerHour",
+    "rate",
+    "target",
+    "drag",
+    "avgHr",
+  ] as const satisfies readonly (keyof MachineTileProvenance)[];
+  const keys = ORDER.filter((k) => sources[k] !== undefined);
+  const of = (k: (typeof ORDER)[number]) => sources[k]!;
   // Grouped by what each tile's source IS FOR THIS ROW, so the grouping is
   // always true rather than true on average.
-  const derived = keys.filter((k) => sources[k].source === "derived");
-  const measured = keys.filter((k) => sources[k].source === "measured");
+  const derived = keys.filter((k) => of(k).source === "derived");
+  const measured = keys.filter((k) => of(k).source === "measured");
+  const planned = keys.filter((k) => of(k).source === "planned");
 
   return (
     <>
@@ -75,7 +104,7 @@ export function TileSourceSheet({
               Worked out on this device. Each line says from what.
             </p>
             {derived.map((k) => (
-              <Row key={k} p={sources[k]} value={values[k]} />
+              <Row key={k} p={of(k)} value={values[k]} />
             ))}
           </section>
         )}
@@ -86,7 +115,18 @@ export function TileSourceSheet({
               Straight from the monitor, as it sent them.
             </p>
             {measured.map((k) => (
-              <Row key={k} p={sources[k]} value={values[k]} />
+              <Row key={k} p={of(k)} value={values[k]} />
+            ))}
+          </section>
+        )}
+        {planned.length > 0 && (
+          <section className="tile-source-group">
+            <h3 className="tile-source-group-head">FROM YOUR PLAN</h3>
+            <p className="tile-source-group-note">
+              Not a reading at all. This is what you asked for.
+            </p>
+            {planned.map((k) => (
+              <Row key={k} p={of(k)} value={values[k]} />
             ))}
           </section>
         )}

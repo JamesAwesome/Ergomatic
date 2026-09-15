@@ -176,6 +176,7 @@ import {
   FIXED_SOURCES,
   heartRateProvenance,
   rateProvenance,
+  targetProvenance,
 } from "./tileProvenance";
 
 describe("buildSummaryModel — oracle bytes are tied to the committed recordings, not hand-transcribed (review finding 6)", () => {
@@ -720,6 +721,9 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
         ...FIXED_SOURCES,
         rate: rateProvenance(true),
         avgHr: heartRateProvenance(false),
+        // this fixture's intervals agree a target, so the RATE tile shows
+        // TWO numbers and the sheet owes an entry for the second one.
+        target: targetProvenance(),
       },
     });
   });

@@ -49,6 +49,7 @@ describe("tileProvenance: the four that never switch", () => {
       const named = (Object.keys(all) as (keyof MachineTileProvenance)[])
         .filter((k) => {
           const p = all[k];
+          if (p === undefined) return false;
           return (
             p.detail?.includes("Concept2") === true ||
             p.because?.includes("Concept2") === true

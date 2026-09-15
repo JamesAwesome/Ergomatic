@@ -139,6 +139,7 @@ import {
   FIXED_SOURCES,
   heartRateProvenance,
   rateProvenance,
+  targetProvenance,
 } from "../session/tileProvenance";
 
 describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL line", () => {
@@ -186,8 +187,46 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
         ...FIXED_SOURCES,
         rate: rateProvenance(true),
         avgHr: heartRateProvenance(true),
+        // this fixture's intervals agree a target, so the RATE tile shows
+        // TWO numbers and the sheet owes an entry for the second one.
+        target: targetProvenance(),
       },
     });
+  });
+
+  it("stamps AVG HR as DERIVED when the belt reported NOTHING (a stored null)", () => {
+    // `avgHeartRateBpm: null` is the wire's "a belt that said nothing", and it
+    // is the PRODUCTION shape — `domain/monitor/types.ts` declares the field
+    // required-and-nullable and `LogSession.tsx` spreads it verbatim, so real
+    // saved rows carry null rather than undefined. The VALUE falls through
+    // `??` on null; the stamp must too. Without this, reverting the predicate
+    // to `!== undefined` is green everywhere while every real row labels a
+    // belt-derived number MEASURED.
+    const heroes = buildStoredSummary(
+      baseRow({
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "finished",
+        machineWorkSeconds: 1550.1,
+        machineWorkMeters: 6000,
+        machineSummary: {
+          avgPaceSecondsPer500m: 129.2,
+          avgStrokeRate: 27,
+          avgHeartRateBpm: null,
+          dragFactorAverage: 101,
+          totalCalories: 372,
+          avgWatts: 162,
+          avgCalPerHour: 864,
+          totalRestMeters: 0,
+        },
+        steps: [
+          { ...measuredStep(313.5, 1200, 130.6), spm: 26, actualSpm: 27 },
+          { ...measuredStep(309.0, 1200, 128.8), spm: 26, actualSpm: 27 },
+        ],
+      }),
+    ).heroes;
+    expect(heroes.machine!.sources.avgHr.source).toBe("derived");
+    expect(heroes.machine!.sources.avgHr.because).toMatch(/belt/i);
   });
 
   it("stamps RATE as DERIVED on a stored TERMINATED row, matching the live door's branch", () => {

@@ -389,19 +389,22 @@ export function MachineTierBlock({ machine }: { machine: MachineTier }) {
       {/* Gate 0B round 2, approved 2026-09-15 (ruling 1). `sources` is
           REQUIRED on `MachineTier`, so both producers stamp it and there is
           no arm where this is absent. */}
-      {
-        <TileSourceSheet
-          sources={machine.sources}
-          values={{
-            avgWatts: fmt(machine.avgWatts),
-            calories: fmt(machine.calories),
-            calPerHour: fmt(machine.calPerHour),
-            rate: fmt(machine.rate),
-            drag: fmt(machine.drag),
-            avgHr: fmt(machine.avgHr),
-          }}
-        />
-      }
+      <TileSourceSheet
+        sources={machine.sources}
+        values={{
+          avgWatts: fmt(machine.avgWatts),
+          calories: fmt(machine.calories),
+          calPerHour: fmt(machine.calPerHour),
+          // The TILE reads `26 / 26` when a target was agreed. The sheet
+          // explains that tile, so it shows the same string — the first
+          // version printed a bare `26` and so drilled into a number the
+          // screen was not showing.
+          rate: fmt(machine.rate),
+          target: fmt(machine.targetRate),
+          drag: fmt(machine.drag),
+          avgHr: fmt(machine.avgHr),
+        }}
+      />
     </div>
   );
 }

@@ -19,7 +19,7 @@
  *  `MachineSummaryTable.tsx` for the objection raised against "MEASURED" and
  *  why it is weaker than it sounds. The same two words carry the same
  *  distinction on BOTH surfaces, so a rower learns it once. */
-export type TileSource = "measured" | "derived";
+export type TileSource = "measured" | "derived" | "planned";
 
 export interface TileProvenance {
   label: string;
@@ -44,6 +44,13 @@ export interface MachineTileProvenance {
   rate: TileProvenance;
   drag: TileProvenance;
   avgHr: TileProvenance;
+  /** Present only when every interval agreed a target, which is exactly when
+   *  the RATE tile renders a SECOND number (`RATE · TARGET  26 / 26`). It is
+   *  neither measured nor derived: the rower authored it by choosing the
+   *  workout, so it is a THIRD source. The sheet's title claims every number
+   *  on the block, and this one was missing from it — the gate never showed
+   *  it because the captured fixture had no agreed target (RF3). */
+  target?: TileProvenance;
 }
 
 /** The tiles whose source is the same on every row. */
@@ -70,6 +77,15 @@ export const FIXED_SOURCES: Record<FixedTile, TileProvenance> = {
   },
   drag: { label: "DRAG", source: "measured" },
 } satisfies Record<FixedTile, TileProvenance>;
+
+/** TARGET, when the tile shows one. */
+export function targetProvenance(): TileProvenance {
+  return {
+    label: "TARGET",
+    source: "planned",
+    detail: "The rate you asked for, from the workout you chose.",
+  };
+}
 
 /** RATE, per row. `finished` is the same flag `sessionStrokeRate` branches
  *  on — a free row counts as finished (James, 2026-09-07). */

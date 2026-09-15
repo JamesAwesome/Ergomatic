@@ -120,6 +120,7 @@ import {
   FIXED_SOURCES,
   heartRateProvenance,
   rateProvenance,
+  targetProvenance,
   type MachineTileProvenance,
 } from "./tileProvenance";
 
@@ -1258,6 +1259,11 @@ export function machineTierFromRun(run: MonitorRun): MachineTier {
   // derived number as measured — caught by `summaryModel.test.ts`, which is
   // why the stamp is asserted at the producer and not just at the sheet.
   const monitorSentHeartRate = detail?.avgHeartRateBpm != null;
+  // HOISTED for the same reason as `finished`: the TILE renders a second
+  // number iff this is defined, and the stamp must read that same expression.
+  const targetRate = agreedTargetSpm(
+    run.program.intervals.map((i) => i.displaySpm),
+  );
   return {
     avgWatts: logbookWatts(t, d),
     calories,
@@ -1282,7 +1288,7 @@ export function machineTierFromRun(run: MonitorRun): MachineTier {
         .filter((a) => a.index !== null && a.avgSpm !== null)
         .map((a) => ({ seconds: a.elapsedSeconds, spm: a.avgSpm as number })),
     }),
-    targetRate: agreedTargetSpm(run.program.intervals.map((i) => i.displaySpm)),
+    targetRate,
     drag: detail?.dragFactorAverage,
     // Same derivation as the saved-row screen, from the same trace, so the
     // number does not change when the row is reopened later. See
@@ -1296,6 +1302,8 @@ export function machineTierFromRun(run: MonitorRun): MachineTier {
       ...FIXED_SOURCES,
       rate: rateProvenance(finished),
       avgHr: heartRateProvenance(monitorSentHeartRate),
+      // Only when the tile actually renders a second number.
+      ...(targetRate === undefined ? {} : { target: targetProvenance() }),
     },
   };
 }

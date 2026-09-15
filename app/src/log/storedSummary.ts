@@ -121,6 +121,7 @@ import {
   FIXED_SOURCES,
   heartRateProvenance,
   rateProvenance,
+  targetProvenance,
 } from "../session/tileProvenance";
 import {
   rowContribution,
@@ -786,6 +787,7 @@ function storedMachineTier(
     row.endedBy === "finished" ||
     row.endedBy == null ||
     isFreeRow(row.workoutId, row.workoutType);
+  const targetRate = agreedTargetSpm(row.steps.map((s) => s.spm));
   return {
     avgWatts: logbookWatts(timeSeconds, distanceMeters),
     calories,
@@ -808,7 +810,7 @@ function storedMachineTier(
           spm: s.actualSpm as number,
         })),
     }),
-    targetRate: agreedTargetSpm(row.steps.map((s) => s.spm)),
+    targetRate,
     drag: ms?.dragFactorAverage,
     // The monitor's own summary heart rate FIRST, and no capture we hold
     // carries one — see `domain/monitor/derivedHeartRate.ts` for how narrow
@@ -828,6 +830,7 @@ function storedMachineTier(
       ...FIXED_SOURCES,
       rate: rateProvenance(finished),
       avgHr: heartRateProvenance(ms?.avgHeartRateBpm != null),
+      ...(targetRate === undefined ? {} : { target: targetProvenance() }),
     },
   };
 }
