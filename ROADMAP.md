@@ -3509,6 +3509,34 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **`ergMachineType` is recorded as `null` in every exported log, on a
+  monitor that reports it 174 times a session.** Found by James reading the
+  2026-09-15 walk's own ring: `"ergMachineType":null` on a RowErg. The wire
+  byte is **0** (RowErg) at 0x0032 offset 16 and 0x0038 offset 18, both
+  frames long enough to carry it (17 B and 19 B against gates of `>16` and
+  `>18`), both decoded cleanly, 174 times. **The bug is the write, not the
+  read:** `driver.ts`'s `classifyErgMachine` runs on EVERY clean decode of
+  EVERY characteristic and calls `log.setMeta({ergMachineType: typeof value
+  === "number" ? value : null})` each time — but 0x0031 carries no such field
+  at all, arrives at ~1 Hz alongside 0x0032, and `setMeta` is
+  last-write-wins (`eventLog.ts:230-235`, "MERGE, never replace"). So
+  0x0031 writes `null` over 0x0032's honest `0`, and whichever characteristic
+  decodes last before export decides the header. **It defeats the exact thing
+  that code's own comment says it exists to prevent** — "a RowErg (a
+  supported value) and a pre-2018 monitor that sends no such field at all
+  were INDISTINGUISHABLE in an exported log". They are indistinguishable
+  again. Consequence: anything reasoning about machine type from an exported
+  log is reading noise, which includes the open "ergMachineType has no
+  consumer" question — it has one, fed by an unreliable header. What would
+  fix it now: write the meta only from characteristics that can structurally
+  carry the field, or only write `null` when no characteristic has ever
+  produced a number. Not done in the PR that found it because that is a
+  branch of docs, a walk card and a design board, and a `src/monitor/driver`
+  behaviour change would make a reviewer hold two risk models at once.
+  **S** · dies 2026-10-15 · a one-site fix with a real test, queued as a
+  quick follow to the number-provenance work rather than bundled into a
+  docs branch
+
 - **`deploy.sh` treats a git lock collision as an unhealthy build, so a
   momentary one silently costs a deploy.** First sighting 2026-09-14, run
   `34907509845` (merge `a847148b`): `git checkout --force` could not take

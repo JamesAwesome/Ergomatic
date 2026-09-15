@@ -211,6 +211,53 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   a CSS question instead of a redesign** — that is what buys the right to tag
   before the phase is finished.
 
+- **A fix-round summary is a claim about its own diff, and nothing checks it
+  (RF36, applied to cards instead of commits).** The 2026-09-15 work-clock
+  card took FIVE PM gates; two were spent on changes the controller's message
+  said were made and the artefact did not carry — an edit script asserted some
+  anchors and not others, so a replace silently no-opped and was reported
+  done. **Before reporting a card fixed, `git diff` it and tick each claimed
+  change against a hunk**, and assert every anchor.
+- **A substitution inherits the new artifact's obligations, and the ones that
+  bite are the ones the old artifact discharged for free.** Swapping a new
+  single-step block for the already-walked Keystone `x2` fixed an assumed
+  workout state and silently added an operator action: the Keystone carries no
+  rest token (`restSeconds: 0`), so interval 1 rolls into interval 2 and the
+  session must be ENDED by hand — a timed two-tap confirm
+  (`ConnectedSurface.tsx:704-716`; `ARM_TIMEOUT_MS = 4000`). **At every
+  re-gate, diff what the old plan got for free against what the new one must
+  do by hand.**
+- **Reading a GATE is not reading the BRANCH.** Two mechanisms sharing one
+  enabling condition are not thereby reachable together:
+  `transports/index.ts:312-330` puts the fake transport and the recording tap
+  behind the same `fakeMonitorEnabled` gate, and an injected fake script
+  RETURNS from its arm before the tap is ever created. The general form of
+  RF13 and RF16's second corollary; the cheapest prophylactic is mechanical —
+  open the exact lines and quote them.
+- **Count from the rows, never adjust the previous count.** That card's tap
+  count went 5 (over a table of 4) → 9 → 11 → 10 → 9. The 10 was the GATE's:
+  it subtracted one from a number already found wrong instead of recounting.
+  An adjusted count inherits every error in the number it adjusts.
+- **A walk card that admits an unknown owes a grep of the capture corpus
+  first.** v1 wrote "PM5 inactivity: NOT ESTABLISHED" and justified a 30 s
+  hold as "well clear of any plausible value" — a limit with no number
+  (RF30). The repo already held two: **36.35 s** of still `INTERVALREST` in a
+  **type-8** workout that continued, and **896.77 s** in a **type-1** free row
+  with 0x0031 still arriving at **0.99 Hz**.
+- **A walk that rescues one option of three is not worth an erg session on
+  that alone — find the second question the SAME evidence answers.** If the
+  answer is nothing beyond one option of one board, recommend taking the
+  option to the gate at its measured risk instead.
+- **Do not read a free-row observation as a prior for a programmed one.**
+  JustRow is `WORKOUTTYPE_JUSTROW` (1), a programmed piece is
+  `WORKOUTTYPE_VARIABLE_INTERVAL` (8), and the monitor plausibly runs
+  different clock rules per type — a TIME interval's clock must run through a
+  stop or the piece could never terminate.
+- **A desk rehearsal CONFIRMS a label; it never DISCOVERS a required action.**
+  Anything the plan requires belongs in the card's interaction table before
+  the gate, because the card is what the operator follows and a rehearsal
+  finding lands after he already has the script.
+
 ## Recommendations that turned out wrong
 - **2026-09-13 — the disabled-button contrast fold (#425).** I measured the
   disabled provider button at 2.16:1 (`--ink-5 #a09a8c` on `--accent #b5341f`)
@@ -341,3 +388,14 @@ is exactly what happened: every section in this file stopped growing on
   approved fix shortens the ticks. Write the criterion as the invariant (the
   widest tick a chart can produce fits its reserved space), not as the
   counterexample.
+
+- **2026-09-14 — "the capture path is desk-rehearsable with the fake"
+  (work-clock walk card).** The gate read `transports/index.ts`'s
+  `fakeMonitorEnabled` condition, saw the fake and the recording tap both
+  behind it, and told the controller the whole export path could be rehearsed
+  at the desk. It cannot: `:312-330`'s `if (script)` arm returns before the
+  tap is created, so an injected fake sets no `__pm5Recording__` and the
+  download control — which reads that global to decide whether to render —
+  does not appear. The claim rode FOUR versions of a card and would have
+  manufactured a false abort the night before the walk. **A gate's own verdict
+  is a claim with the same evidence bar as the artefact it judges.**

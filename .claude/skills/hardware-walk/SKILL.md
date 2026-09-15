@@ -107,6 +107,27 @@ James never hand-gathers what you can reach:
   screen's `RECORDING · DOWNLOAD` row — one tap, ask for it in the
   post-piece gap. NEVER via console `download()` (drops the header's
   program — walk-2026-08-16's lesson).
+  **DOWNLOAD BEFORE ANYTHING RECONNECTS — the tap is replaced, not kept.**
+  `transports/index.ts`'s `__pm5Recording__` comment, verbatim: *"each
+  qualifying `resolveDefaultTransport()` call REPLACES this global with a
+  brand-new tap — latest session wins, unconditionally. A rower who
+  reconnects … before downloading an earlier session's recording loses that
+  earlier recording the instant the new tap is assigned here; nothing
+  preserves it."* So a second attempt at anything downloads the FIRST one
+  first. There is no "re-arm the same connection" after an End either —
+  ending a session navigates, and navigating *"unmounts the interstitial and
+  hangs up the radio"* (`WorkoutDetail.tsx:443-444`). A controller who
+  reconnects believing it is re-arming has destroyed the evidence.
+  **AND THE INJECTED FAKE CANNOT REHEARSE THE DOWNLOAD.** The fake transport
+  and the recording tap sit behind ONE gate and are MUTUALLY EXCLUSIVE
+  (`transports/index.ts:312-330`): an injected `__pm5FakeScript__` returns
+  from the fake arm before the tap is created, so `__pm5Recording__` is never
+  set and the `RECORDING · DOWNLOAD` row does not render. A fake-driven
+  rehearsal finds it missing for a reason that is not a defect — do not
+  write a walk card promising the export path is desk-rehearsable, and do not
+  read that absence as broken evidence. (Cost: it rode four versions of the
+  2026-09-15 work-clock card and would have manufactured a false abort the
+  night before the walk.)
   **RECORDINGS EXIST ONLY ON THE WEB LAB BUILD.** The recording tap is a
   dev/web-only seam (record-replay Stage A, PR #100); native/TestFlight
   builds ship without it, and there is no `RECORDING · DOWNLOAD` row to
