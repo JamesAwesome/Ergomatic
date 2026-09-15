@@ -4496,10 +4496,18 @@ condition is a quiet week rather than an incident.
 date Wave A PR 1 carried) · **the date governs THIS SLATE of rows, not
 the section.** A stalled Phase TD must never become the reason the front door
 slipped, and under the wave-heading rule one date on the heading covers the
-slate rather than writing the same clause on each row. **The slate was three
-and is now TWO** — TD-5 closed 2026-09-14 (`2c9d7e09`); TD-2 and TD-3, split
-out on 2026-09-12, carry their own later dates, so this heading date is now
-the earlier backstop of the two.
+slate rather than writing the same clause on each row. **The slate was three, then
+TWO, and is now FOUR** — TD-5 closed 2026-09-14 (`2c9d7e09`); TD-2 and TD-3,
+split out on 2026-09-12, carry their own later dates; and **PRs 3 and 4 of the
+number-provenance pass were added 2026-09-15** (James: "put them in phase TD.
+i want to ensure they get closed out"), carrying `dies 2026-10-06` and
+`dies 2026-10-08`. Every one of the four carries a date LATER than this
+heading's, so the heading is no longer the backstop for any of them — each row
+is its own. **These two are also not debt in this section's sense** (line 43:
+gaps in evidence, a capture that cannot be taken): they are two of the four
+planned PRs of a live design pass, one of them TRIAD. They are here because
+James put them here to be closed out, and that is worth knowing before anyone
+reads this section's scope off its title.
 
 **THE SECTION ITSELF SURVIVES ITS OWN DATE, and that is a ruling, not an
 oversight (James, 2026-09-12).** Line 43 of this file makes Phase TD the

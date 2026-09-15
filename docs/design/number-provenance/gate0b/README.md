@@ -7,9 +7,12 @@ as promised and replaced it with `app/e2e/provenance.spec.ts`, which asserts
 the behaviour instead of capturing it. The frames here are what that harness
 produced while it lived.
 
-**Boards 2 and 3 are NOT here.** Board 2 (the axis: M3, M6, M9) waits on the
-2026-09-15 walk, which decides whether one of its three candidates is
-drawable at all. Board 3 (M4, M5) is unstarted — see "What is not built" at
+**Boards 2 and 3 are NOT here.** Board 2 (the axis: M3, M6, M9) was waiting on
+the 2026-09-15 walk to decide whether one of its three candidates was drawable
+at all. **That walk RAN and ANSWERED it** — the work clock does not freeze, so
+`wall = work + machineRest` holds and candidate B is alive
+(`docs/monitor/sessions/walk-2026-09-15-work-clock/`). Nothing now blocks
+drawing board 2. Board 3 (M4, M5) is unstarted — see "What is not built" at
 the foot.
 
 ## The three frames, and what each is for

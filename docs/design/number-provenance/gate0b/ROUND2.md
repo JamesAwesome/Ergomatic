@@ -7,11 +7,11 @@ assert. **APPROVED by James on 2026-09-15** (artifact
 `TuGUWZaKj9BxiGaCR7Sb6A`) and implemented on branch `gate0b-round2`; this file
 is the record of the gate, not a live proposal.
 
-Captured by `app/e2e/gate0b.spec.ts` (the board-1 harness, extended) — **that
-harness has since been DELETED and replaced by `app/e2e/provenance.spec.ts`,
-which asserts this behaviour instead of capturing it**. The frames below were
-produced by it before it went against this worktree's compose
-stack at 390x844 and 844x390.
+Captured by `app/e2e/gate0b.spec.ts` (the board-1 harness, extended) at
+390x844 and 844x390 against this worktree's compose stack. **That harness
+has since been DELETED and replaced by `app/e2e/provenance.spec.ts`, which
+asserts this behaviour rather than capturing it** — the frames below are
+what it produced while it lived.
 
 ## ONE PART OF THE RULING IS WITHDRAWN, AND IT IS MINE
 
@@ -193,5 +193,7 @@ gate's own state at the time is legible.]**
   compiler is the gate rather than a comment — it caught two hand-built
   fixtures the moment it changed.
 - ~~No unit tests.~~ **DONE:** `tileProvenance.test.ts` and
-  `TileSourceSheet.test.tsx`, with mutants proving each assertion bites.
+  `TileSourceSheet.test.tsx`. **One of them did NOT bite and was rewritten**: the
+  row-order assertion reduced to `i === 0 || …`, true of any non-empty list, and
+  a fully reversed ORDER passed it 4/4 and the whole suite 8597/8597.
 - **Boards 2 and 3 of Gate 0B remain unbuilt.** Still true.

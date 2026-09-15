@@ -73,6 +73,16 @@ export function TileSourceSheet({
     "drag",
     "avgHr",
   ] as const satisfies readonly (keyof MachineTileProvenance)[];
+  // EXHAUSTIVE, not merely valid. `satisfies` checks each entry IS a key; it
+  // does not check every key is an entry. Without this, a seventh tile
+  // compiles clean and is simply absent from a sheet titled "where these
+  // numbers come from" — the `values` prop flags the producers, but once a
+  // developer satisfies those, nothing notices the missing row. Verified by
+  // adding a seventh member and satisfying every producer: this line is the
+  // only thing that then goes red.
+  type Missing = Exclude<keyof MachineTileProvenance, (typeof ORDER)[number]>;
+  const _exhaustive: Missing extends never ? true : never = true;
+  void _exhaustive;
   const keys = ORDER.filter((k) => sources[k] !== undefined);
   const of = (k: (typeof ORDER)[number]) => sources[k]!;
   // Grouped by what each tile's source IS FOR THIS ROW, so the grouping is
