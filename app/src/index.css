@@ -10429,7 +10429,7 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
 }
 
-/* GATE 0B ROUND 2 PROTOTYPE — the group row (ruling 2 option B). Centred
+/* Gate 0B round 2, approved 2026-09-15 (ruling 2 option B): the group row. Centred
    over its span and separated from the column row by a hairline, so the
    span reads as a bracket rather than as another column label. The group
    row's own pinned cell is empty and carries no bottom rule, so the `#`
@@ -12915,7 +12915,8 @@ section:not(.news-pinned) .news-row:last-of-type {
   }
 }
 
-/* GATE 0B ROUND 2 PROTOTYPE — ruling 1's drill-down. Spans the tile grid's
+/* Gate 0B round 2, approved 2026-09-15 (ruling 1): the drill-down opener.
+   Spans the tile grid's
    full width beneath the six tiles; 44px min-height is the house hard
    requirement for a hit target, not a preference. */
 .tile-source-opener {

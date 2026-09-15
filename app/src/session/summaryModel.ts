@@ -205,7 +205,7 @@ export interface MachineTier {
    *  it repeated the total line's rest metres from a second source — and
    *  AVG HR takes its cell; the PM5's rest total stays stored for PR 2. */
   avgHr?: number;
-  /** GATE 0B ROUND 2 PROTOTYPE (ruling 1). Stamped at the SAME site that
+  /** Gate 0B round 2, approved 2026-09-15 (ruling 1). Stamped at the SAME site that
    *  picks each value, because a renderer cannot re-derive `rate`'s or
    *  `avgHr`'s branch from the values alone and two copies of a predicate
    *  drift. Optional only while this is a prototype: the implementing PR

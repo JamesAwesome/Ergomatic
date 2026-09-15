@@ -1,4 +1,4 @@
-// GATE 0B ROUND 2 PROTOTYPE — ruling 1, the answerable drill-down.
+// Gate 0B round 2, approved 2026-09-15 — ruling 1, the answerable drill-down.
 //
 // Why this exists as a TYPE rather than a lookup the sheet performs:
 // `MachineTier` carries values only, so a renderer cannot tell which branch

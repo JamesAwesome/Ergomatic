@@ -386,10 +386,10 @@ export function MachineTierBlock({ machine }: { machine: MachineTier }) {
           cell, not REST — rest metres already live on the total line and a
           second source four lines apart said nothing a rower could act on. */}
       <MachineTile label="AVG HR" value={machine.avgHr} />
-      {/* GATE 0B ROUND 2 PROTOTYPE (ruling 1). Renders only where the
-          producer stamped provenance, so the live door is unaffected until
-          it stamps too. */}
-      {machine.sources !== undefined && (
+      {/* Gate 0B round 2, approved 2026-09-15 (ruling 1). `sources` is
+          REQUIRED on `MachineTier`, so both producers stamp it and there is
+          no arm where this is absent. */}
+      {
         <TileSourceSheet
           sources={machine.sources}
           values={{
@@ -401,7 +401,7 @@ export function MachineTierBlock({ machine }: { machine: MachineTier }) {
             avgHr: fmt(machine.avgHr),
           }}
         />
-      )}
+      }
     </div>
   );
 }

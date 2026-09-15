@@ -1,4 +1,4 @@
-// GATE 0B ROUND 2 PROTOTYPE — ruling 1's drill-down.
+// Gate 0B round 2, approved 2026-09-15 — ruling 1's drill-down.
 //
 // Apple Health's pattern, not Strava's: the figure on the tile carries no
 // mark, and the answer lives one level down. That is deliberate. Strava's

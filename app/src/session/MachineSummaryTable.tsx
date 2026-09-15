@@ -1,7 +1,7 @@
 import { DASH } from "../workout/connected/surfaceModel";
 import type { MachineSplitRow } from "./summaryModel";
 
-/** GATE 0B ROUND 2 PROTOTYPE — ruling 2 option B. Grouped so each heading is
+/** Gate 0B round 2, approved 2026-09-15 (ruling 2 option B). Grouped so each heading is
  *  true of what sits under it. MEASURED = the monitor's own figures; DERIVED
  *  = we ran Concept2's own published logbook formula over them
  *  (`summaryModel.ts:204-210`). Deliberately NOT "ours" — the formula is
