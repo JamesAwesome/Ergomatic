@@ -29,17 +29,39 @@ describe("Releases", () => {
     expect([...dates].sort().reverse()).toStrictEqual(dates);
   });
 
+  // READ THE DOM ONCE. This test used to call `screen.getByText` once per
+  // release and once per item; each of those scans the WHOLE rendered tree,
+  // so its cost was the product of the two and grew as the SQUARE of a list
+  // that gets an entry every release. Measured 2026-09-15 on this file by
+  // rendering truncated copies of RELEASE_NOTES: 35ms at 13 releases, 83ms
+  // at 26, 175ms at 39, 361ms at 52 — 4.3x for 2x the list. The whole test
+  // was 541ms, the slowest SYNCHRONOUS test in the client project by 3.1x
+  // (runner-up: nameGenerator's 175ms), against vitest's 5000ms deadline,
+  // and it had been timing out in CI on a render with nothing to await.
+  // Walking the sections instead is linear and asserts MORE: each release's
+  // items are pinned to that release's own card, in order, rather than found
+  // anywhere on the screen, and the date is actually checked (the old body
+  // matched `^<version> ·` and stopped, so the title's "date" was a promise
+  // the assertions did not keep).
   it("renders each release's version, date, and every item", () => {
-    renderReleases();
+    const { container } = renderReleases();
 
-    for (const release of RELEASE_NOTES) {
-      expect(
-        screen.getByText(new RegExp(`^${release.version} ·`)),
-      ).toBeVisible();
-      for (const item of release.items) {
-        expect(screen.getByText(item)).toBeVisible();
-      }
-    }
+    const sections = [...container.querySelectorAll("section.news-whatsnew")];
+    expect(sections).toHaveLength(RELEASE_NOTES.length);
+
+    RELEASE_NOTES.forEach((release, i) => {
+      const section = sections[i]!;
+
+      const version = section.querySelector(".news-release-version");
+      expect(version).toBeVisible();
+      expect(version!.textContent).toBe(
+        `${release.version} · ${releaseDate(release.date)}`,
+      );
+
+      const items = [...section.querySelectorAll(".news-release-items li")];
+      expect(items.map((el) => el.textContent)).toStrictEqual(release.items);
+      for (const el of items) expect(el).toBeVisible();
+    });
   });
 
   it("shows no read-state anywhere on the screen", () => {

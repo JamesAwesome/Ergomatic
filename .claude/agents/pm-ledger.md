@@ -7168,3 +7168,51 @@ also settles whether M9's invisible free-row pause has a programmed-row sibling
 — an analysis-plan item, never a second case. If James hesitates, take board 2
 to the gate with B at its MEASURED risk; what is not allowed is striking B in a
 clause on an unmeasured cost (RF30).
+
+## 2026-09-15 — PR #452, `machine-type`: the machine-type floor + the vendor token (TRIAD final-PR gate)
+
+**PASS WITH CONDITIONS.** Two halves: a bug fix (the log header was written by
+every characteristic in the status path while only two carry the field, so a
+RowErg reporting `0` 174 times exported `null`; the write is a floor now) and
+a stored-shape addition at James's explicit direction after a split was
+proposed and overruled (`ergMachineName`, the vendor's own token, absent for
+values rev 1.30 does not name).
+
+**Judged on the merits: the split was right.** Two unrelated risk models —
+last-write-wins ordering versus 23-row vendor-enum transcription — and BOTH
+antagonist findings landed in half 2. **Recommended taking the bundle anyway:**
+half 2 is additive, has no consumer outside the export, and is closed by
+construction (string-literal union + exhaustive table). Splitting at head buys
+a rebase and a second gate and nothing else.
+
+**The field earns its place, narrowly.** `PM5 432331249 Row` appears 46 times
+across `docs/monitor/sessions/` against 4 without the suffix, so `deviceName`
+already answers "is it a rower" for the only erg we have; the token's marginal
+information is model + rig. What tips it is that `deviceName` is an ADVERTISED
+name and the byte is what the machine says about itself. What makes it safe is
+the exhaustive test, not the field — with the 8-of-23 spot-check it would have
+FAILED. Register is right: `MonitorLogs.tsx` renders "N EVENTS" and a COPY
+button, never the JSON, so a rower sees the token only by sending it.
+
+**Conditions, all record defects, all closed before merge.** (C1) the ROADMAP
+row prescribed the WRONG vendor document in present tense with the correction
+appended eleven lines below. (C2) the Gates block read "PM / antagonist / dba:
+skipped" under a sentence crediting the antagonist with two finds. (C3) 260
+words above the fold against ~120 — #230's number almost exactly. (C4) two
+DONE rows left in "Small, queued" with live `dies` stamps, handed to James
+rather than struck. (C5) RF39 — no green run existed at head.
+
+**Noted, unresolved in the tree at gate time and since addressed:** the PR
+rejects a driver-scoped flag because "a flag is a SHADOW of a value the log
+already holds", then persists a pure function of the field beside it.
+Defensible — the token is frozen with the reading that produced it and cannot
+drift — but it was unsaid.
+
+**Sequencing: nothing displaced.** Earliest live stamp 2026-09-19; Wave A's
+cluster is 12 rows at `dies 2026-10-10`, 25 days out; Gate 0B is blocked on
+James's design ruling rather than implementation hours. The naming row's own
+slack was `dies 2026-11-15`, so it was pulled forward two months at the cost
+of one antagonist round.
+
+**Release: NOT NEEDED.** Nothing rower-visible; 3 commits since `v0.49.0`
+(#449, #450, #451), all gates/walk-card/process.

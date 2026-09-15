@@ -1589,6 +1589,31 @@ while we are in here.
       the test's logic; it is the worker not being scheduled. The run's own
       numbers agree: 8,940 tests, `Duration 292.55s` of which
       `environment 210.12s`.
+      **SIGHTED A THIRD AND FOURTH TIME 2026-09-15** (PR #452's `app` job, run
+      `34973719187`, head `da58d1b9`, under `pnpm test:coverage`). Same
+      file, same test, same `Test timed out in 5000ms` on the synchronous
+      test. The branch touches `driver.ts`, `eventLog.ts`, `ergMachine.ts`
+      and their tests — **nothing `Releases.test.tsx` reads**, so again it
+      cannot be a regression. RF40 checked BEFORE the re-run: zero
+      `Allocation failed`, zero 137/134, and vitest printed a full summary
+      (9,083 passed of 9,085), so this is its own 5 s timeout and not a
+      kill. `Duration 320.77s`, `environment 223.87s` against the second
+      sighting's 292.55/210.12, and this run carried coverage
+      instrumentation, which is the slowest shape the suite runs in.
+      **THE FOURTH CAME THE SAME MORNING, on the very commit that
+      recorded the third** (run `34975109761`, head `f3b5a2f9`, whose only
+      diff from the last green head is this ROADMAP row — so the fourth
+      sighting is as close to a pure re-run as the record gets). Same file,
+      same test, same 5 s timeout; RF40 clean again (zero `Allocation
+      failed`, exit 1, full summary of 9,083 passed of 9,085).
+      **AND ITS DURATION WAS NOT WORSE: `297.66s` / `environment 210.26s`,
+      within a second of the second sighting's 210.12.** The third
+      sighting's write-up above originally read those numbers as a
+      worsening trend; that clause has been REMOVED rather than appended
+      to, because the fourth falsifies it. Slow runs and flaking runs are
+      not the same population, so duration is a correlate at best and
+      cannot be used to predict a sighting or to excuse one. Four sightings, all four under a full-suite run,
+      none ever alone.
       **That makes (b) evidence for FLAKE 2's runner hypothesis rather than
       a separate puzzle** — and unlike (a), whose stated mechanism was
       refuted, this one has a mechanism nobody has argued against yet.
@@ -1631,10 +1656,55 @@ while we are in here.
       fact already recorded under the integration-flake row below (the
       `maxWorkers` key sits on the ROOT `test` block, so unit, client and
       integration files share ONE pool, and each integration file starts
-      its own `PostgreSqlContainer`) and CI runs an uncapped pool against
+      its own `PostgreSqlContainer`) and CI runs its default pool against
       containers, under v8 coverage instrumentation (`pnpm test:coverage`),
-      with all three projects in one invocation. **That is a concrete,
-      testable mechanism for a synchronous render missing a 5 s deadline.**
+      with all three projects in one invocation.
+      **"UNCAPPED" WAS WRONG, MEASURED 2026-09-15, and the word is removed
+      rather than softened.** `undefined` does not mean unbounded: vitest's
+      own `getDefaultThreadsCount`
+      (`node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:2354`) returns
+      `Math.max(availableParallelism - 1, 1)` off watch — **3 workers on a
+      4-core `ubuntu-latest`, which leaves a core free and is more
+      conservative than the local cap of 4.** So the contention in CI is
+      real but it comes from the containers and the coverage
+      instrumentation, not from a worker count nobody capped, and there is
+      nothing here to cap: picking a number now would be RF30.
+      **THE ACTUAL MECHANISM, FOUND 2026-09-15, and it is the test's own
+      cost.** `Releases.test.tsx:32` was QUADRATIC in the length of
+      `RELEASE_NOTES` — one `screen.getByText` per release and per item,
+      each scanning the whole rendered tree, so cost = queries x tree size
+      and BOTH halves grow per release. Measured on truncated copies of the
+      real list: 13 releases 35.3ms, 26 releases 83.1ms, 39 releases
+      174.7ms, 52 releases 361.3ms — **4.3x for 2x the list.** And the list
+      grew underneath it: **31 entries on 2026-09-01, 52 on 2026-09-14**
+      (`git show <sha>:app/src/news/content/releaseNotes.ts | grep -c
+      'version:'` walked back over its history), so the test's cost roughly
+      TRIPLED across the fortnight in which this flake went from one
+      sighting to four. **Why this test out of 6,254:** ranked by duration
+      with each `it(` classified sync or async, it was the SLOWEST
+      SYNCHRONOUS client test by 3.1x over the runner-up (541ms against
+      175ms). A synchronous test's whole duration is CPU on its worker, so
+      it is exactly the population that stretches under contention — at
+      541ms it needed a **9.2x** stretch to miss the deadline where every
+      other synchronous test needed 28x or more.
+      **FIXED in #452 (`8db5c58d`, test file only): the test now walks the
+      rendered section list once instead of querying the tree 256 times.
+      541ms -> 106ms, and linear, so it stops degrading per release.** It
+      also asserts strictly MORE than the version it replaces — restoring
+      the old body, a mutant reversing section order and a mutant dropping
+      the date both PASSED against it, so the test's own title had promised
+      a date it never checked.
+      **WHAT THIS DOES NOT PROVE, and the falsifiable prediction that
+      settles it:** the flake has hit ZERO times locally and only ever
+      under CI load, so no local green is evidence of a fix — it was never
+      reproduced and cannot be. **If this test times out again after
+      `8db5c58d`, the quadratic cost was NOT the cause**, and this row goes
+      back to the contention lead with that result recorded. Margin is now
+      51x rather than 9.2x.
+      **`test-run.sh`'s capacity banner prints the runner's real core count
+      on every CI run and nobody has read one yet** — capture that reading
+      next time regardless of whether the flake returns; it is the one
+      number this whole hunt kept assuming.
       **CORRECTION, 2026-09-14, same day it was filed:** this row first
       said "a two-core runner". **That was never measured** — it was the
       shape of an explanation, which is exactly what RF16 forbids. The
@@ -1797,6 +1867,31 @@ while we are in here.
       further down; filed at the PM gate on #255 rather than left in a PR
       comment (recurring failure 14). CI runs the projects separately and
       has stayed green throughout. **S**
+- [ ] **The burst-handoff tests race their own timeout, so a failure there
+      cannot say what failed.** The four ~2.3s tests in
+      `app/src/workout/WorkoutDetail.postReleaseCommit.test.tsx` each wait out
+      `BURST_HANDOFF_HOLD_MS` (2000ms) on the real wall clock, and each sets
+      its `waitFor` budget to `BURST_HANDOFF_HOLD_MS + 3000` = **5000ms,
+      exactly equal to vitest's `testTimeout`**. The two clocks are tied, so
+      under any slowdown the TEST timeout can win the race and report a bare
+      `Test timed out in 5000ms` with no assertion detail — the same
+      uninformative signature the `Releases.test.tsx` hunt spent two days
+      reading, on a different file. **No sighting yet**; found by ranking
+      every client test by duration while chasing that flake, where these
+      four are the top four at ~2.3s against a 541ms runner-up. Their time is
+      a deliberate sleep, not CPU, so they are a DIFFERENT class from the
+      quadratic cost fixed in #452 and a cap would not touch them.
+      **What would fix it now:** give those `waitFor` calls a budget strictly
+      below `testTimeout`, or raise `testTimeout` for that file alone, so a
+      failure names the assertion that never settled. **Not doing it here
+      because** it is a different file and a different mechanism from the one
+      #452 was opened for, it has no sighting behind it, and that file's own
+      comments say fake timers are unusable in this stack — so changing a
+      timing constant there needs its own reading rather than riding a
+      news-screen test fix. James ruled KEEP at #452's hand-back,
+      2026-09-15. **S** · dies 2026-10-15 · a latent timeout race in another
+      file with no sighting yet; folding it into a news-screen fix would put
+      two unrelated risk models in one review
 - [ ] **Settle the mutation-testing gate, one way or the other.**
       `docs/TESTING.md` explicitly demoted the full `pnpm mutate` run from an
       unrun phase gate to an on-demand probe; its only baseline is still
@@ -3640,19 +3735,65 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **The log's machine type is a raw byte, and naming it is a vendor-enum
+  transcription rather than a lookup.** James, 2026-09-15: *"I want to be
+  specific when we can identify the erg."* The header records `0`, which a
+  human reads as nothing. **But the vendor does not name any value "row"** —
+  `0` is `ERGMACHINE_TYPE_STATIC_D`, a MODEL and a rig, and the enum
+  distinguishes at least eleven rowing configurations (static A-E, slides
+  A-E, linked dynamic, multierg row, a simulator flag). Collapsing them to
+  one invented word would be LESS specific than the byte, and labelling an
+  unnamed value `row` would build exactly the allowlist `ergMachine.ts`'s
+  denylist exists to refuse — a RowErg model added after rev 1.30 must read
+  as unnamed, not as a rower. **SHIPPED** as a separate
+  `ergMachineName` field carrying the VENDOR token (`STATIC_D`,
+  `MULTIERG_ROW`), absent for unnamed values, transcribed from **PM5
+  Bluetooth Smart Communication Interface Definition rev 1.30**, Appendix A —
+  the document that DEFINES this field. **NOT from
+  `docs/monitor/PM5_CSAFECommunicationDefinition.pdf` rev 0.27, which this
+  row originally prescribed and which is the wrong source**: the two agree on
+  all 23 values and 22 of 23 names and disagree on exactly one — `32` is
+  `SLIDES_DYNAMIC` in rev 1.30 and `LINKED_DYNAMIC` in CSAFE — and the first
+  draft pinned the divergent one. (CSAFE also carries an offset comment
+  block, `"Dynomometer… (32)"` beside `..._STATIC_DYNO = 64`, so its VALUES
+  are authoritative over its parentheticals; rev 1.30 comments that member
+  not at all.) It is a stored-shape change, the header being persisted
+  (`useMonitorSession.ts:4707-4723`), so it carried the TRIAD's antagonist
+  and PM gates. `deviceName` two fields away reads `PM5 432331249 Row` on the
+  captures we hold — one erg's ADVERTISED name, never observed on a SkiErg,
+  so it corroborates the token rather than replacing it.
+  **DONE in the same PR** (James, 2026-09-15: "Do that as part of this it
+  sounds in scope" — filed as a row an hour earlier, then pulled forward at
+  his direction). Shipped as `ergMachineName`, the vendor's own token, absent
+  for unnamed values. **Two corrections the build earned, kept here because
+  the next transcription needs them:** the name came from the WRONG document
+  first — Concept2 ships two enums agreeing on 23 values and 22 of 23 names,
+  and `32` is `SLIDES_DYNAMIC` in BLE rev 1.30 (which defines the field) but
+  `LINKED_DYNAMIC` in CSAFE rev 0.27; and a spot-check of 8 of 23 tokens let
+  both a one-character typo and a deleted row ship green.
+  **DONE 2026-09-15, PR #452** (James: "Mark them done"). **No `dies`
+  stamp**, for the same reason as the row above — a finished item carrying a
+  live stamp is handed back as an obligation at the next sweep.
+
 - **`ergMachineType` is recorded as `null` in every exported log, on a
   monitor that reports it 174 times a session.** Found by James reading the
   2026-09-15 walk's own ring: `"ergMachineType":null` on a RowErg. The wire
   byte is **0** (RowErg) at 0x0032 offset 16 and 0x0038 offset 18, both
   frames long enough to carry it (17 B and 19 B against gates of `>16` and
   `>18`), both decoded cleanly, 174 times. **The bug is the write, not the
-  read:** `driver.ts`'s `classifyErgMachine` runs on EVERY clean decode of
-  EVERY characteristic and calls `log.setMeta({ergMachineType: typeof value
-  === "number" ? value : null})` each time — but 0x0031 carries no such field
-  at all, arrives at ~1 Hz alongside 0x0032, and `setMeta` is
-  last-write-wins (`eventLog.ts:230-235`, "MERGE, never replace"). So
-  0x0031 writes `null` over 0x0032's honest `0`, and whichever characteristic
-  decodes last before export decides the header. **It defeats the exact thing
+  read:** `driver.ts`'s `classifyErgMachine` runs on every clean decode of
+  the five characteristics routed through `mergeStatus` and calls `log.setMeta({ergMachineType: typeof value
+  === "number" ? value : null})` each time — but **three** characteristics
+  reach it with nothing to say (0x0031, **0x0033** and 0x0037), and `setMeta`
+  is last-write-wins (`eventLog.ts:230-235`, "MERGE, never replace"). So each
+  of them erases a reading it never had. **[CORRECTED 2026-09-15: the first
+  version of this row named 0x0031 as the clobberer. Measured from the
+  capture, the hardware tick is `0x0031 -> 0x0032 -> 0x0033`, 174 times, and
+  the session's LAST status frame is 0x0033 — so 0x0032's honest `0` is
+  overwritten by the 0x0033 that follows it every tick. The 0x0031 story
+  would have left the header reading `0`. The error mattered: the test it
+  implies — notify 0x0031 then 0x0032 — PASSES against the bug, because there
+  the carrier speaks last.]** **It defeats the exact thing
   that code's own comment says it exists to prevent** — "a RowErg (a
   supported value) and a pre-2018 monitor that sends no such field at all
   were INDISTINGUISHABLE in an exported log". They are indistinguishable
@@ -3664,9 +3805,11 @@ Each needs erg time or a deliberate recording session.
   produced a number. Not done in the PR that found it because that is a
   branch of docs, a walk card and a design board, and a `src/monitor/driver`
   behaviour change would make a reviewer hold two risk models at once.
-  **S** · dies 2026-10-15 · a one-site fix with a real test, queued as a
-  quick follow to the number-provenance work rather than bundled into a
-  docs branch
+  **DONE 2026-09-15, PR #452** (James: "Mark them done"). The row's own
+  proposed fix — "only write `null` when no characteristic has ever produced
+  a number" — was the right one and is what shipped. **No `dies` stamp: this
+  is a RECORD, not owed work**, and the overdue sweep is a string grep that
+  cannot tell the two apart (PM gate, #452).
 
 - **`deploy.sh` treats a git lock collision as an unhealthy build, so a
   momentary one silently costs a deploy.** First sighting 2026-09-14, run

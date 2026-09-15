@@ -91,7 +91,10 @@ import {
   type RawPm5Status,
   type WorkoutSummary,
 } from "../../domain/monitor/pm5/parse.js";
-import { unsupportedErgMachine } from "../../domain/monitor/pm5/ergMachine.js";
+import {
+  ergMachineToken,
+  unsupportedErgMachine,
+} from "../../domain/monitor/pm5/ergMachine.js";
 import {
   parseCsafeResponse,
   type CsafeFrameStatus,
@@ -2549,20 +2552,76 @@ export function createPm5Driver(
   function classifyErgMachine(decoded: object): void {
     if (unsupportedMachineFired) return;
     // ONE guard, not two. This used to test `"ergMachineType" in decoded`
-    // first, which reads as the absence check and is fully SHADOWED by the
-    // `typeof` below: an omitted property yields `undefined`, and
-    // `typeof undefined !== "number"` already returns. Deleting it changed no
-    // behaviour and no test could go red on it — a line that reads as a gate
-    // and is not one (whole-branch review, finding 5).
+    // first, which is fully SHADOWED for the REFUSAL below: an omitted
+    // property yields `undefined` and `typeof undefined !== "number"`
+    // already returns. That reasoning was correct then and is still correct
+    // for refusal — but it stopped being the whole story when the header
+    // write landed above, because "the property is absent" and "the value is
+    // not a number" have different consequences for a FLOOR. See that
+    // write's own comment for why the fix is neither a presence check nor a
+    // carrier list.
     const value = (decoded as { ergMachineType?: unknown }).ergMachineType;
-    // THE HEADER RECORDS IT ON EVERY PATH, not only on refusal. Before this,
+    // THE HEADER RECORDS IT ON EVERY PATH, not only on refusal. Before that,
     // a RowErg (a supported value) and a pre-2018 monitor that sends no such
     // field at all were INDISTINGUISHABLE in an exported log, because the
     // only thing that wrote the value was the refusal below. `null` is the
     // honest reading for "the field was absent", which is itself the answer
     // to "was this a monitor too old to classify".
-    log.setMeta({ ergMachineType: typeof value === "number" ? value : null });
-    if (typeof value !== "number") return;
+    //
+    // THE WRITE IS A FLOOR, NOT AN OVERWRITE — and it has to be, because
+    // this function runs on every clean decode of every characteristic
+    // routed through `mergeStatus` — FIVE of them (0x0031, 0x0032, 0x0033,
+    // 0x0037, 0x0038) — and only TWO carry the field (0x0032 offset 16,
+    // 0x0038 offset 18). The other subscriptions (0x0022, 0x0039, 0x003A,
+    // 0x003F, the settle watcher) never reach here at all. 0x0031, 0x0033 and 0x0037 all arrive here with
+    // nothing to say, and `setMeta` is last-write-wins (`eventLog.ts`), so a
+    // flat write let them erase a reading they never had. On hardware the
+    // tick is 0x0031 -> 0x0032 -> 0x0033 and the session's LAST status frame
+    // is 0x0033, so the erasure was total: a RowErg reporting 0 on the wire
+    // 174 times exported `"ergMachineType":null`, recreating the exact
+    // indistinguishability the paragraph above says this write exists to
+    // remove (walk-2026-09-15-work-clock, found by James reading the ring).
+    //
+    // Deliberately NOT a carrier allowlist: this one call site exists so
+    // that "a property test here classifies whatever carrier delivers it
+    // first and cannot be forgotten when a fourth is subscribed" (this
+    // function's own header), and a list of characteristics reintroduces
+    // exactly that forgetting. Deliberately NOT a presence check on the
+    // decoded object either: absence means two OPPOSITE things — a 0x0031
+    // with no such field, and a pre-V1.26 0x0032 whose firmware cannot tell
+    // us — and only the second is worth recording. Deliberately NOT a
+    // driver-scoped flag — though NOT for the reason an earlier draft of
+    // this comment gave. It said `useMonitorSession` builds a new driver per
+    // connect attempt against the SAME log; it does not, it builds a new LOG
+    // too, in the same block (`useMonitorSession.ts:5426` and `:5523`), so a
+    // flag would behave identically and the stale reading that draft feared
+    // cannot occur. The real reason is smaller and still holds: a flag is a
+    // SHADOW of a value the log already holds, and two sources of one truth
+    // is how they drift. Reading the authority cannot disagree with itself.
+    // (Recorded because an option ruled out on a FALSE cost is RF30's shape
+    // even when the conclusion happens to be right.)
+    //
+    // What this cannot distinguish: "a carrier arrived at 16 B (old
+    // firmware)" from "no carrier ever arrived" — both read `null`. That is
+    // recoverable from the same log without a second field: `notify-first`
+    // records every characteristic's first arrival WITH its byte length, so
+    // `0x0032 (16B)` versus no 0x0032 line at all is the discriminator.
+    if (typeof value !== "number") {
+      if (typeof log.meta().ergMachineType !== "number") {
+        log.setMeta({ ergMachineType: null });
+      }
+      return;
+    }
+    // The raw byte and the vendor's token for it are written TOGETHER, from
+    // the same reading, so the pair can never disagree — a header reading
+    // `0` beside `MULTIERG_SKI` would be worse than either field alone.
+    // `ergMachineToken` returns `undefined` for a value rev 1.30 does not
+    // name, and that absence is deliberate: naming an unnamed value as
+    // rowing builds the allowlist the denylist exists to refuse.
+    log.setMeta({
+      ergMachineType: value,
+      ergMachineName: ergMachineToken(value),
+    });
     const machine = unsupportedErgMachine(value);
     if (machine === null) return;
     unsupportedMachineFired = true;
