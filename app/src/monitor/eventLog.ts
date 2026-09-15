@@ -1,3 +1,4 @@
+import type { ErgMachineToken } from "../../domain/monitor/pm5/ergMachine.js";
 import { APP_VERSION } from "../appVersion";
 // Observability ring buffer for the monitor driver (design spec §5):
 // injectable (the driver takes one as a constructor argument, never reaches
@@ -97,8 +98,20 @@ export interface MonitorLogMeta {
    *  and only ever from the same reading, so the pair cannot disagree: a
    *  header saying `0` beside `MULTIERG_SKI` would be worse than either
    *  alone. The token carries no support semantics — whether a machine is
-   *  ALLOWED is the `unsupported-machine` event's business. */
-  ergMachineName?: string;
+   *  ALLOWED is the `unsupported-machine` event's business.
+   *
+   *  Typed as the union, not `string`: the union exists so a mistyped token
+   *  cannot compile, and dropping it at the one boundary that PERSISTS would
+   *  be the only place the guarantee mattered.
+   *
+   *  And yes, this is a value derived from `ergMachineType` beside it, which
+   *  is the shadow-of-a-truth shape `driver.ts` rejects a driver-scoped flag
+   *  for. The difference is drift: this token is computed once and frozen
+   *  with the reading that produced it, so it cannot diverge from its source
+   *  — a live flag's two copies are written at different moments and can.
+   *  Said here because a reader finds the inconsistency before the
+   *  reconciliation. */
+  ergMachineName?: ErgMachineToken;
 }
 
 export interface MonitorEventLog {

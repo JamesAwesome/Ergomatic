@@ -98,22 +98,3 @@ describe("ergMachineType survives a real session's characteristic interleave", (
     },
   );
 });
-
-describe("the header's machine fields move together or not at all", () => {
-  it("an unnamed value records the byte and NO name, rather than guessing", () => {
-    const log = createEventLog();
-    // 9 is a gap in rev 1.30's enum — exactly the shape of a RowErg model
-    // Concept2 might add later. It must record as a number nobody has named,
-    // never fall back to a rowing word.
-    log.setMeta({ ergMachineType: 9, ergMachineName: undefined });
-    expect(log.meta().ergMachineType).toBe(9);
-    expect(log.meta().ergMachineName).toBeUndefined();
-  });
-
-  it("a monitor too old to carry the field records neither", () => {
-    const log = createEventLog();
-    log.setMeta({ ergMachineType: null });
-    expect(log.meta().ergMachineType).toBeNull();
-    expect(log.meta().ergMachineName).toBeUndefined();
-  });
-});

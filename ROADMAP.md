@@ -3484,20 +3484,23 @@ Each needs erg time or a deliberate recording session.
   one invented word would be LESS specific than the byte, and labelling an
   unnamed value `row` would build exactly the allowlist `ergMachine.ts`'s
   denylist exists to refuse — a RowErg model added after rev 1.30 must read
-  as unnamed, not as a rower. What would fix it now: a separate
+  as unnamed, not as a rower. **SHIPPED** as a separate
   `ergMachineName` field carrying the VENDOR token (`STATIC_D`,
-  `MULTIERG_ROW`), absent for unnamed values, transcribed from
-  `docs/monitor/PM5_CSAFECommunicationDefinition.pdf` rev 0.27 — whose
-  comment block is offset from its enum (`/**< Dynomometer… (32) */` sits
-  beside `..._STATIC_DYNO = 64`), so the VALUES are authoritative and the
-  parenthetical numbers contain at least one demonstrable error. Not done
-  with the null fix because the exported header is persisted
-  (`useMonitorSession.ts:4707-4723`), so a new meta field is a stored-shape
-  change and lands on the TRIAD beside a bug fix whose whole value is making
-  one existing number honest. And the urgency is low: `deviceName` two
-  fields away reads `PM5 432331249 Row` on 13 of 13 committed captures —
-  though that is one erg's advertised name, never observed on a SkiErg, so
-  it defeats urgency without being a fact to build on.
+  `MULTIERG_ROW`), absent for unnamed values, transcribed from **PM5
+  Bluetooth Smart Communication Interface Definition rev 1.30**, Appendix A —
+  the document that DEFINES this field. **NOT from
+  `docs/monitor/PM5_CSAFECommunicationDefinition.pdf` rev 0.27, which this
+  row originally prescribed and which is the wrong source**: the two agree on
+  all 23 values and 22 of 23 names and disagree on exactly one — `32` is
+  `SLIDES_DYNAMIC` in rev 1.30 and `LINKED_DYNAMIC` in CSAFE — and the first
+  draft pinned the divergent one. (CSAFE also carries an offset comment
+  block, `"Dynomometer… (32)"` beside `..._STATIC_DYNO = 64`, so its VALUES
+  are authoritative over its parentheticals; rev 1.30 comments that member
+  not at all.) It is a stored-shape change, the header being persisted
+  (`useMonitorSession.ts:4707-4723`), so it carried the TRIAD's antagonist
+  and PM gates. `deviceName` two fields away reads `PM5 432331249 Row` on the
+  captures we hold — one erg's ADVERTISED name, never observed on a SkiErg,
+  so it corroborates the token rather than replacing it.
   **DONE in the same PR** (James, 2026-09-15: "Do that as part of this it
   sounds in scope" — filed as a row an hour earlier, then pulled forward at
   his direction). Shipped as `ergMachineName`, the vendor's own token, absent
