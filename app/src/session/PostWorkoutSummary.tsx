@@ -395,10 +395,13 @@ export function MachineTierBlock({ machine }: { machine: MachineTier }) {
           avgWatts: fmt(machine.avgWatts),
           calories: fmt(machine.calories),
           calPerHour: fmt(machine.calPerHour),
-          // The TILE reads `26 / 26` when a target was agreed. The sheet
-          // explains that tile, so it shows the same string — the first
-          // version printed a bare `26` and so drilled into a number the
-          // screen was not showing.
+          // The TILE packs both numbers into one cell (`RATE · TARGET
+          // 26 / 26`); the sheet SPLITS them, because they have different
+          // sources — the rate is a reading, the target is what the rower
+          // asked for. So this stays the bare rate and `target` below gets
+          // its own row under its own heading. The first version printed
+          // the bare rate with NO target row at all, which drilled into a
+          // tile showing two numbers and explained one.
           rate: fmt(machine.rate),
           target: fmt(machine.targetRate),
           drag: fmt(machine.drag),

@@ -65,6 +65,7 @@ function machineRow(opts: {
     meters: 250,
     actualMeters: 250,
     actualSpm: spm,
+    spm: 26,
     machineCalories: cal,
     machineCalPerHour: calHr,
     machineWatts: watts,
@@ -292,4 +293,40 @@ test("in LANDSCAPE the sheet opens at its title, not scrolled past it", async ({
   expect(await dialog.evaluate((el) => el.scrollTop)).toBe(0);
   // and the first group's heading is reachable without scrolling up
   await expect(dialog.getByText("DERIVED", { exact: true })).toBeInViewport();
+});
+
+// The fixture's steps carry `spm`, so `agreedTargetSpm` resolves and the tile
+// renders TWO numbers. That matters: the gate's own fixture had no agreed
+// target, so every approved frame showed a plain RATE and the missing TARGET
+// row was invisible to it (RF3 — a fixture emptier than production, on the
+// one field that broke the model).
+test("a row with an agreed target explains the SECOND number too", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signInViaBackdoor(page, {
+    email: `prov-target-${RUN_ID}@e2e.test`,
+    name: "Provenance",
+  });
+  await seedAndOpen(page, machineRow({ title: "Finished piece", spm: 26 }));
+  await expect(
+    page.getByRole("heading", { name: "Finished piece" }),
+  ).toBeVisible();
+
+  // the tile packs both numbers
+  await expect(page.getByTestId("summary-machine-tier")).toContainText(
+    "RATE · TARGET",
+  );
+
+  await page
+    .getByRole("button", { name: /where these numbers come from/i })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  // and the sheet accounts for the second one, under a heading that is
+  // neither MEASURED nor DERIVED — the rower authored it.
+  await expect(dialog).toContainText("FROM YOUR PLAN");
+  await expect(dialog).toContainText("TARGET");
+  await expect(dialog).toContainText(/not a reading at all/i);
 });
