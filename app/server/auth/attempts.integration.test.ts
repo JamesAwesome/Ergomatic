@@ -1520,7 +1520,28 @@ describe("front-door transactions against Postgres", () => {
     }
 
     it("followThrough carries the proven identity into a second authorization", async () => {
-      const before = await atConfirm();
+      const seeded = await atConfirm();
+      // PIN THE EXPIRY TO AN INDEPENDENT LITERAL FIRST (RF21). The attempt
+      // TTL is 5 minutes, so a bug that REFRESHES `expires_at` by the same
+      // 5 minutes — which is exactly what copying the sibling reauth arm
+      // would do — lands within a millisecond of the original and a
+      // byte-identical assertion cannot see it. Measured: that mutation left
+      // this test green; the same mutation with 9 minutes reddened it. So the
+      // row is moved to a value no refresh would reproduce, and ANY refresh
+      // now goes red.
+      await pool.query(
+        "UPDATE auth_attempts SET expires_at=now()+interval '11 min' WHERE id=$1",
+        [seeded.id],
+      );
+      const pinned = (
+        await pool.query<{ expiresAt: Date }>(
+          'SELECT expires_at AS "expiresAt" FROM auth_attempts WHERE id=$1',
+          [seeded.id],
+        )
+      ).rows[0]!.expiresAt;
+      // `bound()` compares the whole row, so the expected attempt has to
+      // carry the pinned value too.
+      const before = { ...seeded, expiresAt: pinned };
       const after = (await store.followThrough(before)).attempt!;
       expect(after.stage).toBe("reauth_authorize");
       // The carried identity SURVIVES. This is the design's whole claim.
@@ -1536,7 +1557,7 @@ describe("front-door transactions against Postgres", () => {
       // THE CLOCK IS NOT TOUCHED HERE. Gate 0 ruling 2 refreshes it at the
       // SECOND EXCHANGE (Task 3), not at this transition — asserted as
       // byte-identical so a refresh added in the wrong place goes red.
-      expect(after.expiresAt.getTime()).toBe(before.expiresAt.getTime());
+      expect(after.expiresAt.getTime()).toBe(pinned.getTime());
       // THE REPLAY SURFACE. A second authorization reusing the first's
       // state or nonce would accept a replayed callback; assert explicitly.
       expect(after.state).not.toBe(before.state);
@@ -1554,6 +1575,11 @@ describe("front-door transactions against Postgres", () => {
       );
     });
 
+    // THE STAGE CHECK IS WHAT REFUSES THESE, not the purpose check — and the
+    // purpose check cannot be tested, because neither authority will let a
+    // link or a delete exist at `confirm` in the first place. Asserting the
+    // refusal is still right; claiming it proves the purpose guard would not
+    // be (RF21). The guard's own comment records that it is unreachable.
     it("followThrough refuses a link and a delete", async () => {
       const link = await insert({
         purpose: "link",

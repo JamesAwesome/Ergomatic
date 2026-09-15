@@ -441,6 +441,18 @@ export function createAttempts(
     async followThrough(expected: Attempt): Promise<AttemptResult> {
       return transaction(async (tx) => {
         const a = await bound(tx, expected);
+        // THE PURPOSE HALF OF THIS GUARD IS UNREACHABLE, AND IT SAYS SO
+        // RATHER THAN PRETENDING TO BE TESTED. `confirm` is a signup-only
+        // stage in both authorities — `auth_attempts_session_check` admits
+        // it for `purpose='signin'` alone, and `consistent()`'s
+        // `stageFitsPurpose` refuses a link or a delete there on both the
+        // read and the write path. So no link or delete row can exist at
+        // `confirm` to reach this line. Measured: deleting `a.purpose !==
+        // "signin"` reddens ZERO tests, because the stage check alone
+        // already turns away every fixture that can be built.
+        // It stays as defence in depth against a future stage rename making
+        // `confirm` reachable by another purpose, which is the failure the
+        // CHECK and `consistent()` would both have to miss together.
         if (a.purpose !== "signin" || a.stage !== "confirm")
           throw new AuthFailure("attempt_expired");
         // Two providers, so the rower's usual one is the other one. If a
