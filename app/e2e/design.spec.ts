@@ -12678,8 +12678,12 @@ test.describe("from-the-log detail, machine tier + MACHINE SUMMARY (Phase LP §3
     await expect(table).toBeVisible();
     const rows = table.locator("tbody tr");
     await expect(rows).toHaveCount(2);
-    await expect(rows.nth(0)).toHaveText("1—14016848100147");
-    await expect(rows.nth(1)).toHaveText("2—24816102610095");
+    // DERIVED first (WATTS, CAL/HOUR), then MEASURED (HR, CAL, DRAG, REST m)
+    // — Gate 0B round 2, approved 2026-09-15. The strip overflows at 390px,
+    // so the derived pair leads in order to be what is still on screen at
+    // rest rather than what scrolls away.
+    await expect(rows.nth(0)).toHaveText("1140848—16100147");
+    await expect(rows.nth(1)).toHaveText("22481026—1610095");
 
     // Structure (RF21: measure the CELL's own box, never an inline child).
     const shape = await table.evaluate((el) => {
