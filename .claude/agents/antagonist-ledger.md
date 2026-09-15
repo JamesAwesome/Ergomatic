@@ -10917,7 +10917,99 @@ the blocks lens 2 then gated, and lens 2's four blocking findings were all in th
 client half a mechanism pass does not reach. Neither lens would have found the
 other's set.
 
-<<<<<<< HEAD
+## 2026-09-14 — Phase "say which number this is": ANCHOR PASS (spec `39313ff5`)
+
+Attacked the four-PR decomposition and PR 3's axis semantic.
+
+**Broken:**
+
+- **§1.2's consequence, the finding the spec said "shapes PR 3".** "The monitor
+  does not report, anywhere, how long the session took" is true of any single
+  field and false as a premise: 0x0037 `[12..13]` is per-interval rest time
+  (`pm5-interface-notes.md` §27.3's own table), stored as
+  `storedSummary.ts:152`'s `machineRestSeconds`, written at `logDraft.ts:997`,
+  already shipped to Concept2 as `rest_time` (`server/concept2/intervals.ts:76`).
+  **Technique:** replayed `walk-2026-08-25/rests-finished-recording.jsonl.gz`
+  decoding 0x0031 against §10 with the capture's own host timestamps — wall
+  clock 374.76 s against work-only 254.8 + machine rest 120 = 374.8. The spec
+  cited §27.1, the line that names the subject; §27.3, three paragraphs later,
+  falsifies it.
+- **The stated failure mode.** "Wrong whenever the rower rests longer than the
+  program" — the two rests measured 59.5 s and 59.0 s of host wall clock
+  against 60 s programmed, and `commands.ts:29-31` plus
+  `docs/monitor/undefined-rest.md` establish we never emit an undefined rest.
+  The rower has no mechanism to extend one.
+- **The real hole, found by replaying the OTHER capture.**
+  `walk-2026-08-31-justrow`: 104.63 s of wall clock against 1.69 s of monitor
+  elapsed, frozen at 185.81/656.7 for 104 consecutive frames; the row ran
+  499.52 s wall against 393.58 s elapsed (26.9 %). A free row has no program,
+  no steps and no rest-marked samples, so the pause is invisible to every
+  proposed axis AND to today's, which draws the line continuous across it.
+  Gate 0's board 2 ("five equal rests under each") cannot show it.
+- **§1.3's mechanism.** 7 × 5.67 = 39.69 > 38: the frame clips at the ASSUMED
+  advance too. The cause is a seventh glyph, not the 5 % advance error. Also:
+  "the four charts" names three (`TestTrendGroup.tsx:23`, `PAD_L = 40`, no
+  comment, is the fourth); "all four are ~5 % under-sized" is false (TraceChart
+  36 vs 32.41, WeekBars 38 vs 35.64, TestTrend 34 vs 23.76 all have slack, only
+  Season 38 vs 41.58 clips); "all three Stats charts" — only two draw metres
+  ticks; and 5.94 holds for `.stats-tick` only, which carries
+  `letter-spacing: 0.06em` (`index.css:12671`) where `.trace-tick-label` does
+  not (`:10921`), giving 5.40 there. The probe never opened the trace chart's
+  page.
+- **The probe asserts nothing** (`6b76f902`): its only `expect` is a heading;
+  `overflowsLeft` is printed, never compared. `plexLoaded` is
+  `document.fonts.check`, which returns `true` for a fabricated family
+  (measured), and a Plex-free control measured the identical 5.942. The
+  seven-glyph miss was a missing `backdateLog` against a pinned clock, so
+  `rowsInRange` (`season.ts:76`) excluded a row dated two days in the future —
+  a fixture bug, not a system property. (Fixed and reproduced since:
+  `012cefd7`, three labels at x = −3.59.)
+- **All three §7 gates.** M8's cannot be written in `client` (jsdom 30:
+  `getBBox` undefined, rect all zeros; no `@vitest/browser` in the repo). M7's
+  already exists and is green — `gate0Seed.ts:28` is a stored-tier pm5 row
+  carrying 6,240 m and `StatsScreen.test.tsx:292` asserts it beside
+  `AVG WATTS —`; the exclusion is a mutation-pinned ruling, so the gate must go
+  red on the missing EXPLANATION. M3/M6's is sound but inherits the free-row
+  hole.
+- **I2, for M4.** The live number is not the machine's field: `driver.ts:3034`
+  sums the session register map, and `domain/monitor/types.ts` calls it "A
+  DISPLAY ESTIMATE, never a record: an interval that produces ZERO frames is
+  lost entirely". One quantity and a lossy estimate of another — I2's two arms
+  do not cover it and need a third, or M4 resolves by MOVING the live number,
+  which makes PR 4 a live-surface change its risk model does not state.
+- **Decomposition.** PR 4 carries TRIAD (M4/M5) *and* a reversal of rulings
+  18/19 (M7 — `TotalsGroup.tsx:6-12`; no stored figure moves for it). M3 and M4
+  split ONE mechanism (the register-map sum) across two PRs. Four members'
+  options span two risk models, so §5 cannot be settled before Gate 0 — M2
+  option B would make PR 1 TRIAD.
+- **Three members reverse evidenced rulings §1.1 does not list:** M2 option C
+  rejected at a 2026-09-07 Gate 0 (`domain/monitor/derivedHeartRate.ts` header,
+  with its 3.5-15.2 bpm measurement and the reason — C2 documents that field
+  only as "Split/Interval Work Heartrate"), M5's silence a fix-round safety
+  gate (`storedSummary.ts:654-693`, `isReconstructableClose`), M7 rulings 18/19.
+- **Tags:** the watts-derives-from-pace sentence is INFERENCE tagged PRIMARY
+  (§27.5 measures agreement, not causation); the logbook-parity spec is tagged
+  SECONDARY and PRIMARY in the same section; a code comment is tagged PRIMARY.
+
+**Attacked and HELD (the phase's VETTED GROUND):** 0x0039 is work-only (§27.1,
+re-measured); the trace axis is neither work-only nor wall clock (357.55 /
+254.8 / 374.76 on one capture); M1's subject (`MachineSummaryTable.tsx:34` vs
+an unlabelled `MachineTierBlock`); M2's magnitude; M6's mechanism
+(`TraceChart.tsx:182-205`); the `split` precedent (`axis.ts:99-105`) and that
+the trace chart does not use it; the `L`-as-clipped-`1` signature; the
+committed photograph as evidence THAT it clips; the appendix. **And the ruled
+`150k` label survived an attack at the low end:** `niceMax` floors at
+`base = 1000` (`axis.ts:128-130`) so every metres tick is a whole thousand — no
+`0k` collapse is reachable and 1,000,000 prints `1000k`.
+
+**Could not establish:** whether 0x0031's elapsed freezes during a WORK
+interval when the rower stops (the Just Row capture proves the mechanism
+exists; every work interval in the rest capture was rowed continuously, wall
+and elapsed agreeing to 0.65 s). **If it does, `wall = work + machineRest`
+breaks for programmed rows too — the one question PR 3 genuinely needs**, and
+it is answerable at a desk from any capture holding a mid-interval pause.
+
+
 ## 2026-09-14 — Wave A PR2, the link follow-through (anchor pass, TRIAD/auth)
 
 **Target:** `docs/superpowers/plans/2026-09-14-wave-a-pr2-follow-through.md`
@@ -11079,96 +11171,90 @@ session-before-consent is not the first pass's defect relocated. NIST SP
 800-63C-4 §3.8.1 is satisfied more literally by confirm-after than by revision
 1's shape. `attemptProvider()` needs no signin arm. Adoption introduces no new
 lock cycle.
-=======
-## 2026-09-14 — Phase "say which number this is": ANCHOR PASS (spec `39313ff5`)
 
-Attacked the four-PR decomposition and PR 3's axis semantic.
 
-**Broken:**
+## 2026-09-15 — Wave A PR2, scoped third pass: revision 4's transport fix
 
-- **§1.2's consequence, the finding the spec said "shapes PR 3".** "The monitor
-  does not report, anywhere, how long the session took" is true of any single
-  field and false as a premise: 0x0037 `[12..13]` is per-interval rest time
-  (`pm5-interface-notes.md` §27.3's own table), stored as
-  `storedSummary.ts:152`'s `machineRestSeconds`, written at `logDraft.ts:997`,
-  already shipped to Concept2 as `rest_time` (`server/concept2/intervals.ts:76`).
-  **Technique:** replayed `walk-2026-08-25/rests-finished-recording.jsonl.gz`
-  decoding 0x0031 against §10 with the capture's own host timestamps — wall
-  clock 374.76 s against work-only 254.8 + machine rest 120 = 374.8. The spec
-  cited §27.1, the line that names the subject; §27.3, three paragraphs later,
-  falsifies it.
-- **The stated failure mode.** "Wrong whenever the rower rests longer than the
-  program" — the two rests measured 59.5 s and 59.0 s of host wall clock
-  against 60 s programmed, and `commands.ts:29-31` plus
-  `docs/monitor/undefined-rest.md` establish we never emit an undefined rest.
-  The rower has no mechanism to extend one.
-- **The real hole, found by replaying the OTHER capture.**
-  `walk-2026-08-31-justrow`: 104.63 s of wall clock against 1.69 s of monitor
-  elapsed, frozen at 185.81/656.7 for 104 consecutive frames; the row ran
-  499.52 s wall against 393.58 s elapsed (26.9 %). A free row has no program,
-  no steps and no rest-marked samples, so the pause is invisible to every
-  proposed axis AND to today's, which draws the line continuous across it.
-  Gate 0's board 2 ("five equal rests under each") cannot show it.
-- **§1.3's mechanism.** 7 × 5.67 = 39.69 > 38: the frame clips at the ASSUMED
-  advance too. The cause is a seventh glyph, not the 5 % advance error. Also:
-  "the four charts" names three (`TestTrendGroup.tsx:23`, `PAD_L = 40`, no
-  comment, is the fourth); "all four are ~5 % under-sized" is false (TraceChart
-  36 vs 32.41, WeekBars 38 vs 35.64, TestTrend 34 vs 23.76 all have slack, only
-  Season 38 vs 41.58 clips); "all three Stats charts" — only two draw metres
-  ticks; and 5.94 holds for `.stats-tick` only, which carries
-  `letter-spacing: 0.06em` (`index.css:12671`) where `.trace-tick-label` does
-  not (`:10921`), giving 5.40 there. The probe never opened the trace chart's
-  page.
-- **The probe asserts nothing** (`6b76f902`): its only `expect` is a heading;
-  `overflowsLeft` is printed, never compared. `plexLoaded` is
-  `document.fonts.check`, which returns `true` for a fabricated family
-  (measured), and a Plex-free control measured the identical 5.942. The
-  seven-glyph miss was a missing `backdateLog` against a pinned clock, so
-  `rowsInRange` (`season.ts:76`) excluded a row dated two days in the future —
-  a fixture bug, not a system property. (Fixed and reproduced since:
-  `012cefd7`, three labels at x = −3.59.)
-- **All three §7 gates.** M8's cannot be written in `client` (jsdom 30:
-  `getBBox` undefined, rect all zeros; no `@vitest/browser` in the repo). M7's
-  already exists and is green — `gate0Seed.ts:28` is a stored-tier pm5 row
-  carrying 6,240 m and `StatsScreen.test.tsx:292` asserts it beside
-  `AVG WATTS —`; the exclusion is a mutation-pinned ruling, so the gate must go
-  red on the missing EXPLANATION. M3/M6's is sound but inherits the free-row
-  hole.
-- **I2, for M4.** The live number is not the machine's field: `driver.ts:3034`
-  sums the session register map, and `domain/monitor/types.ts` calls it "A
-  DISPLAY ESTIMATE, never a record: an interval that produces ZERO frames is
-  lost entirely". One quantity and a lossy estimate of another — I2's two arms
-  do not cover it and need a third, or M4 resolves by MOVING the live number,
-  which makes PR 4 a live-surface change its risk model does not state.
-- **Decomposition.** PR 4 carries TRIAD (M4/M5) *and* a reversal of rulings
-  18/19 (M7 — `TotalsGroup.tsx:6-12`; no stored figure moves for it). M3 and M4
-  split ONE mechanism (the register-map sum) across two PRs. Four members'
-  options span two risk models, so §5 cannot be settled before Gate 0 — M2
-  option B would make PR 1 TRIAD.
-- **Three members reverse evidenced rulings §1.1 does not list:** M2 option C
-  rejected at a 2026-09-07 Gate 0 (`domain/monitor/derivedHeartRate.ts` header,
-  with its 3.5-15.2 bpm measurement and the reason — C2 documents that field
-  only as "Split/Interval Work Heartrate"), M5's silence a fix-round safety
-  gate (`storedSummary.ts:654-693`, `isReconstructableClose`), M7 rulings 18/19.
-- **Tags:** the watts-derives-from-pace sentence is INFERENCE tagged PRIMARY
-  (§27.5 measures agreement, not causation); the logbook-parity spec is tagged
-  SECONDARY and PRIMARY in the same section; a code comment is tagged PRIMARY.
+Scope: only revision 4's additions to
+`docs/superpowers/plans/2026-09-14-wave-a-pr2-follow-through.md` at `34589267`.
+Verdict **NOT READY**, three blocking findings, all inside revision 4's own
+scope. The diagnosis of the transport gap is right; the closure is web-only.
 
-**Attacked and HELD (the phase's VETTED GROUND):** 0x0039 is work-only (§27.1,
-re-measured); the trace axis is neither work-only nor wall clock (357.55 /
-254.8 / 374.76 on one capture); M1's subject (`MachineSummaryTable.tsx:34` vs
-an unlabelled `MachineTierBlock`); M2's magnitude; M6's mechanism
-(`TraceChart.tsx:182-205`); the `split` precedent (`axis.ts:99-105`) and that
-the trace chart does not use it; the `L`-as-clipped-`1` signature; the
-committed photograph as evidence THAT it clips; the appendix. **And the ruled
-`150k` label survived an attack at the low end:** `niceMax` floors at
-`base = 1000` (`axis.ts:128-130`) so every metres tick is a whole thousand — no
-`0k` collapse is reachable and 1,000,000 prints `1000k`.
+**Held.** All five confirmations reproduce verbatim in the tree
+(`shared/auth.ts:32`, `frontDoorRoutes.ts:121`, `:150-159`, `:404-407`,
+`authFlow.ts:339`/`:457-459`). `SESSION_TTL_MS` is 60 days (`sessions.ts:7`).
+The `requireAccess` census is exact: `mintSession` (`:232`) has two call sites,
+`:256` and `:729`, guarded at `:254` and `:728`, and the resolved account's
+email is the right argument (matches `finishSignin` and `legacyGoogle`; the
+relay is the carried identity, never `users.email`). Task 7 Step 4's `--rule`
+on `--surface` = **1.47:1**, computed.
 
-**Could not establish:** whether 0x0031's elapsed freezes during a WORK
-interval when the rower stops (the Just Row capture proves the mechanism
-exists; every work interval in the rest capture was rowed continuously, wall
-and elapsed agreeing to 0.65 s). **If it does, `wall = work + machineRest`
-breaks for programmed rows too — the one question PR 3 genuinely needs**, and
-it is answerable at a desk from any capture holding a mid-interval pause.
->>>>>>> origin/main
+**The chosen shape survives.** The costed alternative — authenticate
+`finalize` by the binding secret so no session exists until after the
+confirmation — saves `result()` and the web-callback `Set-Cookie`, but the
+proven subject is consumed rather than stored, so `finalize` needs a new
+`resolved_user_id` column and FK: a SECOND stored shape against the plan's one
+CHECK widening. And the early session grants nothing, because the second
+exchange is a full authentication with the account's own provider — anyone who
+passes it can sign in normally in one tap. It is also what supplies the
+confirmation's DESTINATION account email (`SignedIn.user.email`); Task 4 Step
+1d's carried-identity choice is right per James's ruling but is only a complete
+control because edit 2 exists. The two edits are coupled and revision 4 did not
+say so.
+
+**Blocking 1 — a sixth place.** `grep -n "finalizeLink("` → `422` def, `477`
+(`acceptStep`, the only one revision 4 named), **`553`** (`authorizeNative`,
+before its `acceptStep` call at `:558`). Native's follow-through never reaches
+`acceptStep`, so revision 4's fix left the primary surface attaching with no
+confirmation.
+
+**Blocking 2 — nothing consumes the session.** `storeToken` has one caller in
+the flow (`authFlow.ts:334-336`, inside `finishSignedIn`), so a native
+`link_ready` session is never stored and `finalize`'s `requireUser` 401s. On
+web `onSignedIn` is never called, `App.tsx:116` keeps `me.state === "out"`, and
+`SignIn.tsx` has no `linked` branch — the rower lands back on the sign-in
+screen holding a live 60-day cookie. **Measured:** widening `link_ready` to
+required `profile` + `session: SignedIn | null` in a scratch copy of `app/`
+broke `frontDoorRoutes.ts(121,35) TS2322` and produced ZERO output from
+`tsc -b`, so the RF33 argument in edit 2 does not bind the consumer. `session`
+also cannot be required-non-null: a link's `link_ready` has none.
+
+**Blocking 3 — `expires_at` at the second exchange is unspecified.** The
+confirmation is now last inside the 300 s window; Task 2 Step 1 pins
+`expires_at` byte-identical and Task 3 Step 3 is silent, while the arm it sits
+beside refreshes it.
+
+**Measured, `consistent()` (`attempts.ts:76-102`) extracted verbatim, 27
+purpose x stage cells + 4 negatives.** The asymmetric widening is sufficient
+and safe: signin reads at the three new stages, link/delete keep every cell
+they read today, `signin @ reauth_exchanging` with `verified_subject` NULL is
+still refused, `signin @ target_*` and `delete @ link_ready` still refused,
+nothing reachable newly admitted. The NAIVE widening breaks **five** cells, not
+two: link at `reauth_authorize`, `reauth_exchanging` and **`link_ready`**,
+delete at `reauth_authorize` and `reauth_exchanging`.
+
+**Measured on `postgres:18.4`, 33 migrations from `_journal.json`.** Task 1
+Step 2b's precondition holds: link and delete rows at `reauth_authorize` with
+`verified_*` NULL insert cleanly and survive the proposed arm. The arm and the
+statement-granularity claim reproduce exactly: `SET stage='reauth_authorize'`
+alone -> 23514; with `existing_provider` -> OK; `SET stage='link_ready'` alone
+-> 23514; with `original_session_id` + `reauthenticated_at` -> OK.
+
+**Task 7 Step 3's census is short and the plan pins a test to it.** Two quoted
+(`you/SignInMethods.tsx:128`, `:130`, both from `1aebec39`/#444 — confirmed
+from the diff) and FOUR unquoted (`SignIn.tsx:40`, `:101`, **`:173`**,
+`today/Today.tsx:1479`), plus a third treatment the step never names, "the You
+tab": `log/Concept2SendBlock.tsx:226` in live UI and three undated News article
+bodies.
+
+**The open `ACCESS_MODE` item is already answered in the repo.** `ROADMAP.md`
+records James's 2026-09-14 ruling that staging stays `restricted`;
+`compose.yml:48` and `accessPolicy.ts:14` both default to it. So
+`requireAccess(identity.email)` (`attempts.ts:436`) refuses any Hide My Email
+identity before `confirm`, and PR2 is reachable only for Share My Email by an
+allowlisted address. A PM build-now question, owed BEFORE Gate 0, not before
+implementation.
+
+**All three findings folded into revision 5 by the controller.** The
+antagonist does not run again on this plan: `/harden` caps the loop at two
+passes, this was the third, and revision 5 changes no mechanism.

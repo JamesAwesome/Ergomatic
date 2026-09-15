@@ -167,6 +167,10 @@ jobs:
         run: |
           bash -n scripts/ci-changes.sh
           bash scripts/ci-changes.test.sh
+      - name: Lint + test the conflict-marker gate
+        run: |
+          bash -n scripts/conflict-markers.sh
+          bash scripts/conflict-markers.test.sh
       - name: Lint + test the stack-env guard
         run: |
           bash -n app/scripts/stack-env.sh
