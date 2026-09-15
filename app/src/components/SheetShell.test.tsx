@@ -211,11 +211,18 @@ describe("SheetShell", () => {
   });
 });
 
-// CONTAINMENT, the three shapes that leaked. Each of these was measured
-// escaping a real modal in Chromium before the fix: a rower behind a 45%
-// scrim reaching a workout link, a back link, or the connected surface's
-// pane controls, while `aria-modal="true"` claimed that content was inert.
-// None of the three had a test at any layer.
+// CONTAINMENT, the three shapes that leaked — each measured escaping a real
+// modal in Chromium before its fix, and none of which had a test at any layer.
+//
+// THESE ASSERT THE RESOLVED ELEMENT, NOT CONTAINMENT. The first version
+// checked `dialog.contains(document.activeElement)`, and `Node.contains`
+// returns TRUE FOR THE NODE ITSELF — so the dialog-focused case was satisfied
+// before any key was pressed. Deleting the wrap's `.focus()` call outright,
+// leaving `preventDefault()`, passed all sixteen: a trap where Tab does
+// nothing and the rower can never reach Close, which is a WCAG 2.1.2 keyboard
+// trap and strictly worse than the 2.4.3 leak being fixed. Reversing the wrap
+// direction also passed. Naming WHICH control focus lands on is the only
+// assertion that separates contained from frozen.
 describe("SheetShell: focus never leaves the modal", () => {
   function shellWith(
     children: React.ReactNode,
@@ -243,24 +250,34 @@ describe("SheetShell: focus never leaves the modal", () => {
     return screen.getByRole("dialog");
   }
 
-  const inDialog = (dialog: HTMLElement) =>
-    dialog.contains(document.activeElement);
+  const btn = (name: string) => screen.getByRole("button", { name });
 
-  it("A — the DIALOG itself holding focus wraps instead of falling through", async () => {
+  it("A — the DIALOG itself holding focus wraps to a REAL control, both ways", async () => {
     const dialog = shellWith(
-      <button type="button">Close</button>,
+      <>
+        <button type="button">FIRST</button>
+        <button type="button">LAST</button>
+      </>,
       undefined,
       true,
     );
     expect(document.activeElement).toBe(dialog);
+    // Shift+Tab from the dialog goes to the END of the sheet...
     await userEvent.tab({ shift: true });
-    expect(inDialog(dialog)).toBe(true);
+    expect(btn("LAST")).toHaveFocus();
+
+    // ...and Tab from the dialog goes to its START. Re-open to reset.
+    screen.getByRole("dialog");
+    (dialog as HTMLElement).focus();
+    expect(document.activeElement).toBe(dialog);
+    await userEvent.tab();
+    expect(btn("FIRST")).toHaveFocus();
   });
 
-  it("B — a tabbable NON-button child cannot be shift-tabbed out of", async () => {
+  it("B — a tabbable NON-button child is inside the cycle and cannot be escaped", async () => {
     // ConnectionLogSheet's log list is `tabIndex={0}` on purpose (WCAG
-    // 2.1.1) and sits BEFORE the first button.
-    const dialog = shellWith(
+    // 2.1.1) and sits BEFORE the first button, so it is `first`.
+    shellWith(
       <>
         <div tabIndex={0} data-testid="scroller">
           log
@@ -270,20 +287,25 @@ describe("SheetShell: focus never leaves the modal", () => {
     );
     screen.getByTestId("scroller").focus();
     await userEvent.tab({ shift: true });
-    expect(inDialog(dialog)).toBe(true);
+    // wraps to the LAST control rather than out of the sheet
+    expect(btn("Close")).toHaveFocus();
   });
 
-  it("C — a DISABLED primary does not break the wrap in either direction", async () => {
-    // Both filter sheets disable their primary whenever nothing matches.
-    const dialog = shellWith(<button type="button">CLEAR</button>, {
-      label: "Apply Filter",
-      disabled: true,
-      onPress: vi.fn(),
-    });
-    screen.getByRole("button", { name: "CLEAR" }).focus();
+  it("C — a DISABLED primary is skipped, and the wrap lands on the real ends", async () => {
+    // Both filter sheets disable their primary whenever nothing matches. The
+    // disabled button must be neither a tab stop nor the wrap target.
+    shellWith(
+      <>
+        <button type="button">CLEAR</button>
+        <button type="button">MY WORKOUTS</button>
+      </>,
+      { label: "Apply Filter", disabled: true, onPress: vi.fn() },
+    );
+    btn("MY WORKOUTS").focus();
     await userEvent.tab();
-    expect(inDialog(dialog)).toBe(true);
+    // NOT the disabled "Apply Filter", and NOT outside the sheet
+    expect(btn("CLEAR")).toHaveFocus();
     await userEvent.tab({ shift: true });
-    expect(inDialog(dialog)).toBe(true);
+    expect(btn("MY WORKOUTS")).toHaveFocus();
   });
 });
