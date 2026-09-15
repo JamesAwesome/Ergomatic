@@ -211,11 +211,23 @@ export function destinationFor(
   // NOWHERE. The first three are answered in place on the methods list the
   // rower is already looking at; `deleted` hands over to the signed-out
   // transition, which replaces the whole tree (App.tsx).
+  // THE ATTACH CONFIRMATION NEEDS A ROUTE, NOT "/" — and getting this wrong
+  // is what made the whole flow invisible on web. `onSignedIn` is withheld
+  // until the rower chooses, so on NATIVE `me` stays `out` and `App` renders
+  // `SignIn` directly, ignoring routes entirely. On WEB the callback sets the
+  // session cookie before its 303, so the next document load resolves `me`
+  // IN, `AppRoutes` renders instead, and a destination of "/" is Today — the
+  // rower lands in the app, signed in, provider unattached, confirmation
+  // never shown. Routing to the full-bleed auth surface works on both: when
+  // signed out the route is ignored, when signed in it is the only frame
+  // this screen has.
+  // ONLY `attach_confirm` NAVIGATES, not the whole of `ownsAttachScreen`.
+  // Its `busy` arm keeps the route's ELEMENT rendering through the request;
+  // routing on it too would send every signin `busy` — including the ordinary
+  // sign-in that has not reached this flow — to the auth surface.
+  if (view.kind === "attach_confirm") return "/you/sign-in-methods";
   if (
     view.kind === "confirm" ||
-    // The post-proof confirmation renders on the sign-in screen, because the
-    // rower is still there — `onSignedIn` is withheld until they choose.
-    view.kind === "attach_confirm" ||
     (view.kind === "cancelled" && view.purpose === "signin") ||
     (view.kind === "error" && view.purpose === "signin")
   ) {
@@ -230,6 +242,23 @@ export function destinationFor(
  *  decides whether it draws. Drop `busy` from either and the confirm
  *  screen vanishes mid-request — from the router it becomes a redirect to
  *  `/you`, from the component a blank route. */
+/** THE VIEWS THE ATTACH CONFIRMATION OWNS — the same shape as
+ *  `ownsDeleteScreen` and for the same reason: `AppRoutes` decides whether
+ *  the route renders the screen, the screen decides whether it draws, and a
+ *  disagreement between them is invisible.
+ *
+ *  `busy` IS INCLUDED, and it is what makes `AttachConfirm`'s disabled
+ *  controls reachable at all. Without it the screen unmounts the moment its
+ *  own request starts, which is a weaker guard wearing an attribute that can
+ *  never be true. In the signed-in tree a `busy` signin can only be this
+ *  flow — a rower cannot be signing in while already in. */
+export function ownsAttachScreen(view: AuthFlowView): boolean {
+  return (
+    view.kind === "attach_confirm" ||
+    (view.kind === "busy" && view.purpose === "signin")
+  );
+}
+
 export function ownsDeleteScreen(view: AuthFlowView): boolean {
   return (
     view.kind === "delete_ready" ||

@@ -1268,10 +1268,14 @@ describe("useAuthFlow", () => {
 
   it.each([
     ["confirm", "/"],
-    // `attach_confirm` replaces `usual` here. Both render on the sign-in
-    // screen, which is why both route to "/" — but `usual` was the dead end
-    // and this is the confirmation that replaced it.
-    ["attach_confirm", "/"],
+    // `attach_confirm` ROUTES TO THE AUTH SURFACE, not "/", and the reason is
+    // the defect it was shipped with. `onSignedIn` is withheld until the
+    // rower chooses, so on NATIVE `me` stays out and `App` renders `SignIn`
+    // directly, ignoring routes. On WEB the callback sets the session cookie
+    // before its 303, so the return resolves `me` IN — and "/" in the
+    // signed-in tree is Today, which left the rower in the app with the
+    // confirmation set on a component that had no frame.
+    ["attach_confirm", "/you/sign-in-methods"],
     ["link_confirm", "/you/sign-in-methods"],
     ["link_authorize", "/you/sign-in-methods"],
     ["linked", "/you"],

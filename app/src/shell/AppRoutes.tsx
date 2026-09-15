@@ -7,6 +7,7 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
+import { AttachConfirm } from "../SignIn";
 import Builder from "../builder/Builder";
 import BulkImport from "../builder/BulkImport";
 import EditWorkout from "../builder/EditWorkout";
@@ -41,6 +42,7 @@ import StatsScreen from "../you/stats/StatsScreen";
 import MonitorLogs from "../you/MonitorLogs";
 import type { Me } from "../useMe";
 import {
+  ownsAttachScreen,
   ownsDeleteScreen,
   type AuthFlowController,
 } from "../adapters/authFlow";
@@ -287,6 +289,16 @@ export default function AppRoutes({
                   authFlow.view.kind === "link_confirm" ||
                   authFlow.view.kind === "link_authorize" ? (
                     <LinkSignInMethod auth={authFlow} />
+                  ) : /* WAVE A PR2. THE POST-PROOF CONFIRMATION NEEDS A FRAME
+                       IN THE SIGNED-IN TREE. On web the callback sets the
+                       session cookie before its 303, so the return resolves
+                       `me` IN and `SignIn` — this screen's only other mount
+                       point — never renders. Without this arm the rower
+                       landed on Today, signed in, provider unattached, with
+                       the confirmation set on a component that had no
+                       frame. */
+                  ownsAttachScreen(authFlow.view) ? (
+                    <AttachConfirm auth={authFlow} />
                   ) : ownsDeleteScreen(authFlow.view) ? (
                     <DeleteAccount auth={authFlow} onDeleted={onSignedOut} />
                   ) : (

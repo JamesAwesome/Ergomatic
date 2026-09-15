@@ -560,7 +560,7 @@ describe("supported auth producers through Express and signed tokens", () => {
   // drives the REAL web re-read, `GET /api/auth/web/attempts/:id`, which is
   // served by `view()` and is where a web rower lands after the callback
   // redirects them to `/?authAttempt=<id>`.
-  it("PR2 web: the re-read carries the adopted session, so finalize is reachable", async () => {
+  it("PR2 web: the re-read carries the session, and finalize completes on the cookie", async () => {
     // An account holding Google only, created through the native door
     // (quicker, and irrelevant to what this asserts).
     const first = (
@@ -623,8 +623,18 @@ describe("supported auth producers through Express and signed tokens", () => {
     expect(back.headers.location).toContain(
       `authAttempt=${begin.body.attemptId}`,
     );
-    for (const set of back.headers["set-cookie"] ?? [])
-      if (set.startsWith("ergomatic_auth_attempt=")) cookie = set.split(";")[0];
+    // CAPTURE BOTH COOKIES THE CALLBACK SETS. The attempt cookie is
+    // `erg_auth_attempt`, the session is `erg_session`. An earlier version of
+    // this loop matched `ergomatic_auth_attempt=`, which exists nowhere — so
+    // it never fired and the test passed on the cookie from `begin`. It read
+    // as load-bearing and was not: the same shape as the fabricated fixture
+    // this test was written to replace.
+    let session = "";
+    for (const set of back.headers["set-cookie"] ?? []) {
+      if (set.startsWith("erg_auth_attempt=")) cookie = set.split(";")[0];
+      if (set.startsWith("erg_session=")) session = set.split(";")[0];
+    }
+    expect(session).not.toBe("");
 
     // THE RE-READ. This is the request the browser makes on landing, and it
     // is served by `view()`.
@@ -645,6 +655,23 @@ describe("supported auth producers through Express and signed tokens", () => {
     expect(reread.body.session.token).toBeUndefined();
     // And the carried identity is still the one about to be attached.
     expect(reread.body.profile.email).toBe("relay@privaterelay.appleid.com");
+
+    // FINALIZE ON THE COOKIE, the credential path the web surface actually
+    // uses — the native test proves this with a bearer, which is a different
+    // path. Without this the title's "finalize is reachable" was a claim the
+    // test never made (RF26).
+    const linked = await request(app)
+      .post(`/api/auth/web/attempts/${begin.body.attemptId}/finalize`)
+      .set("Cookie", [cookie, session].join("; "))
+      .send({});
+    expect(linked.status).toBe(200);
+    expect(linked.body.outcome).toBe("linked");
+    const rows = await pool.query<{ appleSub: string; googleSub: string }>(
+      'SELECT apple_sub AS "appleSub", google_sub AS "googleSub" FROM users',
+    );
+    expect(rows.rowCount).toBe(1);
+    expect(rows.rows[0]!.appleSub).toBe("apple-web-rr");
+    expect(rows.rows[0]!.googleSub).toBe("web-reread");
   });
 
   // INVARIANT 1, GATED AT THE LAYER THAT CAN REACH IT (Task 4 Step 3). The
