@@ -5,6 +5,37 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.50.0: git log v0.49.0..main --oneline — SIX merges besides this
+    // notes PR itself, each accounted for (RF15; no --merges, which returns
+    // empty on this squash-merged repo). THREE reach a rower:
+    //   #453 the one-trip attach — item 1. Signing in with a provider
+    //     Ergomatic has never seen used to end in a choice whose second
+    //     arm threw the proof away, so the same screen came back on every
+    //     future sign-in with that provider. It now carries the attempt
+    //     through a second authorization and attaches the identity. The
+    //     two-step recovery it replaces still prints on the sign-in
+    //     screen, so this is a shortcut, not a rescue.
+    //   #454 where the numbers come from — items 2 and 3. A heading
+    //     claiming the monitor for arithmetic we do here, and two tiles
+    //     that change source per row with no way to find out which.
+    //   #452 the machine type — item 4. Written by every characteristic in
+    //     the status path, but carried by only two of them, so the rest
+    //     erased a reading they never had. It is a diagnostics line rather
+    //     than a screen, which is why the note is one sentence.
+    //   #450 #451 #449 plans, walk cards, skill rules and a
+    //     conflict-marker CI gate. Confirmed no product code: none of the
+    //     three touches app/src, app/server or app/domain. Agent-facing;
+    //     no note.
+    version: "v0.50.0",
+    date: "2026-09-15",
+    items: [
+      "Signing in with Apple when your account is a Google one now takes one trip instead of six steps. Tell it you already have an account, sign in the way you usually do, and a screen names both identities and the account they join before anything is attached. Nothing is attached until you say so, and Not now leaves you signed in with nothing changed.",
+      "The post-workout table stops crediting the monitor for sums we work out ourselves. Its columns are now grouped under DERIVED and MEASURED, and the heading above them says only what is true of what is underneath.",
+      "A new row under the tiles, Where these numbers come from, opens a sheet naming the source of each tile FOR THAT ROW. RATE is the monitor's average on a finished piece and ours on one you cut short; AVG HR is the monitor's if it sent one and your belt's trace otherwise.",
+      "The diagnostics header now keeps the erg model it read. It was being overwritten with nothing by the parts of the monitor's status feed that never carry one.",
+    ],
+  },
+  {
     // v0.49.0: git log v0.48.0..main --oneline — NINE merges besides this
     // notes PR itself, each accounted for (RF15; no --merges, which returns
     // empty on this squash-merged repo). TWO reach a rower:
