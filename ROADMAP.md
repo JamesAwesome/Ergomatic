@@ -1523,10 +1523,55 @@ while we are in here.
       fact already recorded under the integration-flake row below (the
       `maxWorkers` key sits on the ROOT `test` block, so unit, client and
       integration files share ONE pool, and each integration file starts
-      its own `PostgreSqlContainer`) and CI runs an uncapped pool against
+      its own `PostgreSqlContainer`) and CI runs its default pool against
       containers, under v8 coverage instrumentation (`pnpm test:coverage`),
-      with all three projects in one invocation. **That is a concrete,
-      testable mechanism for a synchronous render missing a 5 s deadline.**
+      with all three projects in one invocation.
+      **"UNCAPPED" WAS WRONG, MEASURED 2026-09-15, and the word is removed
+      rather than softened.** `undefined` does not mean unbounded: vitest's
+      own `getDefaultThreadsCount`
+      (`node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:2354`) returns
+      `Math.max(availableParallelism - 1, 1)` off watch — **3 workers on a
+      4-core `ubuntu-latest`, which leaves a core free and is more
+      conservative than the local cap of 4.** So the contention in CI is
+      real but it comes from the containers and the coverage
+      instrumentation, not from a worker count nobody capped, and there is
+      nothing here to cap: picking a number now would be RF30.
+      **THE ACTUAL MECHANISM, FOUND 2026-09-15, and it is the test's own
+      cost.** `Releases.test.tsx:32` was QUADRATIC in the length of
+      `RELEASE_NOTES` — one `screen.getByText` per release and per item,
+      each scanning the whole rendered tree, so cost = queries x tree size
+      and BOTH halves grow per release. Measured on truncated copies of the
+      real list: 13 releases 35.3ms, 26 releases 83.1ms, 39 releases
+      174.7ms, 52 releases 361.3ms — **4.3x for 2x the list.** And the list
+      grew underneath it: **31 entries on 2026-09-01, 52 on 2026-09-14**
+      (`git show <sha>:app/src/news/content/releaseNotes.ts | grep -c
+      'version:'` walked back over its history), so the test's cost roughly
+      TRIPLED across the fortnight in which this flake went from one
+      sighting to four. **Why this test out of 6,254:** ranked by duration
+      with each `it(` classified sync or async, it was the SLOWEST
+      SYNCHRONOUS client test by 3.1x over the runner-up (541ms against
+      175ms). A synchronous test's whole duration is CPU on its worker, so
+      it is exactly the population that stretches under contention — at
+      541ms it needed a **9.2x** stretch to miss the deadline where every
+      other synchronous test needed 28x or more.
+      **FIXED in #452 (`8db5c58d`, test file only): the test now walks the
+      rendered section list once instead of querying the tree 256 times.
+      541ms -> 106ms, and linear, so it stops degrading per release.** It
+      also asserts strictly MORE than the version it replaces — restoring
+      the old body, a mutant reversing section order and a mutant dropping
+      the date both PASSED against it, so the test's own title had promised
+      a date it never checked.
+      **WHAT THIS DOES NOT PROVE, and the falsifiable prediction that
+      settles it:** the flake has hit ZERO times locally and only ever
+      under CI load, so no local green is evidence of a fix — it was never
+      reproduced and cannot be. **If this test times out again after
+      `8db5c58d`, the quadratic cost was NOT the cause**, and this row goes
+      back to the contention lead with that result recorded. Margin is now
+      51x rather than 9.2x.
+      **`test-run.sh`'s capacity banner prints the runner's real core count
+      on every CI run and nobody has read one yet** — capture that reading
+      next time regardless of whether the flake returns; it is the one
+      number this whole hunt kept assuming.
       **CORRECTION, 2026-09-14, same day it was filed:** this row first
       said "a two-core runner". **That was never measured** — it was the
       shape of an explanation, which is exactly what RF16 forbids. The
