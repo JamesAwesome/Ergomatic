@@ -195,3 +195,101 @@ for (const [orient, size] of [
     await block.screenshot({ path: path.join(OUT, `table-${orient}.png`) });
   });
 }
+
+// Every colour pairing on board 1, measured from the LIVE cascade rather
+// than from the token file — the element's own computed colour against the
+// first opaque background behind it, with the WCAG 2.x ratio (RF6: the
+// number goes in the report, never an eye).
+test("gate 0B board 1: contrast", async ({ page }) => {
+  test.setTimeout(180_000);
+  await signInViaBackdoor(page, {
+    email: `gate0b-contrast-${RUN_ID}@e2e.test`,
+    name: "Gate 0B",
+  });
+  await seedAndOpen(
+    page,
+    machineRow({ title: "Heart rate gap", spm: 26, withHr: true }),
+  );
+  await expect(
+    page.getByRole("heading", { name: "Heart rate gap" }),
+  ).toBeVisible();
+  const rows = await page.evaluate(() => {
+    const parse = (c: string): [number, number, number] => {
+      const m = /rgba?\(([^)]+)\)/.exec(c);
+      if (m === null) return [0, 0, 0];
+      const [r, g, b] = m[1]!.split(",").map((v) => parseFloat(v));
+      return [r!, g!, b!];
+    };
+    const lum = ([r, g, b]: [number, number, number]) => {
+      const f = (v: number) => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const bgOf = (el: Element): string => {
+      let n: Element | null = el;
+      while (n !== null) {
+        const c = getComputedStyle(n).backgroundColor;
+        if (!c.startsWith("rgba(0, 0, 0, 0)") && c !== "transparent") return c;
+        n = n.parentElement;
+      }
+      return getComputedStyle(document.body).backgroundColor;
+    };
+    const out: unknown[] = [];
+    const seen = new Set<string>();
+    for (const sel of [
+      ".summary-hero-label",
+      ".summary-machine-value",
+      ".machine-summary-title",
+      ".machine-summary-eyebrow",
+      ".machine-summary th",
+      ".machine-summary td",
+      ".summary-total-line",
+    ]) {
+      for (const el of Array.from(document.querySelectorAll(sel))) {
+        const st = getComputedStyle(el);
+        const fg = st.color;
+        const bg = bgOf(el);
+        const key = `${sel}|${fg}|${bg}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const [l1, l2] = [lum(parse(fg)), lum(parse(bg))].sort((a, b) => b - a);
+        out.push({
+          element: sel,
+          sample: (el.textContent ?? "").slice(0, 16),
+          fg,
+          bg,
+          fontPx: st.fontSize,
+          fontWeight: st.fontWeight,
+          ratio: Number(((l1! + 0.05) / (l2! + 0.05)).toFixed(2)),
+        });
+      }
+    }
+    return out;
+  });
+  // A selector that matched NOTHING is a silent hole: the file would claim
+  // the board is measured while covering half of it. The first draft of this
+  // test shipped 3 of 7 and looked complete.
+  const covered = new Set(
+    (rows as { element: string }[]).map((r) => r.element),
+  );
+  expect(
+    [
+      ".summary-hero-label",
+      ".summary-machine-value",
+      ".machine-summary-title",
+      ".machine-summary-eyebrow",
+      ".machine-summary th",
+      ".machine-summary td",
+      ".summary-total-line",
+    ].filter((sel) => !covered.has(sel)),
+    "selectors that matched no element",
+  ).toEqual([]);
+  fs.mkdirSync(OUT, { recursive: true });
+  fs.writeFileSync(
+    path.join(OUT, "contrast.json"),
+    `${JSON.stringify(rows, null, 2)}\n`,
+  );
+  process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`);
+});
