@@ -112,3 +112,31 @@ boards, which are pictures of screens rather than controls.
 
 The option (A, B or C), and — if A — where PR2's success notice should land.
 Everything else in the list above has a stated default I can proceed on.
+
+## GATE 0 RULING (James, 2026-09-15)
+
+**OPTION A.** The ACCOUNT door takes the sign-in methods list AND the delete
+box to a new subpage. You is left with identity, the career hero and the doors.
+
+Carried with it, from the pack's own list:
+
+- **The subpage is `/you/account`.** `/you/sign-in-methods` is a flow-only
+  route that redirects to `/you` unless the auth flow is mid-link or
+  mid-delete, and it sits in `HIDDEN_TABBAR_PREFIXES`; it keeps its name and
+  its job.
+- **The re-auth disclosure rides the ACCOUNT box to the subpage**, per the
+  2026-09-15 ruling — the box moves and the sentence moves with it, and the
+  delete confirm screen stays untouched.
+- **The ACCOUNT row sits first**, above BASELINES. Prior rulings fix CONCEPT2
+  above DIAGNOSTICS and keep DIAGNOSTICS last; nothing constrains the top.
+- **The You-initiated link needs no decision.** `prepareLink` is called only
+  from `SignInMethods`, so "Add Apple" starts and ends inside that component:
+  move the component and the success notice lands where the rower already is.
+
+**OPEN, and the only thing this ruling does not settle: where PR2's
+follow-through lands.** That flow starts at the sign-in screen, so the rower
+ends up newly signed in with no methods list mounted to carry the notice.
+Recommended: **Today, signed in, no notice** — the confirmation screen they
+just approved named both identities, and the proof it worked is being in the
+app. A transient notice is NOT an option: the app has no toast concept, and
+`linked` is a persistent view rendered inside `SignInMethods`.
