@@ -126,8 +126,8 @@ describe("AppRoutes", () => {
     expect(screen.getByText("maya@example.com")).toBeVisible();
   });
 
-  // AND IT SURVIVES ITS OWN REQUEST. `confirmAttach` flips the view to
-  // `busy`, which carries no `carried` and no `account`; if the route drops
+  // AND IT SURVIVES ITS OWN REQUEST. `confirmAttach` flips the view to a
+  // `busy` that CARRIES the same two identities forward; if the route drops
   // the screen there, the disabled controls are an attribute on something
   // already unmounted — which is what `disabled={busy}` was before this.
   it("PR2: the confirmation stays mounted, and disabled, while its request runs", () => {
@@ -149,7 +149,15 @@ describe("AppRoutes", () => {
     );
     const busy = {
       ...auth,
-      view: { kind: "busy", purpose: "signin" } as const,
+      view: {
+        kind: "busy",
+        purpose: "signin",
+        attaching: {
+          targetProvider: "apple",
+          carried: { email: "9m3x@privaterelay.appleid.com", name: "Rower" },
+          account: { id: "u1", email: "maya@example.com", name: "Maya Chen" },
+        },
+      } as const,
     };
     rerender(
       <MemoryRouter initialEntries={["/you/sign-in-methods"]}>
@@ -165,6 +173,30 @@ describe("AppRoutes", () => {
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Attach Apple" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Not now" })).toBeDisabled();
+  });
+
+  // AND A `busy` THAT IS NOT THIS FLOW'S DOES NOT GET THE SCREEN. The web
+  // link and delete SUCCESS redirect carries no `authPurpose`, so a
+  // signed-in rower mid-link sits at `busy`/`signin` — a view this predicate
+  // used to own. Owning it shadowed the route's own `<Navigate to="/you">`
+  // fallback with a component that had nothing to draw. The rower belongs on
+  // You, which is where the link notice is.
+  it("PR2: a signin busy that carries no identities falls through to You", () => {
+    const auth = idleAuthFlow();
+    auth.view = { kind: "busy", purpose: "signin" };
+    render(
+      <MemoryRouter initialEntries={["/you/sign-in-methods"]}>
+        <AppRoutes
+          user={{ id: "u1", email: "maya@example.com", name: "Maya Chen" }}
+          onSignedOut={vi.fn()}
+          authFlow={auth}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Attach Apple to this account?" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "You" })).toBeVisible();
   });
 
   it("keeps an invalid selected review at its honest unavailable state rather than redirecting to Today", async () => {

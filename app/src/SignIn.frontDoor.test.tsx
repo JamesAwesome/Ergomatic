@@ -165,6 +165,53 @@ describe("SignIn front door", () => {
     expect(auth.cancel).not.toHaveBeenCalled();
   });
 
+  // THE SAME SCREEN, THROUGH ITS OWN REQUEST, ON THE SURFACE THAT MATTERS.
+  // `AppRoutes` keeps the confirmation mounted while `finalize` runs, but
+  // `AppRoutes` only exists once `me` resolves IN — and on native it never
+  // does before the rower chooses. `SignIn` is the whole tree there, so if
+  // its dispatch drops the screen the moment the view goes `busy`, the
+  // native rower watches the confirmation vanish into the Ergomatic welcome
+  // screen and back out to Today. `disabled={busy}` cannot save a component
+  // that is not on screen.
+  it("PR2: keeps the confirmation drawn and inert through its own request", () => {
+    const auth = controller({
+      kind: "busy",
+      purpose: "signin",
+      attaching: {
+        targetProvider: "apple",
+        carried: { email: "9m3x@privaterelay.appleid.com", name: "Rower" },
+        account: { id: "u1", email: "maya@example.com", name: "Maya Chen" },
+      },
+    });
+    render(<SignIn auth={auth} />);
+    expect(
+      screen.getByRole("heading", { name: "Attach Apple to this account?" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Attach Apple" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Not now" })).toBeDisabled();
+    // AND THE WELCOME SCREEN IS NOT UNDERNEATH IT. This is the assertion
+    // that fails on the bounce: the provider buttons are what the rower saw
+    // instead of the confirmation.
+    expect(
+      screen.queryByRole("button", { name: "Continue with Apple" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // THE OTHER HALF, AND THE REASON THE DISCRIMINATOR IS ON THE VIEW RATHER
+  // THAN ON `purpose`. An ordinary sign-in is `busy`/`signin` too, and it has
+  // never been near this flow. Owning every such view would hand a rower
+  // waiting on a plain sign-in a confirmation with no identities to name.
+  it("PR2: an ordinary sign-in in flight still shows the welcome screen", () => {
+    const auth = controller({ kind: "busy", purpose: "signin" });
+    render(<SignIn auth={auth} />);
+    expect(
+      screen.getByRole("button", { name: "Continue with Apple" }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByRole("heading", { name: "Attach Apple to this account?" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows a bounded retry and starts Google from the welcome screen", async () => {
     const auth = controller({
       kind: "error",

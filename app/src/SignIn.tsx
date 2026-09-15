@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { SignInButton } from "./adapters/auth";
-import { ownsAttachScreen } from "./adapters/authFlow";
+import { attachingIn, ownsAttachScreen } from "./adapters/authFlow";
 import type { AuthFlowController } from "./adapters/authFlow";
 import AuthProviderButton from "./auth/AuthProviderButton";
 
@@ -134,37 +134,28 @@ function ConfirmAccount({
   );
 }
 
-/** WAVE A PR2: the post-proof confirmation, rendered on the SIGN-IN screen
- *  because that is where the rower still is — `onSignedIn` is deliberately
- *  not called until they choose, so `me` stays out and this screen stays
- *  mounted.
+/** WAVE A PR2: the post-proof confirmation. It has TWO FRAMES, because the
+ *  two surfaces put the rower in different trees: on web the callback sets
+ *  the session cookie before its 303, so `me` resolves IN and `AppRoutes`
+ *  renders it at `/you/sign-in-methods`; on native nothing reloads, `me`
+ *  stays out — `onSignedIn` is withheld until the rower chooses — and
+ *  `SignIn` renders it directly, routes ignored. Both frames ask
+ *  `ownsAttachScreen`, which is the only thing keeping them from disagreeing.
  *
  *  IT NAMES THREE THINGS, and the third is what makes it a control rather
  *  than a notice: the identity being attached, the account it attaches TO,
  *  and that the rower is already signed in. "Attach this to WHICH account?"
  *  is a question they cannot answer without the second. */
 export function AttachConfirm({ auth }: { auth: AuthFlowController }) {
-  // THE SCREEN REMEMBERS ITS OWN PAYLOAD, because it has to outlive the view
-  // that carried it. `confirmAttach` flips the view to `busy`, which has no
-  // `carried` and no `account` — and the screen must keep drawing through its
-  // own request, or the disabled controls below are an attribute on a
-  // component that has already unmounted. `DeleteAccount` gets this for free:
-  // its copy is static, so it needs nothing from the view.
-  type Payload = Extract<
-    AuthFlowController["view"],
-    { kind: "attach_confirm" }
-  >;
-  const live = auth.view.kind === "attach_confirm" ? auth.view : null;
-  const [remembered, setRemembered] = useState<Payload | null>(live);
-  // ADJUSTING STATE DURING RENDER, which is React's own documented pattern for
-  // "a value derived from props that must survive a prop change". A ref read
-  // during render and a setState inside an effect are both rejected by the
-  // compiler's lint here, and both would be worse: the effect version renders
-  // once with nothing.
-  if (live && live !== remembered) setRemembered(live);
-  // The live view first, the remembered one once it flips to `busy`.
-  const view = live ?? remembered;
-  if (!view || !ownsAttachScreen(auth.view)) return null;
+  // THE PAYLOAD COMES OFF THE VIEW, INCLUDING THE `busy` ONE. The screen has
+  // to keep drawing through its own request, or the disabled controls below
+  // are an attribute on a component that has already unmounted — so
+  // `confirmAttach` carries the identities onto the `busy` it sets and this
+  // reads them from wherever they are. An earlier version remembered them in
+  // component state instead: that was a second source of truth, and nothing
+  // in the suite could prove it stayed equal to the first.
+  const view = attachingIn(auth.view);
+  if (!view) return null;
   const target = providerName(view.targetProvider);
   // BOTH CONTROLS GO INERT FOR THE REQUEST'S WHOLE LENGTH, the same guard
   // `DeleteAccount` uses. Relying on this component unmounting when the view
@@ -328,7 +319,12 @@ export default function SignIn({
     if (auth.view.kind === "confirm") {
       return <ConfirmAccount auth={auth} view={auth.view} />;
     }
-    if (auth.view.kind === "attach_confirm") {
+    // THE SAME PREDICATE THE ROUTER USES, not `kind === "attach_confirm"`.
+    // Dispatching on the kind alone dropped the screen the instant
+    // `confirmAttach` flipped the view to `busy`, and on native — where this
+    // component IS the whole tree — the rower watched the confirmation
+    // bounce to the Ergomatic welcome screen for the length of the request.
+    if (ownsAttachScreen(auth.view)) {
       return <AttachConfirm auth={auth} />;
     }
     if (
