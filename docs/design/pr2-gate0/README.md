@@ -122,3 +122,39 @@ address gets here. That is a build-now question and it is yours, but it is **not
 a reason to skip this gate** — the screen is the same screen whenever the path
 opens, and deferring the design on an unsettled reachability question is how a
 design decision gets made by accident (RF30).
+
+## GATE 0 RULINGS (James, 2026-09-15)
+
+All four settled. The pack above is the record of what was shown; this is what
+was decided.
+
+1. **The No button is "Not now".** Option A. Goes to Today, signed in; Apple
+   stays unattached and the screen returns on the next Apple sign-in.
+2. **The second sign-in RESETS the 300-second window.** The rower gets a fresh
+   300 s to read the confirmation, matching what `accept()`'s reauth arm
+   already does for link and delete at exactly this point. James's own reason
+   is the strongest one in the record: **"what 300 second clock I don't see a
+   clock"** — nothing on screen shows it, counts it down, or warns when it is
+   about to run out, so a rower cannot manage a deadline they are not told
+   about. Putting a screen they are meant to READ inside an invisible,
+   already-spent window is what the reset removes. **Cost, stated and
+   accepted:** the carried Apple identity can live across two windows rather
+   than one.
+3. **The delete re-auth is disclosed AT THE TAP.** The proposed version: one
+   sentence in the ACCOUNT quarantine box naming the provider, and the confirm
+   screen is left untouched — which is what keeps its own 2026-09-14 ruling
+   (state facts, not prose) intact.
+4. **The "You" naming treatment is "the You tab".** Applies to every live
+   string, including the two `SignInMethods.tsx` ones #444 shipped as quoted.
+   Re-measure the census at implementation time rather than trusting a number
+   written here.
+5. **The `--rule` hairline STAYS at 1.47:1**, and the policy is written down
+   instead: **a boundary that carries meaning uses `--ink-4`** (4.76:1 on
+   page, measured above), **and `--rule` stays decorative.** James asked for an
+   opinion rather than a menu; the argument he accepted is that WCAG's 3:1
+   non-text minimum governs boundaries needed to IDENTIFY a component or its
+   state, and this one sits between rows their own labels already separate —
+   so raising it would repaint every card, list and divider in the app to fix
+   a line that carries no information. The policy is the durable half: it
+   stops the question returning the next time a divider genuinely means
+   something.
