@@ -105,6 +105,19 @@ export function createFrontDoorRoutes(deps: {
       bindingHash: a.bindingHash,
     };
   }
+  /** The session a follow-through adopted, shaped for the wire. Token-less on
+   *  purpose — see `attempts.adoptedSession`. `undefined` (a session that has
+   *  since been swept or cascaded away) becomes `null`, so the client sees
+   *  "no session" rather than a malformed one. */
+  async function adopted(sessionId: string): Promise<SignedIn | null> {
+    const owner = await attempts.adoptedSession(sessionId);
+    if (!owner) return null;
+    return {
+      outcome: "signed_in",
+      user: owner.user,
+      expiresAt: owner.expiresAt.toISOString(),
+    };
+  }
   async function view(a: Attempt): Promise<AuthStep> {
     const base = {
       attemptId: a.id,
@@ -127,11 +140,23 @@ export function createFrontDoorRoutes(deps: {
         // the confirmation has to name is the identity about to be attached,
         // which the attempt has held since its first exchange.
         profile: { email: a.verifiedEmail!, name: a.verifiedName! },
-        // `view()` READS an attempt; it never mints. A session reaches the
-        // client only through `result()`, which has one to deliver. `null`
-        // here is the truth for every link, and for any re-read of a
-        // follow-through after its session was already handed over.
-        session: null,
+        // A RE-READ HAS TO CARRY THE SESSION TOO, and shipping this as a flat
+        // `null` killed the whole flow on web. `result()` delivers the
+        // session once, at the mint; the web surface then bounces through a
+        // redirect to `/?authAttempt=<id>` and re-reads HERE, where `null`
+        // made the client throw `signin_failed` — and because the callback
+        // had already set the cookie, `me` resolved IN, `SignIn` never
+        // mounted, and the rower landed in the app with the provider
+        // silently unattached and no message anywhere. Exactly the outcome
+        // the callback's own comment says its branch exists to prevent.
+        //
+        // A LINK still gets `null`: it has no adopted session, and the
+        // required key is what makes that a statement rather than an
+        // omission.
+        session:
+          a.purpose === "signin" && a.originalSessionId
+            ? await adopted(a.originalSessionId)
+            : null,
       };
     if (a.stage === "delete_ready") return { ...base, outcome: "delete_ready" };
     if (

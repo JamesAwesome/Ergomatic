@@ -553,6 +553,100 @@ describe("supported auth producers through Express and signed tokens", () => {
     expect(rows.rows[0]!.appleSub).toBe("apple-second");
   });
 
+  // THE GATE THAT WAS MISSING, AND ITS ABSENCE KILLED THE WEB SURFACE. Both
+  // web "gates" for this flow fabricated the `session` field on the very
+  // endpoint whose real implementation returned `null` — RF24 exactly: every
+  // gate green, none able to fail on the one defect that mattered. This one
+  // drives the REAL web re-read, `GET /api/auth/web/attempts/:id`, which is
+  // served by `view()` and is where a web rower lands after the callback
+  // redirects them to `/?authAttempt=<id>`.
+  it("PR2 web: the re-read carries the adopted session, so finalize is reachable", async () => {
+    // An account holding Google only, created through the native door
+    // (quicker, and irrelevant to what this asserts).
+    const first = (
+      await request(app)
+        .post("/api/auth/native/attempts")
+        .send({ purpose: "signin", provider: "google" })
+    ).body;
+    await request(app)
+      .post(`/api/auth/native/attempts/${first.attemptId}/proof`)
+      .send({
+        bindingSecret: first.bindingSecret,
+        state: first.state,
+        idToken: await googleJwt(first.nonce, "web-reread"),
+      });
+    await request(app)
+      .post(`/api/auth/native/attempts/${first.attemptId}/confirm`)
+      .send({ bindingSecret: first.bindingSecret });
+
+    // Now the WEB door, with an Apple identity Ergomatic has not seen.
+    const begin = await request(app)
+      .post("/api/auth/web/attempts")
+      .send({ purpose: "signin", provider: "apple" });
+    let cookie = begin.headers["set-cookie"][0].split(";")[0];
+    const appleToken = await jwt(begin.body.nonce, "web.app", "apple-web-rr");
+    codes.set("apple-web-rr", appleToken);
+    const confirmRedirect = await request(app)
+      .post("/api/auth/apple/callback")
+      .set("Cookie", cookie)
+      .type("form")
+      .send({
+        state: begin.body.state,
+        code: "apple-web-rr",
+        id_token: appleToken,
+      });
+    expect(confirmRedirect.status).toBe(303);
+
+    // "I already have an account" — no session anywhere yet.
+    const followed = await request(app)
+      .post(`/api/auth/web/attempts/${begin.body.attemptId}/follow-through`)
+      .set("Cookie", cookie)
+      .send({});
+    expect(followed.body.outcome).toBe("authorize");
+    expect(followed.body.provider).toBe("google");
+
+    // The second round trip, through the REAL provider callback — which is
+    // what a browser does, and which has no `/proof` route.
+    // The code is exchanged through the provider fake, and the audience must
+    // be the WEB client id — this is the browser's surface, not the phone's.
+    codes.set(
+      "google-web-rr",
+      await googleJwt(followed.body.nonce, "web-reread", "google.web"),
+    );
+    const back = await request(app)
+      .get("/api/auth/google/callback")
+      .set("Cookie", cookie)
+      .query({ state: followed.body.state, code: "google-web-rr" });
+    expect(back.status).toBe(303);
+    // IT REDIRECTS BACK TO THE ATTEMPT, not to signed_in — the attempt is
+    // still alive and the confirmation has not been shown.
+    expect(back.headers.location).toContain(
+      `authAttempt=${begin.body.attemptId}`,
+    );
+    for (const set of back.headers["set-cookie"] ?? [])
+      if (set.startsWith("ergomatic_auth_attempt=")) cookie = set.split(";")[0];
+
+    // THE RE-READ. This is the request the browser makes on landing, and it
+    // is served by `view()`.
+    const reread = await request(app)
+      .get(`/api/auth/web/attempts/${begin.body.attemptId}`)
+      .set("Cookie", cookie);
+    expect(reread.status).toBe(200);
+    expect(reread.body.outcome).toBe("link_ready");
+    // THE SESSION SURVIVES IT. `null` here made the client throw
+    // `signin_failed` — and because the callback had already set the session
+    // cookie, `me` resolved IN, `SignIn` never mounted, and the rower landed
+    // in the app with the provider silently unattached and no message
+    // anywhere. Every other web "gate" for this flow fabricated this field.
+    expect(reread.body.session).not.toBeNull();
+    expect(reread.body.session.user.email).toBeTruthy();
+    // TOKEN-LESS ON PURPOSE: the browser holds the cookie, and a bearer in a
+    // JSON body is a credential this surface has never needed.
+    expect(reread.body.session.token).toBeUndefined();
+    // And the carried identity is still the one about to be attached.
+    expect(reread.body.profile.email).toBe("relay@privaterelay.appleid.com");
+  });
+
   // INVARIANT 1, GATED AT THE LAYER THAT CAN REACH IT (Task 4 Step 3). The
   // antagonist's finding was that a store-level test CANNOT express this:
   // `finalize`'s signature takes a session id, so forging it there proves

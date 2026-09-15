@@ -150,6 +150,12 @@ function AttachConfirm({
   view: Extract<AuthFlowController["view"], { kind: "attach_confirm" }>;
 }) {
   const target = providerName(view.targetProvider);
+  // BOTH CONTROLS GO INERT FOR THE REQUEST'S WHOLE LENGTH, the same guard
+  // `DeleteAccount` uses. Relying on this component unmounting when the view
+  // flips to `busy` is weaker: `confirmAttach` and `declineAttach` share a
+  // generation, so a second tap landing in the same tick would be guarded
+  // only by a render closure.
+  const busy = auth.view.kind === "busy" && auth.view.purpose === "signin";
   return (
     <main className="auth-flow-screen">
       <header className="auth-flow-header">
@@ -196,12 +202,14 @@ function AttachConfirm({
         <div className="auth-actions">
           <button
             className="button-l1"
+            disabled={busy}
             onClick={() => void auth.confirmAttach()}
           >
             Attach {target}
           </button>
           <button
             className="button-l2"
+            disabled={busy}
             onClick={() => void auth.declineAttach()}
           >
             Not now

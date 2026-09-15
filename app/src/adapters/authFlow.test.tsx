@@ -817,6 +817,13 @@ describe("useAuthFlow", () => {
   // or nowhere. Both drive the REAL resume path — `?authAttempt=` is exactly
   // how a web rower returning from their provider arrives — rather than a
   // seam added to production for a test's convenience.
+  // NO `token`, BECAUSE `view()` SENDS NONE. This fixture is served from
+  // `/api/auth/web/attempts/ft`, the web RE-READ endpoint, and the browser
+  // already holds the session cookie — so a token here would be a field
+  // production never sends, and asserting against it is RF24's exact shape:
+  // a gate that cannot fail on the one defect that matters. An earlier
+  // version of this fixture carried one, and the whole web follow-through
+  // was dead behind it.
   const session = {
     outcome: "signed_in",
     user: { id: "u1", email: "maya@test", name: "Maya Chen" },
@@ -903,9 +910,12 @@ describe("useAuthFlow", () => {
   it("PR2: a failed attach still lands a signed-in rower in the app", async () => {
     window.history.replaceState(null, "", "/?authAttempt=ft");
     const onSignedIn = vi.fn();
+    let finalizeAttempts = 0;
     seam.api.mockImplementation(async (path: string) => {
-      if (path === "/api/auth/web/attempts/ft/finalize")
+      if (path === "/api/auth/web/attempts/ft/finalize") {
+        finalizeAttempts += 1;
         return ok({ error: "signin_failed" }, 503);
+      }
       return resumeAs(readyStep("signin"))(path);
     });
     const { result } = renderHook(() => useAuthFlow(onSignedIn));
@@ -918,6 +928,11 @@ describe("useAuthFlow", () => {
     // sign-in worked, and what failed was the attach.
     expect(result.current.view).toStrictEqual({ kind: "idle" });
     expect(onSignedIn).toHaveBeenCalledOnce();
+    // THE END STATE ALONE CANNOT TELL A FAILED ATTACH FROM A SUCCESSFUL ONE —
+    // the success test asserts the same `idle` + one `onSignedIn`. Pin the
+    // attempt itself, so a mutation that stops `postJson` throwing is caught
+    // here rather than passing as "the rower ended up in the app".
+    expect(finalizeAttempts).toBe(1);
   });
 
   it("PR2: Not now leaves them signed in, with nothing attached", async () => {

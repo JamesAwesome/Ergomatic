@@ -185,7 +185,15 @@ export function createAttempts(
         "code" in error &&
         error.code === "23503" &&
         "constraint" in error &&
-        String(error.constraint) === "sessions_user_id_users_id_fk"
+        [
+          "sessions_user_id_users_id_fk",
+          // THE SAME RACE HAS A SIBLING (found at review). `finishSignin`
+          // runs `grant()` BEFORE `mintSession`, so an Apple sign-in whose
+          // account is deleted mid-transaction trips the grant's FK first,
+          // not the session's. Same cause, same right answer; leaving it out
+          // would have been this fix half-applied (RF34).
+          "apple_grants_user_id_users_id_fk",
+        ].includes(String(error.constraint))
       )
         throw new AuthFailure("account_changed");
       throw error;
@@ -420,6 +428,41 @@ export function createAttempts(
         ).rows[0];
         return { attempt: row, bindingSecret };
       });
+    },
+    /** WAVE A PR2: who owns an adopted session, for a RE-READ of a
+     *  follow-through.
+     *
+     *  `result()` delivers the session once, at the moment it is minted. The
+     *  WEB surface then bounces through a redirect and re-reads the attempt
+     *  with `GET /api/auth/web/attempts/:id`, which is served by `view()` —
+     *  and `view()` mints nothing. Without this the re-read returned
+     *  `session: null` and the client threw, so the whole follow-through was
+     *  dead on web while every native test passed.
+     *
+     *  NO TOKEN, and that is not an omission. The browser already holds the
+     *  session cookie `signed()` set on the callback; handing the token back
+     *  in a JSON body would put a bearer credential somewhere the web surface
+     *  has never needed one. Native never takes this path — it resumes
+     *  through `/proof`, which carries the token in its own response. */
+    async adoptedSession(
+      sessionId: string,
+    ): Promise<{ user: AuthUser; expiresAt: Date } | undefined> {
+      const row = (
+        await pool.query<{
+          id: string;
+          email: string;
+          name: string;
+          expiresAt: Date;
+        }>(
+          `SELECT users.id,users.email,users.name,sessions.expires_at AS "expiresAt" FROM sessions INNER JOIN users ON sessions.user_id=users.id WHERE sessions.id=$1 AND sessions.expires_at>now()`,
+          [sessionId],
+        )
+      ).rows[0];
+      if (!row) return undefined;
+      return {
+        user: { id: row.id, email: row.email, name: row.name },
+        expiresAt: row.expiresAt,
+      };
     },
     async read(
       id: string,

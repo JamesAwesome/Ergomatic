@@ -501,6 +501,13 @@ async function linkReady(
   if (context.native) {
     if (!step.session?.token) throw new AuthRequestError("signin_failed");
     const { storeToken } = await import("../native/session");
+    // BETWEEN THE IMPORT AND THE STORE, not only after. `finishSignedIn` has
+    // checked here since it was written, and for the same reason: an abandon
+    // or a fresh `startSignIn` landing while the dynamic import resolves
+    // would otherwise store a token this flow has disowned, leaving the app
+    // silently signed in as the follow-through account while the UI starts
+    // over (RF27).
+    if (context.generation.current !== generation) return;
     await storeToken(step.session.token);
     if (context.generation.current !== generation) return;
   }

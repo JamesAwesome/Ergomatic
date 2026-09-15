@@ -1168,6 +1168,20 @@ it lands the stranger on this same denial.
       anyone counted (five here, seven at the gate, six after PR2 deleted the
       dead-end screen that held one), which is why the test pins "strings NOT
       in the chosen form" at zero rather than pinning a total.
+- [ ] **A failed provider attach tells the rower nothing, ever.** PR2's
+      `confirmAttach` catch deliberately swallows the failure and lands the
+      rower in the app signed in — correct, because by then the sign-in HAS
+      worked and a sign-in error screen would lie about what failed. But the
+      attach failure is then surfaced on no surface at all, and a
+      `account_conflict` (that provider already belongs to another Ergomatic
+      account) will fail identically on every future sign-in with no message
+      ever produced. The code comment says it "belongs on the methods list",
+      which is a decide-later ruling rather than a row (RF29), so here it is.
+      **S** · dies 2026-11-15 · a row and not a fix now because the methods
+      list is the surface the account submenu relocates, so writing the
+      notice before that lands means writing it twice — and the only failure
+      that repeats deterministically is `account_conflict`, whose recovery
+      copy the sign-in screen already prints.
 - [ ] **`begin()`'s pre-sweep silently destroys an in-flight follow-through.**
       Measured by the DBA gate on the shipped schema (2026-09-15, PR #453):
       starting a link or a delete from a session whose provider attach has not

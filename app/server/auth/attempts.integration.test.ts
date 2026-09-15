@@ -1835,7 +1835,12 @@ describe("front-door transactions against Postgres", () => {
     });
 
     // --- Step 6: no edit expected. If this needs one, the migration is wrong.
-    it("attemptProvider resolves to the USUAL provider for a follow-through", async () => {
+    // RENAMED (RF4). This asserts the two COLUMNS, which is what it always
+    // did; `attemptProvider` is not exported and the title claimed a function
+    // works while the body proved a row exists. What actually exercises
+    // `attemptProvider` on this path is the route test that follows the
+    // authorize target back to the usual provider.
+    it("a follow-through row carries the usual provider beside the target", async () => {
       const id = await insert({
         purpose: "signin",
         stage: "reauth_authorize",

@@ -681,6 +681,9 @@ test("PR2: the post-proof confirmation renders both identities and both controls
           email: "9m3x7k2p1r@privaterelay.appleid.com",
           name: "Rower",
         },
+        // TOKEN-LESS, matching what `view()` actually returns on a web
+        // re-read — the browser holds the cookie. A fixture carrying a token
+        // here would be asserting against a field production never sends.
         session: {
           outcome: "signed_in",
           user: { id: "u1", email: "maya.chen@example.com", name: "Maya Chen" },
