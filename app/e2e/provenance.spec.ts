@@ -226,12 +226,26 @@ test("the table groups its columns, derived first, and drops the blanket PM5 cla
   // strip overflows ~30px at 390px, so with MEASURED first the two derived
   // columns and their own heading are what scrolls out of sight at rest —
   // the table would hide the disclosure it exists to make.
+  //
+  // SELECTED BY TEXT, NOT BY INDEX, and that is the whole difference. The
+  // first version took `headers.nth(0)` and `nth(1)` and asserted the first
+  // sat left of the second — true of ANY left-to-right table, whichever
+  // label is where. Against the mutant that swaps the groups it passed 3/3
+  // while the variables were named `derivedBox`/`measuredBox`, so it read as
+  // an identity check and was comparing DOM order with itself (RF21).
+  const derivedHead = block.locator(".machine-summary-groups th", {
+    hasText: /^DERIVED$/,
+  });
+  const measuredHead = block.locator(".machine-summary-groups th", {
+    hasText: /^MEASURED$/,
+  });
   const [derivedBox, measuredBox] = await Promise.all([
-    headers.nth(0).boundingBox(),
-    headers.nth(1).boundingBox(),
+    derivedHead.boundingBox(),
+    measuredHead.boundingBox(),
   ]);
   expect(derivedBox!.x).toBeLessThan(measuredBox!.x);
+  // and DERIVED is fully on screen at rest, which is the property that
+  // actually matters on a strip that overflows.
   expect(derivedBox!.x).toBeGreaterThanOrEqual(0);
-  // and it is fully on screen at rest, which is the property that matters
   expect(derivedBox!.x + derivedBox!.width).toBeLessThanOrEqual(390);
 });
