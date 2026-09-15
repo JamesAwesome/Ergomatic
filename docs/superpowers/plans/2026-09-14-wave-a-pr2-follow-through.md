@@ -86,6 +86,98 @@ what made the transfer plausible (RF16's second corollary). Replaced by NIST SP
 800-63C-4 §3.8.1 and by Sudhodanan & Paverd, *Pre-hijacked Accounts*, USENIX
 Security 2022 §6.2.2.
 
+## Revision 4, after the antagonist pass on revision 3 (2026-09-15)
+
+Revision 3 came back **NOT READY** on one gap, and it is a real one: the design
+has the attempt adopt a minted session, and **nothing in the wire union or in
+either transport can put that session in the client's hands while the attempt is
+still alive.** The antagonist's own verdict is that `finalize()` needs no edit —
+that still holds — but `finalize()` is reached through `requireUser`, and the
+rower has no session to present until the mint that the follow-through performs.
+Four independent confirmations, all read in the tree at `45e6843a`:
+
+- **`app/shared/auth.ts`** makes `SignedIn` and `link_ready` MUTUALLY EXCLUSIVE
+  members of `AuthStep`, and the `link_ready` member is
+  `(AttemptView & { outcome: "link_ready" })` — no session, and **no `profile`**,
+  which the post-proof confirmation also needs.
+- **`view()` (`frontDoorRoutes.ts:121`)** returns exactly
+  `{ ...base, outcome: "link_ready" }`. Only the `confirm` branch carries a
+  profile.
+- **`result()` (`frontDoorRoutes.ts:150-159`)** answers `signed()` **or**
+  `{outcome:"linked"}` **or** `view()`. Never a session beside an attempt.
+- **The web callback's attempt-surviving branch (`frontDoorRoutes.ts:~402`)**
+  sets the attempt cookie and redirects `?authAttempt=`; it never calls
+  `signed()`, so no `Set-Cookie` for the session is emitted on that path at all.
+- **The client discards the attempt on a session.** `finishSignedIn`
+  (`src/adapters/authFlow.ts:339`) sets `context.operation.current = null`, and
+  `acceptStep` returns immediately after calling it (`authFlow.ts:457-459`).
+
+**This is an editing pass, not a redesign.** The design's shape survives; what
+was missing is the transport that carries it. Revision 4 names the edits.
+
+### The fifth confirmation, which no gate had found: the client auto-finalizes
+
+`acceptStep`'s `link_ready` branch (`src/adapters/authFlow.ts:476-479`) calls
+`finalizeLink` **unconditionally, with no pause.** Today that is right: the only
+producer of `link_ready` is a link attempt started from You, where the rower
+already consented on the way in. For PR2 it is exactly wrong — a signin
+follow-through arriving at `link_ready` would attach the identity with no
+confirmation shown, **defeating James's confirm-after-the-proof ruling in the
+client while every server test stayed green.** The branch must be qualified by
+`step.purpose`, and that qualification is a Task 5 step with its own failing
+test.
+
+### The transport edits, named
+
+1. **`app/shared/auth.ts`, edit one — the `link_ready` member carries a
+   profile**, so the post-proof confirmation can name what is about to be
+   attached. It is the carried (target-provider) identity, not the one just
+   proven: the rower is confirming the Apple identity the attempt has held since
+   its first exchange.
+2. **`app/shared/auth.ts`, edit two — the `link_ready` member carries the
+   adopted session** beside the attempt. One declaration both sides compile
+   against, so a renamed field is a build error rather than a silently absent
+   one (RF33). The web surface's copy of it carries no token — `signed()`
+   strips it and sets the cookie (`frontDoorRoutes.ts:144-149`) — and native's
+   does, which is the existing asymmetry, not a new one.
+3. **`result()` gains the both-at-once case**, and the web callback's
+   attempt-surviving branch gains the session `Set-Cookie` it does not emit
+   today. Whichever shape these take, the test that decides them is the one in
+   Task 4 Step 1: a follow-through's response must leave the client able to call
+   `finalize` without a second sign-in.
+
+**None of the three is named in any revision-3 task.** They are added below.
+
+### Three corrections revision 3 carries, all measured
+
+- **The `consistent()` widening is ASYMMETRIC, and revision 3's wording is not.**
+  Revision 3 says "widen `consistent()`'s signup rule so a signin attempt may sit
+  at `reauth_authorize`, `reauth_exchanging` and `link_ready`". Read literally —
+  add those three stages to the `signup` array at `attempts.ts:77` — it
+  **refuses every link and every delete at the stage they start at**, because
+  the rule is `(purpose === "signin") !== signup` and `begin()` starts both at
+  `reauth_authorize` (`attempts.ts:351`:
+  `input.purpose === "signin" ? "authorize" : "reauth_authorize"`). The stages
+  are SHARED. The rule must admit a signin at the extended set **without**
+  refusing a link or a delete there.
+- **The `verified` clause must be PURPOSE-QUALIFIED for the same reason.**
+  `verified` is `["confirm","link_ready"].includes(stage)` (`attempts.ts:78`).
+  Extending it to `reauth_authorize`/`reauth_exchanging` unqualified would
+  require `verified_*` columns on a LINK attempt at its first stage, where they
+  are legitimately NULL. The carried identity must be required at those stages
+  **for a signin**, and not for a link or a delete.
+- **The session TTL is 60 days, not 30.** `SESSION_TTL_MS` is
+  `60 * 24 * 60 * 60 * 1000` (`app/server/auth/sessions.ts:7`). Revision 3's
+  DBA rollback bullet says "a minted session at its 30-day TTL"; corrected in
+  place. It matters only as the window over which a reverted migration leaves a
+  minted session live, and that window is twice what was written.
+- **`requireAccess` goes before the new `mintSession` call.** Both existing
+  mints are guarded — `attempts.ts:254` before `256`, and `728` before `729` —
+  so an unguarded one in the signin arm would be the only mint in the module
+  that skips the access policy, on the one path that reaches it without a
+  confirm-stage check. The email to check is the RESOLVED ACCOUNT's, which is
+  the account the session is being minted for.
+
 ## The design
 
 The second exchange's identity is **consumed, never stored**. That is what
@@ -153,7 +245,8 @@ is re-litigated from memory:
   (PRIMARY, from Drizzle's own migrator). A hand-written narrowing aborts while
   a widened row is live and succeeds after the 5-minute sweep. No
   `docs/RELEASING.md` floor row is owed. What a revert cannot undo: a minted
-  session at its 30-day TTL, and `users.apple_sub` if `finalize()` ran.
+  session at its **60-day** TTL (`app/server/auth/sessions.ts:7`; revision 3
+  said 30 and was wrong), and `users.apple_sub` if `finalize()` ran.
 - **No deadlock is available** between the follow-through and a concurrent
   delete, proven by held transactions in both interleaves with an RF21 control
   that DOES deadlock. But see the two rows below.
@@ -174,9 +267,15 @@ is re-litigated from memory:
 
 ### The three edits in `attempts.ts`
 
-1. **`consistent()` — THREE edits, not two.** Widen the signup rule so a signin
-   attempt may sit at `reauth_authorize`, `reauth_exchanging` and `link_ready`;
-   extend its `verified` clause to those stages; **and widen the separate
+1. **`consistent()` — THREE edits, not two, and the first two are
+   ASYMMETRIC (revision 4).** Admit a SIGNIN attempt at `reauth_authorize`,
+   `reauth_exchanging` and `link_ready` **without refusing a link or a delete
+   there** — the stages are shared, and `begin()` starts both of those at
+   `reauth_authorize` (`attempts.ts:351`), so adding the stages to the `signup`
+   array refuses every link and every delete at the stage they start at;
+   require the carried `verified_*` columns at those stages **for a signin
+   only**, since a link legitimately carries none at its first stage;
+   **and widen the separate
    `(stage.startsWith("target_") || stage === "link_ready") && purpose !== "link"`
    clause**, the one added to close RF34's mirror case. The DBA applied only the
    first edit to `consistent()` extracted verbatim and measured the result:
@@ -260,20 +359,37 @@ modify `app/server/db/schema.ts`; test
       Today all three throw `attempt_expired` from `consistent()`; that is the
       proof this task is needed, and it is the antagonist's own probe.
 - [ ] **Step 2** — run, confirm all three fail.
-- [ ] **Step 3** — widen `consistent()`'s signup rule. Expect `link_ready` to
-      STILL throw after this edit alone; that is measured, not a surprise.
+- [ ] **Step 2b (revision 4)** — failing test FIRST, before any widening: a
+      LINK attempt and a DELETE attempt at `reauth_authorize`, each with
+      `verified_*` NULL, read back today. They must STILL read after Task 1.
+      This is the guard on the asymmetry: the naive widening (adding three
+      stages to the `signup` array at `attempts.ts:77`) makes both of these go
+      red, because the rule is `(purpose === "signin") !== signup` and `begin()`
+      starts a link and a delete at `reauth_authorize` (`attempts.ts:351`).
+      Green now, and green at the end of the task, is the whole assertion.
+- [ ] **Step 3** — widen `consistent()`'s signup rule ASYMMETRICALLY: admit a
+      signin at the extended stage set without refusing a link or a delete
+      there. Re-run Step 2b. Expect `link_ready` to STILL throw after this edit
+      alone; that is measured, not a surprise.
 - [ ] **Step 3b** — widen the `link_ready && purpose !== "link"` clause, and
       re-run Step 1 expecting all three to read.
-- [ ] **Step 4** — failing test for the OTHER half: a signin attempt at
+- [ ] **Step 4** — failing test for the OTHER half: a SIGNIN attempt at
       `reauth_exchanging` with `verified_subject` NULL must be refused. Without
       extending the `verified` clause, the machine stops protecting the carried
-      identity at exactly the stages that carry it.
+      identity at exactly the stages that carry it. **The clause is
+      purpose-qualified (revision 4)** — Step 2b's link attempt at
+      `reauth_authorize` carries no `verified_*` and must keep reading.
 - [ ] **Step 5** — run, implement, re-run.
 - [ ] **Step 6** — assert `attemptProvider()` returns the USUAL provider for a
       follow-through row, with `existing_provider` set by the migration. No edit
       expected; if one is needed, the migration is wrong.
 - [ ] **Step 7** — mutation probe: revert the `verified` clause alone and
       confirm Step 4 goes red while Step 1 stays green. Record the failure.
+- [ ] **Step 7b (revision 4)** — second mutation probe, on the asymmetry: make
+      the widening symmetric (add the three stages to the `signup` array
+      outright) and confirm Step 2b goes red while Step 1 stays green. This is
+      the one mutation that separates a correct widening from the one revision
+      3's wording described.
 - [ ] **Step 8** — commit.
 
 ### Task 2: the follow-through transition
@@ -307,7 +423,15 @@ modify `app/server/db/schema.ts`; test
       `verified_subject` is STILL the Apple one.
 - [ ] **Step 2** — run, confirm it fails inside the existing branch's
       `original(tx, a.originalSessionId!, true)`.
-- [ ] **Step 3** — implement the signin arm ahead of that dereference.
+- [ ] **Step 3** — implement the signin arm ahead of that dereference,
+      **calling `requireAccess` on the RESOLVED ACCOUNT's email before
+      `mintSession` (revision 4)**. Both existing mints are guarded
+      (`attempts.ts:254` before `256`, `728` before `729`); an unguarded one
+      here would be the only mint in the module that skips the access policy.
+- [ ] **Step 3b (revision 4)** — failing test: the resolved account's email is
+      outside the access policy, and the follow-through is refused with
+      `access_denied` rather than minting. Then a mutation probe removing the
+      `requireAccess` call, confirming it goes red.
 - [ ] **Step 4** — failing test: the proven subject belongs to NO account. The
       rower must reach a stated outcome, not a thrown 500.
 - [ ] **Step 5** — run, implement, re-run.
@@ -322,11 +446,36 @@ modify `app/server/db/schema.ts`; test
 
 ### Task 4: the routes, and invariant 1's gate
 
-**Files:** modify `app/server/auth/frontDoorRoutes.ts`; test
+**Files:** modify `app/shared/auth.ts` and
+`app/server/auth/frontDoorRoutes.ts`; test
 `app/server/auth/frontDoorRoutes.integration.test.ts`.
+
+**Revision 4 added Steps 1b-1d. They are the antagonist's blocking finding:
+without them the rower reaches `link_ready` holding no session and cannot call
+`finalize` at all.**
 
 - [ ] **Step 1** — failing test: `POST .../attempts/:id/follow-through` on both
       surfaces, with NO session, returns an authorize target.
+- [ ] **Step 1b (revision 4)** — failing test on the WEB surface, the one that
+      decides the wire shape: drive the second callback to completion and
+      assert the response BOTH delivers the session (a session `Set-Cookie`,
+      which `frontDoorRoutes.ts:~402`'s attempt-surviving branch does not emit
+      today) AND leaves the attempt alive. Then assert the rower can call
+      `finalize` with only what that response gave them. **Assert the
+      consequence, not the field** — the field shape is whatever makes this
+      pass.
+- [ ] **Step 1c (revision 4)** — the same on NATIVE, where `signed()` returns
+      the token in the body rather than a cookie
+      (`frontDoorRoutes.ts:144-149`). The two surfaces' asymmetry is existing;
+      the test is what keeps it from becoming a third shape.
+- [ ] **Step 1d (revision 4)** — failing test: the `link_ready` view for a
+      SIGNIN attempt carries the profile of the CARRIED identity (the target
+      provider's, proven in the first exchange), pinned as an independent
+      literal. `view()`'s `link_ready` branch returns no profile at all today
+      (`frontDoorRoutes.ts:121`); only `confirm` does. Task 5 Step 3 renders it.
+      Implement Steps 1b-1d together: they are one edit to `AuthStep`'s
+      `link_ready` member in `app/shared/auth.ts`, plus `result()` and the web
+      callback branch.
 - [ ] **Step 2** — run, implement, re-run.
 - [ ] **Step 3** — **invariant 1's real gate, at the layer that can reach it**
       (the antagonist's finding 7): drive the second callback while the client
@@ -344,15 +493,26 @@ modify `app/server/db/schema.ts`; test
 
 ### Task 5: the client, and the copy
 
-**GATE 0 APPLIES AND BLOCKS THIS TASK.** The confirmation is user-visible copy
-and now sits after the proof, so the screen is new. James approves the rendered
-thing, at phone width, in both orientations, with every colour pairing computed,
-before Step 1.
+**GATE 0 HAS ALREADY RUN** — it blocks Task 0, not this task (see Gates). The
+confirmation is user-visible copy and now sits after the proof, so the screen is
+new; James approves the rendered thing, at phone width, in both orientations,
+with every colour pairing computed as a number, before ANY implementation task
+starts. If it has not run, stop here.
 
 - [ ] **Step 1** — failing test: `useUsualSignIn()` no longer calls
       `cancelActive`. Assert the CONSEQUENCE — the attempt survives and the view
       advances — never the absence of a call.
 - [ ] **Step 2** — run, implement, re-run.
+- [ ] **Step 2b (revision 4) — the client auto-finalizes today, and no gate
+      had found it.** `acceptStep`'s `link_ready` branch
+      (`src/adapters/authFlow.ts:476-479`) calls `finalizeLink`
+      UNCONDITIONALLY. A signin follow-through arriving at `link_ready` would
+      attach the identity with NO confirmation shown, defeating James's
+      confirm-after-the-proof ruling in the client while every server test
+      stayed green. Failing test first: a signin `link_ready` renders the
+      confirmation and performs NO attach; a LINK `link_ready` still finalizes
+      immediately, unchanged. Qualify the branch by `step.purpose`. Mutation
+      probe: drop the qualification and confirm the signin leg goes red.
 - [ ] **Step 3** — failing test: the post-proof confirmation names the provider
       and the carried relay address, from the attempt's `verifiedEmail`, pinned
       as an independent literal.
@@ -395,14 +555,49 @@ before Step 1.
       belongs in the record with its citation beside it.
 - [ ] **Step 8** — commit.
 
+### Task 7: the copy round riding this PR (revision 4)
+
+Four ROADMAP rows on the two screens PR2 already edits. They ride this PR at
+James's instruction (2026-09-15) and share its Gate 0. **Row 1 and row 3 are
+open QUESTIONS, not known fixes** — they go into Gate 0 as questions, and
+nothing is implemented until James rules.
+
+- [ ] **Step 1 — `Delete account` never says a provider re-auth is coming.**
+      James found it running the deletion twice for real. Disclosing it puts the
+      confirm screen's whole shape in question, so this is a Gate 0 item, not a
+      sentence. Present the screen, not the wording.
+- [ ] **Step 2 — the redundant link-success notice.** "Apple is now connected.
+      You can sign in either way." duplicates the row beneath it, which already
+      reads CONNECTED. The second sentence does work the row cannot; the first
+      is the duplication. Failing test on the rendered surface first.
+- [ ] **Step 3 — naming the "You" screen has no consistent treatment.** Five
+      user-facing strings, two quoted by #444 and three not, including
+      `Today.tsx`'s "You can type the other in on You" — pronoun and screen name
+      in one sentence, neither marked. **The treatment is the open question**,
+      not just the inconsistency; the quotes were James's own suggestion and he
+      flagged the grammar himself. Gate 0 decides the treatment, then one sweep
+      applies it to all five and a test pins the census count.
+- [ ] **Step 4 — the `--rule` hairline measures 1.47:1 on `--surface`.**
+      Pre-existing, decorative, outside WCAG's 3:1 non-text minimum. Recompute
+      the ratio as a number in the Gate 0 pack and let James decide whether a
+      decorative hairline is worth changing.
+- [ ] **Step 5** — tick the four rows, and commit.
+
 ---
 
 ## Gates
 
-- **Gate 0:** REQUIRED, blocks Task 5.
+- **Gate 0:** REQUIRED, and it runs **FIRST, before Task 0** — the PM moved
+  it there and the reason is that James's confirm-after-the-proof ruling is the
+  load-bearing input to the whole architecture. If the rendered screen sends the
+  confirmation back before the proof, Tasks 0-4 are partly wasted. RC-24 is the
+  precedent. It also covers the copy round below, which is why rolling those
+  rows in is grouping rather than scope creep: **one Gate 0 instead of four.**
 - **DBA:** REQUIRED at plan (Task 0 Step 5) and at PR. Revision 1 skipped it on
   a claim that turned out to be true about the schema and false about the work.
-- **Antagonist:** lens 1 has run (NOT READY, folded here). The design CHANGED
+- **Antagonist:** lens 1 has run TWICE (both NOT READY, both folded here).
+  **Revision 4 goes back to it for the TRANSPORT fix only** — Task 4 Steps
+  1b-1d and Task 5 Step 2b — not for the whole plan; the rest is vetted ground. The design CHANGED
   shape afterwards, and the route through was the antagonist's own INFERENCE
   which it did not build — so Task 3 Step 7 is the falsification test: if
   `finalize()` needs editing, the central claim is wrong and the plan comes back
