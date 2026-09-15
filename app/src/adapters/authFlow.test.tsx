@@ -922,6 +922,87 @@ describe("useAuthFlow", () => {
     expect(onSignedIn).toHaveBeenCalledOnce();
   });
 
+  // NATIVE, AND IT IS THE HALF THAT MATTERS. The web tests above left two
+  // things ungated, measured with mutations: deleting `storeToken` reddened
+  // nothing, and reverting `authorizeNative`'s call site to `finalizeLink` —
+  // the exact incomplete fix revision 4 prescribed — also reddened nothing,
+  // because nothing drove the native route. Native is the primary surface and
+  // `authorizeNative` RETURNS before `acceptStep` is reached, so a web-only
+  // suite cannot see either.
+  it("PR2 native: the follow-through stores the session and confirms before attaching", async () => {
+    seam.native = true;
+    let finalized = false;
+    seam.googleProof.mockResolvedValue({ idToken: "google-id-token" });
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/options") return ok(options);
+      if (path === "/api/auth/native/attempts")
+        return ok({
+          outcome: "confirm",
+          attemptId: "nft",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          profile: { email: "relay@apple.test", name: "Rower" },
+          bindingSecret: "binding",
+        });
+      if (path === "/api/auth/native/attempts/nft/follow-through")
+        return ok({
+          outcome: "authorize",
+          attemptId: "nft",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          provider: "google",
+          stage: "reauth",
+          nonce: "n2",
+          state: "s2",
+        });
+      if (path === "/api/auth/native/attempts/nft/proof")
+        return ok({
+          outcome: "link_ready",
+          attemptId: "nft",
+          purpose: "signin",
+          targetProvider: "apple",
+          expiresAt: "soon",
+          profile: { email: "relay@apple.test", name: "Rower" },
+          session: {
+            outcome: "signed_in",
+            user: { id: "u1", email: "maya@test", name: "Maya Chen" },
+            expiresAt: "later",
+            token: "adopted-token",
+          },
+        });
+      if (path === "/api/auth/native/attempts/nft/finalize") {
+        finalized = true;
+        return ok({ outcome: "linked" });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    const onSignedIn = vi.fn();
+    const { result } = renderHook(() => useAuthFlow(onSignedIn));
+    await waitFor(() => expect(result.current.options.state).toBe("ready"));
+    await act(async () => result.current.startSignIn("apple"));
+    await waitFor(() => expect(result.current.view.kind).toBe("confirm"));
+
+    await act(async () => result.current.useUsualSignIn());
+    await waitFor(() =>
+      expect(result.current.view.kind).toBe("attach_confirm"),
+    );
+    // THE TOKEN IS STORED BEFORE ANYTHING ELSE. `finalize` sits behind
+    // `requireUser`; without this the phone would answer 401 on a flow that
+    // had already succeeded on the server.
+    expect(seam.storeToken).toHaveBeenCalledWith("adopted-token");
+    // AND NOTHING WAS ATTACHED YET, on the surface where the missed call
+    // site would have attached silently.
+    expect(finalized).toBe(false);
+    expect(onSignedIn).not.toHaveBeenCalled();
+
+    await act(async () => result.current.confirmAttach());
+    expect(finalized).toBe(true);
+    expect(result.current.view).toStrictEqual({ kind: "idle" });
+    expect(onSignedIn).toHaveBeenCalledOnce();
+  });
+
   it("PR2: a failed follow-through leaves the rower a way forward", async () => {
     window.history.replaceState(null, "", "/?authAttempt=usual-fail");
     seam.api.mockImplementation(async (path: string) => {
