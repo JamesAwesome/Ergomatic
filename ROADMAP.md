@@ -1701,6 +1701,31 @@ while we are in here.
       further down; filed at the PM gate on #255 rather than left in a PR
       comment (recurring failure 14). CI runs the projects separately and
       has stayed green throughout. **S**
+- [ ] **The burst-handoff tests race their own timeout, so a failure there
+      cannot say what failed.** The four ~2.3s tests in
+      `app/src/workout/WorkoutDetail.postReleaseCommit.test.tsx` each wait out
+      `BURST_HANDOFF_HOLD_MS` (2000ms) on the real wall clock, and each sets
+      its `waitFor` budget to `BURST_HANDOFF_HOLD_MS + 3000` = **5000ms,
+      exactly equal to vitest's `testTimeout`**. The two clocks are tied, so
+      under any slowdown the TEST timeout can win the race and report a bare
+      `Test timed out in 5000ms` with no assertion detail — the same
+      uninformative signature the `Releases.test.tsx` hunt spent two days
+      reading, on a different file. **No sighting yet**; found by ranking
+      every client test by duration while chasing that flake, where these
+      four are the top four at ~2.3s against a 541ms runner-up. Their time is
+      a deliberate sleep, not CPU, so they are a DIFFERENT class from the
+      quadratic cost fixed in #452 and a cap would not touch them.
+      **What would fix it now:** give those `waitFor` calls a budget strictly
+      below `testTimeout`, or raise `testTimeout` for that file alone, so a
+      failure names the assertion that never settled. **Not doing it here
+      because** it is a different file and a different mechanism from the one
+      #452 was opened for, it has no sighting behind it, and that file's own
+      comments say fake timers are unusable in this stack — so changing a
+      timing constant there needs its own reading rather than riding a
+      news-screen test fix. James ruled KEEP at #452's hand-back,
+      2026-09-15. **S** · dies 2026-10-15 · a latent timeout race in another
+      file with no sighting yet; folding it into a news-screen fix would put
+      two unrelated risk models in one review
 - [ ] **Settle the mutation-testing gate, one way or the other.**
       `docs/TESTING.md` explicitly demoted the full `pnpm mutate` run from an
       unrun phase gate to an on-demand probe; its only baseline is still
