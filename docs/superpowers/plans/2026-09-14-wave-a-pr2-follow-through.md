@@ -524,13 +524,22 @@ modify `app/server/db/schema.ts`; test
       expected; if one is needed, the migration is wrong.
 - [ ] **Step 7** — mutation probe: revert the `verified` clause alone and
       confirm Step 4 goes red while Step 1 stays green. Record the failure.
-- [ ] **Step 7b (revision 4)** — second mutation probe, on the asymmetry: make
-      the widening symmetric (add the three stages to the `signup` array
-      outright) and confirm Step 2b goes red while Step 1 stays green. This is
-      the one mutation that separates a correct widening from the one revision
-      3's wording described. **Record WHICH of Step 2b's five cells went red**
-      — with revision 4's two-cell fixture set the probe would have missed
-      three of them and still read as a passing proof (RF21).
+- [x] **Step 7b — DONE 2026-09-15, and the measured blast radius is bigger
+      than this plan claimed.** Three probes, each biting precisely:
+      reverting the `verified` clause to stage-only reds exactly ONE test (the
+      carried-identity refusal); dropping `link_ready` from the signin-allowed
+      set reds exactly ONE (the adopted-session read); and **making the
+      widening SYMMETRIC — the naive form — reds THIRTY-FIVE.**
+      **The correction that matters:** this plan said the naive widening
+      "refuses five rows". Five CELLS is right, and the consequence is the
+      whole link flow — the 35 include `links Google to Apple and retains
+      existing-provider refresh grant`, `rechecks original-account access at
+      link finalization`, `links Apple relay identity by the saved account
+      email` and the claim/lock-order tests. So the honest statement is that
+      the existing suite would have caught this on its own; the two guard
+      tests are still worth having because they name the invariant and fail
+      fast, but "no gate could have seen it" would be false and is not
+      claimed.
 - [ ] **Step 8** — commit.
 
 ### Task 2: the follow-through transition

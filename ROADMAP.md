@@ -1489,7 +1489,9 @@ while we are in here.
       standing between that and eleven hours of nobody reading it. Twice in
       fifteen minutes on the same afternoon.
       So (b) is now: four sightings, two sourced whole-run re-runs, and a
-      mechanism.
+      mechanism — and with (d) below, the family has its first LOCAL
+      occurrence, which is what makes "starved scheduler" rather than
+      "uncapped pool" the shape worth instrumenting.
       **THE OPEN QUESTION, scheduled before the order (Phase OD's rule),
       and it took one read to find:** `vitest.config.ts:11` is
       `maxWorkers: isCI() ? undefined : workerCap(…, 4)`. The cap that
@@ -1518,6 +1520,31 @@ while we are in here.
       measured against a baseline we cannot see is guessing twice.
       **Deliberately NOT changed in #434.** Capping CI workers is a cost
       nobody has measured (RF30) and would slow every run.
+      **(d) THE FIRST LOCAL SIGHTING, 2026-09-15, and it is evidence FOR the
+      runner hypothesis rather than against it.** During Wave A PR2's Task 1,
+      `attempts.integration.test.ts`'s neighbour
+      `"refuses a contradiction — manual with a deviceName — with a 400
+      naming the field, and persists nothing"` failed once in a full
+      `--project integration` run and passed on the next TWO runs of the
+      identical command and tree. Different test and different project from
+      (b), same shape.
+      **Why it matters more than a fifth tally mark:** every prior sighting
+      was in CI, where the hypothesis is an UNCAPPED worker pool
+      (`vitest.config.ts:11` makes the cap CI-inert). This one ran with
+      `ERGOMATIC_TEST_WORKERS=2` on a laptop the same session had just
+      measured at **58 MB of free pages, 3.1 GB inactive, Docker's VM at
+      1.1 GB RSS**, with a background task KILLED for low memory minutes
+      earlier. So the common factor across CI and local is not the worker
+      COUNT, which differed by an order of magnitude — it is a starved
+      scheduler. **That narrows the instrument this row already owes:**
+      printing `os.availableParallelism()` and vitest's resolved worker
+      count is still step one, but memory pressure at the moment of failure
+      belongs beside them, or the local half of this evidence stays
+      unexplainable.
+      **RF40 check, stated because it is the trap here:** this was NOT a
+      signal death. Exit was a normal vitest failure with a `Test Files`
+      summary and no `Allocation failed` on stderr, so it is a test result
+      and re-running it was legitimate.
       (c) A third, on the SAME release run: `pnpm e2e` returned `553 passed`
       with exit 1, and the two immediately following full runs both returned
       `554 passed`. **Which test failed was not captured** — the tail showed
