@@ -21,7 +21,7 @@ function AppContent() {
   //     which means no `<Routes>` is mounted while the session read is in
   //     flight;
   //   - `AppRoutes.tsx`'s root route, `<Route path="/" element={<Navigate
-  //     to="/today" replace />} />` (line 170 at this commit), the only
+  //     to="/today" replace />} />`, the only
   //     thing that writes `/today` WHEN THE URL IS `/`. (Not the only
   //     writer of `/today` at all — `AppRoutes` alone has four, and a dozen
   //     screens navigate there. `path="/"` outranks `path="*"`, so at `/`
@@ -67,9 +67,13 @@ function AppContent() {
   // runs, with this guard and without), so the trace is the motivation and
   // the two writers above are the reason.
   //
-  // The destination is held, not dropped: this effect re-runs when
-  // `me.state` changes, and the ref is only consumed on a run that
-  // actually navigates.
+  // The destination is not lost while the tree is unmounted: this effect
+  // re-runs when `me.state` changes, and a held destination is still there
+  // when it does. (The ref is consumed on EVERY signed-in run, navigating or
+  // not — the assignment sits above the navigate guard — so it records "this
+  // effect has seen this destination", not "this effect acted on it". An
+  // earlier version of this sentence claimed the narrower thing and was
+  // wrong.)
   //
   // IT COVERS `out` TOO SINCE WAVE A PR2, AND ITS OWN COMMENT ASKED FOR THAT.
   // This gated on `loading` alone, under a note saying to widen it "the day a
@@ -81,9 +85,10 @@ function AppContent() {
   // withheld until they choose. `SignIn` draws that screen itself, so the URL
   // move bought nothing and wrote a path under a tree that owns no routes.
   //
-  // Nothing is lost by holding it. The destination is held, not dropped, and
-  // by the time `me` resolves IN the flow has reached `attached`, whose
-  // destination is `/` — the landing James ruled.
+  // Nothing is lost by not navigating there: `SignIn` draws every screen a
+  // signed-out destination names, and the destination itself is still
+  // current when `me` resolves IN — see the next paragraph, which is the
+  // half this one originally got wrong.
   //
   // AND `out` FORGETS, WHICH IS NOT THE SAME AS CONSUMING. Three cases have
   // to hold at once, and only this form holds all three:

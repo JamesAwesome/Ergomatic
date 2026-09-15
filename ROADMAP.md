@@ -1181,7 +1181,7 @@ it lands the stranger on this same denial.
       only by location, and argued in a comment. PR #453's verify round keyed
       the predicate on the carried identities instead, so the shadow is gone
       by construction rather than by argument. What remains is the ambiguity
-      itself. `authFlow.ts:928` reads the same defaulted purpose a second time
+      itself. `authFlow.ts:930` reads the same defaulted purpose a second time
       (`step.outcome === "signed_in" ? returned.purpose : step.purpose`); it
       looks unreachable for a link or delete return, since those attempt reads
       never answer `signed_in` — INFERENCE, not run, and the reason this row
