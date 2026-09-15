@@ -277,6 +277,22 @@ cal/hr. The eyebrow names the monitor for all of it. **Agrees when** the
 label says whose arithmetic each column is, or the columns are split so one
 eyebrow is true of what it covers.
 
+**[SHARPENED 2026-09-14, building Gate 0B's board 1.] The table is six data
+columns and two of them are ours**, which `summaryModel.ts:204-210` states in
+its own words: "`watts`/`calPerHour` are the LOGBOOK's arithmetic off the
+step's own seconds/metres/calories (§3.1); `calories`/`drag`/`restMeters` are
+the machine's own." `hr` is the machine's per-split reading. So under one
+eyebrow reading `PM5 · PER INTERVAL`:
+
+| column | whose arithmetic |
+| --- | --- |
+| HR | the monitor's (0x0038 per-interval) |
+| **WATTS** | **ours** (`logbookWatts`) |
+| CAL | the monitor's |
+| **CAL / HOUR** | **ours** (`logbookCalPerHour`) |
+| DRAG | the monitor's |
+| REST m | the monitor's |
+
 ### M2 — AVG HR is derived from the trace
 
 The tile is our time-weighted mean over working strokes; the HR column
@@ -286,6 +302,34 @@ beneath it is the monitor's own 0x0038 per-interval reading, measured
 same source the column does" arm is option C and was rejected at a Gate 0 on
 2026-09-07** (§1.1) — reopening it needs James, and it would make PR 1
 TRIAD, because a number a rower has already saved would render differently.
+
+### M1b — two of the six TILES change whose arithmetic they are, per row (NEW)
+
+**[FOUND 2026-09-14 building Gate 0B's board 1, and it changes what board 1
+can propose.]** `MachineTierBlock`'s six tiles are unlabelled (§1.4), and
+labelling them is not simply a matter of writing six labels, because **two of
+them are not a fixed source at all:**
+
+| tile | whose arithmetic | fixed? |
+| --- | --- | --- |
+| AVG WATTS | ours (`logbookWatts`) | yes |
+| CALORIES | the monitor's | yes |
+| CAL / HOUR | ours (`logbookCalPerHour`) | yes |
+| **RATE** | **the monitor's own `avgStrokeRate` IF the piece finished; OUR time-weighted mean over the splits if it did not** | **NO — switches on `endedBy`** |
+| DRAG | the monitor's | yes |
+| **AVG HR** | **the monitor's `avgHeartRateBpm` if present; OURS from the trace otherwise** — and no capture we hold carries one, so in practice always ours | **NO — switches on data presence** |
+
+(PRIMARY — `logbookDerived.ts:38-53`'s `sessionStrokeRate`, whose first line
+is `if (input.finished) return input.avgStrokeRate;`, and
+`storedSummary.ts:816`'s `ms?.avgHeartRateBpm ?? deriveAverageHeartRate(...)`.)
+
+**The design consequence, which board 1 must carry:** a STATIC per-tile
+provenance label is false for RATE on some rows and false for AVG HR on
+others. Three ways out, and the board shows them rather than assuming one —
+compute the label per row from the same predicate the value came from; group
+the tiles so one honest eyebrow covers each group; or remove the conditional
+so the tile has one source always. The third changes a number a rower has
+already saved, which makes it TRIAD and PR 4's, not PR 1's.
 
 ### M3 — the chart's axis is a quantity with no name
 
@@ -462,7 +506,11 @@ provenance vocabulary verbatim or states a deviation.
 
 **0B's boards:**
 
-1. The post-workout summary / log detail: tiles + eyebrow + table (M1, M2).
+1. The post-workout summary / log detail: tiles + eyebrow + table (M1, M1b,
+   M2) — and because two tiles switch source per row (M1b), the board draws
+   the SAME screen twice, once for a finished piece and once for a
+   terminated one, so a static label's falsehood is visible rather than
+   argued.
 2. The trace chart: **three candidates**, five equal rests drawn under each,
    **and the free row's frozen 104 s (M9)**, which every one of them must be
    shown against because it is invisible to all three and to today's axis.
