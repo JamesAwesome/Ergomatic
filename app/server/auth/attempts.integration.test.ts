@@ -475,6 +475,18 @@ describe("front-door transactions against Postgres", () => {
     const running = restricted.confirm(
       await restricted.read(b.attempt.id, b.bindingSecret, "native"),
     );
+    // A HANDLER BEFORE THE POLLING LOOP, NOT AFTER IT. `running` is left in
+    // flight for up to a second below while we watch for the lock; if it
+    // rejects inside that window — which it does whenever the insert does
+    // not block — the rejection is unhandled for a turn, and Node reports it
+    // at the process level. Vitest then fails the JOB with
+    // `Tests <n> passed | Errors 1 error`, which reads as a red run with no
+    // red test: seen once on this branch at `d2409c09`, from
+    // `attempts.ts:145`'s `access_denied`. This changes nothing the test
+    // asserts — `running` still rejects, and the assertion below still reads
+    // it — it only means the same conditions now surface as the honest
+    // failure of `expect(waiting)` instead of a confusing job-level error.
+    void running.catch(() => {});
     let waiting = false;
     for (let i = 0; i < 100; i++) {
       const rows = await pool.query<{ waiting: boolean }>(

@@ -1168,25 +1168,28 @@ it lands the stranger on this same denial.
       anyone counted (five here, seven at the gate, six after PR2 deleted the
       dead-end screen that held one), which is why the test pins "strings NOT
       in the chosen form" at zero rather than pinning a total.
-- [ ] **The attempt-surviving redirects drop their purpose, and one route now
-      shadows its own fallback because of it.** `/?authAttempt=<id>` carries no
-      `authPurpose` (the failure and cancel redirects do), so
+- [ ] **The attempt-surviving redirects drop their purpose, so a link or
+      delete return is indistinguishable from a sign-in.** `/?authAttempt=<id>`
+      carries no `authPurpose` (the failure and cancel redirects do), so
       `consumeReturnParams()` defaults it to `"signin"` and a signed-in rower
-      returning from a LINK or DELETE briefly holds a `busy`/`signin` view —
-      which `ownsAttachScreen` matches. **Unreachable today**, and only by
-      location: that redirect lands at `/`, `destinationFor(busy)` is `null`,
-      so nothing routes them onto the auth surface during the window. RF18's
-      shape exactly. What it costs if a redirect ever moves is a BLANK ROUTE:
-      the predicate shadows `<Navigate to="/you">` and `AttachConfirm` draws
-      nothing without a remembered payload.
-      **The fix was tried and backed out in PR #453**, deliberately: adding
-      `authPurpose` to both redirects changes a contract four integration
-      tests pin by exact location, two of them about stale-callback safety,
-      and that is not a change to make late in a PR that has already had three
-      review rounds — to close a case nobody can reach. **S**
+      returning from a LINK or DELETE briefly holds a `busy`/`signin` view
+      that belongs to neither flow. RF18's shape exactly: an invariant held up
+      by the current call graph rather than by the data.
+      **The one consumer this had already bitten is FIXED, not deferred.**
+      `ownsAttachScreen` used to match that view, shadowing
+      `<Navigate to="/you">` with a screen that had nothing to draw — safe
+      only by location, and argued in a comment. PR #453's verify round keyed
+      the predicate on the carried identities instead, so the shadow is gone
+      by construction rather than by argument. What remains is the ambiguity
+      itself, with no consumer relying on it today.
+      **The root fix was tried and backed out in PR #453**, deliberately:
+      adding `authPurpose` to both redirects changes a contract four
+      integration tests pin by exact location, two of them about
+      stale-callback safety, and that is not a change to make late in a PR
+      that has already had three review rounds. **S**
       · dies 2026-11-15 · a row and not a fix now because it is a redirect
-      contract change with unaudited consumers, and the case it closes needs a
-      future redirect move to become reachable at all.
+      contract change with unaudited consumers, and with the attach predicate
+      no longer keyed on purpose, nothing downstream is currently wrong.
 - [ ] **A failed provider attach tells the rower nothing, ever.** PR2's
       `confirmAttach` catch deliberately swallows the failure and lands the
       rower in the app signed in — correct, because by then the sign-in HAS
