@@ -323,13 +323,32 @@ them are not a fixed source at all:**
 is `if (input.finished) return input.avgStrokeRate;`, and
 `storedSummary.ts:816`'s `ms?.avgHeartRateBpm ?? deriveAverageHeartRate(...)`.)
 
-**The design consequence, which board 1 must carry:** a STATIC per-tile
-provenance label is false for RATE on some rows and false for AVG HR on
-others. Three ways out, and the board shows them rather than assuming one —
-compute the label per row from the same predicate the value came from; group
-the tiles so one honest eyebrow covers each group; or remove the conditional
-so the tile has one source always. The third changes a number a rower has
-already saved, which makes it TRIAD and PR 4's, not PR 1's.
+**[SHARPENED] Neither conditional is an accident, and one has a photographed
+receipt — so "remove the conditional" is NOT on the table for RATE.**
+`pm5-interface-notes.md` §27.6: **"0x0039's Average Stroke Rate reads exactly
+DOUBLE on a terminate"**, with the monitor's own View Detail screen siding
+against the wire (46 on 0x0039, 23 on 0x0038, **23 photographed on the PM5**),
+and a second terminate capture showing the same 2×. Its stated operational
+rule is "never display 0x0039's average stroke rate for a terminated piece."
+**The RATE tile switches source because the monitor lies by exactly 2× on one
+arm.** (PRIMARY.)
+
+The two conditionals are therefore different in KIND, and a board that treats
+them alike gets the design wrong:
+
+- **RATE switches because the monitor is WRONG** on terminated pieces. Ours is
+  the better number there, and the switch protects the rower.
+- **AVG HR falls back because the monitor sends NOTHING** — not because it is
+  wrong. It is a gap-filler, and `derivedHeartRate.ts` records how narrow the
+  evidence for "always empty" really is (two belted recordings, one walk).
+
+**So the design question is narrower and harder than labelling six tiles: can
+one label be true of a tile whose source switches for a documented reason?**
+Three ways out, and the board shows them rather than assuming one — compute
+the label per row from the same predicate the value came from; group the tiles
+so one honest eyebrow covers each group; or say the switch out loud on the
+rows where it happens. **Removing the conditional is ruled out for RATE by
+§27.6** and for AVG HR would mean showing a dash where a real number exists.
 
 ### M3 — the chart's axis is a quantity with no name
 
