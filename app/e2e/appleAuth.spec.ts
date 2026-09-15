@@ -656,7 +656,14 @@ test("a delete return that outruns the session read still reaches the confirm sc
 test("PR2: the post-proof confirmation renders both identities and both controls at phone width", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  // 360, NOT 390, AND THE DIFFERENCE IS THE WHOLE GATE. Measured against this
+  // stack: at 390 the relay address is 211px in a 211px box and fits, so an
+  // anti-clipping assertion there can never go red — it passed with the fix
+  // deliberately removed. At 360 the same address is 208px in a 181px box and
+  // the shared ellipsis takes it. 360 is an ordinary Android width and the
+  // narrowest common phone; asserting at 390 was measuring the case that
+  // cannot fail (RF21).
+  await page.setViewportSize({ width: 360, height: 800 });
   await enableFrontDoor(page);
   await page.route("**/api/me", (route) =>
     route.fulfill({ status: 401, json: { error: "unauthenticated" } }),
@@ -690,9 +697,11 @@ test("PR2: the post-proof confirmation renders both identities and both controls
   ).toBeVisible();
 
   // THE RELAY ADDRESS IN FULL. The shared `.auth-identity-email` rule
-  // ellipsises; on a 390px frame that cut this at "…appleid…", losing the
-  // half that says it IS a relay. Assert the rendered width is not clipped
-  // rather than that the text node exists — jsdom would pass either way.
+  // ellipsises, which would cut this at "…appleid…" and lose the half that
+  // says it IS a relay. Assert the rendered width is not clipped rather than
+  // that the text node exists — jsdom resolves no layout, so it would pass
+  // either way. Probed: removing `.auth-identity-email-full` from
+  // `SignIn.tsx` reds this line here, and did NOT at 390px.
   const relay = page.getByText("9m3x7k2p1r@privaterelay.appleid.com");
   await expect(relay).toBeVisible();
   const clipped = await relay.evaluate(
@@ -710,7 +719,7 @@ test("PR2: the post-proof confirmation renders both identities and both controls
     await expect(button).toBeVisible();
     const box = await button.boundingBox();
     if (!box) throw new Error(`${name} has no box`);
-    expect(box.y + box.height).toBeLessThanOrEqual(844);
+    expect(box.y + box.height).toBeLessThanOrEqual(800);
     expect(box.height).toBeGreaterThanOrEqual(44);
   }
 });

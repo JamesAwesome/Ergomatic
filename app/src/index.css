@@ -290,20 +290,6 @@ main {
   line-height: 1.1;
 }
 
-/* WAVE A PR2, the attach confirmation. THE RELAY ADDRESS MUST BE READABLE IN
-   FULL: the spec's global constraint is that the confirmation "names the
-   provider AND the relay address", and the shared ellipsis above cuts a
-   private-relay address at "…appleid…" on a 390px frame — the half that says
-   it IS a relay is exactly the half that goes. Break at the `@` rather than
-   anywhere, so the domain stays one readable token. */
-.auth-identity-email-full {
-  overflow: visible;
-  overflow-wrap: break-word;
-  line-height: 1.35;
-  text-overflow: clip;
-  white-space: normal;
-}
-
 .auth-field-label {
   margin: 0 2px 6px;
   color: var(--ink-3);
@@ -344,6 +330,28 @@ main {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* WAVE A PR2, the attach confirmation. THE RELAY ADDRESS MUST BE READABLE IN
+   FULL: the spec's constraint is that the confirmation "names the provider AND
+   the relay address", and the shared ellipsis above cuts it at "…appleid…" —
+   the half that says it IS a relay is exactly the half that goes.
+
+   MEASURED, because the width matters: at 390px the address is 211px in a
+   211px box and fits, so nothing is wrong there. At 360px — an ordinary
+   Android width — it is 208px in a 181px box and the ellipsis takes it.
+
+   AND THIS RULE MUST SIT *AFTER* `.auth-identity-email`, WHICH IS WHY THIS
+   COMMENT SAYS SO. Both are (0,1,0), so the later one wins. The first version
+   of this block was written ABOVE that rule and was silently inert — the
+   element still clipped, and only the browser leg could see it, because
+   Vitest imports CSS as "" and jsdom resolves no cascade (RF37). */
+.auth-identity-email-full {
+  overflow: visible;
+  overflow-wrap: break-word;
+  line-height: 1.35;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .auth-explain {
