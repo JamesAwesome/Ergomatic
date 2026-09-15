@@ -3350,23 +3350,29 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
-- **`deploy.sh` has no pre-flight check for a stale `.git/HEAD.lock`, so one
-  turns every future deploy into a silent rollback.** First sighting
-  2026-09-14, run `34907509845` (merge `a847148b`): `git checkout --force`
-  could not move HEAD, the `ERR` trap rolled back to `PREV`, every container
+- **`deploy.sh` treats a git lock collision as an unhealthy build, so a
+  momentary one silently costs a deploy.** First sighting 2026-09-14, run
+  `34907509845` (merge `a847148b`): `git checkout --force` could not take
+  `.git/HEAD.lock`, the `ERR` trap rolled back to `PREV`, every container
   came up healthy and the job exited 1 — prod served the previous commit
-  while main looked merged and green. The rollback behaved correctly; the
+  while main looked merged and green. The lock was **transient** (absent on
+  the host minutes later), so a re-run was the entire recovery; recovery is
+  documented in `docs/deploy.md`. The rollback behaved correctly. The
   problem is that nothing distinguishes "the new build is unhealthy" from
   "git could not check it out", and the second is not fixed by rolling back.
-  Recovery is documented in `docs/deploy.md`. What would fix it now: fail
-  FAST and distinctly before `up` — test for `.git/HEAD.lock` and
-  `.git/index.lock` and `exit 4` with a message naming the file, so the log
-  says what is wrong instead of burying it above 160 lines of healthy
-  containers. Not done here because `scripts/deploy.sh` is only exercised on
-  the real host (`deploy.test.sh` covers its argument guards), so a change to
-  it wants a deploy to verify against rather than riding a docs PR.
-  **S** · dies 2026-10-14 · one sighting, recovery is documented and takes
-  one `rm`; the code fix wants a real deploy to verify against
+  What would fix it now: **retry the checkout** (a few seconds' backoff)
+  rather than a pre-flight lock check, which cannot help against a race —
+  it would fail faster and still not deploy — plus a distinct exit code so
+  the log says what went wrong instead of burying it above 160 lines of
+  healthy containers. **What held the lock is not established**; the
+  leading candidate is the background `git gc --auto` that the preceding
+  `git fetch --prune` can spawn (INFERENCE — settle it on the host with
+  `git config --get gc.auto` and `ls -l ~/Ergomatic/.git/gc.log`). Not done
+  here because `scripts/deploy.sh` is only exercised on the real host
+  (`deploy.test.sh` covers its argument guards), so a change to it wants a
+  deploy to verify against rather than riding a docs PR.
+  **S** · dies 2026-10-14 · one sighting, recovery is a re-run; the code fix
+  wants a real deploy to verify against and a named culprit first
 
 - **One unidentified `client`/`unit` test failure, seen once on 2026-09-14 and
   not reproduced in nine runs since.** A full
