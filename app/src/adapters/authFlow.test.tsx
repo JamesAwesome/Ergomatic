@@ -1233,7 +1233,10 @@ describe("useAuthFlow", () => {
 
   it.each([
     ["confirm", "/"],
-    ["usual", "/"],
+    // `attach_confirm` replaces `usual` here. Both render on the sign-in
+    // screen, which is why both route to "/" — but `usual` was the dead end
+    // and this is the confirmation that replaced it.
+    ["attach_confirm", "/"],
     ["link_confirm", "/you/sign-in-methods"],
     ["link_authorize", "/you/sign-in-methods"],
     ["linked", "/you"],
@@ -1244,8 +1247,13 @@ describe("useAuthFlow", () => {
     const view = (
       kind === "confirm"
         ? { kind, targetProvider: "apple", profile: { email: "", name: "" } }
-        : kind === "usual"
-          ? { kind, provider: "apple" }
+        : kind === "attach_confirm"
+          ? {
+              kind,
+              targetProvider: "apple",
+              carried: { email: "", name: "" },
+              account: { id: "u1", email: "", name: "" },
+            }
           : kind === "link_confirm" || kind === "linked"
             ? { kind, targetProvider: "apple" }
             : kind === "link_authorize"

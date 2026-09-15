@@ -250,32 +250,6 @@ function EmailNeeded({ auth }: { auth: AuthFlowController }) {
   );
 }
 
-function UsualSignIn({
-  auth,
-  provider,
-}: {
-  auth: AuthFlowController;
-  provider: "apple" | "google";
-}) {
-  const add = provider === "apple" ? "Google" : "Apple";
-  return (
-    <main className="signin">
-      <h1>Sign in to your account</h1>
-      <p className="auth-intro">
-        Use your usual sign-in. Then open You → Sign-in methods to add {add}.
-        Your workouts stay with the account you already have.
-      </p>
-      <AuthProviderButton
-        provider={provider}
-        onClick={() => void auth.startSignIn(provider)}
-      />
-      <button className="auth-back" onClick={auth.reset}>
-        ← ALL SIGN-IN OPTIONS
-      </button>
-    </main>
-  );
-}
-
 function LegacySignIn({
   denied,
   failed,
@@ -332,9 +306,6 @@ export default function SignIn({
     }
     if (auth.view.kind === "attach_confirm") {
       return <AttachConfirm auth={auth} view={auth.view} />;
-    }
-    if (auth.view.kind === "usual") {
-      return <UsualSignIn auth={auth} provider={auth.view.provider} />;
     }
     if (
       auth.view.kind === "error" &&

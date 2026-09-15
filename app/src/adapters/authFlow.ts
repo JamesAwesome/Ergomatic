@@ -35,7 +35,6 @@ export type AuthFlowView =
       targetProvider: AuthProvider;
       profile: { email: string; name: string };
     }
-  | { kind: "usual"; provider: AuthProvider }
   | { kind: "link_confirm"; targetProvider: AuthProvider }
   | {
       kind: "link_authorize";
@@ -214,7 +213,9 @@ export function destinationFor(
   // transition, which replaces the whole tree (App.tsx).
   if (
     view.kind === "confirm" ||
-    view.kind === "usual" ||
+    // The post-proof confirmation renders on the sign-in screen, because the
+    // rower is still there — `onSignedIn` is withheld until they choose.
+    view.kind === "attach_confirm" ||
     (view.kind === "cancelled" && view.purpose === "signin") ||
     (view.kind === "error" && view.purpose === "signin")
   ) {

@@ -781,10 +781,15 @@ as open questions and came back decided.
       two `SignInMethods.tsx` ones #444 shipped as quoted**, so those change
       too; #444's answer is superseded rather than extended.
       **Re-measure the census at implementation time rather than trusting any
-      number written here** — it moved once already, from the row's five to
-      the Gate 0 pack's seven. At the time of the gate: two quoted
-      (`you/SignInMethods.tsx:128`, `:130`), four unquoted (`SignIn.tsx:40`,
-      `:101`, `:173`, `today/Today.tsx:1479`), one already in the chosen form
+      number written here** — it has now moved TWICE: the row said five, the
+      Gate 0 pack measured seven, and Task 5 DELETED one of the seven.
+      `SignIn.tsx:173` ("Then open You → Sign-in methods to add {provider}")
+      lived in `UsualSignIn`, the dead-end screen this PR removed, so the live
+      count is SIX. **That this number has moved every time anyone counted is
+      the argument for the test pinning "strings NOT in the chosen form" at
+      zero rather than pinning a total.** As it stands: two quoted
+      (`you/SignInMethods.tsx:128`, `:130`), three unquoted (`SignIn.tsx:53`,
+      `:114`, `today/Today.tsx:1479`), one already in the chosen form
       (`log/Concept2SendBlock.tsx:226`), plus three UNDATED News strings across TWO
       article bodies (`news/content/bodies/yourFirstRow.tsx:28` and `:36`,
       `baselines.tsx:63`) which Phase JC's ruling makes rendering surfaces.
