@@ -519,7 +519,7 @@ export function createAttempts(
           // this would be the only path that puts a session in a rower's
           // hands without consulting the access policy.
           requireAccess(user.email);
-          const { sessionId } = await mintSession(tx, user);
+          const { sessionId, signedIn } = await mintSession(tx, user);
           // ONE STATEMENT AGAIN. `auth_attempts_session_check`'s signin arm
           // requires `original_session_id` NOT NULL at `link_ready` and NULL
           // at `reauth_exchanging`, so the stage and the session must cross
@@ -540,7 +540,12 @@ export function createAttempts(
           ).rows[0];
           if (!row) throw new AuthFailure("attempt_expired");
           consistent(row);
-          return { attempt: row };
+          // BOTH, and that is the point. `AttemptResult` already carried the
+          // two fields; nothing had ever returned them together, and the
+          // transport treated them as mutually exclusive. The rower needs
+          // the session to reach `finalize` while the attempt is still
+          // alive — that is the whole transport gap.
+          return { attempt: row, signedIn };
         }
         if (a.stage === "reauth_exchanging") {
           const session = await original(tx, a.originalSessionId!, true);

@@ -118,7 +118,21 @@ export function createFrontDoorRoutes(deps: {
         outcome: "confirm",
         profile: { email: a.verifiedEmail!, name: a.verifiedName! },
       };
-    if (a.stage === "link_ready") return { ...base, outcome: "link_ready" };
+    if (a.stage === "link_ready")
+      return {
+        ...base,
+        outcome: "link_ready",
+        // THE CARRIED IDENTITY, not the one just consumed. The second
+        // exchange's subject resolved the account and was discarded; what
+        // the confirmation has to name is the identity about to be attached,
+        // which the attempt has held since its first exchange.
+        profile: { email: a.verifiedEmail!, name: a.verifiedName! },
+        // `view()` READS an attempt; it never mints. A session reaches the
+        // client only through `result()`, which has one to deliver. `null`
+        // here is the truth for every link, and for any re-read of a
+        // follow-through after its session was already handed over.
+        session: null,
+      };
     if (a.stage === "delete_ready") return { ...base, outcome: "delete_ready" };
     if (
       !["authorize", "reauth_authorize", "target_authorize"].includes(a.stage)
@@ -148,6 +162,16 @@ export function createFrontDoorRoutes(deps: {
     return projection;
   }
   async function result(res: Response, r: AttemptResult, surface: Surface) {
+    // BOTH AT ONCE — the follow-through's shape, and it has to come FIRST.
+    // Ordered after the `r.signedIn` branch below, that branch would win and
+    // return a bare `signed_in`, ABANDONING the live attempt: the rower would
+    // be signed in with the Apple identity still unattached and no way back
+    // to the confirmation. The attempt cookie is deliberately NOT cleared
+    // here; it is what addresses the attempt through `finalize`.
+    if (r.signedIn && r.attempt) {
+      const session = signed(res, r.signedIn, surface);
+      return { ...(await view(r.attempt)), session };
+    }
     if (r.signedIn) {
       if (surface === "web") res.append("Set-Cookie", cookie("", 0));
       return signed(res, r.signedIn, surface);
@@ -233,7 +257,16 @@ export function createFrontDoorRoutes(deps: {
         }
       },
     );
-    for (const action of ["confirm", "finalize", "delete", "cancel"] as const)
+    // NO `requireUser` ON `follow-through`, and that is the whole point: the
+    // rower has no session when they tap "I already have an account". It is
+    // authorised by the attempt's own binding secret, like `confirm`.
+    for (const action of [
+      "confirm",
+      "follow-through",
+      "finalize",
+      "delete",
+      "cancel",
+    ] as const)
       router.post(
         `${prefix}/:id/${action}`,
         ...(action === "finalize" || action === "delete"
@@ -267,7 +300,9 @@ export function createFrontDoorRoutes(deps: {
             const r =
               action === "confirm"
                 ? await attempts.confirm(a)
-                : await attempts.finalize(a, req.sessionId!);
+                : action === "follow-through"
+                  ? await attempts.followThrough(a)
+                  : await attempts.finalize(a, req.sessionId!);
             res.json(await result(res, r, surface));
           } catch (error) {
             failure(res, error);
@@ -397,7 +432,21 @@ export function createFrontDoorRoutes(deps: {
       owned = claimed;
       const verified = await providers.verify(context(claimed), proof);
       const r = await attempts.accept(claimed, verified);
-      if (r.signedIn) {
+      // THE FOLLOW-THROUGH RETURNS BOTH, AND IT IS TESTED FIRST FOR THE SAME
+      // REASON `result()` orders it first: the `r.signedIn` branch below
+      // would otherwise win, clear the attempt cookie and redirect to
+      // `signed_in`, ABANDONING a live attempt whose whole purpose is the
+      // confirmation the rower has not been shown yet. They would land in
+      // the app signed in, with Apple silently unattached.
+      //
+      // The session cookie IS set here — this branch never emitted one
+      // before, because until PR2 an attempt that survived the callback
+      // could not be holding a session.
+      if (r.signedIn && r.attempt) {
+        signed(res, r.signedIn, "web");
+        res.append("Set-Cookie", cookie(`${a.id}.${binding.bindingSecret}`));
+        res.redirect(303, `/?authAttempt=${a.id}`);
+      } else if (r.signedIn) {
         signed(res, r.signedIn, "web");
         res.append("Set-Cookie", cookie("", 0));
         res.redirect(303, "/?authResult=signed_in");

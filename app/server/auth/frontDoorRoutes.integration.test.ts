@@ -467,6 +467,198 @@ describe("supported auth producers through Express and signed tokens", () => {
       .setProtectedHeader({ alg: "RS256", kid: "test" })
       .sign(rsa.privateKey);
   }
+  // WAVE A PR2, Task 4. THE WHOLE FLOW WITH NO SESSION ANYWHERE IN THE
+  // CLIENT'S HANDS UNTIL THE FOLLOW-THROUGH MINTS ONE. This is the test the
+  // antagonist's blocking finding was about: the store can adopt a session
+  // onto a live attempt, but the rower cannot call `finalize` unless the
+  // TRANSPORT hands them that session while the attempt is still alive.
+  // Asserts the CONSEQUENCE — finalize succeeds with only what the
+  // follow-through response gave the client — never the presence of a field.
+  it("PR2: a rower with a Google account signs in with Apple and attaches it in ONE trip", async () => {
+    // An account that holds Google only.
+    const first = (
+      await request(app)
+        .post("/api/auth/native/attempts")
+        .send({ purpose: "signin", provider: "google" })
+    ).body;
+    await request(app)
+      .post(`/api/auth/native/attempts/${first.attemptId}/proof`)
+      .send({
+        bindingSecret: first.bindingSecret,
+        state: first.state,
+        idToken: await googleJwt(first.nonce),
+      });
+    await request(app)
+      .post(`/api/auth/native/attempts/${first.attemptId}/confirm`)
+      .send({ bindingSecret: first.bindingSecret });
+
+    // Now the rower signs in with APPLE, which Ergomatic has never seen.
+    const b = (
+      await request(app)
+        .post("/api/auth/native/attempts")
+        .send({ purpose: "signin", provider: "apple" })
+    ).body;
+    const appleToken = await jwt(b.nonce, "native.app", "apple-second");
+    codes.set("pr2-code", appleToken);
+    const confirmStep = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/proof`)
+      .send({
+        bindingSecret: b.bindingSecret,
+        state: b.state,
+        idToken: appleToken,
+        authorizationCode: "pr2-code",
+      });
+    expect(confirmStep.body.outcome).toBe("confirm");
+
+    // "I already have an account" — NO session is sent, because the rower
+    // does not have one.
+    const followed = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/follow-through`)
+      .send({ bindingSecret: b.bindingSecret });
+    expect(followed.status).toBe(200);
+    expect(followed.body.outcome).toBe("authorize");
+    expect(followed.body.provider).toBe("google");
+
+    // The second authorization, again with no session.
+    const ready = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/proof`)
+      .send({
+        bindingSecret: b.bindingSecret,
+        state: followed.body.state,
+        idToken: await googleJwt(followed.body.nonce),
+      });
+    expect(ready.body.outcome).toBe("link_ready");
+    // THE TRANSPORT CARRIES THE SESSION BESIDE THE LIVE ATTEMPT. On native
+    // that means a token in the body; the attempt is still addressable.
+    expect(ready.body.session?.token).toBeTruthy();
+    // AND IT CARRIES THE PROFILE THE CONFIRMATION HAS TO NAME — the CARRIED
+    // Apple identity, not the Google one just consumed.
+    expect(ready.body.profile.email).toBe("relay@privaterelay.appleid.com");
+
+    // The rower confirms. `finalize` is reachable with ONLY what the
+    // follow-through response handed the client.
+    const linked = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/finalize`)
+      .auth(ready.body.session.token, { type: "bearer" })
+      .send({ bindingSecret: b.bindingSecret });
+    expect(linked.status).toBe(200);
+    expect(linked.body.outcome).toBe("linked");
+
+    // ONE account, both subjects.
+    const rows = await pool.query<{ appleSub: string; googleSub: string }>(
+      'SELECT apple_sub AS "appleSub", google_sub AS "googleSub" FROM users',
+    );
+    expect(rows.rowCount).toBe(1);
+    expect(rows.rows[0]!.googleSub).toBe("google");
+    expect(rows.rows[0]!.appleSub).toBe("apple-second");
+  });
+
+  // INVARIANT 1, GATED AT THE LAYER THAT CAN REACH IT (Task 4 Step 3). The
+  // antagonist's finding was that a store-level test CANNOT express this:
+  // `finalize`'s signature takes a session id, so forging it there proves
+  // nothing about which session the ROUTE would have chosen. This drives the
+  // real HTTP path holding a live bearer token for a DIFFERENT account and
+  // asserts the attach follows the PROVEN subject, never the credential the
+  // client happens to be carrying.
+  it("PR2: a live token for another account cannot redirect the attach", async () => {
+    // Account A — the stranger, whose token we will present.
+    const strangerStart = (
+      await request(app)
+        .post("/api/auth/native/attempts")
+        .send({ purpose: "signin", provider: "google" })
+    ).body;
+    await request(app)
+      .post(`/api/auth/native/attempts/${strangerStart.attemptId}/proof`)
+      .send({
+        bindingSecret: strangerStart.bindingSecret,
+        state: strangerStart.state,
+        idToken: await googleJwt(strangerStart.nonce, "stranger-google"),
+      });
+    const stranger = (
+      await request(app)
+        .post(`/api/auth/native/attempts/${strangerStart.attemptId}/confirm`)
+        .send({ bindingSecret: strangerStart.bindingSecret })
+    ).body;
+    expect(stranger.token).toBeTruthy();
+
+    // Account B — the rower's own, holding a different Google subject.
+    const ownStart = (
+      await request(app)
+        .post("/api/auth/native/attempts")
+        .send({ purpose: "signin", provider: "google" })
+    ).body;
+    await request(app)
+      .post(`/api/auth/native/attempts/${ownStart.attemptId}/proof`)
+      .send({
+        bindingSecret: ownStart.bindingSecret,
+        state: ownStart.state,
+        idToken: await googleJwt(ownStart.nonce, "owner-google"),
+      });
+    await request(app)
+      .post(`/api/auth/native/attempts/${ownStart.attemptId}/confirm`)
+      .send({ bindingSecret: ownStart.bindingSecret });
+
+    // The rower signs in with an unseen Apple identity and follows through
+    // by proving account B's Google.
+    const b = (
+      await request(app)
+        .post("/api/auth/native/attempts")
+        .send({ purpose: "signin", provider: "apple" })
+    ).body;
+    const appleToken = await jwt(b.nonce, "native.app", "apple-inv1");
+    codes.set("inv1", appleToken);
+    await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/proof`)
+      .send({
+        bindingSecret: b.bindingSecret,
+        state: b.state,
+        idToken: appleToken,
+        authorizationCode: "inv1",
+      });
+    const followed = (
+      await request(app)
+        .post(`/api/auth/native/attempts/${b.attemptId}/follow-through`)
+        .send({ bindingSecret: b.bindingSecret })
+    ).body;
+    const ready = (
+      await request(app)
+        .post(`/api/auth/native/attempts/${b.attemptId}/proof`)
+        .send({
+          bindingSecret: b.bindingSecret,
+          state: followed.state,
+          idToken: await googleJwt(followed.nonce, "owner-google"),
+        })
+    ).body;
+    expect(ready.outcome).toBe("link_ready");
+
+    // NOW THE ATTACK: finalize with the STRANGER's live token.
+    const hijack = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/finalize`)
+      .auth(stranger.token, { type: "bearer" })
+      .send({ bindingSecret: b.bindingSecret });
+    expect(hijack.status).toBe(409);
+    expect(hijack.body.error).toBe("account_changed");
+
+    // The stranger's account did NOT gain the Apple subject.
+    const strangerRow = await pool.query<{ appleSub: string | null }>(
+      'SELECT apple_sub AS "appleSub" FROM users WHERE google_sub=$1',
+      ["stranger-google"],
+    );
+    expect(strangerRow.rows[0]!.appleSub).toBeNull();
+
+    // And the rower's own session still completes the attach.
+    const linked = await request(app)
+      .post(`/api/auth/native/attempts/${b.attemptId}/finalize`)
+      .auth(ready.session.token, { type: "bearer" })
+      .send({ bindingSecret: b.bindingSecret });
+    expect(linked.body.outcome).toBe("linked");
+    const ownRow = await pool.query<{ appleSub: string | null }>(
+      'SELECT apple_sub AS "appleSub" FROM users WHERE google_sub=$1',
+      ["owner-google"],
+    );
+    expect(ownRow.rows[0]!.appleSub).toBe("apple-inv1");
+  });
+
   it("native Google signup, fresh Google proof and Apple target finalize one account", async () => {
     const start = (
       await request(app)

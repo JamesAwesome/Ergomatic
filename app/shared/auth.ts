@@ -29,7 +29,28 @@ export type AuthStep =
       outcome: "confirm";
       profile: { email: string; name: string };
     })
-  | (AttemptView & { outcome: "link_ready" })
+  // `link_ready` CARRIES TWO THINGS A LINK NEVER NEEDED (Wave A PR2).
+  //
+  // `profile` is the CARRIED identity — the one the attempt has held since
+  // its first exchange — because the post-proof confirmation has to name
+  // what is about to be attached. A link started from You never needed it:
+  // the rower was looking at their own methods list when they began.
+  //
+  // `session` is the session a signin follow-through ADOPTED, delivered
+  // beside the still-live attempt so the rower can reach `finalize` without
+  // signing in a second time. It is a REQUIRED KEY WITH `null` MEANING
+  // ABSENT, not an optional field: a link's `link_ready` legitimately has
+  // none, and `null` makes the producer say so rather than forget.
+  //
+  // NOTE WHAT THIS TYPE DOES NOT GIVE YOU. Widening it breaks the server
+  // (measured: `frontDoorRoutes.ts` TS2322) and produces ZERO errors in the
+  // client project, so it binds the writer and not the reader. The client's
+  // obligation to STORE this session is covered by tests, not by types.
+  | (AttemptView & {
+      outcome: "link_ready";
+      profile: { email: string; name: string };
+      session: SignedIn | null;
+    })
   | (AttemptView & { outcome: "delete_ready" })
   | SignedIn;
 export type NativeBegin = AuthStep & { bindingSecret: string };
