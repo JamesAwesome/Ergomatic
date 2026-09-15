@@ -1722,6 +1722,63 @@ describe("front-door transactions against Postgres", () => {
       ).rejects.toThrow(/account_changed/);
     });
 
+    // TASK 0 STEP 6, which shipped unimplemented and the DBA gate measured.
+    // A delete landing between the resolve and the `INSERT INTO sessions`
+    // violates `sessions_user_id_users_id_fk`; before the mapping that
+    // propagated as a raw DatabaseError and `failure()` rendered it 500,
+    // where 409 `account_changed` is right.
+    //
+    // HELD TRANSACTION, NEVER A RACE (RF21). The deleter holds a lock on the
+    // user row so the adopt blocks deterministically, then commits the
+    // delete; the adopter unblocks into the FK violation.
+    it("the second exchange answers account_changed when the account is deleted under it", async () => {
+      const { user, exchanging } = await followedThrough("g-vanish");
+      const holder = await pool.connect();
+      try {
+        await holder.query("BEGIN");
+        await holder.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
+          user.id,
+        ]);
+        const pending = store.accept(exchanging, usual("g-vanish"));
+        // Let the adopt reach the lock before the row disappears.
+        await new Promise((r) => setTimeout(r, 250));
+        await holder.query("DELETE FROM users WHERE id=$1", [user.id]);
+        await holder.query("COMMIT");
+        await expect(pending).rejects.toThrow(/account_changed/);
+      } finally {
+        holder.release();
+      }
+      // AND NOTHING WAS LEFT BEHIND. The rollback takes the just-minted
+      // session with it.
+      const sessions = await pool.query(
+        "SELECT id FROM sessions WHERE user_id=$1",
+        [user.id],
+      );
+      expect(sessions.rowCount).toBe(0);
+    });
+
+    // THE CONTROL. Same hold, same timing, deleter releases WITHOUT deleting
+    // — so the refusal above is a measurement of the delete rather than a
+    // probe that throws whatever happens.
+    it("the same held lock WITHOUT a delete lets the adopt through", async () => {
+      const { user, exchanging } = await followedThrough("g-survive");
+      const holder = await pool.connect();
+      try {
+        await holder.query("BEGIN");
+        await holder.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
+          user.id,
+        ]);
+        const pending = store.accept(exchanging, usual("g-survive"));
+        await new Promise((r) => setTimeout(r, 250));
+        await holder.query("COMMIT");
+        const after = (await pending).attempt!;
+        expect(after.stage).toBe("link_ready");
+        expect(after.originalSessionId).not.toBeNull();
+      } finally {
+        holder.release();
+      }
+    });
+
     // --- THE FALSIFICATION TEST (Task 3 Steps 6-7). The design's central
     //     claim is that `finalize()` attaches UNCHANGED once the attempt has
     //     EARNED the session its `currentSessionId === originalSessionId`

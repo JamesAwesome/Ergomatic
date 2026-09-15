@@ -166,6 +166,28 @@ export function createAttempts(
         )
       )
         throw new AuthFailure("account_conflict");
+      // THE ACCOUNT WENT AWAY MID-TRANSACTION, AND UNTIL NOW THAT WAS A 500.
+      // Wave A PR2's follow-through mints a session for an account it just
+      // resolved; a delete landing between the resolve and the
+      // `INSERT INTO sessions` violates the FK. Measured through the real
+      // `accept()` against a HELD delete transaction: `code=23503`,
+      // `constraint=sessions_user_id_users_id_fk`, not an `AuthFailure`, so
+      // `failure()` rendered `signin_failed` = 500 where 409
+      // `account_changed` is exactly right — it is the same fact `original()`
+      // reports when it finds no session.
+      //
+      // Constraint-named, not bare 23503: any OTHER foreign key failing here
+      // would be a bug in this module rather than a race with a rower, and
+      // swallowing it as `account_changed` would hide it.
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "23503" &&
+        "constraint" in error &&
+        String(error.constraint) === "sessions_user_id_users_id_fk"
+      )
+        throw new AuthFailure("account_changed");
       throw error;
     } finally {
       tx.release();

@@ -368,7 +368,10 @@ is re-litigated from memory:
 - **Lock:** `AccessExclusiveLock`, and it blocks READS as well as writes. The
   whole DROP+ADD transaction is **0.564 ms** at realistic size; the ADD scans at
   ~49 µs per 1,000 rows. `auth_attempts` is CAPPED at ~512 signin rows plus one
-  per live session — **160 kB** at that ceiling — so no migration cost on this
+  per live session — **240 kB** at that ceiling (the plan's original 160 kB was
+  measured BEFORE signin rows could hold sessions; re-measured at the PR gate
+  with `link_session_unique` up from 16 kB to 32 kB, heap 104, `state_unique`
+  48, `pkey` 32, `expires_at_idx` 16) — so no migration cost on this
   table can matter. It was judged on correctness.
 - **The ADD validates against live rows and aborts the whole Drizzle
   transaction if any fails.** One row of each of the 11 states the shipped
@@ -476,9 +479,15 @@ modify `app/server/db/schema.ts`; test
       (23505 on `auth_attempts_link_session_unique`, 23503 on the sessions FK).
 - [ ] **Step 5** — DBA gate at PLAN: DONE 2026-09-14, verdict FAIL, folded
       above. What remains for the PR gate is the migration as actually written.
-- [ ] **Step 6** — map 23503 on `sessions_user_id_users_id_fk` to
-      `account_changed` in `transaction()`'s catch, with a held-transaction test
-      rather than a race: a concurrent account delete is the only producer.
+- [x] **Step 6 — DONE, but only after the DBA gate caught it MISSING.** It
+      shipped unimplemented and the PR gate measured the consequence through
+      the real `accept()` against a held delete: `code=23503`,
+      `constraint=sessions_user_id_users_id_fk`, not an `AuthFailure`, so
+      `failure()` rendered 500 where 409 `account_changed` is right. Now
+      mapped by CONSTRAINT NAME, not bare 23503 — any other FK failing there
+      would be a bug in this module, and swallowing it would hide one. Test is
+      a held transaction with a control that releases WITHOUT deleting, and the
+      mutation neutering the arm reds it.
 - [ ] **Step 7** — commit.
 
 ### Task 1: the machine admits the state

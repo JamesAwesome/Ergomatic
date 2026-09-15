@@ -1168,6 +1168,22 @@ it lands the stranger on this same denial.
       anyone counted (five here, seven at the gate, six after PR2 deleted the
       dead-end screen that held one), which is why the test pins "strings NOT
       in the chosen form" at zero rather than pinning a total.
+- [ ] **`begin()`'s pre-sweep silently destroys an in-flight follow-through.**
+      Measured by the DBA gate on the shipped schema (2026-09-15, PR #453):
+      starting a link or a delete from a session whose provider attach has not
+      been confirmed runs
+      `DELETE FROM auth_attempts WHERE original_session_id=$1` and leaves **0
+      attempts and 1 session** — the rower stays signed in and the pending
+      attach vanishes with no error anywhere. The sweep exists to dodge
+      `auth_attempts_link_session_unique`, and narrowing it by purpose
+      reinstates exactly the 23505 it was written to avoid (reproduced).
+      Three sibling paths were measured and are benign: signout and the
+      session-expiry sweep both cascade to a consistent signed-out state, and
+      the attempt-expiry sweep is the designed abandon.
+      **S** · dies 2026-11-15 · a row and not a fix now because the fix is a
+      PRODUCT ruling — whether a rower should be offered "Add a provider" or
+      "Delete account" at all while an attach is pending — not a SQL change,
+      and the race needs a rower doing both at once on one device.
 - [ ] **Move the account block behind an ACCOUNT door on You. GATE 0 IS DONE
       AND JAMES RULED OPTION A (2026-09-15); nothing has built it.** He asked
       for it in as many words: _"I want to also move the account settings into
