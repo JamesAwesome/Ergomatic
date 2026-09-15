@@ -1041,15 +1041,27 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
         // would put one navigation between them and rowing.
         setView({ kind: "idle" });
         onSignedInRef.current();
-      } catch (error) {
-        setFailure(
-          context,
-          attachGeneration,
-          "signin",
-          error,
-          active.step.targetProvider,
-          true,
-        );
+      } catch {
+        // THE ROWER IS ALREADY SIGNED IN, SO A SIGN-IN ERROR SCREEN LIES
+        // ABOUT WHAT FAILED. By this point the session is minted and, on
+        // native, its token is already stored — `linkReady` did both before
+        // this screen rendered. Routing to `setFailure(… "signin" …)` left an
+        // authenticated rower reading "That sign-in didn't work", which is
+        // false twice over: the sign-in worked, and the thing that failed was
+        // the attach.
+        //
+        // The end state of a failed attach is the same as "Not now": signed
+        // in, nothing attached, and the offer returns on the next sign-in
+        // with the unattached provider. So it lands the same way. The failure
+        // is NOT surfaced, deliberately — it is not actionable here, and the
+        // rower can retry from You whenever they like. If that ever needs to
+        // be visible it belongs on the methods list, next to the thing that
+        // did not happen.
+        if (generation.current !== attachGeneration) return;
+        operation.current = null;
+        setTargetAuthorizationBusy(false);
+        setView({ kind: "idle" });
+        onSignedInRef.current();
       }
     },
     /** "Not now". NOT a cancel — the rower is already signed in, and that

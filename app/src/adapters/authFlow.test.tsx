@@ -900,6 +900,26 @@ describe("useAuthFlow", () => {
     expect(onSignedIn).toHaveBeenCalledOnce();
   });
 
+  it("PR2: a failed attach still lands a signed-in rower in the app", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=ft");
+    const onSignedIn = vi.fn();
+    seam.api.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/web/attempts/ft/finalize")
+        return ok({ error: "signin_failed" }, 503);
+      return resumeAs(readyStep("signin"))(path);
+    });
+    const { result } = renderHook(() => useAuthFlow(onSignedIn));
+    await waitFor(() =>
+      expect(result.current.view.kind).toBe("attach_confirm"),
+    );
+    await act(async () => result.current.confirmAttach());
+    // By this point the session was minted and the rower is authenticated.
+    // A "That sign-in didn't work" screen would be false twice over — the
+    // sign-in worked, and what failed was the attach.
+    expect(result.current.view).toStrictEqual({ kind: "idle" });
+    expect(onSignedIn).toHaveBeenCalledOnce();
+  });
+
   it("PR2: Not now leaves them signed in, with nothing attached", async () => {
     window.history.replaceState(null, "", "/?authAttempt=ft");
     const onSignedIn = vi.fn();

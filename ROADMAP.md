@@ -1071,12 +1071,24 @@ it lands the stranger on this same denial.
       cross-surface subject continuity proven on real hardware" — that closed
       2026-09-13, when Apple sign-in on Kaito landed on the existing account
       (`apple_grants` 1→2, `users` stayed at 6).
-      **NOT READY as of 2026-09-14, and not next.** Plan revision 3 lives at
-      `docs/superpowers/plans/2026-09-14-wave-a-pr2-follow-through.md`. Three
-      gates ran: DBA PASS WITH ROWS, PM shape-approved but sequencing NOT NOW,
-      antagonist NOT READY — nothing can hand the client the minted session
-      while the attempt is alive, because `AuthStep` makes `SignedIn` and
-      `link_ready` mutually exclusive union members. **And the defect is smaller
+      **BUILT 2026-09-15, PR #453, all seven tasks.** The plan is at
+      `docs/superpowers/plans/2026-09-14-wave-a-pr2-follow-through.md`, now
+      REVISION 5. Every gate that blocked it has been answered:
+      - the antagonist's NOT READY was the transport — nothing could hand the
+        client the minted session while the attempt was alive, because
+        `AuthStep` made `SignedIn` and `link_ready` mutually exclusive union
+        members. Closed in Task 4: `link_ready` now carries the session and the
+        carried profile, and `result()` gained a both-at-once branch that has
+        to come FIRST or the bare `signedIn` branch clears the attempt cookie.
+      - the PM's sequencing NOT NOW was voided by James's 2026-09-14 ruling
+        deferring public sign-up, which removed the only row ahead of it.
+      - the DBA's PASS WITH ROWS was at PLAN; the PR gate is owed on #453.
+      **The design's central claim was falsifiable and held:** `finalize()`
+      attaches with ZERO edits to itself, which the plan said would otherwise
+      send the work back to James.
+      **Copy round (Task 7) is HELD**, not dropped — it rides the account
+      submenu above, because its delete disclosure sits in a box that Option A
+      relocates. **And the defect is smaller
       than this row says:** `SignIn.tsx` has printed the two-step recovery above
       the two buttons since #436, so this turns a two-step recovery into one
       step rather than unsticking anyone.
@@ -1148,6 +1160,14 @@ it lands the stranger on this same denial.
       is a design-gate question across five strings on three surfaces, and
       because #444 shipped one answer to it without ever asking — applying that
       answer more widely by reflex is how a house style gets set by accident.
+      **TREATMENT RULED 2026-09-15 (Gate 0 ruling 4): "the You tab", applied to
+      every live string INCLUDING the two `SignInMethods.tsx` ones #444 shipped
+      as quoted, so that answer is superseded rather than extended.** The
+      question is settled; the SWEEP is what remains, and it rides the copy
+      round behind the account submenu. Census note: it has moved every time
+      anyone counted (five here, seven at the gate, six after PR2 deleted the
+      dead-end screen that held one), which is why the test pins "strings NOT
+      in the chosen form" at zero rather than pinning a total.
 - [ ] **Move the account block behind an ACCOUNT door on You. GATE 0 IS DONE
       AND JAMES RULED OPTION A (2026-09-15); nothing has built it.** He asked
       for it in as many words: _"I want to also move the account settings into
@@ -1191,6 +1211,15 @@ it lands the stranger on this same denial.
       rendering surface and carries a design gate, and because the right fix is
       probably not one sentence: the confirm screen's whole shape is in
       question once the re-auth is disclosed up front.
+      **RULED 2026-09-15 (Gate 0 ruling 3), and it IS one sentence.** The
+      disclosure goes at the TAP, in the ACCOUNT quarantine box on You, naming
+      the provider the account holds — because the re-auth happens BEFORE the
+      confirm screen, so a warning there arrives after the cost is paid. **The
+      confirm screen is left untouched**, which is what keeps its own
+      2026-09-14 ruling (state facts, not prose) intact. Rendered at
+      `docs/design/pr2-gate0/renders/08-delete-reauth-options.png`. The box it
+      lives in MOVES under the account-submenu row above, which is why this
+      rides that work rather than landing first.
 - [ ] **"Apple is now connected. You can sign in either way." says what the row
       under it already says.** James, 2026-09-14, from the live screen: _"I
       don't need this blurb here forever. Apple says connected below it."_ The
@@ -1338,6 +1367,23 @@ it lands the stranger on this same denial.
       shipped here and only the confirming measurement is outstanding, and it
       needs post-merge CI jobs that do not exist yet.
 - [ ] **Raise the `--rule` hairline: it measures 1.47:1 on `--surface`.**
+      **SUPERSEDED BY GATE 0 RULING 5, JAMES, 2026-09-15 — DO NOT DO THE SWEEP
+      THIS ROW DESCRIBES.** He reversed the 2026-09-14 ruling below after
+      seeing both options rendered: `--rule` STAYS at 1.47:1, and the durable
+      half is a policy instead — **a boundary that carries meaning uses
+      `--ink-4`** (4.76:1 on page, computed) **and `--rule` stays decorative.**
+      Two measurements decided it: the minimum only governs boundaries needed
+      to IDENTIFY a component or its state, and this one sits between rows
+      their own labels already separate; and the obvious small step does not
+      even work — `#a39c88` is 2.69:1 on `--surface` and 2.42:1 on `--page`,
+      while the lightest value clearing both is `#928a78` (3.37:1 / 3.03:1),
+      which no longer reads as a hairline at all.
+      Pack and numbers: `docs/design/account-submenu-gate0/` and
+      `docs/design/pr2-gate0/contrast.json`. **What this row still owes is the
+      POLICY WRITE-DOWN in `app/src/theme/tokens.css`, not the sweep** — it
+      rides the copy round (that plan's Task 7 Step 4). Left open for that one
+      line, annotated rather than struck, because striking is James's call and
+      the write-down has not happened.
       Pre-existing (`10ed2c2a`, predates PR1): `.auth-identity`'s card border
       (`app/src/index.css:275`, `border: 1px solid var(--rule)` on
       `background: var(--surface)`), rendered on the confirm and reauth
