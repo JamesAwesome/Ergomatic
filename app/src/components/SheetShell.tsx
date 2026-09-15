@@ -49,12 +49,24 @@ export function SheetShell({
   onDismiss,
   opener,
   primary,
+  focusTitleOnOpen = false,
   children,
 }: {
   open: boolean;
   titleId: string;
   onDismiss: () => void;
   opener: RefObject<HTMLElement | null>;
+  /** Focus the dialog itself rather than its first button when it opens.
+   *  DEFAULT FALSE, so every existing caller is untouched.
+   *
+   *  The default is right for a sheet whose controls sit at the top. It is
+   *  WRONG for one whose only control is a Close at the very end of a long
+   *  scrolling body: focusing that button scrolls the sheet to its bottom,
+   *  and the rower lands mid-sentence with the title, the first group
+   *  heading and its first rows above the viewport. Measured at 844×390 on
+   *  the tile-source sheet: `scrollTop` 332 of 642, title 283px above the
+   *  top edge. */
+  focusTitleOnOpen?: boolean;
   primary?: {
     label: string;
     disabled: boolean;
@@ -79,12 +91,19 @@ export function SheetShell({
   // moment this effect runs.
   useEffect(() => {
     if (!open) return;
-    focusableElements()[0]?.focus();
+    if (focusTitleOnOpen) {
+      // The dialog carries `tabIndex={-1}` so it can hold focus without
+      // entering the tab order; the trap below still wraps the buttons.
+      dialogRef.current?.focus();
+      dialogRef.current?.scrollTo?.({ top: 0 });
+    } else {
+      focusableElements()[0]?.focus();
+    }
     const restoreTarget = opener.current;
     return () => {
       restoreTarget?.focus?.();
     };
-  }, [open, opener]);
+  }, [open, opener, focusTitleOnOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -138,6 +157,7 @@ export function SheetShell({
       <div
         ref={dialogRef}
         className="filter-sheet"
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

@@ -249,3 +249,47 @@ test("the table groups its columns, derived first, and drops the blanket PM5 cla
   expect(derivedBox!.x).toBeGreaterThanOrEqual(0);
   expect(derivedBox!.x + derivedBox!.width).toBeLessThanOrEqual(390);
 });
+
+test("in LANDSCAPE the sheet opens at its title, not scrolled past it", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  // 844x390 is where this broke. The sheet's only button is Close at the very
+  // end of a body taller than the viewport, and SheetShell's default focuses
+  // the first button — which scrolled the sheet to its bottom and put the
+  // title 283px above the top edge. Measured, on the frame the design gate
+  // itself captured and nobody read out of it.
+  await page.setViewportSize({ width: 844, height: 390 });
+  await signInViaBackdoor(page, {
+    email: `prov-land-${RUN_ID}@e2e.test`,
+    name: "Provenance",
+  });
+
+  await seedAndOpen(
+    page,
+    machineRow({
+      title: "Terminated piece",
+      endedBy: "rower",
+      spm: 52,
+      withHr: true,
+    }),
+  );
+  await expect(
+    page.getByRole("heading", { name: "Terminated piece" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /where these numbers come from/i })
+    .click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  const title = dialog.getByRole("heading", {
+    name: /where these numbers come from/i,
+  });
+  // The title is IN VIEW, and the body starts at the top. Both, because
+  // either alone can hold while the other does not.
+  await expect(title).toBeInViewport();
+  expect(await dialog.evaluate((el) => el.scrollTop)).toBe(0);
+  // and the first group's heading is reachable without scrolling up
+  await expect(dialog.getByText("DERIVED", { exact: true })).toBeInViewport();
+});

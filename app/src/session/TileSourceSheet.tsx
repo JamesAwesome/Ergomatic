@@ -93,6 +93,7 @@ export function TileSourceSheet({
         titleId={titleId}
         onDismiss={() => setOpen(false)}
         opener={opener}
+        focusTitleOnOpen
       >
         <h2 id={titleId} className="tile-source-title">
           WHERE THESE NUMBERS COME FROM
