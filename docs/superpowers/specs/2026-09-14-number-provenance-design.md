@@ -135,8 +135,31 @@ work-only is recoverable from the series alone, and it has a machine oracle
 elapsed freeze during a **work** interval when the rower stops? **If it does,
 `wall = work + machineRest` breaks for programmed rows too.**
 
-**[CORRECTED 2026-09-14] It is NOT answerable at a desk, and this spec said
-it was.** Both halves of the corpus were swept and neither can settle it:
+**[ANSWERED 2026-09-15 at the erg: the clock RAN. It does NOT freeze during
+a programmed work interval, so `wall = work + machineRest` HOLDS and board
+2's candidate B is alive.]** 60.48 s stopped dead in `INTERVALWORKDISTANCE`
+and elapsed moved 60.51 s; the wire recording and the diagnostics ring agree
+independently. Record and decode:
+`docs/monitor/sessions/walk-2026-09-15-work-clock/`.
+
+**The free-row freeze does not generalise, and that was the whole risk.** A
+free row is `WORKOUTTYPE_JUSTROW` (1) and freezes; a programmed piece is
+`WORKOUTTYPE_VARIABLE_INTERVAL` (8) and does not. **James, at the erg:**
+*"if you stopped like that during a timed interval the ergometer would keep
+its clock ticking"* — which closes the scope the walk could not measure, a
+time interval's clock having to run through a stop or the piece could never
+terminate. Distance measured plus time by that argument covers both kinds.
+
+**And it handed board 2 a number it did not have.** That interval stores as
+250 m in 129.2 s — about 68 s rowed, about 61 s standing still — so the saved
+row reads a split of roughly **4:18/500m** for a piece pulled at about
+**2:15**, with nothing on screen saying why. A mid-interval stop poisons the
+split silently. That is M3's axis question with a real figure attached.
+
+**[CORRECTED 2026-09-14, and now superseded by the walk above — kept because
+the sweep it records is still the reason the walk was needed.] It was NOT
+answerable at a desk, and this spec said it was.** Both halves of the corpus
+were swept and neither could settle it:
 
 - **The wire recordings: 13 of them, zero instances.** Decoding 0x0031 per
   §10 (elapsed `0-2` at 0.01 s, distance `3-5` at 0.1 m, workout state byte

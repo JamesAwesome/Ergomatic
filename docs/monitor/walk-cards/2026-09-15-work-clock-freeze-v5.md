@@ -20,6 +20,10 @@ verdict, a retry that could destroy the first attempt's evidence, and a
 workout state assumed rather than observed), plus a wrong interaction count
 and a wrong capture count. Every one is fixed below and marked **[v2]**.
 
+**WALKED 2026-09-15. Outcome: RAN — the clock does not freeze.** Record at
+`docs/monitor/sessions/walk-2026-09-15-work-clock/`. This card is now a
+RECORD; do not re-run it.
+
 **Status: SHAPE APPROVED by James 2026-09-14** ("that walk shape is fine") —
 the one piece, the mid-interval stop, the laptop-only medium and the
 interaction budget. **Awaiting the PM readiness PASS**, which is a separate
