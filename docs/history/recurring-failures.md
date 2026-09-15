@@ -775,7 +775,14 @@ repo depend on them.
     name doing a job — disambiguating which monitor ("Looking for PM5
     432331249", "More than one PM5 has this name") or naming the source
     of a stored number where the reader must know it came from the
-    machine (`MACHINE SUMMARY · PM5 · PER INTERVAL`).** The check is
+    machine.** **The example originally given here — `MACHINE SUMMARY ·
+    PM5 · PER INTERVAL` — was RETIRED on 2026-09-15** by Gate 0B round 2,
+    which found that eyebrow claiming the PM5 over two columns computed
+    here rather than by the monitor. It now reads `PER INTERVAL` with
+    `DERIVED` / `MEASURED` group headings. The rule stands; the surface it
+    was illustrated from is the surface that falsified it, which is worth
+    remembering before quoting any example as if it were the rule. The
+    check is
     mechanical: `grep -rn "PM5" app/src --include='*.ts' --include='*.tsx'`
     over string literals, and for each hit ask "would this sentence be
     less true with 'monitor'?" — if not, it is the wrong word. Code

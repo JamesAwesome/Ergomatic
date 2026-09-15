@@ -3113,8 +3113,22 @@ all seven and each is derived by `labelRoom` from the widest string its own
 data can produce. **Gate 0A ruling 2, the MACHINE column's caption: RULED C — no caption**
 (James, 2026-09-14). Rulings 18/19 stand; M7's "the column says they do
 not" arm is closed, so M7 survives only as the population change and stays
-TRIAD in PR 4. **Gate 0B (M1-M6 and the new M9) is still owed**, and PRs
-3 and 4 are PROVISIONAL until it runs.
+TRIAD in PR 4. **Gate 0B BOARD 1 (M1, M1b, M2) IS APPROVED AND BUILT**
+(James, 2026-09-15: board 1 `1MKF7K6zhtEK58xXuK3ofB`, then round 2
+`TuGUWZaKj9BxiGaCR7Sb6A` — the ruling was a direction, so round 2 drew both
+halves and measured them). **Ruling 1 = no mark on the tile face, an
+answerable drill-down instead; ruling 2 = group the columns, DERIVED first.**
+**M2 is WITHDRAWN from scope**: the recommendation proposed reopening which
+number AVG HR shows, and `derivedHeartRate.ts:20-42` records James settling
+that on 2026-09-07 with option C rejected on measured numbers — RF18. The
+screen now says what that code already knew. **Gate 0B boards 2 (the axis:
+M3, M6, M9) and 3 (live total vs stored: M4, M5) are STILL OWED**, and PRs
+3 and 4 stay PROVISIONAL until they run.
+**PRs 3 AND 4 ARE NOW FILED ROWS IN PHASE TD** (James, 2026-09-15: "I want to
+ensure they get closed out"), with dates and with the open question each is
+blocked behind named. They lived here as PROSE — no checkbox, no date — which
+is the third state this file's own rule says is where orders die. This
+paragraph is no longer their home; Phase TD is.
 
 **Spec:**
 [docs/superpowers/specs/2026-09-14-number-provenance-design.md](docs/superpowers/specs/2026-09-14-number-provenance-design.md).
@@ -3169,6 +3183,13 @@ wrong in three ways at once:
    lives on `MachineSummaryTable.tsx`, a separate block further down, which
    is 4/6 the machine's figures and 2/6 ours. So the derived tiles are
    UNLABELLED rather than mislabelled.
+   **[BOTH HALVES FIXED 2026-09-15, Gate 0B round 2.]** The eyebrow now reads
+   `PER INTERVAL` with `DERIVED` / `MEASURED` group headings over the columns
+   each is true of, and the tiles are no longer unlabelled: a drill-down names
+   each tile's source FOR THIS ROW. The census in this note was also
+   incomplete — the tiles are **2/2/2**, not 4/2, because RATE and AVG HR are
+   conditional on DIFFERENT predicates, which is why no fixed label could
+   cover them.
 3. **`931` / `929` is an e2e SEED, not a record.** It is
    `design.spec.ts` and `screenshots.spec.ts` fixture data. The measured band
    a rower could actually see is watts ≤1 W and cal/hr **24-78 on six of
@@ -3194,7 +3215,14 @@ one day on 2026-09-07 and gained two more (M8 and the appendix) on the day
 it opened — eight and an appendix, against the "five" this paragraph was
 written under.
 
-- [ ] **Phase LP's strip eyebrow says `PM5 · PER INTERVAL` over two
+- [x] **DONE 2026-09-15 — Phase LP's strip eyebrow said `PM5 · PER INTERVAL`
+      over two columns that are Concept2's arithmetic.** Gate 0B round 2
+      (James, approved): the eyebrow is now a plain `PER INTERVAL` and the
+      six data columns sit under `DERIVED` / `MEASURED` group headings, each
+      true of what is beneath it. The tiles got the other half — a drill-down
+      naming each one's source for THAT row. Original text below, kept
+      because this row is what the gate was drawn against.
+      **Phase LP's strip eyebrow says `PM5 · PER INTERVAL` over two
       columns that are Concept2's arithmetic** (PM final gate #327,
       2026-09-07, non-blocking): WATTS and CAL/HOUR are the logbook's
       derivation (James's §3.1 ruling), differing from the PM5's own by
@@ -4468,10 +4496,18 @@ condition is a quiet week rather than an incident.
 date Wave A PR 1 carried) · **the date governs THIS SLATE of rows, not
 the section.** A stalled Phase TD must never become the reason the front door
 slipped, and under the wave-heading rule one date on the heading covers the
-slate rather than writing the same clause on each row. **The slate was three
-and is now TWO** — TD-5 closed 2026-09-14 (`2c9d7e09`); TD-2 and TD-3, split
-out on 2026-09-12, carry their own later dates, so this heading date is now
-the earlier backstop of the two.
+slate rather than writing the same clause on each row. **The slate was three, then
+TWO, and is now FOUR** — TD-5 closed 2026-09-14 (`2c9d7e09`); TD-2 and TD-3,
+split out on 2026-09-12, carry their own later dates; and **PRs 3 and 4 of the
+number-provenance pass were added 2026-09-15** (James: "put them in phase TD.
+i want to ensure they get closed out"), carrying `dies 2026-10-06` and
+`dies 2026-10-08`. Every one of the four carries a date LATER than this
+heading's, so the heading is no longer the backstop for any of them — each row
+is its own. **These two are also not debt in this section's sense** (line 43:
+gaps in evidence, a capture that cannot be taken): they are two of the four
+planned PRs of a live design pass, one of them TRIAD. They are here because
+James put them here to be closed out, and that is worth knowing before anyone
+reads this section's scope off its title.
 
 **THE SECTION ITSELF SURVIVES ITS OWN DATE, and that is a ruling, not an
 oversight (James, 2026-09-12).** Line 43 of this file makes Phase TD the
@@ -4705,6 +4741,41 @@ than back in the queue this was built to replace.
       `deliverSummary` never writes) is UNRESOLVED and is the next thing to
       find out. This is a FAKE-side gap only: the same fold works on real
       wire bytes, which is what `justRowReplay.test.ts` gates.
+
+- [ ] **PR 3 of the number-provenance pass — the chart's axis (M3, M6, M9).**
+      · dies 2026-10-06 · a row and not a fix now because it cannot start
+      until Gate 0B board 2 is drawn and ruled, and a board is James's
+      decision rather than work I can do ahead of him.
+      **MOVED HERE FROM THE PASS'S OWN SECTION 2026-09-15 (James: "I want to
+      ensure they get closed out")** — it lived in that section's PROSE with
+      no checkbox and no date, which is the third state where orders die.
+      **THE OPEN QUESTION, scheduled before the order (Phase OD's rule), and
+      it is ANSWERED:** the 2026-09-15 walk settled whether 0x0031's elapsed
+      clock freezes during a programmed work interval. **It does not** — the
+      clock RUNS, so `wall = work + machineRest` holds and board 2's
+      candidate B is alive. Nothing blocks drawing the board.
+      **What board 2 must show, already known:** a mid-interval stop stores
+      as 250 m in 129.2 s, so a piece pulled at about 2:15 saves as roughly
+      4:18/500m with nothing on screen saying why. **S**
+
+- [ ] **PR 4 of the number-provenance pass — live total versus stored
+      (M4, M5, M7), and it is TRIAD.** · dies 2026-10-08 · a row and not a
+      fix now because it moves a STORED figure, so it carries the full
+      antagonist pass and a PM final gate, and it needs Gate 0B board 3 —
+      which is unstarted.
+      **MOVED HERE FROM PROSE 2026-09-15, same reason as PR 3.**
+      **THE DATE IS NOT ARBITRARY AND IS THE POINT OF FILING IT:** the PM
+      ruled PR 4 must not be live when Wave A's `dies 2026-10-10` arrives,
+      and while it sat in prose nothing enforced that. 10-08 puts it in
+      front of James with two days of room.
+      **THE OPEN QUESTION, and it is NOT answered:** M7 measured ZERO on
+      production, because a stored-tier pm5 row is not what the career-stats
+      spec says it is — `monitorRun.ts` makes `workSeconds`/`workMeters`
+      unconditional over any non-empty `actuals`, so a dropped link still
+      feeds AVG WATTS. The stored tier needs a monitor row with NO measured
+      interval at all. **Until someone establishes that such a row can exist
+      in production, PR 4's headline member may have no subject.** That is
+      the read to do before scheduling the work, not during it. **M**
 
 
 # Icebox

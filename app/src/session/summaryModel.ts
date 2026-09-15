@@ -116,6 +116,12 @@ import {
 } from "./logbookDerived";
 import type { SessionRun } from "./run";
 import { deriveAverageHeartRate } from "../../domain/monitor/derivedHeartRate.js";
+import {
+  FIXED_SOURCES,
+  heartRateProvenance,
+  rateProvenance,
+  type MachineTileProvenance,
+} from "./tileProvenance";
 
 /** Per §2A: `AUG 10 · 18:57 · PM5 <id>` / `· TIMER` / `· LOGGED BY HAND`,
  *  plus Phase LM Task 4's fourth answer `· NO MONITOR READING`
@@ -199,6 +205,14 @@ export interface MachineTier {
    *  it repeated the total line's rest metres from a second source — and
    *  AVG HR takes its cell; the PM5's rest total stays stored for PR 2. */
   avgHr?: number;
+  /** Gate 0B round 2, approved 2026-09-15 (ruling 1). Stamped at the SAME site that
+   *  picks each value, because a renderer cannot re-derive `rate`'s or
+   *  `avgHr`'s branch from the values alone and two copies of a predicate
+   *  drift. Both producers stamp it — here and `storedMachineTier` — or
+   *  the sheet would tell the truth on one door and not the other (RF24).
+   *  REQUIRED, so the compiler is that gate rather than this comment — and
+   *  it caught two hand-built fixtures the moment it stopped being optional. */
+  sources: MachineTileProvenance;
 }
 
 /** Phase LP §3: one MACHINE SUMMARY row. `index` is the INTERVALS table's
@@ -1234,6 +1248,23 @@ export function machineTierFromRun(run: MonitorRun): MachineTier {
   const d = run.summaryTotals!.workDistanceMeters;
   const detail = run.summaryDetail;
   const calories = detail?.totalCalories;
+  // HOISTED so the value below and the label in `sources` read ONE predicate.
+  // Re-deriving it for the label would be two copies that drift, and this
+  // function's own comment already records that happening once this phase.
+  const finished = run.endedBy === "finished" || run.mode === "justrow";
+  // `!= null`, NOT `!== undefined`: the VALUE below uses `??`, which falls
+  // through on null AND undefined, and `avgHeartRateBpm: null` is the wire's
+  // "a belt that reported nothing". Checking only undefined labelled a
+  // derived number as measured — caught by `summaryModel.test.ts`, which is
+  // why the stamp is asserted at the producer and not just at the sheet.
+  const monitorSentHeartRate = detail?.avgHeartRateBpm != null;
+  // Hoisted when TARGET briefly had a provenance stamp; James struck that
+  // from the sheet on 2026-09-15, so nothing in `sources` reads this now and
+  // the hoist is presentational only. The tile's own label still branches on
+  // it, and one expression is better than two.
+  const targetRate = agreedTargetSpm(
+    run.program.intervals.map((i) => i.displaySpm),
+  );
   return {
     avgWatts: logbookWatts(t, d),
     calories,
@@ -1252,13 +1283,13 @@ export function machineTierFromRun(run: MonitorRun): MachineTier {
       // its own live 0x0032 frames, time-weighted across the rowing state,
       // give 26.8 — a 1.8 spm delta, not the ~2x a doubled figure shows. The
       // monitor's own average is honest on a free row.
-      finished: run.endedBy === "finished" || run.mode === "justrow",
+      finished,
       avgStrokeRate: detail?.avgStrokeRate,
       splits: run.actuals
         .filter((a) => a.index !== null && a.avgSpm !== null)
         .map((a) => ({ seconds: a.elapsedSeconds, spm: a.avgSpm as number })),
     }),
-    targetRate: agreedTargetSpm(run.program.intervals.map((i) => i.displaySpm)),
+    targetRate,
     drag: detail?.dragFactorAverage,
     // Same derivation as the saved-row screen, from the same trace, so the
     // number does not change when the row is reopened later. See
@@ -1268,6 +1299,11 @@ export function machineTierFromRun(run: MonitorRun): MachineTier {
       detail?.avgHeartRateBpm ??
       deriveAverageHeartRate(run.series?.samples ?? []) ??
       undefined,
+    sources: {
+      ...FIXED_SOURCES,
+      rate: rateProvenance(finished),
+      avgHr: heartRateProvenance(monitorSentHeartRate),
+    },
   };
 }
 

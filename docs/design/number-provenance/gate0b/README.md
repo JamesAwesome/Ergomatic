@@ -1,12 +1,18 @@
 # Gate 0B — board 1 (the session screens: M1, M1b, M2)
 
 Rendered 2026-09-14 in Chromium against this worktree's compose stack, at
-390×844 portrait and 844×390 landscape, by `app/e2e/gate0b.spec.ts`
-(throwaway; deleted by the PR that implements this board's ruling).
+390×844 portrait and 844×390 landscape, by `app/e2e/gate0b.spec.ts` —
+**which no longer exists**: the PR implementing this board's ruling deleted it
+as promised and replaced it with `app/e2e/provenance.spec.ts`, which asserts
+the behaviour instead of capturing it. The frames here are what that harness
+produced while it lived.
 
-**Boards 2 and 3 are NOT here.** Board 2 (the axis: M3, M6, M9) waits on the
-2026-09-15 walk, which decides whether one of its three candidates is
-drawable at all. Board 3 (M4, M5) is unstarted — see "What is not built" at
+**Boards 2 and 3 are NOT here.** Board 2 (the axis: M3, M6, M9) was waiting on
+the 2026-09-15 walk to decide whether one of its three candidates was drawable
+at all. **That walk RAN and ANSWERED it** — the work clock does not freeze, so
+`wall = work + machineRest` holds and candidate B is alive
+(`docs/monitor/sessions/walk-2026-09-15-work-clock/`). Nothing now blocks
+drawing board 2. Board 3 (M4, M5) is unstarted — see "What is not built" at
 the foot.
 
 ## The three frames, and what each is for
@@ -44,7 +50,7 @@ the frame (RF7):
   different quantities. (Measured range across the corpus: 3.5-15.2 bpm.)
 - The eyebrow reads **`PM5 · PER INTERVAL`** over a table whose **WATTS**
   (140/248) and **CAL/HOUR** (848/1026) columns are OURS —
-  `summaryModel.ts:204-210` says so in its own comment.
+  `session/logbookDerived.ts` says so in its own comment.
 - The tiles' **AVG WATTS 184** sits above table rows of 140 and 248.
 
 ## The census this board is arguing from

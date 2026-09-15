@@ -1,0 +1,19 @@
+{
+  "tableWidth": 379.640625,
+  "scrollerClientWidth": 390,
+  "scrollerContentWidth": 350,
+  "overflowPx": 29.640625,
+  "intervals": 2,
+  "groups": [
+    {
+      "label": "COMPUTED HERE",
+      "spanWidth": 144.203125,
+      "inkWidth": 93.875
+    },
+    {
+      "label": "REPORTED BY THE PM5",
+      "spanWidth": 215.625,
+      "inkWidth": 137.1875
+    }
+  ]
+}

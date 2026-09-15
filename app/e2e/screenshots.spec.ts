@@ -4126,8 +4126,13 @@ test("log-detail", async ({ page }) => {
     .getByRole("table", { name: "Machine summary per interval" })
     .locator("tbody tr");
   await expect(lpStrip).toHaveCount(2);
-  await expect(lpStrip.nth(0)).toHaveText("1—14016848100147");
-  await expect(lpStrip.nth(1)).toHaveText("2—24816102610095");
+  // Column order is DERIVED first (WATTS, CAL/HOUR) then MEASURED (HR, CAL,
+  // DRAG, REST m) — Gate 0B round 2, approved 2026-09-15. The strip scrolls
+  // sideways and overflows, so the derived pair leads in order to be the part
+  // still on screen at rest; with the monitor's columns first, the two this
+  // disclosure exists for were what scrolled away.
+  await expect(lpStrip.nth(0)).toHaveText("1140848—16100147");
+  await expect(lpStrip.nth(1)).toHaveText("22481026—1610095");
 
   // RC-2/RC-3 wave, PR 2, Task 3: the MACHINE CONFIRMED · WORK ONLY block,
   // below the interval rows and above the trace chart — real seeded

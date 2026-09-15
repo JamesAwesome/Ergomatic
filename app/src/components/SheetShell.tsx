@@ -7,12 +7,12 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
  * whole-branch review — see the extraction's own history in
  * `library/FilterSheet.tsx`, the sheet this was lifted out of whole).
  *
- * Every button rendered inside `children` and the `primary` control is
- * assumed to be a real `<button>` (no links/inputs/other focusable kinds),
- * so `querySelectorAll("button")` is the complete, correctly-ordered
- * focusable set — kept as a small helper rather than a library so a future
- * group added by a caller is included automatically as long as it's a
- * button.
+ * The focusable set is computed from what the browser will actually Tab to
+ * — enabled buttons, links, and anything with a non-negative `tabindex` —
+ * so a caller's scroll region or a disabled primary cannot silently break
+ * containment. An earlier version assumed every focusable was an enabled
+ * `<button>`; `ConnectionLogSheet`'s tabbable log list and both filter
+ * sheets' disabled primaries each falsified that, and each leaked.
  *
  * `onDismiss` fires on backdrop tap, Escape, or (per the caller's own
  * unmount) a route/tab change — discarding whatever the caller's own draft
@@ -40,21 +40,33 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
  * house's one-L1-per-screen rule means a shell that always emitted a
  * `.button-l1` would have handed that sheet a second primary it does not
  * want. Omitting the prop renders no button at all; the caller's own
- * buttons in `children` are still the focus trap's `focusableElements()`,
- * since that reads every `<button>` in the dialog rather than a list this
- * component keeps. */
+ * controls in `children` are still the focus trap's `focusableElements()`,
+ * since that reads what the browser will Tab to (see its own doc below)
+ * rather than a list this component keeps. */
 export function SheetShell({
   open,
   titleId,
   onDismiss,
   opener,
   primary,
+  focusTitleOnOpen = false,
   children,
 }: {
   open: boolean;
   titleId: string;
   onDismiss: () => void;
   opener: RefObject<HTMLElement | null>;
+  /** Focus the dialog itself rather than its first button when it opens.
+   *  DEFAULT FALSE, so every existing caller is untouched.
+   *
+   *  The default is right for a sheet whose controls sit at the top. It is
+   *  WRONG for one whose only control is a Close at the very end of a long
+   *  scrolling body: focusing that button scrolls the sheet to its bottom,
+   *  and the rower lands mid-sentence with the title, the first group
+   *  heading and its first rows above the viewport. Measured at 844×390 on
+   *  the tile-source sheet: `scrollTop` 332 of 642, title 283px above the
+   *  top edge. */
+  focusTitleOnOpen?: boolean;
   primary?: {
     label: string;
     disabled: boolean;
@@ -65,10 +77,47 @@ export function SheetShell({
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
+  /** The controls the browser will Tab to, in document order: enabled
+   *  buttons and form fields, links, and anything with a non-negative
+   *  `tabindex`.
+   *
+   *  NOT an exhaustive enumeration of focusable HTML — `summary` and
+   *  `[contenteditable]` are absent — and that matters MORE than it used to,
+   *  because the handler below hard-stops on anything unlisted: an
+   *  unenumerated control cannot be Tabbed PAST. Before that handler existed
+   *  such an element matched neither end and the browser advanced normally.
+   *  No caller renders one today (measured: all four); add to this list
+   *  rather than working around it.
+   *
+   *  NOT just `button`. A DISABLED button is matched by that selector and
+   *  cannot hold focus, so with a disabled primary — which both filter
+   *  sheets have whenever their result count is zero — `activeElement` was
+   *  never `last`, forward Tab fell out of the modal, and `last.focus()`
+   *  was a no-op so Shift+Tab from `first` did nothing at all. Measured:
+   *  twelve Tabs out of Library's FILTER sheet reached a workout link
+   *  behind the scrim.
+   *
+   *  And a tabbable NON-button leaks the other way: `ConnectionLogSheet`
+   *  gives its log list `tabIndex={0}` on purpose (WCAG 2.1.1, a scroll
+   *  region needs to be reachable), and it sits BEFORE the first button, so
+   *  Shift+Tab off it escaped onto the connected surface's pane controls
+   *  mid-session. This component's own doc comment used to assert that
+   *  `button` was the complete focusable set; that premise was false. */
   function focusableElements(): HTMLElement[] {
     const dialog = dialogRef.current;
     if (!dialog) return [];
-    return Array.from(dialog.querySelectorAll<HTMLElement>("button"));
+    return Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        [
+          "button:not([disabled])",
+          "a[href]",
+          'input:not([type="hidden"]):not([disabled])',
+          "select:not([disabled])",
+          "textarea:not([disabled])",
+          '[tabindex]:not([tabindex="-1"])',
+        ].join(", "),
+      ),
+    );
   }
 
   // Moves focus into the sheet when it opens (the first control) and
@@ -79,12 +128,19 @@ export function SheetShell({
   // moment this effect runs.
   useEffect(() => {
     if (!open) return;
-    focusableElements()[0]?.focus();
+    if (focusTitleOnOpen) {
+      // The dialog carries `tabIndex={-1}` so it can hold focus without
+      // entering the tab order; the trap below still wraps the buttons.
+      dialogRef.current?.focus();
+      dialogRef.current?.scrollTo?.({ top: 0 });
+    } else {
+      focusableElements()[0]?.focus();
+    }
     const restoreTarget = opener.current;
     return () => {
       restoreTarget?.focus?.();
     };
-  }, [open, opener]);
+  }, [open, opener, focusTitleOnOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -105,6 +161,16 @@ export function SheetShell({
       if (focusable.length === 0) return;
       const first = focusable[0]!;
       const last = focusable[focusable.length - 1]!;
+      // ONE PREDICATE, not a list of special cases. Focus inside the dialog
+      // that is not on an enumerated control — the dialog itself under
+      // `focusTitleOnOpen`, or anything a future caller adds — wraps to the
+      // end it is heading for. The previous version special-cased exactly
+      // the dialog and left every other such position leaking.
+      if (!focusable.includes(document.activeElement as HTMLElement)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+        return;
+      }
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
         last.focus();
@@ -138,6 +204,7 @@ export function SheetShell({
       <div
         ref={dialogRef}
         className="filter-sheet"
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

@@ -1,0 +1,65 @@
+[
+  {
+    "element": ".summary-hero-label",
+    "sample": "AVG SPLIT",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(244, 241, 232)",
+    "fontPx": "10px",
+    "fontWeight": "400",
+    "ratio": 6.69
+  },
+  {
+    "element": ".summary-machine-value",
+    "sample": "184",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(244, 241, 232)",
+    "fontPx": "17px",
+    "fontWeight": "500",
+    "ratio": 15.41
+  },
+  {
+    "element": ".machine-summary-title",
+    "sample": "MACHINE SUMMARY",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(244, 241, 232)",
+    "fontPx": "11px",
+    "fontWeight": "600",
+    "ratio": 15.41
+  },
+  {
+    "element": ".machine-summary-eyebrow",
+    "sample": "PM5 · PER INTERV",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(244, 241, 232)",
+    "fontPx": "10px",
+    "fontWeight": "400",
+    "ratio": 6.69
+  },
+  {
+    "element": ".machine-summary th",
+    "sample": "#",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(244, 241, 232)",
+    "fontPx": "10px",
+    "fontWeight": "400",
+    "ratio": 6.69
+  },
+  {
+    "element": ".machine-summary td",
+    "sample": "1",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(244, 241, 232)",
+    "fontPx": "13px",
+    "fontWeight": "400",
+    "ratio": 15.41
+  },
+  {
+    "element": ".summary-total-line",
+    "sample": "4:04 total · plu",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(244, 241, 232)",
+    "fontPx": "12px",
+    "fontWeight": "400",
+    "ratio": 6.69
+  }
+]

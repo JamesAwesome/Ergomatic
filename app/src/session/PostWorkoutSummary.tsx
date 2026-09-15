@@ -9,6 +9,7 @@ import TraceChart from "../log/TraceChart";
 import BackLink from "../shell/BackLink";
 import { DASH } from "../workout/connected/surfaceModel";
 import MachineSummaryTable from "./MachineSummaryTable";
+import { TileSourceSheet } from "./TileSourceSheet";
 import type {
   MachineTier,
   MeasuredRow,
@@ -385,8 +386,37 @@ export function MachineTierBlock({ machine }: { machine: MachineTier }) {
           cell, not REST — rest metres already live on the total line and a
           second source four lines apart said nothing a rower could act on. */}
       <MachineTile label="AVG HR" value={machine.avgHr} />
+      {/* Gate 0B round 2, approved 2026-09-15 (ruling 1). `sources` is
+          REQUIRED on `MachineTier`, so both producers stamp it and there is
+          no arm where this is absent. */}
+      <TileSourceSheet
+        sources={machine.sources}
+        values={{
+          avgWatts: fmt(machine.avgWatts),
+          calories: fmt(machine.calories),
+          calPerHour: fmt(machine.calPerHour),
+          // The RATE tile can pack two numbers (`RATE · TARGET  26 / 26`)
+          // and this is the first of them. The TARGET is deliberately NOT
+          // in this sheet — James, 2026-09-15, on seeing it rendered: it is
+          // not a reading, it is what he asked for, and a provenance sheet
+          // is the wrong place to explain it.
+          rate: fmt(machine.rate),
+          drag: fmt(machine.drag),
+          avgHr: fmt(machine.avgHr),
+        }}
+      />
     </div>
   );
+}
+
+/** The house dash for a number the row does not have. The sheet still LISTS
+ *  the tile — its group is a fact about the tile, not about the value — but
+ *  it makes no claim about where a number came from when there is no number.
+ *  An earlier version of this comment argued the opposite and was the
+ *  rationale for sentences like "from the monitor's calorie count" printed
+ *  beside a dash. */
+function fmt(v: number | undefined): string {
+  return v === undefined ? DASH : String(v);
 }
 
 export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {

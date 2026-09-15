@@ -172,6 +172,12 @@ function readSessionFile(relativePath: string): string {
 // recording that gets re-captured under the same filename) fails loudly
 // here rather than silently validating against itself.
 // ---------------------------------------------------------------------
+import {
+  FIXED_SOURCES,
+  heartRateProvenance,
+  rateProvenance,
+} from "./tileProvenance";
+
 describe("buildSummaryModel — oracle bytes are tied to the committed recordings, not hand-transcribed (review finding 6)", () => {
   it("keystone (step-2): both boundary pairs appear verbatim in the committed .jsonl", () => {
     const text = readSessionFile(
@@ -707,7 +713,31 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
       targetRate: 26,
       drag: 100,
       avgHr: undefined,
+      // The stamp rides the SAME predicate the value took. This piece
+      // FINISHED, so RATE is the monitor's own 0x0039 average and says so;
+      // the monitor sent no heart rate, so AVG HR is ours and explains why.
+      sources: {
+        ...FIXED_SOURCES,
+        rate: rateProvenance(true),
+        avgHr: heartRateProvenance(false),
+      },
     });
+  });
+
+  it("stamps RATE as DERIVED on a TERMINATED piece, which is the branch the doubled 0x0039 average exists for", () => {
+    const run = monitorRun({
+      program: exit7Program,
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "rower",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: { ...exit7SummaryDetail, totalRestMeters: 242 },
+    });
+    const machine = buildSummaryModel({ door: "monitor", run }).heroes.machine!;
+    expect(machine.sources.rate.source).toBe("derived");
+    expect(machine.sources.rate.because).toMatch(/stopped this piece early/i);
+    // and the label does NOT change, so the tile face is identical to the
+    // finished row's — which is the whole finding board 1 was built on.
+    expect(machine.sources.rate.label).toBe("RATE");
   });
 
   it("Phase LP (James 2026-09-07, M3): the sixth tile is AVG HR off 0x0039 — a belt reading shows, no belt (wire null) is undefined, and REST is no longer a tile", () => {

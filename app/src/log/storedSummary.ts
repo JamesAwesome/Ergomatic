@@ -118,6 +118,11 @@ import {
 } from "../session/logbookDerived";
 import { deriveAverageHeartRate } from "../../domain/monitor/derivedHeartRate.js";
 import {
+  FIXED_SOURCES,
+  heartRateProvenance,
+  rateProvenance,
+} from "../session/tileProvenance";
+import {
   rowContribution,
   statsRowInput,
   type StatsRowInput,
@@ -781,6 +786,7 @@ function storedMachineTier(
     row.endedBy === "finished" ||
     row.endedBy == null ||
     isFreeRow(row.workoutId, row.workoutType);
+  const targetRate = agreedTargetSpm(row.steps.map((s) => s.spm));
   return {
     avgWatts: logbookWatts(timeSeconds, distanceMeters),
     calories,
@@ -803,7 +809,7 @@ function storedMachineTier(
           spm: s.actualSpm as number,
         })),
     }),
-    targetRate: agreedTargetSpm(row.steps.map((s) => s.spm)),
+    targetRate,
     drag: ms?.dragFactorAverage,
     // The monitor's own summary heart rate FIRST, and no capture we hold
     // carries one — see `domain/monitor/derivedHeartRate.ts` for how narrow
@@ -817,6 +823,13 @@ function storedMachineTier(
       ms?.avgHeartRateBpm ??
       deriveAverageHeartRate(row.series?.samples ?? []) ??
       undefined,
+    // Stamped from the SAME `finished` and the SAME presence check the two
+    // values above branch on — not re-derived.
+    sources: {
+      ...FIXED_SOURCES,
+      rate: rateProvenance(finished),
+      avgHr: heartRateProvenance(ms?.avgHeartRateBpm != null),
+    },
   };
 }
 

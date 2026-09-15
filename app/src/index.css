@@ -10429,6 +10429,28 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
 }
 
+/* Gate 0B round 2, approved 2026-09-15 (ruling 2 option B): the group row. Centred
+   over its span and separated from the column row by a hairline, so the
+   span reads as a bracket rather than as another column label. The group
+   row's own pinned cell is empty and carries no bottom rule, so the `#`
+   column's sticky background does not grow a stray line above it. */
+.machine-summary-groups th {
+  text-align: center;
+  /* 10px, matching `.machine-summary th` rather than inventing a smaller
+     size for this row alone — hierarchy comes from the letter-spacing and
+     the rule beneath it, not from a step off the type scale. */
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.machine-summary-groups .machine-summary-pin {
+  border-bottom: 0;
+  box-shadow: none;
+}
+
 .machine-summary .machine-summary-pin {
   position: sticky;
   left: 0;
@@ -12891,4 +12913,96 @@ section:not(.news-pinned) .news-row:last-of-type {
     padding-top: 0;
     flex: 0 0 200px;
   }
+}
+
+/* Gate 0B round 2, approved 2026-09-15 (ruling 1): the drill-down opener.
+   Spans the tile grid's
+   full width beneath the six tiles; 44px min-height is the house hard
+   requirement for a hit target, not a preference. */
+.tile-source-opener {
+  grid-column: 1 / -1;
+  min-height: 44px;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin-top: 4px;
+  padding: 0;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.tile-source-opener::after {
+  content: " ›";
+  color: var(--ink-3);
+}
+
+.tile-source-opener:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+.tile-source-title {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+}
+
+.tile-source-group {
+  margin-top: 18px;
+}
+
+.tile-source-group-head {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+}
+
+.tile-source-row {
+  padding: 8px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.tile-source-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tile-source-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+}
+
+.tile-source-value {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.tile-source-because {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.tile-source-close {
+  margin-top: 20px;
+  width: 100%;
 }

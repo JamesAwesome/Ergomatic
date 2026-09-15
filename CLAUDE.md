@@ -1069,7 +1069,13 @@ describes.
     where it is the device's own advertised name doing a job** — disambiguating
     which monitor ("Looking for PM5 432331249"), or naming the source of a stored
     number where the reader must know it came from the machine
-    (`MACHINE SUMMARY · PM5 · PER INTERVAL`). **The check is mechanical:**
+    (the log header's `PM5 432331249`). **The example this rule used to give
+    here was `MACHINE SUMMARY · PM5 · PER INTERVAL`, and that copy NO LONGER
+    EXISTS** — Gate 0B round 2 (2026-09-15) replaced that eyebrow with a
+    plain `PER INTERVAL` over two group headings, because the old one claimed
+    the PM5 for two columns the PM5 did not compute. The rule is unchanged;
+    only its example was falsified, by the very surface it was drawn from.
+    **The check is mechanical:**
     `grep -rn "PM5" app/src --include='*.ts' --include='*.tsx'` over string
     literals, and for each hit ask "would this sentence be less true with
     'monitor'?" — if not, it is the wrong word. Code identifiers, comments, wire
