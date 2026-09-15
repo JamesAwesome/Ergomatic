@@ -1458,7 +1458,7 @@ while we are in here.
       the test's logic; it is the worker not being scheduled. The run's own
       numbers agree: 8,940 tests, `Duration 292.55s` of which
       `environment 210.12s`.
-      **SIGHTED A THIRD TIME 2026-09-15** (PR #452's `app` job, run
+      **SIGHTED A THIRD AND FOURTH TIME 2026-09-15** (PR #452's `app` job, run
       `34973719187`, head `da58d1b9`, under `pnpm test:coverage`). Same
       file, same test, same `Test timed out in 5000ms` on the synchronous
       test. The branch touches `driver.ts`, `eventLog.ts`, `ergMachine.ts`
@@ -1466,11 +1466,23 @@ while we are in here.
       cannot be a regression. RF40 checked BEFORE the re-run: zero
       `Allocation failed`, zero 137/134, and vitest printed a full summary
       (9,083 passed of 9,085), so this is its own 5 s timeout and not a
-      kill. **The run's numbers match the hypothesis again and are worse:
-      `Duration 320.77s`, `environment 223.87s`** against the second
-      sighting's 292.55/210.12 — and this run carried coverage
-      instrumentation, which is the slowest shape the suite runs in. Three
-      sightings, all three under a full-suite run, none ever alone.
+      kill. `Duration 320.77s`, `environment 223.87s` against the second
+      sighting's 292.55/210.12, and this run carried coverage
+      instrumentation, which is the slowest shape the suite runs in.
+      **THE FOURTH CAME THE SAME MORNING, on the very commit that
+      recorded the third** (run `34975109761`, head `f3b5a2f9`, whose only
+      diff from the last green head is this ROADMAP row — so the fourth
+      sighting is as close to a pure re-run as the record gets). Same file,
+      same test, same 5 s timeout; RF40 clean again (zero `Allocation
+      failed`, exit 1, full summary of 9,083 passed of 9,085).
+      **AND ITS DURATION WAS NOT WORSE: `297.66s` / `environment 210.26s`,
+      within a second of the second sighting's 210.12.** The third
+      sighting's write-up above originally read those numbers as a
+      worsening trend; that clause has been REMOVED rather than appended
+      to, because the fourth falsifies it. Slow runs and flaking runs are
+      not the same population, so duration is a correlate at best and
+      cannot be used to predict a sighting or to excuse one. Four sightings, all four under a full-suite run,
+      none ever alone.
       **That makes (b) evidence for FLAKE 2's runner hypothesis rather than
       a separate puzzle** — and unlike (a), whose stated mechanism was
       refuted, this one has a mechanism nobody has argued against yet.
