@@ -143,9 +143,17 @@ while building the fix I wrote the same defect three times:
 3. *"Worked out on this device from the monitor's own figures"* — the same
    error again, reworded.
 
-The group note is now **"Worked out on this device. Each line says from
-what."** — true of all four, and it does the one job a group heading can do
-safely: name the group, and delegate every specific claim to the rows.
+The group note became **"Worked out on this device. Each line says from
+what."** — and **that was WRONG TOO, found by the second review.** A row with
+no value now says "This piece has no number here", so "each line says from
+what" was false of those lines, and "Straight from the monitor, as it sent
+them" sat over figures the monitor never sent. **THE GROUP NOTES ARE GONE.** A
+heading cannot be checked against a value; only a row can. The headings now
+say nothing but which group this is, and every claim lives on a row.
+
+**That is three attempts at one sentence**, which is the strongest evidence
+this file holds for its own lesson: the safe number of claims to make in a
+heading is zero.
 
 **None of the three was caught by a number.** The geometry file said "fits",
 the contrast file said 6.69:1, and every gate was green. All three were
@@ -164,7 +172,7 @@ claim about its own diff", now earned a second time in code.
 
 ## Contrast, measured
 
-**8 pairings**, every element round 2 adds, measured from the LIVE cascade
+**8 pairings** as captured, every element round 2 added at the time, measured (one of the eight, `.tile-source-group-note`, no longer exists — the committed JSON is the record of what was measured then, not of what ships) from the LIVE cascade
 with the sheet OPEN (half of them do not exist until it is) —
 `round2-computed-first/contrast-round2.json`. **Lowest 6.69:1, highest
 17.11:1**, against WCAG AA's 4.5:1. One `SELECTORS` list feeds both the
