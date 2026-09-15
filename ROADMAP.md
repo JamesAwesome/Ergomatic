@@ -1458,6 +1458,19 @@ while we are in here.
       the test's logic; it is the worker not being scheduled. The run's own
       numbers agree: 8,940 tests, `Duration 292.55s` of which
       `environment 210.12s`.
+      **SIGHTED A THIRD TIME 2026-09-15** (PR #452's `app` job, run
+      `34973719187`, head `da58d1b9`, under `pnpm test:coverage`). Same
+      file, same test, same `Test timed out in 5000ms` on the synchronous
+      test. The branch touches `driver.ts`, `eventLog.ts`, `ergMachine.ts`
+      and their tests — **nothing `Releases.test.tsx` reads**, so again it
+      cannot be a regression. RF40 checked BEFORE the re-run: zero
+      `Allocation failed`, zero 137/134, and vitest printed a full summary
+      (9,083 passed of 9,085), so this is its own 5 s timeout and not a
+      kill. **The run's numbers match the hypothesis again and are worse:
+      `Duration 320.77s`, `environment 223.87s`** against the second
+      sighting's 292.55/210.12 — and this run carried coverage
+      instrumentation, which is the slowest shape the suite runs in. Three
+      sightings, all three under a full-suite run, none ever alone.
       **That makes (b) evidence for FLAKE 2's runner hypothesis rather than
       a separate puzzle** — and unlike (a), whose stated mechanism was
       refuted, this one has a mechanism nobody has argued against yet.
