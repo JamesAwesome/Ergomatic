@@ -310,9 +310,13 @@ test("linking Apple proves Google then Apple and preserves the signed-in account
     await page.getByRole("button", { name: "Confirm with Google" }).click();
     await expect(page.getByLabel("Usual sign-in confirmed")).toBeVisible();
     await page.getByRole("button", { name: "Continue with Apple" }).click();
-    await expect(page.getByRole("status")).toHaveText(
-      "Apple is now connected. You can sign in either way.",
-    );
+    // The notice says only the CONSEQUENCE now (James, 2026-09-15): the row
+    // beneath already reads CONNECTED, and this notice repeating it was the
+    // complaint. Asserting the provider name is ABSENT is the half that
+    // catches it being re-added; matching the new string alone would not.
+    const notice = page.getByRole("status");
+    await expect(notice).toHaveText("You can sign in either way.");
+    await expect(notice).not.toContainText("Apple is now connected");
     await expect(page.locator(".auth-method-connected")).toHaveCount(2);
 
     const account = await page.evaluate(async (workoutTitle) => {
