@@ -342,8 +342,38 @@ them alike gets the design wrong:
   wrong. It is a gap-filler, and `derivedHeartRate.ts` records how narrow the
   evidence for "always empty" really is (two belted recordings, one walk).
 
+**[RENDERED 2026-09-14, board 1's core evidence.] The conditional is
+INVISIBLE because it works, and that is the actual defect.** Three frames,
+`docs/design/number-provenance/gate0b/`, the same row twice plus one
+prototype:
+
+| frame | what the wire said | what the screen says | source |
+| --- | --- | --- | --- |
+| `before/tiles-finished-portrait.png` | `avgStrokeRate: 26` | **RATE 26** | the monitor's |
+| `before/tiles-terminated-portrait.png` | `avgStrokeRate: 52` | **RATE 26** | **ours** — the guard dropped the monitor's |
+| `guard-removed/tiles-terminated-portrait.png` | `avgStrokeRate: 52` | **RATE 52** | the monitor's, which is the §27.6 double |
+
+Verified in the database rather than inferred: `ended_by = 'rower'` stored on
+the second row and `machine_summary->>'avgStrokeRate'` reads `52`, while the
+screen reads 26 — so the branch fired. **The first two frames are
+pixel-identical in the RATE tile.** A rower cannot tell which number they are
+looking at, and the reason the screen looks fine is that the guard is
+silently declining the monitor's own field. The third frame is what that tile
+says without it.
+
 **So the design question is narrower and harder than labelling six tiles: can
 one label be true of a tile whose source switches for a documented reason?**
+And board 1 must answer it knowing the switch produces no visible symptom —
+there is no wrong number on screen to point at, only an unstated one.
+
+**The house's existing mark does NOT answer it.** The tilde is already a
+provenance-adjacent mark here — `Builder.tsx:633`, `WorkoutRow`, and the
+baselines article's own words: "distance workouts show a rough length marked
+with a tilde". But it means ESTIMATED, not OURS, and most of these figures
+are not estimates: `logbookWatts` is exact arithmetic on measured inputs, and
+so is `logbookCalPerHour`. Reusing it would conflate the two axes this pass
+exists to separate. (Asked and answered per the brainstorming rule: the house
+has a mark, and it is the wrong one.)
 Three ways out, and the board shows them rather than assuming one — compute
 the label per row from the same predicate the value came from; group the tiles
 so one honest eyebrow covers each group; or say the switch out loud on the
