@@ -294,6 +294,14 @@ Each: what a rower sees, the mechanism with its citation, and what
 
 ### M1 — `PM5 · PER INTERVAL` over arithmetic the PM5 did not do
 
+**[RESOLVED 2026-09-15, Gate 0B round 2.]** The eyebrow now reads `PER
+INTERVAL`, and the six data columns sit under two group headings — `DERIVED`
+(WATTS, CAL/HOUR) and `MEASURED` (HR, CAL, DRAG, REST m) — so each heading is
+true of what is under it. Derived leads because the strip overflows ~30px at
+390px and whatever sits rightmost is invisible at rest; with the monitor's
+columns first, the two this disclosure exists for were the part that scrolled
+away. Measured, not asserted: `gate0b/round2-*/geometry.json`.
+
 WATTS and CAL/HOUR in the machine-summary table are the logbook's formula
 (James's §3.1 ruling), differing from the monitor's own by ≤1 W and 24-78
 cal/hr. The eyebrow names the monitor for all of it. **Agrees when** the
@@ -337,6 +345,16 @@ provenance changes — which is why RF7's "put it in one frame and check it by
 eye" is the only discipline that catches this class.
 
 ### M1b — two of the six TILES change whose arithmetic they are, per row (NEW)
+
+**[RESOLVED 2026-09-15, Gate 0B round 2.]** Not by a label on the tile —
+Strava's rename encodes QUALITY and this axis does not, so marking the tile
+face would brand the more correct number as the less trustworthy one. Instead
+a drill-down (`TileSourceSheet.tsx`) names each tile's source FOR THIS ROW,
+stamped at the same site that picks the value (`tileProvenance.ts`), because
+`MachineTier` carries values only and two copies of a predicate drift. The
+census is 2/2/2, not 4/2: AVG WATTS and CAL/HOUR always derived, CALORIES and
+DRAG always measured, RATE and AVG HR conditional **on different
+predicates**.
 
 **[FOUND 2026-09-14 building Gate 0B's board 1, and it changes what board 1
 can propose.]** `MachineTierBlock`'s six tiles are unlabelled (§1.4), and
@@ -758,7 +776,10 @@ that PR; the probe itself does not survive the branch, and neither does
 | Antagonist anchor | 2026-09-14 | findings folded in; vetted ground below |
 | PM open | 2026-09-14 | APPROVED with four amendments, all folded in |
 | Gate 0A | 2026-09-14 | **APPROVED as rendered** (James: "approved") — artifact `MZsVEJ1rSsxYLFQRuCrbtS` rev 1, boards at `docs/design/number-provenance/gate0a/`. Rulings 1, 3 and 4 take the option the boards rendered; **ruling 2 (the MACHINE caption) RULED C by James the same day: NO CAPTION** — rulings 18/19 stand, and M7's "or the column says they do not" arm is closed. M7 survives only as the population change, which moves a stored figure and stays TRIAD in PR 4 |
-| Gate 0B | — | owed |
+| Gate 0B board 1 | 2026-09-15 | **APPROVED** (James: "go with the recommendation") — artifact `1MKF7K6zhtEK58xXuK3ofB`, boards at `docs/design/number-provenance/gate0b/`. Covers M1, M1b and M2 only; boards 2 and 3 remain unbuilt |
+| Gate 0B round 2 | 2026-09-15 | **APPROVED as rendered** (James: "approved") — artifact `TuGUWZaKj9BxiGaCR7Sb6A`, record at `gate0b/ROUND2.md`. Board 1's ruling was a DIRECTION, so round 2 drew both halves and measured them. **Ruling 1 = none of A/B/C: no mark on the tile face, an answerable drill-down instead.** **Ruling 2 = B, group the columns, DERIVED first.** Words `DERIVED` / `MEASURED` chosen by James over `COMPUTED HERE` / `REPORTED BY THE PM5` |
+| M2 (AVG HR) | 2026-09-15 | **WITHDRAWN from scope.** The recommendation proposed reopening which number the tile shows; `derivedHeartRate.ts:20-42` records James settling exactly that on 2026-09-07 as Gate 0 option A, with option C rejected on measured numbers and an explicit warning against "fixing" the tile to match the rows. RF18. What M2 actually needed was for the SCREEN to say what the code knew, which the drill-down now does |
+| Gate 0B boards 2 + 3 | — | still owed (the axis; live total vs stored) |
 
 **The phase's VETTED GROUND** (attacked and held, so later specs inherit it
 without re-deriving): 0x0039 is work-only; the trace axis is neither

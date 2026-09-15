@@ -3113,8 +3113,17 @@ all seven and each is derived by `labelRoom` from the widest string its own
 data can produce. **Gate 0A ruling 2, the MACHINE column's caption: RULED C — no caption**
 (James, 2026-09-14). Rulings 18/19 stand; M7's "the column says they do
 not" arm is closed, so M7 survives only as the population change and stays
-TRIAD in PR 4. **Gate 0B (M1-M6 and the new M9) is still owed**, and PRs
-3 and 4 are PROVISIONAL until it runs.
+TRIAD in PR 4. **Gate 0B BOARD 1 (M1, M1b, M2) IS APPROVED AND BUILT**
+(James, 2026-09-15: board 1 `1MKF7K6zhtEK58xXuK3ofB`, then round 2
+`TuGUWZaKj9BxiGaCR7Sb6A` — the ruling was a direction, so round 2 drew both
+halves and measured them). **Ruling 1 = no mark on the tile face, an
+answerable drill-down instead; ruling 2 = group the columns, DERIVED first.**
+**M2 is WITHDRAWN from scope**: the recommendation proposed reopening which
+number AVG HR shows, and `derivedHeartRate.ts:20-42` records James settling
+that on 2026-09-07 with option C rejected on measured numbers — RF18. The
+screen now says what that code already knew. **Gate 0B boards 2 (the axis:
+M3, M6, M9) and 3 (live total vs stored: M4, M5) are STILL OWED**, and PRs
+3 and 4 stay PROVISIONAL until they run.
 
 **Spec:**
 [docs/superpowers/specs/2026-09-14-number-provenance-design.md](docs/superpowers/specs/2026-09-14-number-provenance-design.md).
@@ -3169,6 +3178,13 @@ wrong in three ways at once:
    lives on `MachineSummaryTable.tsx`, a separate block further down, which
    is 4/6 the machine's figures and 2/6 ours. So the derived tiles are
    UNLABELLED rather than mislabelled.
+   **[BOTH HALVES FIXED 2026-09-15, Gate 0B round 2.]** The eyebrow now reads
+   `PER INTERVAL` with `DERIVED` / `MEASURED` group headings over the columns
+   each is true of, and the tiles are no longer unlabelled: a drill-down names
+   each tile's source FOR THIS ROW. The census in this note was also
+   incomplete — the tiles are **2/2/2**, not 4/2, because RATE and AVG HR are
+   conditional on DIFFERENT predicates, which is why no fixed label could
+   cover them.
 3. **`931` / `929` is an e2e SEED, not a record.** It is
    `design.spec.ts` and `screenshots.spec.ts` fixture data. The measured band
    a rower could actually see is watts ≤1 W and cal/hr **24-78 on six of
