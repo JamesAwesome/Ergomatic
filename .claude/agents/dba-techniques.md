@@ -92,6 +92,16 @@ verdict. A cost that bites only past the household's horizon (0.6 µs/row →
 ~170,000 rows per user before +100 ms) is a ROADMAP row with a measured
 trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
 
+8. **A scratchpad `.ts` run by `pnpm exec tsx` is treated as CJS** -- the
+   scratchpad has no `package.json`, so `"type": "module"` never applies and
+   every top-level `await` fails with *Top-level await is currently not
+   supported with the "cjs" output format*. **Name the file `.mts`.** And give
+   any probe through `attempts.read()` the RIGHT binding hash
+   (`printf '0' | shasum -a 256`): a wrong one returns `invalid_proof` from
+   `read()`, which looks exactly like a `consistent()` refusal but is thrown
+   three lines later -- always include a stage you expect to READ OK as the
+   control.
+
 ## Questions to always ask (answer each, or write "untested")
 
 1. What index does every `WHERE` use, and does `ORDER BY ... LIMIT` have a
@@ -110,6 +120,10 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
    ONE transaction drizzle wraps every pending migration in
    (`drizzle-orm/pg-core/dialect.js:60`, so `CONCURRENTLY` is unavailable)?
    And does a competing open PR mint the same migration index?
+
+7. For a CHECK that PAIRS two columns: which transition writes each, and is
+   there a window where one is set and the other is not? Write that row and
+   watch for 23514 -- do not read the predicate and infer.
 
 ## Measured facts that keep paying (2026-09-07 unless dated otherwise)
 - **(2026-09-13, PR #425) A btree over churning random keys looks unbounded for
@@ -278,3 +292,124 @@ trigger, never a FAIL; one that bites at 5,000 rows is a FAIL in any phase.
 `dba-ledger.md`, one section per engagement with its environment table and
 commands; `grep -n '^## ' .claude/agents/dba-ledger.md` lists them. **Propose
 every entry to BOTH files** — an entry only in the record is invisible here.
+
+- **(2026-09-14, Wave A PR2 plan gate) A CHECK arm written as TWO states can
+  hide a THREE-state design, and the missing state is where the user waits.**
+  The proposed `auth_attempts_session_check` signin arm admitted "both columns
+  NULL" or "both set"; the design's own `followThrough` produces
+  `existing_provider` SET with `original_session_id` NULL for the entire second
+  authorization round-trip, and that state was refused 23514 both as an INSERT
+  and as the real UPDATE from a `confirm` row. **Before accepting a CHECK that
+  pairs two columns, enumerate the states the WRITE PATH passes through, not the
+  states the design names** -- the columns here are written by two different
+  transitions, so a pair rule is a three-state rule.
+- **(2026-09-14) A `CHECK` is evaluated PER STATEMENT, so a stage-keyed arm
+  dictates statement granularity.** Under a stage-keyed signin arm, `SET
+  stage='reauth_authorize'` alone raises 23514 and `SET stage=...,
+  existing_provider=...` together succeeds; `SET original_session_id=...` alone
+  at `reauth_exchanging` raises 23514 and setting it with `stage='link_ready'`
+  together succeeds. `save()` (`attempts.ts`) writes neither column, so any such
+  design needs its own single-statement UPDATEs. This is the tighter predicate
+  EARNING its keep: the looser form silently admits the state where
+  `attemptProvider()` returns `null`.
+- **(2026-09-14) `ADD CONSTRAINT ... CHECK` also blocks READS, not only writes,
+  and it VALIDATES.** With the ALTER's transaction held open, a second
+  connection at `lock_timeout='500ms'` was refused on `SELECT count(*)` as well
+  as on `INSERT` (`AccessExclusiveLock`, read from `pg_locks`). And the ADD
+  scans: **~49 us per 1,000 rows** (`ADD` alone 0.164 / 4.924 / 49.211 ms at
+  513 / 100k / 1M; `DROP` flat ~0.1 ms at every size; the whole DROP+ADD
+  transaction 0.564 ms at realistic size). **A row that fails the new predicate
+  aborts the whole Drizzle migration transaction** -- so a widening is only safe
+  if every LIVE state passes it; seed one row of each and run the ADD before
+  believing it.
+- **(2026-09-14) `auth_attempts` is CAPPED, not merely small.** `attempts.ts`
+  refuses a signin `begin()` at `count >= 512` over `purpose='signin'`, and
+  `auth_attempts_link_session_unique` plus `begin()`'s pre-sweep allow one
+  link/delete row per live session. At the 512 cap the whole relation is
+  **160 kB** after `VACUUM FULL` (heap 64 kB; pkey 32 kB, state_unique 32 kB,
+  expires_at_idx 16 kB, link_session_unique 8 kB). Letting signin rows adopt a
+  session grows `link_session_unique` 8 kB -> 32 kB in the worst case. No
+  migration cost on this table can matter; judge its changes on CORRECTNESS.
+- **(2026-09-14) `pg_relation_size` after a benchmark measures your own bloat.**
+  512 rows read **536 MB** after a 1M-row round plus `vacuum analyze`;
+  `VACUUM FULL` gave the true 64 kB. A plain `vacuum` does not truncate mid-file
+  dead space. Run `VACUUM FULL` before quoting any small-table footprint you
+  reached by shrinking down from a large one.
+- **(2026-09-14) A partial unique index on a nullable FK turns a SWEEP into a
+  silent deletion when a new purpose starts populating that column.**
+  `begin()`'s `DELETE FROM auth_attempts WHERE original_session_id=$1` exists to
+  dodge `auth_attempts_link_session_unique`; the moment a signin attempt can
+  hold a session, that sweep deletes an in-flight signin follow-through. Same
+  for the FK's `ON DELETE CASCADE`: signout and the expiry sweep
+  (`sessions.ts`) now reach a signin attempt that was previously unreachable by
+  either. **When a column gains a new populating purpose, grep every statement
+  that filters on it, not just the index definition.**
+- **(2026-09-14) A concurrent account delete gives the adopting transaction
+  23503, and nothing maps it.** `transaction()`'s catch converts only 23505 on
+  `users_apple_sub_unique`/`users_google_sub_unique`, so `INSERT INTO sessions`
+  meeting a just-deleted user propagates `sessions_user_id_users_id_fk` raw --
+  a 500 where `account_changed` is correct. Measured: the insert blocked
+  6,473 ms on the deleter's users lock (no `lock_timeout`, no
+  `statement_timeout` -- both 0) and then raised 23503. **No deadlock is
+  available** in either interleave: the adopter locks attempt-then-users and the
+  deleter locks sessions-then-users-then-attempts, but the adopter's uncommitted
+  session is invisible to the deleter, so there is a wait and never a cycle.
+  **The RF21 control matters here** -- the same harness on a deliberate reverse
+  order over those two rows DOES print `deadlock detected`, so "no deadlock" is
+  a measurement rather than a silent probe.
+- **(2026-09-14) A CHECK widening is rollback-clean, and the down-migration
+  fails LOUDLY.** PRIMARY, from `drizzle-orm/pg-core/dialect.js`: the migrator
+  reads `order by created_at desc limit 1` and applies only
+  `Number(lastDbMigration.created_at) < migration.folderMillis`, so an older
+  image meeting a newer database applies nothing and boots. A hand-written
+  narrowing aborts while any widened row is live (`check constraint ... is
+  violated by some row`, ROLLBACK, widened constraint intact) and succeeds after
+  the expiry sweep -- never silently lossy. No `docs/RELEASING.md` floor row is
+  owed for this class. **Name what a revert CANNOT undo**: here, a session
+  minted at its 30-day TTL and a `users.apple_sub` already attached.
+- **(2026-09-14) A per-write CHECK cost is below this harness's noise floor,
+  and one non-interleaved pass will invent one.** 100k INSERTs, three
+  predicates, interleaved across two rounds: shipped 450.3/519.4, plan's
+  478.8/504.3, stage-keyed 457.3/523.2 ms. Within-label spread (69 ms) exceeds
+  every between-label gap; upper bound <1 us/row. A first NON-interleaved pass
+  read 365.9 vs 429.0 ms and would have shipped a fabricated +0.63 us/row
+  (RF30). **Interleave the labels or report nothing.**
+- **(2026-09-14, rev 3 re-gate) Testing ONE arm of a multi-arm CHECK in
+  isolation is sound for REFUSALS and unsound for ADMITS.** When every arm of the
+  OR opens with an equality on the same discriminator column, no row of one
+  purpose can be rescued by another arm, so an isolated refusal is a refusal in
+  company. The reverse fails hard: a bare table carrying only the arm's columns
+  has none of the real table's sibling CHECKs, FKs or partial unique indexes, and
+  admitted two rows the real schema refused with **23505** and **23503**. **Run
+  the admit cases against the migrated table with real parent rows.**
+- **(2026-09-14) A clean `ADD CONSTRAINT` proves rows are ADMISSIBLE, not that
+  the app's own write statement still lands.** Validation checks resident rows;
+  it does not exercise the UPDATE the code issues. After widening, re-run the
+  store's real statement text across one row of every live state — `UPDATE <n>`
+  is the second half of the proof.
+- **(2026-09-14) Enumerate the writers of a CHECK-governed column by grepping
+  the SQL, not by reading the call graph.**
+  `grep -rn "SET <col>\|<col>=\$\|,<col>," app/server | grep -v '\.test\.'` found
+  exactly two writers of `auth_attempts.stage` where the module has six callers
+  funnelling into them. A stage-keyed CHECK then reads off as a table of
+  disjunct transitions: only the ones CROSSING a disjunct need a companion
+  column in the same statement, and the transition that looks like it needs one
+  and does not is the one worth writing down.
+- **(2026-09-14) Before mapping a SQLSTATE in a shared `catch`, enumerate every
+  statement inside that catch's scope that can raise it.** `INSERT INTO sessions`
+  appears twice in this server; only the one inside `transaction()` is reachable
+  by the catch, so mapping 23503 on `sessions_user_id_users_id_fk` captures
+  exactly one event. Confirm the driver exposes the discriminator: real `pg`
+  gives `code`, `constraint` and `table`, so a constraint-name match is writable.
+- **(2026-09-14) An error CODE's meaning is whatever each rendering surface does
+  with it — read every surface, not the enum.** Whether a new producer
+  "collides" is a question about which surface its `purpose` routes it to.
+- **(2026-09-14) `shared_buffers` has two honest readings that look like
+  different numbers (RF11).** `select setting from pg_settings` gives `16384`
+  (8 kB pages); `setting||unit` gives `163848kB`. Same 128 MB. Say which form
+  the table used.
+- **(2026-09-14) Drizzle migrations are written to `app/drizzle/`, never under
+  `app/server/db/`.** `app/drizzle.config.ts` is
+  `schema: "./server/db/schema.ts", out: "./drizzle"` — the schema and the
+  migrations live in different trees, and a plan naming
+  `app/server/db/migrations/` names a directory that does not exist.

@@ -87,9 +87,16 @@ cd ~/Ergomatic && git checkout <good-sha> && docker compose up -d --build --wait
 
 Two things that bite here:
 
-- **`deploy.sh` refuses to run on a dirty checkout** (`exit 3`), and a
-  hand-rolled rollback is the most likely way to leave one dirty. Check
-  `git status --porcelain` on the host before letting CI deploy again.
+- **`deploy.sh` refuses to run on a dirty checkout** (`exit 3`), and
+  `git status --porcelain` counts UNTRACKED files. `.gitignore` ignores exactly
+  `.env` and nothing else near it, so a `.env.bak`, a `.env~`, or a `.env.swp`
+  left by a dropped SSH session makes the host checkout permanently dirty —
+  and then every later CI deploy exits 3, the tree stays on the old SHA, and
+  the only symptom is a red `deploy` job on main that nobody reads (RF28, which
+  ran for eleven hours across six merges). **A hand edit of the host `.env`
+  keeps its backup OUTSIDE `~/Ergomatic`, and ends with
+  `git -C ~/Ergomatic status --porcelain` printing nothing.** A hand-rolled
+  rollback can dirty the tree too, but it is the louder of the two.
 - **A LOCK COLLISION ON THE HOST LOOKS EXACTLY LIKE A FAILED BUILD.** Seen
   2026-09-14 on run `34907509845` (merge `a847148b`): all six code jobs
   green, `deploy` red, and the only honest line in a 166-line log was

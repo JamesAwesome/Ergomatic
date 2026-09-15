@@ -372,9 +372,38 @@ subject and the Apple grant, so the same screen returns on every future sign-in 
 a fresh chance to create a duplicate each time. PR2 carries the confirmed attempt
 across the second provider's round trip and attaches the identity.
 
-**The security shape, settled by the hardening pass.** This is the OAuth
-pre-account-linking attack (RFC 9700, which this repo already cites for the
-Concept2 case). **The confirmation alone is NOT sufficient.** What actually bounds
+**The security shape, settled by the hardening pass.** This is the
+pre-account-linking attack.
+
+**CITATION CORRECTED 2026-09-14. This paragraph previously credited RFC 9700,
+and RFC 9700 does not contain this attack.** Measured twice independently:
+`curl https://www.rfc-editor.org/rfc/rfc9700.txt` is 2569 lines, `grep -ci
+linking` returns 0, all four `account` hits are the idiom "take into account",
+and §4's table of contents runs 4.1-4.17 with no account-linking section. This
+repo's four OTHER RFC 9700 citations (§4.2, §4.4, §4.5, §4.7, all in the
+Concept2 work) are real sections, which is exactly what made the transfer
+plausible — RF16's second corollary. The primaries are:
+
+- **Sudhodanan & Paverd, _Pre-hijacked Accounts_, USENIX Security 2022 §6.2.2**,
+  for the attack: _"When a service merges an account created via the classic
+  route with one created via the federated route (or vice-versa), the service
+  must ensure that the user currently controls both accounts."_ Its §4.1 is the
+  only source found that evaluates a confirmation as a control, and it declines
+  to treat one as sufficient.
+- **NIST SP 800-63C-4 §3.8.1**, which ENDORSES this design's shape: _"If the RP
+  allows a subscriber to link multiple subscriber accounts in this way, the RP
+  SHALL require an authenticated session with the subscriber account for all
+  linking functions. This authenticated session SHOULD require authentication
+  using one existing federated identifier before linking the new federated
+  identifier to the RP subscriber account."_
+
+**And a deviation this spec had not named.** NIST SP 800-63C-4 §3.8 carries a
+SHALL — the RP notifies the subscriber when a new federated identifier is added
+— and SP 800-63B-4 §4.1.2 asks that the notice use _"a mechanism independent of
+the transaction."_ This spec's "the You screen is the only detection channel" is
+not independent of the transaction. The deviation may well be right at a
+five-person cohort; it is recorded here with its citation rather than left
+silent. **The confirmation alone is NOT sufficient.** What actually bounds
 it is `auth_attempts.binding_hash`, a per-attempt secret the client holds, which
 forces attacker and victim onto the same client instance and collapses the attack
 from remote phishing to shared-device. Revision 1 never named it.

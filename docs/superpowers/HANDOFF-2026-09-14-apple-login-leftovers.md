@@ -69,7 +69,10 @@ that will bite:
    is often an address the victim has never seen, so the discriminating power is
    weakest exactly where permanence is worst.
 
-The security shape is the OAuth pre-account-linking attack (RFC 9700). What
+The security shape is the pre-account-linking attack. **NOT RFC 9700 — that
+citation was wrong and is withdrawn (2026-09-14); the RFC contains no
+account-linking section, measured twice. The primaries are Sudhodanan & Paverd,
+USENIX Security 2022 §6.2.2, and NIST SP 800-63C-4 §3.8.1. See the spec.** What
 bounds it is `auth_attempts.binding_hash`, a per-attempt secret the client holds,
 which forces attacker and victim onto the same client instance. **The
 confirmation alone is not sufficient** — revision 1 thought it was.

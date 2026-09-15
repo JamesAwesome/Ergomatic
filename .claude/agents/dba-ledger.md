@@ -510,3 +510,228 @@ ORDER BY id FOR UPDATE` is already served by the pre-existing
 **Unmeasured**: production host CPU/RAM; per-row WAL cost of a future
 `delete`-purpose insert (inferred identical to `link`'s, since no column or index
 changed); Task 3's actual code, which does not exist yet.
+
+## 2026-09-14 — Wave A PR2 plan gate: widening the signin arm of `auth_attempts_session_check`
+
+**Verdict: FAIL.** The proposed predicate refuses the state the plan's own
+Task 2 produces. Every cost measured clean; the failure is correctness at one
+row, not cost at any row count.
+
+| | |
+|---|---|
+| Container | `docker run --rm -d --name erg-dba-pg -p 5434:5432 -e POSTGRES_PASSWORD=dev postgres:18.4` |
+| Version | `PostgreSQL 18.4 (Debian 18.4-1.pgdg13+1) on aarch64-unknown-linux-gnu` |
+| Machine | Apple M5, `hw.ncpu` 10, `hw.memsize` 17179869184 (laptop; prod host CPU/RAM untested) |
+| Settings | `work_mem` 4096 kB, `shared_buffers` 16384x8kB, `jit` on, `lock_timeout` 0, `statement_timeout` 0, `deadlock_timeout` 1000 ms, `max_parallel_workers_per_gather` 0 for the write bench |
+| Schema | all 33 `app/drizzle/*.sql` applied in name order, `psql -v ON_ERROR_STOP=1` |
+| Target | plan `docs/superpowers/plans/2026-09-14-wave-a-pr2-follow-through.md` rev 2, "The design" + Task 0 |
+| Timings | median of 5, run 1 discarded, one psql session per label |
+
+### Blocking 1 — the predicate refuses the design's own middle state
+
+Task 0 Step 1's four cases all behave as the plan expects (admit / admit /
+refuse 23514 / refuse 23514). A fifth, unenumerated case is the design's:
+`signin` at `reauth_authorize` with `existing_provider` SET and
+`original_session_id` NULL is refused 23514, both as an INSERT and by `save()`'s
+UPDATE statement text applied to a real `confirm` row (corrected at the revision
+3 re-gate: `followThrough` does not exist yet, so the original entry's
+attribution to it was wrong; the measurement itself is sound).
+
+`attemptProvider()` reads `existing_provider` at every `reauth_*` stage, and
+FOUR `frontDoorRoutes.ts` call sites use it at `reauth_authorize` (`:101`,
+`:130`, `:307`, `:358` — corrected at the revision 3 re-gate; the original
+entry said three) -- while the
+rower is at their usual provider's consent screen, before any session can
+exist. The plan's "two-state arm, never one without the other" is a three-state
+design.
+
+Two corrected predicates measured. **Variant B** (delete
+`original_session_id is not null and` from the second disjunct): all five cases
+correct, but admits `reauth_authorize` with `existing_provider` NULL
+(`UPDATE 1`), where `attemptProvider()` returns `null`. **Variant C,
+recommended** (stage-keyed three-state arm): all five correct AND refuses both
+states B admits (`reauth_authorize` with a session already adopted; `confirm`
+with `existing_provider` set -- both 23514).
+
+Variant C's ordering prescription, measured, because CHECKs evaluate per
+statement and `save()` writes neither column:
+
+| write | result |
+|---|---|
+| `SET stage='reauth_authorize'` alone | 23514 |
+| `SET stage='reauth_authorize', existing_provider='google'` | `UPDATE 1` |
+| `SET original_session_id=...` alone at `reauth_exchanging` | 23514 |
+| `SET original_session_id=..., stage='link_ready', reauthenticated_at=now()` | `UPDATE 1` |
+
+### Blocking 2 — the machine still refuses `signin@link_ready`
+
+Through the real `createAttempts(...).read()` against real Postgres:
+
+    signin@confirm            -> READ OK           <- control
+    signin@reauth_authorize   -> THREW attempt_expired
+    signin@reauth_exchanging  -> THREW attempt_expired
+    signin@link_ready         -> THREW attempt_expired
+
+Then `consistent()` extracted verbatim with ONLY the plan's Task 1 Step 3 edit
+applied (widening the `signup` array): the first three PASS and
+`signin@link_ready` STILL THROWS, refused by the separate
+`((a.stage.startsWith("target_") || a.stage === "link_ready") && a.purpose !== "link")`
+clause -- the one added to close RF34's mirror case. Task 1 names two
+`consistent()` edits; three are needed, and without the third, Task 3 Step 7's
+falsification test would read as the design's central claim failing.
+
+### Lock behaviour
+
+`BEGIN; DROP CONSTRAINT; ADD CONSTRAINT; COMMIT;` x6, median of 5:
+
+| rows | heap | BEGIN | DROP | ADD | COMMIT | txn |
+|---|---|---|---|---|---|---|
+| 513 (realistic) | 64 kB | 0.036 | 0.080 | 0.164 | 0.284 | **0.564 ms** |
+| 1,000 | 120 kB | 0.039 | 0.121 | 0.256 | 0.169 | 0.585 ms |
+| 100,000 | 12.0 MB | 0.041 | 0.102 | 4.924 | 0.168 | 5.235 ms |
+| 1,000,000 | 120 MB | 0.046 | 0.118 | 49.211 | 0.250 | 49.625 ms |
+
+`AccessExclusiveLock` (from `pg_locks` inside the transaction). With it held, a
+second connection at `lock_timeout='500ms'` was refused on **both** `INSERT` and
+`SELECT count(*)`. `ADD` scans at ~49 us/1,000 rows; `DROP` is flat. Against
+`deploy.sh`'s `--wait-timeout 120`, the realistic figure is 0.0005%.
+
+The ADD validates: one row of each of the 11 states the shipped machine can
+produce (3 signin, 5 link, 3 delete) validated clean under both predicates; a
+deliberate bad row gave `check constraint ... is violated by some row` and
+aborted the transaction. No competing migration index (`gh pr list --state
+open` -> `[]`).
+
+### `auth_attempts_link_session_unique`
+
+Direct collision reproduced: a `link` attempt on a session already held by a
+signin follow-through gives `duplicate key value violates unique constraint`.
+**No legitimate flow can hit it** -- `mintSession` inserts a fresh session
+inside the adopting transaction, so nothing else can name it.
+
+The NEW exposure is the reverse: `begin()`'s pre-sweep
+(`DELETE FROM auth_attempts WHERE original_session_id=$1`) now silently deletes
+an in-flight signin follow-through when the rower starts a link or delete from
+the adopted session. And the FK's `ON DELETE CASCADE` makes signout and the
+expiry sweep reach a signin attempt for the first time.
+
+Worst case (all 512 signin rows in the follow-through state):
+`link_session_unique` 8,192 -> 32,768 B; table total 160 kB -> 200 kB.
+
+### Deadlock probe (held transaction on one connection, never a race)
+
+| interleave | result |
+|---|---|
+| delete first, follow-through second | `INSERT INTO sessions` blocked **6,473 ms**, then 23503 on `sessions_user_id_users_id_fk` |
+| follow-through first, delete second | `deleteAccount`'s `original()` blocked **6,458 ms**, then completed; the delete cascaded away the adopted session and attempt |
+| RF21 control: deliberate reverse order, same two rows | `ERROR: deadlock detected` |
+
+No deadlock is available: the adopter locks attempt-then-users (`bound()` skips
+`original()` while `original_session_id` is NULL), the deleter locks
+sessions-then-users-then-attempts, and the adopter's uncommitted session is
+invisible to the deleter -- a wait, never a cycle. But 23503 is unmapped:
+`transaction()`'s catch converts only 23505 on the two subject uniques, so the
+rower gets a 500 where `account_changed` is correct. Both `lock_timeout` and
+`statement_timeout` are 0, so the 6.5 s figures are the probe's own `pg_sleep`,
+not a ceiling.
+
+### Rollback
+
+PRIMARY, `drizzle-orm/pg-core/dialect.js`: the migrator selects
+`order by created_at desc limit 1` and applies only
+`Number(lastDbMigration.created_at) < migration.folderMillis`, so an older image
+against the migrated database applies nothing and boots. The widened CHECK is
+strictly more permissive for every shipped state (validated). **No
+`docs/RELEASING.md` floor row owed**; the 0031 Apple row remains the floor. A
+hand-written narrowing ABORTS while a widened row is live and succeeds after the
+expiry sweep -- loud, never lossy. Old image reading a widened row:
+`consistent()` throws `attempt_expired` on a 5-minute row. **What a revert
+cannot undo:** the minted session at its 30-day TTL, and `users.apple_sub` if
+`finalize()` ran.
+
+### Write cost
+
+100k INSERTs per predicate, interleaved over two rounds, median of 5:
+shipped 450.314 / 519.386 ms, plan's 478.752 / 504.306, variant C 457.296 /
+523.217. Unresolvable; upper bound <1 us/row. A first NON-interleaved pass read
+365.870 vs 428.997 ms and would have published a fabricated +0.63 us/row.
+
+### Which scale ruled
+
+The household, and specifically the CAP. `auth_attempts` is 160 kB at its
+structural ceiling (512 signin + one per live session) and the migration is
+0.56 ms of exclusive lock there. 1k/100k/1M were the ceiling and decided
+nothing.
+
+### Could not establish
+
+Production `auth_attempts`/`sessions` counts (no prod access; the cap bounds
+them). Prod host CPU/RAM (untested). The per-insert CHECK cost (below the noise
+floor). Staging's `ACCESS_MODE` -- the plan's own open item, and the PM's.
+
+### Re-gate on revision 3 (2026-09-14)
+
+**PASS WITH ROWS.** Same container recipe. The rev-3 predicate written out in
+full (signin arm replaced, `link`/`delete` arms verbatim from
+`0032_account_delete_purpose.sql`), applied to the migrated schema with real
+`users`/`sessions` rows so the FK and `auth_attempts_link_session_unique` are
+live. All seven cases reproduce the controller's isolated harness exactly:
+ADMIT / ADMIT / 23514 / 23514 / **ADMIT (the middle state)** / 23514 / 23514,
+every refusal naming `auth_attempts_session_check`.
+
+**Why an isolated arm is sound for REFUSE and not for ADMIT.** The constraint is
+a three-way OR and each arm opens with an equality on `purpose`, so no
+`purpose='signin'` row can be rescued by the `link` or `delete` disjunct — an
+isolated refusal is a refusal in company. The other direction is not safe: two
+false ADMITs measured on rows THIS design produces — `signin@link_ready` on a
+session a link attempt already holds (real: **23505**
+`auth_attempts_link_session_unique`) and on a nonexistent session (real:
+**23503** `auth_attempts_original_session_id_sessions_id_fk`). **Task 0 Step 1's
+seven rows must go into the real table.**
+
+**11 shipped states.** Seeded one row of each (3 signin / 5 link / 3 delete)
+under the SHIPPED constraint, each session-bearing row on its own session; the
+widened `DROP`+`ADD` validated clean, 11 rows surviving. They also stay
+WRITABLE: a `save()`-shaped UPDATE rewriting all of `save()`'s columns across all
+11 returned `UPDATE 11`. (`ADD` validating proves admissibility, not that the
+app's own write statement still lands — measure both.)
+
+**Every `stage` writer, enumerated mechanically.**
+`grep -rn "SET stage\|stage=\$\|,stage," app/server | grep -v '\.test\.'` returns
+exactly two: `begin()`'s INSERT and `save()`'s UPDATE. `save()` writes neither
+`existing_provider` nor `original_session_id`, so the signin transitions check
+as: `authorize->exchanging` and `exchanging->confirm` stay within disjunct 1 and
+need nothing; `confirm->reauth_authorize` crosses 1->2 and needs
+`existing_provider` in the same statement (stage alone 23514);
+**`reauth_authorize->reauth_exchanging` stays within disjunct 2 and needs
+NOTHING — stage alone is fine, on the UNCHANGED `claim()` path**;
+`reauth_exchanging->link_ready` crosses 2->3 and needs `original_session_id` in
+the same statement (stage alone 23514, session alone 23514, together ok). The
+third row is the one worth keeping: it looks like it needs a companion column
+and does not, and a stage-keyed CHECK invites an implementer to widen `save()`
+defensively when nothing requires it.
+
+**23503 -> `account_changed` is correct and narrow.** Through the real `pg`
+driver: `code: 23503 | constraint: sessions_user_id_users_id_fk | table:
+sessions`. Only ONE statement inside `transaction()` can raise it —
+`mintSession`'s `INSERT INTO sessions`; `sessions.ts`'s `createSession` runs on
+the drizzle pool OUTSIDE `transaction()` and is unreachable by the catch. No
+client collision: the producer carries `purpose: "signin"`, and `SignIn.tsx`
+enumerates only `access_denied`/`account_conflict` and defaults the rest to
+"That sign-in didn't work. Give it another try." — right for a concurrent
+delete. `SignInMethods.tsx`'s "Start linking again" copy is unreachable from
+here (its retry is gated on `purpose === "link"`). `account_changed` is already
+409. **Open:** Task 3 Step 4 does not name its code for "proven subject belongs
+to no account"; picking `account_changed` puts a user error and a concurrent
+delete behind one code on one screen. `account_conflict` fits and already has
+copy there.
+
+**Four things rev 3 states that measurement did not support; TWO ARE THIS
+AGENT'S OWN, corrected in place above.** (1) Task 0's Files line named
+`app/server/db/migrations/`, which does not exist — `app/drizzle.config.ts` is
+`out: "./drizzle"` and all 33 migrations live in `app/drizzle/`. (2) "three
+`frontDoorRoutes.ts` call sites" is FOUR. (3) "`followThrough`'s real UPDATE"
+was `save()`'s UPDATE text. (4) Task 0 Step 4 still read "all four cases hold"
+while Step 1 enumerates seven — and Step 4 is the step that reads the gate.
+
+**Which scale ruled:** none. Decided at one row, by correctness, like revision 2.
