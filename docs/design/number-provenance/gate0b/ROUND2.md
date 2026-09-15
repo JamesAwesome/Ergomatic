@@ -2,11 +2,15 @@
 
 James ruled on board 1 (2026-09-15): **"go with the recommendation."** That
 recommendation was a direction, not a design — neither half had been drawn —
-so this round renders both and measures the costs the board could only
-assert. **Nothing here is approved.**
+so this round rendered both and measured the costs the board could only
+assert. **APPROVED by James on 2026-09-15** (artifact
+`TuGUWZaKj9BxiGaCR7Sb6A`) and implemented on branch `gate0b-round2`; this file
+is the record of the gate, not a live proposal.
 
-Captured by `app/e2e/gate0b.spec.ts` (the board-1 harness, extended;
-throwaway, deleted by the implementing PR) against this worktree's compose
+Captured by `app/e2e/gate0b.spec.ts` (the board-1 harness, extended) — **that
+harness has since been DELETED and replaced by `app/e2e/provenance.spec.ts`,
+which asserts this behaviour instead of capturing it**. The frames below were
+produced by it before it went against this worktree's compose
 stack at 390x844 and 844x390.
 
 ## ONE PART OF THE RULING IS WITHDRAWN, AND IT IS MINE
@@ -49,7 +53,7 @@ is per-row.
 `MachineTier` carries values only — so a renderer **cannot** re-derive which
 branch produced `rate` or `avgHr`. Provenance is therefore stamped at the
 same site that picks the value. Re-deriving it downstream would make two
-copies of one predicate, and `summaryModel.ts:1229` already records that
+copies of one predicate, and `machineTierFromRun`'s own doc comment already records that
 exact failure happening once this phase ("the alternative is two that drift,
 which is how the tile and the wire came to disagree").
 
@@ -86,7 +90,7 @@ identical; the picture is what separated them.
 
 **`DERIVED` / `MEASURED` (James, 2026-09-15.)** The board said the second
 group was "ours". It is not — `AVG WATTS` and `CAL/HOUR` run **Concept2's own
-published logbook formula**, so the formula is theirs and only the running of
+logbook's own figures**, so the arithmetic is theirs and only the running of
 it is ours. "Estimated" was never available either: the tilde already means
 that on the baselines surface.
 
@@ -180,13 +184,14 @@ unchanged (the colour did not move); the labels still fit.
 
 ## What is NOT done
 
-- **Only the STORED door is wired.** `storedMachineTier` (`storedSummary.ts`)
-  is what `/today/log/:id` renders, so it is what these captures exercise.
-  `machineTierFromRun` feeds the live screen and Just Row and is NOT stamped.
-  **The implementing PR must stamp both or the sheet is honest on one door
-  and silent on the other (RF24)**; the field's own comment says so.
-- `MachineTier.sources` is OPTIONAL only because this is a prototype. It
-  should be required once both producers stamp it, so the compiler is the
-  gate rather than a comment.
-- No unit tests. This is capture scaffolding, not an implementation.
-- Boards 2 and 3 of Gate 0B remain unbuilt.
+**[ALL BUT THE LAST WERE CLOSED BY THE IMPLEMENTING WORK — kept here so the
+gate's own state at the time is legible.]**
+
+- ~~Only the STORED door is wired.~~ **DONE:** both `storedMachineTier` and
+  `machineTierFromRun` stamp, each from the same predicate its value took.
+- ~~`MachineTier.sources` is OPTIONAL.~~ **DONE:** it is REQUIRED, so the
+  compiler is the gate rather than a comment — it caught two hand-built
+  fixtures the moment it changed.
+- ~~No unit tests.~~ **DONE:** `tileProvenance.test.ts` and
+  `TileSourceSheet.test.tsx`, with mutants proving each assertion bites.
+- **Boards 2 and 3 of Gate 0B remain unbuilt.** Still true.

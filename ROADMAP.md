@@ -3210,7 +3210,14 @@ one day on 2026-09-07 and gained two more (M8 and the appendix) on the day
 it opened — eight and an appendix, against the "five" this paragraph was
 written under.
 
-- [ ] **Phase LP's strip eyebrow says `PM5 · PER INTERVAL` over two
+- [x] **DONE 2026-09-15 — Phase LP's strip eyebrow said `PM5 · PER INTERVAL`
+      over two columns that are Concept2's arithmetic.** Gate 0B round 2
+      (James, approved): the eyebrow is now a plain `PER INTERVAL` and the
+      six data columns sit under `DERIVED` / `MEASURED` group headings, each
+      true of what is beneath it. The tiles got the other half — a drill-down
+      naming each one's source for THAT row. Original text below, kept
+      because this row is what the gate was drawn against.
+      **Phase LP's strip eyebrow says `PM5 · PER INTERVAL` over two
       columns that are Concept2's arithmetic** (PM final gate #327,
       2026-09-07, non-blocking): WATTS and CAL/HOUR are the logbook's
       derivation (James's §3.1 ruling), differing from the PM5's own by

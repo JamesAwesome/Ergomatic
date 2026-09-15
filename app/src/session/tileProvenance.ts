@@ -3,14 +3,15 @@
 // Why this exists as a TYPE rather than a lookup the sheet performs:
 // `MachineTier` carries values only, so a renderer cannot tell which branch
 // produced `rate` or `avgHr`. Re-deriving the predicate downstream gives two
-// copies that drift, and `summaryModel.ts:1229` already records that exact
+// copies that drift, and `machineTierFromRun`'s own doc comment in
+// `summaryModel.ts` already records that exact
 // failure happening once this phase ("the alternative is two that drift,
 // which is how the tile and the wire came to disagree"). So the source is
 // stamped at the SAME site that picks the value, and the sheet only renders
 // what it is handed.
 
 /** Who did the arithmetic. Deliberately not "ours" vs "theirs": AVG WATTS
- *  and CAL/HOUR run CONCEPT2'S OWN published logbook formula over the
+ *  and CAL/HOUR reproduce CONCEPT2'S OWN LOGBOOK figures over the
  *  monitor's figures, so the formula is theirs and only the running of it is
  *  ours. And deliberately not "estimated", which is what the tilde already
  *  means on the baselines surface.
@@ -65,15 +66,18 @@ export const FIXED_SOURCES: Record<FixedTile, TileProvenance> = {
   avgWatts: {
     label: "AVG WATTS",
     source: "derived",
-    detail:
-      "Concept2's published logbook formula, from your time and distance.",
+    detail: "Concept2's published formula, from your time and distance.",
   },
   calories: { label: "CALORIES", source: "measured" },
   calPerHour: {
     label: "CAL / HOUR",
     source: "derived",
+    // NOT "published": `logbookDerived.ts` tags the WATTS formula PRIMARY
+    // from Concept2's own calculator, but records this one as reproduced by
+    // matching six cells of a photographed logbook row — no publication is
+    // cited anywhere in this repo. The copy says what we actually know.
     detail:
-      "Concept2's published logbook formula, from the monitor's calorie count.",
+      "Worked out from the monitor's calorie count, to match what Concept2's logbook shows.",
   },
   drag: { label: "DRAG", source: "measured" },
 } satisfies Record<FixedTile, TileProvenance>;

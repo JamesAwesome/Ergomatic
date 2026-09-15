@@ -209,10 +209,10 @@ export interface MachineTier {
   /** Gate 0B round 2, approved 2026-09-15 (ruling 1). Stamped at the SAME site that
    *  picks each value, because a renderer cannot re-derive `rate`'s or
    *  `avgHr`'s branch from the values alone and two copies of a predicate
-   *  drift. Optional only while this is a prototype: the implementing PR
-   *  must stamp it in BOTH producers — here and `storedMachineTier` — or
+   *  drift. Both producers stamp it — here and `storedMachineTier` — or
    *  the sheet would tell the truth on one door and not the other (RF24).
-   *  REQUIRED, so the compiler is that gate rather than this comment. */
+   *  REQUIRED, so the compiler is that gate rather than this comment — and
+   *  it caught two hand-built fixtures the moment it stopped being optional. */
   sources: MachineTileProvenance;
 }
 
