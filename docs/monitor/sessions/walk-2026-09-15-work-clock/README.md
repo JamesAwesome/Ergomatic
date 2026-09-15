@@ -116,7 +116,8 @@ figure attached, and it belongs in board 2.
 
 **3. `ergMachineType` is logged as `null` on a machine that reports it 174
 times.** The wire byte is `0` on both carriers; the log header says `null`.
-`classifyErgMachine` writes the meta on every decode of every characteristic,
+`classifyErgMachine` writes the meta on every decode of the five
+characteristics routed through `mergeStatus`,
 and THREE of them carry no such field (0x0031, 0x0033, 0x0037), and `setMeta`
 is last-write-wins — so each erases a reading it never had. Found by James
 reading this walk's own ring.

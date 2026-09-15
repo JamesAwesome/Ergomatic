@@ -3507,8 +3507,8 @@ Each needs erg time or a deliberate recording session.
   byte is **0** (RowErg) at 0x0032 offset 16 and 0x0038 offset 18, both
   frames long enough to carry it (17 B and 19 B against gates of `>16` and
   `>18`), both decoded cleanly, 174 times. **The bug is the write, not the
-  read:** `driver.ts`'s `classifyErgMachine` runs on EVERY clean decode of
-  EVERY characteristic and calls `log.setMeta({ergMachineType: typeof value
+  read:** `driver.ts`'s `classifyErgMachine` runs on every clean decode of
+  the five characteristics routed through `mergeStatus` and calls `log.setMeta({ergMachineType: typeof value
   === "number" ? value : null})` each time — but **three** characteristics
   reach it with nothing to say (0x0031, **0x0033** and 0x0037), and `setMeta`
   is last-write-wins (`eventLog.ts:230-235`, "MERGE, never replace"). So each

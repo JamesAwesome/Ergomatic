@@ -116,22 +116,58 @@ describe("ergMachineToken — the vendor's own name for a value", () => {
   // Spot-checked against the FIRST-PARTY document in this repo, not against
   // the map under test: `docs/monitor/PM5_CSAFECommunicationDefinition.pdf`
   // rev 0.27, `OBJ_ERGMACHINETYPE_T`, read with `pdftotext -layout`.
-  it("names the values the vendor names, verbatim", () => {
-    expect(ergMachineToken(0)).toBe("STATIC_D");
-    expect(ergMachineToken(3)).toBe("STATIC_B");
-    expect(ergMachineToken(20)).toBe("SLIDES_E");
-    expect(ergMachineToken(128)).toBe("STATIC_SKI");
-    expect(ergMachineToken(224)).toBe("MULTIERG_ROW");
-    expect(ergMachineToken(226)).toBe("MULTIERG_BIKE");
+  // EXHAUSTIVE, not spot-checked — this file's own header says why (RF21's
+  // first smell), and the first draft of this block ignored it: it pinned 8
+  // of 23 values, so mutating an unpinned row's spelling
+  // (`MULTIERG_SKI` -> `MULTIERG_SKl`) or deleting one outright both stayed
+  // GREEN at 37/37. The union type on the map catches the typo; only this
+  // table catches a DROPPED row.
+  //
+  // Every literal is transcribed from PM5 Bluetooth Smart Communication
+  // Interface Definition rev 1.30, Appendix A — the document that DEFINES
+  // this field, and the same source the `unsupportedErgMachine` table above
+  // uses. Not from the CSAFE definition, which names 32 `LINKED_DYNAMIC`
+  // where rev 1.30 names it `SLIDES_DYNAMIC`; that is the two documents'
+  // only divergence in 23 values and it is the one a first draft got wrong.
+  it.each([
+    [0, "STATIC_D"],
+    [1, "STATIC_C"],
+    [2, "STATIC_A"],
+    [3, "STATIC_B"],
+    [5, "STATIC_E"],
+    [7, "STATIC_SIMULATOR"],
+    [8, "STATIC_DYNAMIC"],
+    [16, "SLIDES_A"],
+    [17, "SLIDES_B"],
+    [18, "SLIDES_C"],
+    [19, "SLIDES_D"],
+    [20, "SLIDES_E"],
+    [32, "SLIDES_DYNAMIC"],
+    [64, "STATIC_DYNO"],
+    [128, "STATIC_SKI"],
+    [143, "STATIC_SKI_SIMULATOR"],
+    [192, "BIKE"],
+    [193, "BIKE_ARMS"],
+    [194, "BIKE_NOARMS"],
+    [207, "BIKE_SIMULATOR"],
+    [224, "MULTIERG_ROW"],
+    [225, "MULTIERG_SKI"],
+    [226, "MULTIERG_BIKE"],
+  ])("%i is named %s, verbatim from rev 1.30", (value, token) => {
+    expect(ergMachineToken(value as number)).toBe(token);
   });
 
-  // THE DOCUMENT'S OWN COMMENT IS WRONG HERE and this test is the record of
-  // it: `ERGMACHINE_TYPE_STATIC_DYNO = 64` carries `/**< Dynomometer, static
-  // type (32). */`, while 32 is `LINKED_DYNAMIC`. Transcribing from the
-  // parentheticals rather than the assignments would swap these two.
-  it("reads the assignment, not the parenthetical, where the PDF disagrees with itself", () => {
+  // TWO TRAPS, ONE PER DOCUMENT, and this test is the record of both.
+  // (1) The CSAFE definition's `ERGMACHINE_TYPE_STATIC_DYNO = 64` carries a
+  // comment reading "Dynomometer, static type (32)" — transcribing from the
+  // parenthetical rather than the assignment swaps two machines.
+  // (2) The two vendor documents disagree on 32's NAME: CSAFE rev 0.27 says
+  // `LINKED_DYNAMIC`, BLE rev 1.30 says `SLIDES_DYNAMIC`. Rev 1.30 defines
+  // this field, so it wins — and a first draft of this map used the other
+  // document and pinned the wrong one.
+  it("reads the assignment, not the parenthetical, and rev 1.30, not CSAFE", () => {
     expect(ergMachineToken(64)).toBe("STATIC_DYNO");
-    expect(ergMachineToken(32)).toBe("LINKED_DYNAMIC");
+    expect(ergMachineToken(32)).toBe("SLIDES_DYNAMIC");
   });
 
   // An unnamed value must stay unnamed. Naming one as rowing would build the

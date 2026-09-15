@@ -2569,9 +2569,11 @@ export function createPm5Driver(
     // to "was this a monitor too old to classify".
     //
     // THE WRITE IS A FLOOR, NOT AN OVERWRITE — and it has to be, because
-    // this function runs on EVERY clean decode of EVERY subscribed
-    // characteristic and only TWO of them carry the field (0x0032 offset 16,
-    // 0x0038 offset 18). 0x0031, 0x0033 and 0x0037 all arrive here with
+    // this function runs on every clean decode of every characteristic
+    // routed through `mergeStatus` — FIVE of them (0x0031, 0x0032, 0x0033,
+    // 0x0037, 0x0038) — and only TWO carry the field (0x0032 offset 16,
+    // 0x0038 offset 18). The other subscriptions (0x0022, 0x0039, 0x003A,
+    // 0x003F, the settle watcher) never reach here at all. 0x0031, 0x0033 and 0x0037 all arrive here with
     // nothing to say, and `setMeta` is last-write-wins (`eventLog.ts`), so a
     // flat write let them erase a reading they never had. On hardware the
     // tick is 0x0031 -> 0x0032 -> 0x0033 and the session's LAST status frame
@@ -2588,10 +2590,16 @@ export function createPm5Driver(
     // decoded object either: absence means two OPPOSITE things — a 0x0031
     // with no such field, and a pre-V1.26 0x0032 whose firmware cannot tell
     // us — and only the second is worth recording. Deliberately NOT a
-    // driver-scoped flag: `useMonitorSession` builds a NEW driver per
-    // connect attempt against the SAME log, so a reconnect would reset the
-    // flag and let the next non-carrier erase the previous attempt's
-    // reading. Reading the log's own meta has none of those failure modes.
+    // driver-scoped flag — though NOT for the reason an earlier draft of
+    // this comment gave. It said `useMonitorSession` builds a new driver per
+    // connect attempt against the SAME log; it does not, it builds a new LOG
+    // too, in the same block (`useMonitorSession.ts:5426` and `:5523`), so a
+    // flag would behave identically and the stale reading that draft feared
+    // cannot occur. The real reason is smaller and still holds: a flag is a
+    // SHADOW of a value the log already holds, and two sources of one truth
+    // is how they drift. Reading the authority cannot disagree with itself.
+    // (Recorded because an option ruled out on a FALSE cost is RF30's shape
+    // even when the conclusion happens to be right.)
     //
     // What this cannot distinguish: "a carrier arrived at 16 B (old
     // firmware)" from "no carrier ever arrived" — both read `null`. That is

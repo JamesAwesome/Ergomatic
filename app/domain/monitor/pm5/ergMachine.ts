@@ -135,17 +135,31 @@ export function unsupportedErgMachine(
  * 9-15, 21-31, 33-63, 65-127, 129-142, 144-191, 195-206 and 208-223 are all
  * absent from the enum.
  *
- * TRANSCRIBED FROM THE FIRST-PARTY DOCUMENT in this repo,
- * `docs/monitor/PM5_CSAFECommunicationDefinition.pdf` rev 0.27,
- * `OBJ_ERGMACHINETYPE_T` (`pdftotext -layout`, 2026-09-15). Implicit values
- * are expanded by C enum rules.
+ * TRANSCRIBED FROM THE DOCUMENT THAT DEFINES THE FIELD: PM5 Bluetooth Smart
+ * Communication Interface Definition **rev 1.30**, Appendix A "Erg Machine
+ * Type" — the same source `ergMachine.test.ts`'s own table already uses, and
+ * the one whose revision history reads "Added Erg Machine Type parameter to
+ * characteristic 0x0032/0x0080/" and "…to characteristic 0x0038". Implicit
+ * values are expanded by C enum rules.
  *
- * **THE VALUES ARE AUTHORITATIVE; ONE OF THE DOCUMENT'S OWN COMMENTS IS
- * WRONG.** `ERGMACHINE_TYPE_STATIC_DYNO = 64` carries a comment reading
- * "Dynomometer, static type (32)" — and 32 is `LINKED_DYNAMIC`. Read
- * from the assignments, never the parentheticals. (`UNSUPPORTED` above
- * already records a sibling oddity: 192 and 194 are both described as "no
- * arms".)
+ * **CONCEPT2 SHIPS TWO ENUMS AND THEY DISAGREE ON EXACTLY ONE NAME.** The
+ * CSAFE Communication Definition rev 0.27 in this repo
+ * (`docs/monitor/PM5_CSAFECommunicationDefinition.pdf`) carries the same 23
+ * values and 22 of the same 23 names — but calls `32` `LINKED_DYNAMIC`,
+ * where rev 1.30 calls it **`SLIDES_DYNAMIC`**. Rev 1.30 wins because it
+ * defines this field; CSAFE merely also contains the type. The first draft
+ * of this map was transcribed from CSAFE and pinned the one divergent value,
+ * while the test file sixty lines away already had rev 1.30's name — the
+ * file asserted two vendor names for one value. **Diff the two enums
+ * mechanically before changing any name here; one divergence in
+ * twenty-three is invisible to spot-checking.**
+ *
+ * A related trap, in the CSAFE document only: its
+ * `ERGMACHINE_TYPE_STATIC_DYNO = 64` carries a comment reading
+ * "Dynomometer, static type (32)", and 32 is a different machine entirely.
+ * Rev 1.30 carries no comment on that member at all. Read assignments, never
+ * parentheticals. (`UNSUPPORTED` above records a sibling oddity: 192 and 194
+ * are both described as "no arms".)
  *
  * `ERGMACHINE_TYPE_NUM` (227) is a COUNT SENTINEL, not a machine, and is
  * deliberately absent.
@@ -155,7 +169,37 @@ export function unsupportedErgMachine(
  * cannot say "it changed"; it reports the latest reading the log floor
  * accepted. Said here rather than left for a reader to assume stability.
  */
-const VENDOR_TOKENS: ReadonlyMap<number, string> = new Map([
+export type ErgMachineToken =
+  | "STATIC_D"
+  | "STATIC_C"
+  | "STATIC_A"
+  | "STATIC_B"
+  | "STATIC_E"
+  | "STATIC_SIMULATOR"
+  | "STATIC_DYNAMIC"
+  | "SLIDES_A"
+  | "SLIDES_B"
+  | "SLIDES_C"
+  | "SLIDES_D"
+  | "SLIDES_E"
+  | "SLIDES_DYNAMIC"
+  | "STATIC_DYNO"
+  | "STATIC_SKI"
+  | "STATIC_SKI_SIMULATOR"
+  | "BIKE"
+  | "BIKE_ARMS"
+  | "BIKE_NOARMS"
+  | "BIKE_SIMULATOR"
+  | "MULTIERG_ROW"
+  | "MULTIERG_SKI"
+  | "MULTIERG_BIKE";
+
+/** Typed as the union above, not `string`, so a mistyped token cannot
+ *  compile — `"MULTIERG_SKl"` for `"MULTIERG_SKI"` is a capital-I/lowercase-l
+ *  swap no reviewer sees and no spot-check catches. The compiler names it and
+ *  suggests the fix. It does NOT catch a DROPPED row; the exhaustive table in
+ *  `ergMachine.test.ts` does. */
+const VENDOR_TOKENS: ReadonlyMap<number, ErgMachineToken> = new Map([
   [0, "STATIC_D"],
   [1, "STATIC_C"],
   [2, "STATIC_A"],
@@ -168,7 +212,7 @@ const VENDOR_TOKENS: ReadonlyMap<number, string> = new Map([
   [18, "SLIDES_C"],
   [19, "SLIDES_D"],
   [20, "SLIDES_E"],
-  [32, "LINKED_DYNAMIC"],
+  [32, "SLIDES_DYNAMIC"],
   [64, "STATIC_DYNO"],
   [128, "STATIC_SKI"],
   [143, "STATIC_SKI_SIMULATOR"],
@@ -181,6 +225,6 @@ const VENDOR_TOKENS: ReadonlyMap<number, string> = new Map([
   [226, "MULTIERG_BIKE"],
 ]);
 
-export function ergMachineToken(value: number): string | undefined {
+export function ergMachineToken(value: number): ErgMachineToken | undefined {
   return VENDOR_TOKENS.get(value);
 }
