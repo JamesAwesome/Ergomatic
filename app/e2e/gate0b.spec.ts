@@ -25,7 +25,30 @@ const OUT = path.resolve(
   process.env.GATE0B_OUT ?? "before",
 );
 
-function machineRow(opts: { title: string; endedBy?: string; spm: number }) {
+/** A trace whose WORKING strokes average ~140 bpm. The table's HR column
+ *  reads the monitor's own per-interval figures (152 / 148), and
+ *  `deriveAverageHeartRate` reads this — the 3.5-15.2 bpm gap the pass
+ *  measured, in one frame, so it can be checked by eye (RF7). */
+function traceWithHr() {
+  const samples = [];
+  for (let i = 0; i <= 120; i++) {
+    samples.push({
+      t: i * 10,
+      d: i * 40,
+      p: 1240,
+      spm: i < 60 ? 25 : 28,
+      hr: 138 + (i % 5),
+    });
+  }
+  return { samples };
+}
+
+function machineRow(opts: {
+  title: string;
+  endedBy?: string;
+  spm: number;
+  withHr?: boolean;
+}) {
   const step = (
     split: number,
     secs: number,
@@ -50,6 +73,7 @@ function machineRow(opts: { title: string; endedBy?: string; spm: number }) {
     machineRestHr: null,
     machineRestSeconds: 60,
     machineRestMeters: restM,
+    ...(opts.withHr === true ? { avgHr: restM === 147 ? 152 : 148 } : {}),
   });
   return {
     workoutId: null,
@@ -67,6 +91,7 @@ function machineRow(opts: { title: string; endedBy?: string; spm: number }) {
     restMeters: 242,
     advancesPlan: false,
     ...(opts.endedBy !== undefined ? { endedBy: opts.endedBy } : {}),
+    ...(opts.withHr === true ? { series: traceWithHr() } : {}),
     steps: [
       step(135.8, 67.9, 25, 16, 848, 140, 147),
       step(112.2, 56.1, 28, 16, 1026, 248, 95),
@@ -147,5 +172,26 @@ for (const [orient, size] of [
     await tiles.screenshot({
       path: path.join(OUT, `tiles-terminated-${orient}.png`),
     });
+
+    // M1 + M2 IN ONE FRAME: the six tiles, the `PM5 · PER INTERVAL` eyebrow,
+    // and the table under it. Two of the table's six data columns are OURS
+    // (`summaryModel.ts:204-210` says so in its own comment), and the AVG HR
+    // tile is our trace mean sitting directly above the monitor's own
+    // per-interval HR column. Both readable by eye in one capture, which is
+    // the only way a contradiction of this kind gets caught (RF7).
+    await seedAndOpen(
+      page,
+      machineRow({ title: "Heart rate gap", spm: 26, withHr: true }),
+    );
+    await expect(
+      page.getByRole("heading", { name: "Heart rate gap" }),
+    ).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const block = page.locator(".machine-summary-block");
+    await expect(block).toBeVisible();
+    await expect(tiles).toBeVisible();
+    await tiles.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(OUT, `block-hr-${orient}.png`) });
+    await block.screenshot({ path: path.join(OUT, `table-${orient}.png`) });
   });
 }

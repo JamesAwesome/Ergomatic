@@ -303,6 +303,16 @@ same source the column does" arm is option C and was rejected at a Gate 0 on
 2026-09-07** (§1.1) — reopening it needs James, and it would make PR 1
 TRIAD, because a number a rower has already saved would render differently.
 
+**[RENDERED 2026-09-14] M1 and M2 in ONE frame, readable by eye:**
+`gate0b/before/block-hr-portrait.png`. The tiles read **AVG HR 140** directly
+above a table whose HR column reads **152** and **148** — a ~10 bpm gap, both
+figures on the same screen, nothing saying they are different quantities. The
+eyebrow over that table reads `PM5 · PER INTERVAL` while its WATTS (140/248)
+and CAL/HOUR (848/1026) columns are OURS. And the tiles' own AVG WATTS reads
+**184** above table rows of 140 and 248. One capture, three unstated
+provenance changes — which is why RF7's "put it in one frame and check it by
+eye" is the only discipline that catches this class.
+
 ### M1b — two of the six TILES change whose arithmetic they are, per row (NEW)
 
 **[FOUND 2026-09-14 building Gate 0B's board 1, and it changes what board 1
