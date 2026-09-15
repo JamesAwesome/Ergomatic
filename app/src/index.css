@@ -1459,9 +1459,22 @@ button.auth-method-row:disabled .auth-method-action {
   inset: 0;
   background: rgba(27, 26, 23, 0.45);
   display: flex;
-  align-items: flex-end;
+  /* CENTRED, not bottom-anchored (James, 2026-09-15: "it's also poorly
+     centered", with a capture of the provenance sheet). It was pinned to the
+     bottom with a tab-bar-height gap BELOW it — padding that exists so a
+     scrolling screen clears the fixed bar, which a modal does not need
+     because the scrim already covers that bar and swallows its taps
+     (measured: `elementFromPoint` at the bar's centre returns the backdrop).
+     The result was a sheet floating a finger's width off the bottom under a
+     large empty scrim, reading as misplaced rather than as a bottom sheet.
+     Centring also keeps the overflow symmetric once `max-height: 80vh`
+     bites, so a long sheet grows evenly instead of only upward. */
+  align-items: center;
   justify-content: center;
-  padding: 0 20px calc(var(--tap) + env(safe-area-inset-bottom, 0px));
+  padding: calc(20px + env(safe-area-inset-top, 0px))
+    calc(20px + env(safe-area-inset-right, 0px))
+    calc(20px + env(safe-area-inset-bottom, 0px))
+    calc(20px + env(safe-area-inset-left, 0px));
   z-index: 30;
 }
 
@@ -1470,6 +1483,11 @@ button.auth-method-row:disabled .auth-method-action {
   max-width: 440px;
   max-height: 80vh;
   overflow-y: auto;
+  /* A sheet that scrolls must not CHAIN its overscroll to the document
+     behind it — reaching the end of this list and carrying on would move the
+     page under the modal, which is the other half of the same complaint the
+     body lock in SheetShell answers. */
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 14px;
