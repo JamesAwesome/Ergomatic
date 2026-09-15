@@ -1675,6 +1675,46 @@ describe("front-door transactions against Postgres", () => {
       expect(after.expiresAt.getTime()).toBeGreaterThan(Date.now());
     });
 
+    // THE GUARD THE PLAN ASKED FOR AND I FIRST SHIPPED WITHOUT. Deleting
+    // `requireAccess` from the new arm reddened ZERO tests until this
+    // existed — the module's other two mints are covered, and this one was
+    // not, which is exactly the census the plan told me to check (RF21).
+    // Nothing else on this path calls `requireAccess`: `load()` only reaches
+    // `original()` when `original_session_id` is set, and it is NULL until
+    // the adopt this arm performs.
+    it("the second exchange refuses an account outside the access policy, minting nothing", async () => {
+      const { user, exchanging } = await followedThrough("g-denied");
+      const restricted = createAttempts(
+        pool,
+        createAccessPolicy("restricted", "someone-else@test"),
+        recordingRevoke().revoke,
+      );
+      const before = await pool.query(
+        "SELECT id FROM sessions WHERE user_id=$1",
+        [user.id],
+      );
+      await expect(
+        restricted.accept(exchanging, usual("g-denied")),
+      ).rejects.toThrow(/access_denied/);
+      // NOTHING WAS MINTED. A refusal that still left a live session behind
+      // would be the whole point of the guard defeated, and the transaction
+      // is what makes this assertable.
+      const after = await pool.query(
+        "SELECT id FROM sessions WHERE user_id=$1",
+        [user.id],
+      );
+      expect(after.rowCount).toBe(before.rowCount);
+      // And the attempt did not advance.
+      const row = (
+        await pool.query<{ stage: string; originalSessionId: string | null }>(
+          'SELECT stage, original_session_id AS "originalSessionId" FROM auth_attempts WHERE id=$1',
+          [exchanging.id],
+        )
+      ).rows[0]!;
+      expect(row.stage).toBe("reauth_exchanging");
+      expect(row.originalSessionId).toBeNull();
+    });
+
     it("the second exchange refuses a proven subject that belongs to no account", async () => {
       const { exchanging } = await followedThrough("g-known");
       await expect(

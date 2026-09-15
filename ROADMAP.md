@@ -1526,8 +1526,16 @@ while we are in here.
       `"refuses a contradiction — manual with a deviceName — with a 400
       naming the field, and persists nothing"` failed once in a full
       `--project integration` run and passed on the next TWO runs of the
-      identical command and tree. Different test and different project from
-      (b), same shape.
+      identical command and tree.
+      **And a SECOND local test, same day, same shape:**
+      `frontDoorRoutes.integration.test.ts`'s `"anonymous start request 121
+      is rejected after 120 shared admissions"` failed twice in separate
+      probe runs and passed on two consecutive re-runs of the identical tree
+      (532/532 both times). **Ruled out as a budget collision, not assumed:**
+      it lives in a different file from the work in flight, builds its own
+      app in `beforeEach`, and TRUNCATEs — so a neighbouring file's `begin()`
+      calls cannot consume its 120 admissions. Different tests, different
+      projects from (b); same shape.
       **Why it matters more than a fifth tally mark:** every prior sighting
       was in CI, where the hypothesis is an UNCAPPED worker pool
       (`vitest.config.ts:11` makes the cap CI-inert). This one ran with
