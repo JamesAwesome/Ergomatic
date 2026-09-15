@@ -12,7 +12,13 @@ control calls Apple, Google, or Ergomatic authentication.
 
 Copy is the **shipped** copy wherever a screen exists today, read from
 `app/src/SignIn.tsx`, `app/src/you/SignInMethods.tsx`,
-`app/src/you/DeleteAccount.tsx` and `app/src/theme/tokens.css` in this worktree.
+`app/src/you/DeleteAccount.tsx` and `app/src/theme/tokens.css` in this
+worktree — **with one deliberate exception, named here rather than left to be
+discovered.** `03-proving` is NOT today's screen. Today's `UsualSignIn` reads
+"Sign in to your account" / "Use your usual sign-in. Then open You →
+Sign-in methods to add Apple." / "← ALL SIGN-IN OPTIONS", which describes the
+two-step recovery PR2 replaces; the mock shows the PROPOSED copy, because the
+screen's whole job changes. `create` (screen 1) is verbatim, line by line.
 
 ## What you are approving
 
@@ -28,14 +34,27 @@ signed in. A confirmation that says "attach this?" without naming the
 destination is not a control, because the whole failure it guards against is
 attaching to the wrong account.
 
-**Landscape puts the pair side by side.** Stacked, it pushed the actions 267 px
-below the fold on an 844 × 390 frame, which is the RC-24 failure exactly: the
-one control the screen exists for, off-screen on the orientation a rower is most
-likely holding at an erg. Measured by `render.mjs` before and after. **No
-content is hidden in either orientation** — only spacing shrinks.
+**Landscape puts the pair side by side.** Stacked, the two identity cards plus
+the arrow plus the explain card pushed the actions below the fold on an
+844 × 390 frame — the RC-24 failure exactly: the one control the screen exists
+for, off-screen on the orientation a rower is most likely holding at an erg.
 
-**The relay address wraps rather than truncates.** The shared `.identity-email`
-rule ellipsises it, and on a 390 px frame that cut it at `…appleid…` — the half
+**The honest numbers, because the first version of this paragraph invented
+one.** `render.mjs` reports frame overflow, not "how far below the fold the
+button sat", and it has no stacked variant to re-measure — so the 267 px it
+first claimed was a frame-overflow reading from an intermediate render, not a
+measurement of the button, and the "→ 0" was wrong too. What the committed
+`renders/layout-audit.json` actually records for `04-attach-landscape` is
+**19 px of frame overflow and `contentBelowFoldPx: 0`** — the overflow is the
+screen's own bottom padding, and **no element is below the fold.** That second
+number is measured by `render.mjs` directly (lowest bottom edge of any
+descendant of `.app-screen` against the fold), added precisely so "no content
+is hidden in either orientation" stops being an inference from an overflow
+figure that does not mean that.
+
+**The relay address wraps rather than truncates.** The shipped rule
+(`.auth-identity-email`, mirrored here as `.identity-email`) ellipsises it, and
+on a 390 px frame that cut it at `…appleid…` — the half
 that says it is a relay is exactly the half that was lost, while the spec's own
 global constraint is that the confirmation "names the provider AND the relay
 address". It breaks at the `@`.
@@ -76,15 +95,18 @@ it either way is yours; I have not silently removed it.
   census was wrong in the row and is corrected here: seven live strings, not
   five, and three treatments, not two.** `SignIn.tsx:173` was missed, and
   `Concept2SendBlock.tsx:226` uses a third form ("the You tab") that the row
-  never mentioned. Three undated News article bodies use that form too, which
-  Phase JC's ruling makes rendering surfaces; dated release notes stand as
-  history and are exempt. The board shows the Today sentence under each
+  never mentioned. Three undated News strings use that form too, across two article
+  bodies (`yourFirstRow.tsx:28` and `:36`, `baselines.tsx:63`), which Phase
+  JC's ruling makes rendering surfaces; dated release notes stand as history
+  and are exempt. The board shows the Today sentence under each
   treatment, because that is the one whose grammar you flagged.
 - **`renders/11-hairline-options.png` — the `--rule` hairline.** Today it
   measures **1.47:1** on `--surface`. **The obvious small step does not work:**
-  `#a39c88` measures 2.69:1 and 2.42:1 and still misses the 3:1 floor. The
-  lightest value clearing 3:1 against **both** grounds is `#928a78` (3.37:1 and
-  3.03:1), and it is visibly darker than a hairline. `--rule` is used across the
+  `#a39c88` measures 2.69:1 and 2.42:1 and still misses the 3:1 floor. A value
+  that does clear both is `#928a78` (3.37:1 and 3.03:1) — the lightest on this
+  token's own hue ramp, though other warm neutrals of different hue are lighter
+  and also clear, so it is one workable value rather than the only one. It is
+  visibly darker than a hairline. `--rule` is used across the
   whole app, so this is a global change, not a local one.
 
 ## Rendering and checks
@@ -105,13 +127,37 @@ The two `--rule` rows are reported as decorative and exempt **with their numbers
 anyway**, because the exemption is the claim under question and a reader has to
 be able to check it.
 
+Three values in `contrast.mjs` are NOT tokens and the file says which: `focus`
+(#1d4e89) is `--judge-blue`, not a `--focus` token, which does not exist — the
+app's real ring on these surfaces is `outline: 2px solid var(--ink)`, covered
+by the ink-on-page and ink-on-surface rows at 15.41:1 and 17.11:1.
+
 `render.mjs` uses the repository's installed Playwright and Chromium at
 `deviceScaleFactor: 2`. It writes `renders/layout-audit.json` recording, per
-capture, horizontal overflow, vertical overflow in pixels, and every interactive
-box below 44 × 44. **Current state: no horizontal overflow anywhere, and every
-target clears 44 × 44.** The option boards (08-11) scroll vertically by design —
-they are decision aids you read, not screens a rower stands in front of. The
-four flow screens do not.
+capture, horizontal overflow, vertical overflow in pixels, **content below the
+fold in pixels**, and every interactive box below 44 × 44.
+
+**Current state: no horizontal overflow anywhere, no content below the fold on
+any flow screen, and every enumerated target clears 44 × 44.** Two flow screens
+DO overflow their frame slightly — `04-attach-landscape` by 19 px and
+`05-attached-landscape` by 2 px — and both have `contentBelowFoldPx: 0`: that
+is bottom padding, not a hidden control. The decision boards (06-11) are captured at a
+**grown frame** — the script measures what the content needs and resizes the
+viewport before shooting, so `10-naming-you-options.png` is 844 × 994 rather
+than 844 × 390. At frame height that board cut off all three treatment panes,
+which is everything it exists to show. **`fullPage: true` does not do this**
+and the first attempt to use it produced a 390-tall image while the script
+printed "captured full-height": the scrolling element is `.app-screen`, not
+the document, and in capture mode the document is exactly viewport-sized. The
+audit now records the size actually captured beside the size requested, so a
+grown frame is visible in the record rather than asserted in prose.
+
+**What the 44 × 44 check actually enumerates**, so the line above is not read
+as stronger than it is: `button, a, [tabindex]` with a non-zero box — 22 boxes
+across the 15 captures. A styled `<span>` or an `<input>` acting as a control
+is not counted. It bites on what it does enumerate (forcing a 20 px height
+returns three undersized boxes), but it is a check on this mock's own markup,
+not a general accessibility audit.
 
 ## What this pack does NOT settle
 
@@ -125,7 +171,7 @@ design decision gets made by accident (RF30).
 
 ## GATE 0 RULINGS (James, 2026-09-15)
 
-All four settled. The pack above is the record of what was shown; this is what
+All five settled. The pack above is the record of what was shown; this is what
 was decided.
 
 1. **The No button is "Not now".** Option A. Goes to Today, signed in; Apple

@@ -1076,7 +1076,7 @@ repo depend on them.
 ## RF43
 
 43. **A merge-conflict marker reaching a commit, in the files that ARE the
-    agent instructions.** PR #446 merged to main on 2026-09-15 carrying
+    agent instructions (2026-09-15).** PR #446 merged to main on 2026-09-15 carrying
     `<<<<<<< HEAD`, `=======` and `>>>>>>> origin/main` in three files:
     `.claude/agents/antagonist-techniques.md`,
     `.claude/agents/antagonist-ledger.md` and `.claude/agents/pm-ledger.md`.
@@ -1095,9 +1095,16 @@ repo depend on them.
       file under `.claude/`.
     - The files are prose. No compiler, type-check or test reads them.
 
-    So the markers survived a merge commit, a full review and a PM gate, and
-    landed as INSTRUCTIONS every future agent reads. They were found the same
-    day, by an agent appending to one of the three files and reading its tail.
+    So the markers survived a merge commit and a green post-merge CI run on
+    main (`6989d2ac success`), and landed as INSTRUCTIONS every future agent
+    reads. They were found the same day, by an agent appending to one of the
+    three files and reading its tail. **An earlier draft of this entry said
+    they also survived "a full review and a PM gate"; that is not supported.**
+    `gh pr view 446 --json reviews,comments` returns zero of each, and both PM
+    verdict commits on that branch (`9dfaa9e8` 21:02Z, `e5091225` 22:43Z)
+    PREDATE the merge that introduced the markers (`47a5b423`, 02:03Z). The
+    claim was strengthened while adding no evidence, which is the failure this
+    file exists to record — so it is recorded rather than quietly deleted.
 
     **The resolution is the second half of the lesson.** Both sides of the
     `antagonist-techniques.md` conflict had appended to the SAME numbered

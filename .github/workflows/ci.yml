@@ -167,14 +167,16 @@ jobs:
         run: |
           bash -n scripts/ci-changes.sh
           bash scripts/ci-changes.test.sh
+      # BEFORE the test step, not after. A failed step ends the job, and the
+      # test's own case 7 runs the gate over this same tree — so ordered the
+      # other way round this step could only ever run after case 7 had
+      # already returned 0, which made it decoration that could not go red.
+      - name: No conflict markers in tracked files
+        run: bash scripts/conflict-markers.sh
       - name: Lint + test the conflict-marker gate
         run: |
           bash -n scripts/conflict-markers.sh
           bash scripts/conflict-markers.test.sh
-      # Its own step, so a real failure prints the offending file and line
-      # rather than only the test harness's "want 0 got 1".
-      - name: No conflict markers in tracked files
-        run: bash scripts/conflict-markers.sh
       - name: Lint + test the stack-env guard
         run: |
           bash -n app/scripts/stack-env.sh

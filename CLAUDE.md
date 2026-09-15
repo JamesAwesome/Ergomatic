@@ -1246,8 +1246,9 @@ describes.
     commit is not.
     **Resolve a conflict in a NUMBERED list by keeping BOTH sides and
     renumbering one.** In `antagonist-techniques.md` — the one of the three
-    that holds a list; the other two are dated prose sections — both sides
-    had appended to the same list and both began at 57, so "pick a side"
+    whose list is repo-wide and continuously numbered; the other two are dated
+    sections, whose own lists restart per entry and so cannot collide — both
+    sides had appended to the same list and both began at 57, so "pick a side"
     silently deletes seven or eight real entries. **Then sweep the OLD
     numbers**: the first fix renumbered and did not, leaving eight citations
     inside `antagonist-ledger.md`'s own entry pointing at unrelated

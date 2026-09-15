@@ -745,12 +745,12 @@ starts. If it has not run, stop here.
       belongs in the record with its citation beside it.
 - [ ] **Step 8** — commit.
 
-### Task 7: the copy round riding this PR (revision 4)
+### Task 7: the copy round riding this PR
 
 Four ROADMAP rows on the two screens PR2 already edits. They ride this PR at
-James's instruction (2026-09-15) and share its Gate 0. **Row 1 and row 3 are
-open QUESTIONS, not known fixes** — they go into Gate 0 as questions, and
-nothing is implemented until James rules.
+James's instruction (2026-09-15) and shared its Gate 0. **All four are RULED
+(2026-09-15) and each step below carries its ruling** — rows 1 and 3 went in
+as open questions and came back decided.
 
 - [ ] **Step 1 — `Delete account` discloses the re-auth AT THE TAP (Gate 0
       ruling 3).** One sentence in the ACCOUNT quarantine box on You, naming
@@ -776,8 +776,8 @@ nothing is implemented until James rules.
       the Gate 0 pack's seven. At the time of the gate: two quoted
       (`you/SignInMethods.tsx:128`, `:130`), four unquoted (`SignIn.tsx:40`,
       `:101`, `:173`, `today/Today.tsx:1479`), one already in the chosen form
-      (`log/Concept2SendBlock.tsx:226`), plus three UNDATED News article
-      bodies (`news/content/bodies/yourFirstRow.tsx:28` and `:36`,
+      (`log/Concept2SendBlock.tsx:226`), plus three UNDATED News strings across TWO
+      article bodies (`news/content/bodies/yourFirstRow.tsx:28` and `:36`,
       `baselines.tsx:63`) which Phase JC's ruling makes rendering surfaces.
       Dated `releaseNotes.ts` entries stand as history and are EXEMPT.
       **The test pins the count of strings NOT in the chosen form at zero**,
@@ -794,8 +794,10 @@ nothing is implemented until James rules.
       the app to fix a line carrying no information. **And the obvious small
       step does not even work:** `#a39c88` measures 2.69:1 on `--surface` and
       2.42:1 on `--page`; the lightest value clearing 3:1 against both is
-      `#928a78` (3.37:1 / 3.03:1), which no longer reads as a hairline. Both
-      measured in `docs/design/pr2-gate0/contrast.json`.
+      `#928a78` (3.37:1 / 3.03:1) — the lightest on this token's own hue ramp,
+      though other warm neutrals are lighter and also clear, so it is one
+      workable value rather than the only one — and it no longer reads as a
+      hairline. Both measured in `docs/design/pr2-gate0/contrast.json`.
       **Close the ROADMAP row with the ruling, not silently** — it is a
       decision that the row was right to raise and wrong to assume.
 - [ ] **Step 5** — tick the four rows, each with its Gate 0 ruling beside
@@ -814,14 +816,13 @@ nothing is implemented until James rules.
   confirmation back before the proof, Tasks 0-4 are partly wasted. RC-24 is the
   precedent. It also covers the copy round below, which is why rolling those
   rows in is grouping rather than scope creep: **one Gate 0 instead of four.**
-  **Revision 5 gives it four decisions to carry besides the rendered screen:**
-  whether the second exchange refreshes `expires_at` (Task 3 Step 3c), what the
-  No button does now that refusing leaves the rower signed in (Task 5 Step 5b),
-  the "You" naming treatment across the live strings Task 7 Step 3 enumerates
-  (six in the app's own screens plus a seventh using a third form, and three
-  undated article bodies — the step orders a re-measure at implementation
-  time rather than trusting any count written here), and whether the 1.47:1
-  hairline is worth changing (Task 7 Step 4).
+  **It carried five decisions besides the rendered screen, and all five came
+  back ruled:** the No button is "Not now" (Task 5 Step 5b); the second
+  exchange REFRESHES `expires_at` (Task 3 Step 3c); the delete re-auth is
+  disclosed at the tap (Task 7 Step 1); the "You" treatment is "the You tab"
+  (Task 7 Step 3, which orders a re-measure of the census rather than trusting
+  any count written here); and the 1.47:1 hairline STAYS, with the
+  `--ink-4`-for-meaning policy written down instead (Task 7 Step 4).
 - **PM, BEFORE Gate 0 (revision 5):** the `ACCESS_MODE` build-now call. Staging
   stays `restricted` (James, 2026-09-14), `compose.yml:48` and
   `accessPolicy.ts:14` both default to it, and `requireAccess(identity.email)`

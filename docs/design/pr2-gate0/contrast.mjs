@@ -3,7 +3,19 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Every pairing this Gate 0 pack puts on screen, plus the two the copy
-// round asks a question about. Values are app/src/theme/tokens.css verbatim.
+// round asks a question about.
+//
+// MOST values are app/src/theme/tokens.css verbatim. THREE ARE NOT, and
+// saying which matters, because a ratio computed against a colour the app
+// does not use is a number about nothing:
+//   * `focus` (#1d4e89) is NOT a token. `--focus` does not exist; this value
+//     is `--judge-blue`, and the app's real ring on these surfaces is
+//     `outline: 2px solid var(--ink)` (app/src/index.css). The two focus-ring
+//     rows below are therefore about the PACK's ring, not the app's — the
+//     app's own ring is covered by the ink-on-page and ink-on-surface rows,
+//     which are 15.41:1 and 17.11:1.
+//   * `apple` (#000000) and `white` (#ffffff) are literals from Apple's own
+//     button spec, not Ergomatic tokens, and no check below consumes them.
 const here = dirname(fileURLToPath(import.meta.url));
 const hex = {
   page: "#f4f1e8", surface: "#fffdf7", sunken: "#efeade",

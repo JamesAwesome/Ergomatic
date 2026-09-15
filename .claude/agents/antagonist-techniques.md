@@ -691,13 +691,18 @@ is exactly what happened: every section in this file stopped growing on
     both and renumber one, never to pick. `scripts/conflict-markers.sh` is now
     the gate.
 77. **RENUMBERING A LIST IS A CLAIM ABOUT EVERY CITATION OF THE OLD NUMBERS,
-    and the ledger that cites them is usually the file you are standing in.**
-    The fix for 76 renumbered seven techniques 57-63 to 65-71 and swept
-    nothing; eight citations inside this ledger's OWN Wave A PR2 entry still
-    said 57-63, and each then resolved to an unrelated technique — a record
-    citing seven wrong techniques about itself, shipped. **The one-command
-    check:** `grep -nE '[Tt]echnique #?(<old range>)' .claude/agents/*.md`
-    before the renumbering commit, not after. It is RF16's
-    correct-it-where-it-is-USED rule with an integer instead of a phrase, and
-    an integer is worse, because a wrong number still resolves to something
-    that reads like evidence.
+    AND THE CITATIONS LIVE IN A DIFFERENT FILE FROM THE LIST.** The fix for 76
+    renumbered seven entries 57-63 to 65-71 in `antagonist-techniques.md` and
+    swept nothing; the eight stale citations were in `antagonist-ledger.md`,
+    inside its own Wave A PR2 entry, and each then resolved to an unrelated
+    technique — a record citing seven wrong techniques about itself, shipped.
+    **The check has to be case-insensitive, plural-tolerant and repo-wide**,
+    because this corpus writes them at least four ways — `technique 57`,
+    `Technique 58`, `TECHNIQUE 1`, `Techniques 43-44`:
+    `grep -rniE 'technique[s]? ?#?(<old range>)' --include='*.md' .`
+    A `grep -nE '[Tt]echnique …' .claude/agents/*.md` misses the ALL-CAPS and
+    plural-range forms that are already in the very file it targets, and
+    scopes out `docs/`, `.agents/`, `ROADMAP.md` and `CLAUDE.md` entirely.
+    It is RF16's correct-it-where-it-is-USED rule with an integer instead of a
+    phrase, and an integer is worse, because a wrong number still resolves to
+    something that reads like evidence.
