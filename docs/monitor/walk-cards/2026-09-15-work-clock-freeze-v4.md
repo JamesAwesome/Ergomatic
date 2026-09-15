@@ -1,4 +1,4 @@
-# Walk card — does the work clock freeze? (v3)
+# Walk card — does the work clock freeze? (v4)
 
 **One question, one piece, one observable.** Written 2026-09-14 for a walk
 James offered for the morning of 2026-09-15. Gates nothing; it UNBLOCKS Gate
@@ -147,12 +147,21 @@ verbatim: *"each qualifying `resolveDefaultTransport()` call REPLACES this
 global with a brand-new tap — latest session wins, unconditionally. A rower
 who reconnects … before downloading an earlier session's recording loses that
 earlier recording the instant the new tap is assigned here; nothing preserves
-it."* So the retry rule is: **download attempt 1 BEFORE anything reconnects**,
-or re-arm on the same connection. A retry that reconnects first has thrown
-away the only evidence the walk exists to collect.
+it."* So the retry rule is: **download attempt 1 BEFORE anything reconnects.
+Unconditionally.** A retry that reconnects first has thrown away the only
+evidence the walk exists to collect.
+
+**[v4] The "or re-arm on the same connection" alternative is DELETED, because
+after an End there is no connection to re-arm.** The same function that
+navigates also hangs up the radio — `WorkoutDetail.tsx:443-444`, verbatim:
+*"Navigating is also what unmounts the interstitial and hangs up the radio."*
+The danger was never a wasted minute; it is a controller reconnecting while
+*believing* it is re-arming, which is exactly the action that destroys
+attempt 1's recording.
 
 **[v2] The retry is offered only if ≥8 minutes remain** on the 20-minute cap,
-because a retry is another full interval plus re-arm, and the cap is
+because a retry is another full interval plus a fresh CONNECT — not a
+re-arm, which after an End is not a thing that exists — and the cap is
 inclusive.
 
 Either outcome is a result. There is no "we need another walk" branch.
@@ -185,8 +194,19 @@ thresholds made unreadable).
 
 ## Every operator interaction, counted
 
-**[v3] 2 pastes, 11 taps + 1 browser chooser, 1 spoken reading, 1 photo —
-nothing mid-piece.** (v2 said 9 and had no ending at all.) v1 claimed 5 taps over a table listing 4, and left out
+**[v4] 2 pastes, 9 taps + 1 browser chooser, 1 spoken reading, 1 photo —
+nothing mid-piece.**
+
+Counted from the rows below rather than adjusted from the last version:
+reload, navigate-to-import, submit, Connect, workout, Start, `END`,
+`TAP AGAIN`, `RECORDING · DOWNLOAD` = **9**. (v2 said 9 with no ending at
+all — right number, wrong reasons. v3 said 11 and counted a navigation the
+app performs itself. The gate's correction to 10 subtracted one from 11
+rather than re-counting, so it carried v3's error forward; 9 is what the
+table holds.)
+
+**Ending the session navigates for him** — `WorkoutDetail.tsx:445-447`,
+`handleConnectedEnded` → `navigate('/library/<id>/log?from=monitor')`. v1 claimed 5 taps over a table listing 4, and left out
 the navigations and the Bluetooth chooser entirely.
 
 | # | When | What | Kind |
@@ -202,7 +222,7 @@ the navigations and the Bluetooth chooser entirely.
 | 9 | during | *(nothing — he is rowing)* | — |
 | 10 | after | **[v3] `END` in the header** — the button top-right on the connected surface, beside the connection line | tap |
 | 11 | after | **[v3] `TAP AGAIN`** — the SAME button, relabelled, **within 4 seconds** | tap |
-| 12 | after | navigate to the log screen | tap |
+| 12 | after | *(nothing — the app navigates to the log screen ITSELF on End)* | automatic |
 | 13 | after | read the PM5's time aloud | spoken |
 | 14 | after | `RECORDING · DOWNLOAD` | tap |
 | 15 | after | one same-frame photo: PM5 + laptop | photo |
@@ -246,9 +266,17 @@ have started while the stack built.
    `VITE_ENABLE_FAKE_MONITOR=1` is already a build arg of this stack
    (`compose.e2e.yml`), and `transports/index.ts` wraps the real web
    transport in the recording tap behind that same gate. So connect →
-   program → session → `RECORDING · DOWNLOAD` is walked end to end at the
-   desk and the downloaded file is decoded by the same script the walk will
-   use. If the export is broken, it is found tonight, not at the erg.
+   program → session → **END → TAP AGAIN** → `RECORDING · DOWNLOAD` is
+   walked end to end at the desk and the downloaded file is decoded by the
+   same script the walk will use. If the export is broken, it is found
+   tonight, not at the erg.
+   **[v4] The rehearsal takes the END path, not a natural finish.** The
+   fake's default is a natural finish, so a rehearsal as v2 and v3 wrote it
+   would confirm the one path this walk no longer takes, and the transition
+   the ending ADDED — END → TAP AGAIN → saved row → download on a TERMINATED
+   session — would go unrehearsed. Broken there, the walk would find out
+   after James had already rowed, and the abort condition would fire on
+   evidence that was never gathered.
 3. The Keystone block pasted into `/library/import` on this stack, so the
    grammar is proven before he pastes it.
 4. The evidence directory created with its README prefilled — date, branch,
