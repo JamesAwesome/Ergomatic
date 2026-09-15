@@ -10429,6 +10429,25 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
 }
 
+/* GATE 0B ROUND 2 PROTOTYPE — the group row (ruling 2 option B). Centred
+   over its span and separated from the column row by a hairline, so the
+   span reads as a bracket rather than as another column label. The group
+   row's own pinned cell is empty and carries no bottom rule, so the `#`
+   column's sticky background does not grow a stray line above it. */
+.machine-summary-groups th {
+  text-align: center;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.machine-summary-groups .machine-summary-pin {
+  border-bottom: 0;
+  box-shadow: none;
+}
+
 .machine-summary .machine-summary-pin {
   position: sticky;
   left: 0;

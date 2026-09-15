@@ -293,3 +293,90 @@ test("gate 0B board 1: contrast", async ({ page }) => {
   );
   process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`);
 });
+
+// ROUND 2 — the measurement ruling 2 option B actually turns on, which the
+// board could only assert. The table already scrolls sideways with `#`
+// pinned and, per the component's own comment, "overflows a 390 px screen
+// by a few px today". Grouping adds a row and REORDERS the columns, so two
+// things are worth a number rather than an eye: does either group label
+// fit inside the span it brackets, and does the overflow get worse?
+//
+// This REPORTS; it is not a gate and must not be read as one (RF26).
+test("gate 0B round 2: the grouped table's geometry", async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signInViaBackdoor(page, {
+    email: `gate0b-r2-${RUN_ID}@e2e.test`,
+    name: "Gate 0B R2",
+  });
+  fs.mkdirSync(OUT, { recursive: true });
+
+  await seedAndOpen(
+    page,
+    machineRow({ title: "Grouped columns", spm: 26, withHr: true }),
+  );
+  await expect(
+    page.getByRole("heading", { name: "Grouped columns" }),
+  ).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+
+  const block = page.locator(".machine-summary-block");
+  await expect(block).toBeVisible();
+  await block.scrollIntoViewIfNeeded();
+
+  const geom = await page.evaluate(() => {
+    const scroller = document.querySelector(
+      ".machine-summary-scroller",
+    ) as HTMLElement;
+    const table = document.querySelector(".machine-summary") as HTMLElement;
+    const groups = Array.from(
+      document.querySelectorAll(".machine-summary-groups th[colspan]"),
+    ) as HTMLElement[];
+
+    // The label's own ink width, measured with a Range so it is the TEXT
+    // and not the padded cell — a cell can be wide while its label clips.
+    const inkWidth = (el: HTMLElement) => {
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      return r.getBoundingClientRect().width;
+    };
+
+    // clientWidth INCLUDES the scroller's own 20px side padding, and the
+    // first draft of this compared the table against it and reported "fits"
+    // for a table the capture shows clipped mid-CAL/HOUR. The content box is
+    // the box the table actually has to live in.
+    const cs = getComputedStyle(scroller);
+    const contentWidth =
+      scroller.clientWidth -
+      parseFloat(cs.paddingLeft) -
+      parseFloat(cs.paddingRight);
+
+    return {
+      tableWidth: table.getBoundingClientRect().width,
+      scrollerClientWidth: scroller.clientWidth,
+      scrollerContentWidth: contentWidth,
+      overflowPx: table.getBoundingClientRect().width - contentWidth,
+      intervals: document.querySelectorAll(".machine-summary tbody tr").length,
+      groups: groups.map((g) => ({
+        label: (g.textContent ?? "").trim(),
+        spanWidth: g.getBoundingClientRect().width,
+        inkWidth: inkWidth(g),
+      })),
+    };
+  });
+
+  process.stdout.write(
+    `\nGATE0B-R2 GEOMETRY ${JSON.stringify(geom, null, 2)}\n`,
+  );
+  fs.writeFileSync(
+    path.join(OUT, "geometry.json"),
+    JSON.stringify(geom, null, 2),
+  );
+
+  await block.screenshot({
+    path: path.join(OUT, "table-grouped-portrait.png"),
+  });
+  await page.screenshot({
+    path: path.join(OUT, "block-grouped-portrait.png"),
+  });
+});

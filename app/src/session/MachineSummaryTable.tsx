@@ -1,7 +1,14 @@
 import { DASH } from "../workout/connected/surfaceModel";
 import type { MachineSplitRow } from "./summaryModel";
 
-const COLUMNS = ["HR", "WATTS", "CAL", "CAL/HOUR", "DRAG", "REST m"] as const;
+/** GATE 0B ROUND 2 PROTOTYPE — ruling 2 option B. Grouped so each heading
+ *  is true of what sits under it. REPORTED = the monitor said it; COMPUTED =
+ *  we ran Concept2's own published logbook formula over measured inputs
+ *  (`summaryModel.ts:204-210`). Deliberately NOT "ours" — the formula is
+ *  theirs, only the running of it is ours — and deliberately not "estimated",
+ *  which is what the tilde already means elsewhere in this app. */
+const REPORTED = ["HR", "CAL", "DRAG", "REST m"] as const;
+const COMPUTED = ["WATTS", "CAL/HOUR"] as const;
 
 /** `undefined` (no frame) and `null` (a belt that said nothing) both read
  *  as the house dash; `0` reads as 0 — "the machine did not say" and "the
@@ -31,7 +38,7 @@ export default function MachineSummaryTable({
     <section className="machine-summary-block">
       <div className="machine-summary-head">
         <h3 className="machine-summary-title">MACHINE SUMMARY</h3>
-        <span className="machine-summary-eyebrow">PM5 · PER INTERVAL</span>
+        <span className="machine-summary-eyebrow">PER INTERVAL</span>
       </div>
       {/* A scroll container with no focusable content must itself be
           keyboard-reachable (WCAG 2.1.1; axe `scrollable-region-focusable`,
@@ -50,11 +57,20 @@ export default function MachineSummaryTable({
           aria-label="Machine summary per interval"
         >
           <thead>
+            <tr className="machine-summary-groups">
+              <th className="machine-summary-pin" aria-hidden="true" />
+              <th scope="colgroup" colSpan={REPORTED.length}>
+                REPORTED BY THE PM5
+              </th>
+              <th scope="colgroup" colSpan={COMPUTED.length}>
+                COMPUTED HERE
+              </th>
+            </tr>
             <tr>
               <th scope="col" className="machine-summary-pin">
                 #
               </th>
-              {COLUMNS.map((c) => (
+              {[...REPORTED, ...COMPUTED].map((c) => (
                 <th scope="col" key={c}>
                   {c}
                 </th>
@@ -66,11 +82,11 @@ export default function MachineSummaryTable({
               <tr key={r.index}>
                 <td className="machine-summary-pin">{r.index}</td>
                 <td>{cell(r.hr)}</td>
-                <td>{cell(r.watts)}</td>
                 <td>{cell(r.calories)}</td>
-                <td>{cell(r.calPerHour)}</td>
                 <td>{cell(r.drag)}</td>
                 <td>{cell(r.restMeters)}</td>
+                <td>{cell(r.watts)}</td>
+                <td>{cell(r.calPerHour)}</td>
               </tr>
             ))}
           </tbody>
