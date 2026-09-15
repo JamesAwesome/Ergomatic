@@ -3474,6 +3474,33 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **The log's machine type is a raw byte, and naming it is a vendor-enum
+  transcription rather than a lookup.** James, 2026-09-15: *"I want to be
+  specific when we can identify the erg."* The header records `0`, which a
+  human reads as nothing. **But the vendor does not name any value "row"** —
+  `0` is `ERGMACHINE_TYPE_STATIC_D`, a MODEL and a rig, and the enum
+  distinguishes at least eleven rowing configurations (static A-E, slides
+  A-E, linked dynamic, multierg row, a simulator flag). Collapsing them to
+  one invented word would be LESS specific than the byte, and labelling an
+  unnamed value `row` would build exactly the allowlist `ergMachine.ts`'s
+  denylist exists to refuse — a RowErg model added after rev 1.30 must read
+  as unnamed, not as a rower. What would fix it now: a separate
+  `ergMachineName` field carrying the VENDOR token (`STATIC_D`,
+  `MULTIERG_ROW`), absent for unnamed values, transcribed from
+  `docs/monitor/PM5_CSAFECommunicationDefinition.pdf` rev 0.27 — whose
+  comment block is offset from its enum (`/**< Dynomometer… (32) */` sits
+  beside `..._STATIC_DYNO = 64`), so the VALUES are authoritative and the
+  parenthetical numbers contain at least one demonstrable error. Not done
+  with the null fix because the exported header is persisted
+  (`useMonitorSession.ts:4707-4723`), so a new meta field is a stored-shape
+  change and lands on the TRIAD beside a bug fix whose whole value is making
+  one existing number honest. And the urgency is low: `deviceName` two
+  fields away reads `PM5 432331249 Row` on 13 of 13 committed captures —
+  though that is one erg's advertised name, never observed on a SkiErg, so
+  it defeats urgency without being a fact to build on.
+  **S** · dies 2026-11-15 · a vendor-enum transcription with a real evidence
+  bar and a stored-shape change, not a lookup; the byte is honest now
+
 - **`ergMachineType` is recorded as `null` in every exported log, on a
   monitor that reports it 174 times a session.** Found by James reading the
   2026-09-15 walk's own ring: `"ergMachineType":null` on a RowErg. The wire
@@ -3482,11 +3509,17 @@ Each needs erg time or a deliberate recording session.
   `>18`), both decoded cleanly, 174 times. **The bug is the write, not the
   read:** `driver.ts`'s `classifyErgMachine` runs on EVERY clean decode of
   EVERY characteristic and calls `log.setMeta({ergMachineType: typeof value
-  === "number" ? value : null})` each time — but 0x0031 carries no such field
-  at all, arrives at ~1 Hz alongside 0x0032, and `setMeta` is
-  last-write-wins (`eventLog.ts:230-235`, "MERGE, never replace"). So
-  0x0031 writes `null` over 0x0032's honest `0`, and whichever characteristic
-  decodes last before export decides the header. **It defeats the exact thing
+  === "number" ? value : null})` each time — but **three** characteristics
+  reach it with nothing to say (0x0031, **0x0033** and 0x0037), and `setMeta`
+  is last-write-wins (`eventLog.ts:230-235`, "MERGE, never replace"). So each
+  of them erases a reading it never had. **[CORRECTED 2026-09-15: the first
+  version of this row named 0x0031 as the clobberer. Measured from the
+  capture, the hardware tick is `0x0031 -> 0x0032 -> 0x0033`, 174 times, and
+  the session's LAST status frame is 0x0033 — so 0x0032's honest `0` is
+  overwritten by the 0x0033 that follows it every tick. The 0x0031 story
+  would have left the header reading `0`. The error mattered: the test it
+  implies — notify 0x0031 then 0x0032 — PASSES against the bug, because there
+  the carrier speaks last.]** **It defeats the exact thing
   that code's own comment says it exists to prevent** — "a RowErg (a
   supported value) and a pre-2018 monitor that sends no such field at all
   were INDISTINGUISHABLE in an exported log". They are indistinguishable
@@ -3500,7 +3533,9 @@ Each needs erg time or a deliberate recording session.
   behaviour change would make a reviewer hold two risk models at once.
   **S** · dies 2026-10-15 · a one-site fix with a real test, queued as a
   quick follow to the number-provenance work rather than bundled into a
-  docs branch
+  docs branch. **FIXED — see the PR that carries this correction.** The
+  row's own proposed fix ("only write `null` when no characteristic has ever
+  produced a number") was the right one and is what shipped.
 
 - **`deploy.sh` treats a git lock collision as an unhealthy build, so a
   momentary one silently costs a deploy.** First sighting 2026-09-14, run
