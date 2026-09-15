@@ -3366,8 +3366,12 @@ Each needs erg time or a deliberate recording session.
   the log says what went wrong instead of burying it above 160 lines of
   healthy containers. **What held the lock is not established**; the
   leading candidate is the background `git gc --auto` that the preceding
-  `git fetch --prune` can spawn (INFERENCE — settle it on the host with
-  `git config --get gc.auto` and `ls -l ~/Ergomatic/.git/gc.log`). Not done
+  `git fetch --prune` can spawn (INFERENCE, still open). **The two obvious
+  reads do not discriminate** and were run on 2026-09-14: an unset
+  `gc.auto` is the 6700 default rather than "off", and `.git/gc.log` exists
+  only when auto-gc FAILS, so both came back empty under the hypothesis AND
+  under its negation. **`git count-objects -v` is the read that decides** —
+  a loose `count` far below 6700 kills the candidate. Not done
   here because `scripts/deploy.sh` is only exercised on the real host
   (`deploy.test.sh` covers its argument guards), so a change to it wants a
   deploy to verify against rather than riding a docs PR.

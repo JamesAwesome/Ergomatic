@@ -122,8 +122,15 @@ Two things that bite here:
   **What held it is NOT established.** The leading candidate is the
   background `git gc --auto` that `git fetch` can spawn, since `deploy.sh`
   runs `git fetch --prune origin` on the line before the checkout — but
-  that is INFERENCE, untested. Two reads on the host would settle it:
-  `git config --get gc.auto` and `ls -l ~/Ergomatic/.git/gc.log`.
+  that is INFERENCE, and it is still open. **Two reads that look like they
+  settle it do not:** `git config --get gc.auto` returning nothing means
+  UNSET, which is the 6700-loose-object default rather than "off", and
+  `.git/gc.log` is written only when auto-gc FAILS or declines, so a
+  successful one leaves no trace. Both were checked on 2026-09-14 and both
+  came back empty, which is consistent with the hypothesis and with its
+  negation. **The read that discriminates is `git count-objects -v`:** a
+  loose `count` far below 6700 means auto-gc could not have fired, and the
+  candidate is dead. Worth running the next time anyone is on the host.
 
   Either way, **confirm prod actually moved** rather than trusting the
   green tick: the deploy is only real if the host's `git rev-parse HEAD`
