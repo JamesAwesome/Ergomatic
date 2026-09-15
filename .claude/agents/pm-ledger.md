@@ -6989,3 +6989,66 @@ live when Wave A's `dies 2026-10-10` arrives.**
 deletes it and in which PR, or it ships as dead code with no row (RF29).
 
 **Overdue sweep (tr form):** zero. Earliest live stamp 2026-09-19.
+
+## 2026-09-14 — hardware-walk readiness gate: work-clock freeze (v1-v4 NOT READY, v5 PASS)
+
+**Final: PASS on `2026-09-15-work-clock-freeze-v5` (`3d2d9027`).** One question
+(does 0x0031's Elapsed Time keep counting during a WORK interval when the rower
+stops?), one case, ~70 s of rowing, 20-minute inclusive cap, laptop only,
+nothing installed on the phone. **PASS is not permission to start.**
+
+**Five gates on a 70-second walk.** Every round found something that would have
+cost erg time, and each round's defect sat in the paragraph the previous round
+wrote — the NFC runsheet's shape (RF31) reached by a different road.
+
+- **v1:** a retry that could not return a verdict (PASS ≥20 s, INCONCLUSIVE
+  <10 s, retry hold 15 s — neither); a retry that could destroy attempt 1's
+  evidence (`transports/index.ts:176-181`, the tap is replaced unconditionally
+  on reconnect); a workout state assumed rather than observed; plus "5 taps"
+  over a table of 4 and 13 recordings against 17.
+- **v2:** the state fix swapped in the already-walked Keystone `x2` abandoned
+  after interval 1 — and silently added an ENDING the single piece got free.
+- **v3:** three one-clause items downstream of that ending — a rehearsal step
+  reported changed and silently no-opped, a navigation counted as a tap that
+  the app performs itself (`WorkoutDetail.tsx:445-447`), and a retry branch
+  ("re-arm on the same connection") that cannot exist because End hangs up the
+  radio.
+- **v4:** the blocker was the GATE's own claim, carried since v2 — that the
+  export path is desk-rehearsable with the fake. It is not.
+- **v5:** rehearsal split into a CONTROL half (fully rehearsable, and it is the
+  half the ending added) and an EXPORT half (first exercised at the erg, with
+  the missing-download-row abort as its compensating control).
+
+**What actually cost the rounds:** two rounds on changes reported as landed
+that had silently no-opped (fixed by asserting every edit anchor and ticking
+each claim against a `git diff -U0` hunk), one on a gate-authored mechanism
+claim nobody had read the branch for, and one count error by the gate itself.
+
+**Verified at the gate, so a later card cites rather than re-derives.**
+
+- Across all **17** recordings with 0x0031 frames: **zero** frozen-elapsed runs
+  ≥3 s in states 4/5. Only state 3 (rest, expected) and state 1 (free row). The
+  desk genuinely cannot answer the question.
+- Inactivity is bounded, not unknown: **36.35 s** still `INTERVALREST` in a
+  type-8 workout that continued; **896.77 s** in a type-1 free row. 0x0031
+  arrives at **0.99-1.00 Hz** throughout both — the precondition that makes a
+  NO observable at all.
+- Terminating mid-workout and downloading the recording is a WALKED path:
+  `walk-2026-08-28/README.md` leg 2 records `ws=11 <- End pressed in the app`,
+  and `end-on-interval-1-recording.jsonl.gz` is that walk's first attempt,
+  ended on interval 1, committed.
+- `commands.ts:212` always emits `WORKOUTTYPE_VARIABLE_INTERVAL`; distance
+  programs sit in state 5; a single-step TIME program reached state 4.
+- The recording tap and the injected fake are MUTUALLY EXCLUSIVE
+  (`transports/index.ts:312-330`), despite sharing one gate.
+
+**Residuals this PASS accepts:** the export path is first exercised at the erg;
+inactivity in states 4/5 is unmeasured (routed to INCONCLUSIVE + a 20 s retry);
+the result generalises to TIME intervals by argument, not measurement.
+
+**PM judgement.** Two of three axis candidates are immune, so the walk's narrow
+return is candidate B alone. It is worth 20 minutes because the same recording
+also settles whether M9's invisible free-row pause has a programmed-row sibling
+— an analysis-plan item, never a second case. If James hesitates, take board 2
+to the gate with B at its MEASURED risk; what is not allowed is striking B in a
+clause on an unmeasured cost (RF30).
