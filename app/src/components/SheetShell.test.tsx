@@ -210,3 +210,80 @@ describe("SheetShell", () => {
     });
   });
 });
+
+// CONTAINMENT, the three shapes that leaked. Each of these was measured
+// escaping a real modal in Chromium before the fix: a rower behind a 45%
+// scrim reaching a workout link, a back link, or the connected surface's
+// pane controls, while `aria-modal="true"` claimed that content was inert.
+// None of the three had a test at any layer.
+describe("SheetShell: focus never leaves the modal", () => {
+  function shellWith(
+    children: React.ReactNode,
+    primary?: { label: string; disabled: boolean; onPress: () => void },
+    focusTitleOnOpen = false,
+  ) {
+    const opener = createRef<HTMLElement | null>();
+    render(
+      <>
+        <button type="button">OUTSIDE BEFORE</button>
+        <SheetShell
+          open
+          titleId="t"
+          onDismiss={vi.fn()}
+          opener={opener}
+          primary={primary}
+          focusTitleOnOpen={focusTitleOnOpen}
+        >
+          <h2 id="t">Title</h2>
+          {children}
+        </SheetShell>
+        <button type="button">OUTSIDE AFTER</button>
+      </>,
+    );
+    return screen.getByRole("dialog");
+  }
+
+  const inDialog = (dialog: HTMLElement) =>
+    dialog.contains(document.activeElement);
+
+  it("A — the DIALOG itself holding focus wraps instead of falling through", async () => {
+    const dialog = shellWith(
+      <button type="button">Close</button>,
+      undefined,
+      true,
+    );
+    expect(document.activeElement).toBe(dialog);
+    await userEvent.tab({ shift: true });
+    expect(inDialog(dialog)).toBe(true);
+  });
+
+  it("B — a tabbable NON-button child cannot be shift-tabbed out of", async () => {
+    // ConnectionLogSheet's log list is `tabIndex={0}` on purpose (WCAG
+    // 2.1.1) and sits BEFORE the first button.
+    const dialog = shellWith(
+      <>
+        <div tabIndex={0} data-testid="scroller">
+          log
+        </div>
+        <button type="button">Close</button>
+      </>,
+    );
+    screen.getByTestId("scroller").focus();
+    await userEvent.tab({ shift: true });
+    expect(inDialog(dialog)).toBe(true);
+  });
+
+  it("C — a DISABLED primary does not break the wrap in either direction", async () => {
+    // Both filter sheets disable their primary whenever nothing matches.
+    const dialog = shellWith(<button type="button">CLEAR</button>, {
+      label: "Apply Filter",
+      disabled: true,
+      onPress: vi.fn(),
+    });
+    screen.getByRole("button", { name: "CLEAR" }).focus();
+    await userEvent.tab();
+    expect(inDialog(dialog)).toBe(true);
+    await userEvent.tab({ shift: true });
+    expect(inDialog(dialog)).toBe(true);
+  });
+});

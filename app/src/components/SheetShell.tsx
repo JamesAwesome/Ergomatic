@@ -7,12 +7,12 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
  * whole-branch review — see the extraction's own history in
  * `library/FilterSheet.tsx`, the sheet this was lifted out of whole).
  *
- * Every button rendered inside `children` and the `primary` control is
- * assumed to be a real `<button>` (no links/inputs/other focusable kinds),
- * so `querySelectorAll("button")` is the complete, correctly-ordered
- * focusable set — kept as a small helper rather than a library so a future
- * group added by a caller is included automatically as long as it's a
- * button.
+ * The focusable set is computed from what the browser will actually Tab to
+ * — enabled buttons, links, and anything with a non-negative `tabindex` —
+ * so a caller's scroll region or a disabled primary cannot silently break
+ * containment. An earlier version assumed every focusable was an enabled
+ * `<button>`; `ConnectionLogSheet`'s tabbable log list and both filter
+ * sheets' disabled primaries each falsified that, and each leaked.
  *
  * `onDismiss` fires on backdrop tap, Escape, or (per the caller's own
  * unmount) a route/tab change — discarding whatever the caller's own draft
@@ -77,10 +77,30 @@ export function SheetShell({
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
+  /** Every control the browser will actually Tab to, in document order.
+   *
+   *  NOT just `button`. A DISABLED button is matched by that selector and
+   *  cannot hold focus, so with a disabled primary — which both filter
+   *  sheets have whenever their result count is zero — `activeElement` was
+   *  never `last`, forward Tab fell out of the modal, and `last.focus()`
+   *  was a no-op so Shift+Tab from `first` did nothing at all. Measured:
+   *  twelve Tabs out of Library's FILTER sheet reached a workout link
+   *  behind the scrim.
+   *
+   *  And a tabbable NON-button leaks the other way: `ConnectionLogSheet`
+   *  gives its log list `tabIndex={0}` on purpose (WCAG 2.1.1, a scroll
+   *  region needs to be reachable), and it sits BEFORE the first button, so
+   *  Shift+Tab off it escaped onto the connected surface's pane controls
+   *  mid-session. This component's own doc comment used to assert that
+   *  `button` was the complete focusable set; that premise was false. */
   function focusableElements(): HTMLElement[] {
     const dialog = dialogRef.current;
     if (!dialog) return [];
-    return Array.from(dialog.querySelectorAll<HTMLElement>("button"));
+    return Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      ),
+    );
   }
 
   // Moves focus into the sheet when it opens (the first control) and
@@ -124,18 +144,17 @@ export function SheetShell({
       if (focusable.length === 0) return;
       const first = focusable[0]!;
       const last = focusable[focusable.length - 1]!;
-      // The DIALOG ITSELF can hold focus (`focusTitleOnOpen`), and it is
-      // neither the first button nor the last — so without this clause
-      // Shift+Tab fell through to the browser and left the modal entirely.
-      // Measured: two Shift+Tabs reached the `← LOG` link behind the scrim
-      // and Enter navigated the rower off the screen, while `aria-modal`
-      // claimed that content was inert. Treat the dialog as sitting BEFORE
-      // the first control, which is where it visually is.
-      if (
-        e.shiftKey &&
-        (document.activeElement === first ||
-          document.activeElement === dialogRef.current)
-      ) {
+      // ONE PREDICATE, not a list of special cases. Focus inside the dialog
+      // that is not on an enumerated control — the dialog itself under
+      // `focusTitleOnOpen`, or anything a future caller adds — wraps to the
+      // end it is heading for. The previous version special-cased exactly
+      // the dialog and left every other such position leaking.
+      if (!focusable.includes(document.activeElement as HTMLElement)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+        return;
+      }
+      if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
         last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {
