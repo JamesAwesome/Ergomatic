@@ -1148,6 +1148,35 @@ it lands the stranger on this same denial.
       is a design-gate question across five strings on three surfaces, and
       because #444 shipped one answer to it without ever asking — applying that
       answer more widely by reflex is how a house style gets set by accident.
+- [ ] **Move the account block behind an ACCOUNT door on You. GATE 0 IS DONE
+      AND JAMES RULED OPTION A (2026-09-15); nothing has built it.** He asked
+      for it in as many words: _"I want to also move the account settings into
+      a submenu because 'delete your account' is FAR too prominent."_ Measured
+      on the shipped screen: `Delete account` sits **433 px from the top of You
+      and is visible without scrolling** at 390x844, as a red button inside a
+      red-bordered box — the loudest element on the page, louder than
+      `Sign out`. That box is itself the 2026-09-14 quarantine ruling, so this
+      is the same concern escalating: quarantining it on the page did not make
+      it quieter, because a quarantine box is a visually loud object.
+      **What A means:** the sign-in methods list AND the delete box move to a
+      new `/you/account`, leaving You with identity, the career hero and the
+      doors. The row sits FIRST, above BASELINES. The re-auth disclosure rides
+      the box to the subpage (ruling 3), and the delete confirm screen stays
+      untouched.
+      **Two constraints already measured, so nobody re-derives them:**
+      `/you/sign-in-methods` is NOT available as the path — it is a flow-only
+      route that redirects to `/you` unless the auth flow is mid-link or
+      mid-delete, and it sits in `HIDDEN_TABBAR_PREFIXES`. `/you/account` is
+      free. And the You-initiated link needs no decision: `prepareLink` is
+      called only from `SignInMethods`, so "Add Apple" starts and ends inside
+      that one component and its success notice follows it.
+      Pack and rulings: `docs/design/account-submenu-gate0/`. **S**
+      · dies 2026-10-12 · a row and not a fix now because it is a navigation
+      change and PR2 is an auth state machine plus a stored shape — bundling
+      them would make a reviewer hold two unrelated risk models at once, which
+      is this repo's own split test. Dated to match the three copy rows below,
+      because Task 7 Step 1's disclosure rides this and the four should land
+      together.
 - [ ] **Delete account does not say that it will ask you to prove it is you.**
       James, 2026-09-14, immediately after running the deletion twice on a real
       account: _"we really need to make it more obvious that the reauth is
