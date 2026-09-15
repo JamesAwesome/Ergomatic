@@ -84,8 +84,22 @@ function AppContent() {
   // Nothing is lost by holding it. The destination is held, not dropped, and
   // by the time `me` resolves IN the flow has reached `attached`, whose
   // destination is `/` — the landing James ruled.
+  //
+  // BUT `loading` HOLDS AND `out` CONSUMES, AND THE DIFFERENCE IS A REAL BUG.
+  // Returning bare on both leaves `consumedAuthDestination` carrying whatever
+  // the last signed-in flow put there, for the whole signed-out period — and
+  // `/` is exactly what an attach terminal writes. A rower who attaches,
+  // signs out, and signs in again in the SAME document (native never
+  // reloads) reaches `attached` a second time with destination `/`, matches
+  // the stale ref, takes the early return below, and is left standing on
+  // `/you` — the subpage this landing ruling exists to avoid. `loading` must
+  // still hold, because that is the race the whole guard was written for.
   useEffect(() => {
-    if (me.state !== "in") return;
+    if (me.state === "loading") return;
+    if (me.state === "out") {
+      consumedAuthDestination.current = auth.destination;
+      return;
+    }
     if (consumedAuthDestination.current === auth.destination) return;
     consumedAuthDestination.current = auth.destination;
     if (auth.destination && auth.destination !== location.pathname) {
