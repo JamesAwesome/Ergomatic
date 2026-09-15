@@ -913,7 +913,16 @@ it lands the stranger on this same denial.
       enforces any individual guideline in practice — the text binds, the
       folklore that beta review is lighter has no Apple page behind it and is
       not planned on in either direction.
-- [ ] **An open sign-up policy, replacing deny-by-default.**
+- [ ] **DEFERRED OUT OF WAVE A BY JAMES, 2026-09-14: _"we're not going public
+      in staging, you can strike that for now. That will be a final
+      'production' phase, don't worry about authoring it yet."_** The row stays
+      here, struck rather than deleted, because the work is done and only the
+      DECISION moved: a future production phase inherits it, and that phase is
+      deliberately not authored yet. **Consequence for the wave: Wave A's exit
+      sentence, which describes a stranger installing from TestFlight, cannot
+      be met inside Wave A any more.** Whoever closes this wave rewrites that
+      exit or says plainly that it moved.
+      Was: **An open sign-up policy, replacing deny-by-default.**
       **PROVEN TO WORK, NOT YET SHIPPED (2026-09-14 activation session).** With
       `ACCESS_MODE=public` on staging, a brand-new Gmail with no allowlist entry
       created an account, and the same identity was refused once `restricted`
