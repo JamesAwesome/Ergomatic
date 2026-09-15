@@ -3350,6 +3350,34 @@ Each needs erg time or a deliberate recording session.
 
 ## Small, queued, rides the next PR in its area
 
+- **`deploy.sh` treats a git lock collision as an unhealthy build, so a
+  momentary one silently costs a deploy.** First sighting 2026-09-14, run
+  `34907509845` (merge `a847148b`): `git checkout --force` could not take
+  `.git/HEAD.lock`, the `ERR` trap rolled back to `PREV`, every container
+  came up healthy and the job exited 1 — prod served the previous commit
+  while main looked merged and green. The lock was **transient** (absent on
+  the host minutes later), so a re-run was the entire recovery; recovery is
+  documented in `docs/deploy.md`. The rollback behaved correctly. The
+  problem is that nothing distinguishes "the new build is unhealthy" from
+  "git could not check it out", and the second is not fixed by rolling back.
+  What would fix it now: **retry the checkout** (a few seconds' backoff)
+  rather than a pre-flight lock check, which cannot help against a race —
+  it would fail faster and still not deploy — plus a distinct exit code so
+  the log says what went wrong instead of burying it above 160 lines of
+  healthy containers. **What held the lock is not established**; the
+  leading candidate is the background `git gc --auto` that the preceding
+  `git fetch --prune` can spawn (INFERENCE, still open). **The two obvious
+  reads do not discriminate** and were run on 2026-09-14: an unset
+  `gc.auto` is the 6700 default rather than "off", and `.git/gc.log` exists
+  only when auto-gc FAILS, so both came back empty under the hypothesis AND
+  under its negation. **`git count-objects -v` is the read that decides** —
+  a loose `count` far below 6700 kills the candidate. Not done
+  here because `scripts/deploy.sh` is only exercised on the real host
+  (`deploy.test.sh` covers its argument guards), so a change to it wants a
+  deploy to verify against rather than riding a docs PR.
+  **S** · dies 2026-10-14 · one sighting, recovery is a re-run; the code fix
+  wants a real deploy to verify against and a named culprit first
+
 - **One unidentified `client`/`unit` test failure, seen once on 2026-09-14 and
   not reproduced in nine runs since.** A full
   `pnpm test --project client --project unit` at PR #445's head reported

@@ -90,6 +90,51 @@ Two things that bite here:
 - **`deploy.sh` refuses to run on a dirty checkout** (`exit 3`), and a
   hand-rolled rollback is the most likely way to leave one dirty. Check
   `git status --porcelain` on the host before letting CI deploy again.
+- **A LOCK COLLISION ON THE HOST LOOKS EXACTLY LIKE A FAILED BUILD.** Seen
+  2026-09-14 on run `34907509845` (merge `a847148b`): all six code jobs
+  green, `deploy` red, and the only honest line in a 166-line log was
+
+  ```
+  fatal: update_ref failed for ref 'HEAD': cannot lock ref 'HEAD':
+  Unable to create '/home/<user>/Ergomatic/.git/HEAD.lock': File exists.
+  ```
+
+  `git checkout --force "$SHA"` could not move HEAD, the `ERR` trap fired,
+  and the rollback did its job perfectly — `PREV` rebuilt, every container
+  healthy, `exit 1`. **The tell is that the log ends with everything
+  HEALTHY and still exits 1**, because what you are reading is the
+  ROLLBACK's `up`, not the deploy's. Prod then serves the PREVIOUS commit
+  while main's tip looks merged and green (RF28's exact shape).
+
+  **That lock was TRANSIENT, not stale** — checked on the host minutes
+  later and the file did not exist, so nothing had to be removed and a
+  re-run was the whole recovery. **Do not reach for `rm` first.** Look:
+
+  ```bash
+  ls -l ~/Ergomatic/.git/HEAD.lock     # usually absent by the time you look
+  ```
+
+  If it is ABSENT, some git process held it for the moment the deploy
+  needed it and has since finished: just `gh run rerun <run-id> --failed`.
+  Only if it is PRESENT, with no live git process to explain it, is it
+  genuinely stale and safe to `rm`.
+
+  **What held it is NOT established.** The leading candidate is the
+  background `git gc --auto` that `git fetch` can spawn, since `deploy.sh`
+  runs `git fetch --prune origin` on the line before the checkout — but
+  that is INFERENCE, and it is still open. **Two reads that look like they
+  settle it do not:** `git config --get gc.auto` returning nothing means
+  UNSET, which is the 6700-loose-object default rather than "off", and
+  `.git/gc.log` is written only when auto-gc FAILS or declines, so a
+  successful one leaves no trace. Both were checked on 2026-09-14 and both
+  came back empty, which is consistent with the hypothesis and with its
+  negation. **The read that discriminates is `git count-objects -v`:** a
+  loose `count` far below 6700 means auto-gc could not have fired, and the
+  candidate is dead. Worth running the next time anyone is on the host.
+
+  Either way, **confirm prod actually moved** rather than trusting the
+  green tick: the deploy is only real if the host's `git rev-parse HEAD`
+  equals the merge SHA.
 - **A rollback is only safe above the floor.** If the good SHA is below it,
   restoring the database comes first.
 
