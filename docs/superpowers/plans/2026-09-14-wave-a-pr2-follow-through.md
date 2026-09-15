@@ -116,7 +116,11 @@ reproduced by the antagonist at `34589267`:
 **This is an editing pass, not a redesign.** The design's shape survives; what
 was missing is the transport that carries it. Revision 4 names the edits.
 
-### The fifth confirmation, which no gate had found: the client auto-finalizes
+### The client auto-finalizes, which no gate had found
+
+_(Revision 4 called this "the fifth confirmation" when the list above had four
+bullets; the list is five, and revision 5 counts this as the SIXTH place. The
+heading is renamed rather than renumbered, so no count has to stay in sync.)_
 
 `acceptStep`'s `link_ready` branch (`src/adapters/authFlow.ts:476-479`) calls
 `finalizeLink` **unconditionally, with no pause.** Today that is right: the only
@@ -136,11 +140,17 @@ test.
    proven: the rower is confirming the Apple identity the attempt has held since
    its first exchange.
 2. **`app/shared/auth.ts`, edit two — the `link_ready` member carries the
-   adopted session** beside the attempt. One declaration both sides compile
+   adopted session** beside the attempt. ~~One declaration both sides compile
    against, so a renamed field is a build error rather than a silently absent
-   one (RF33). The web surface's copy of it carries no token — `signed()`
-   strips it and sets the cookie (`frontDoorRoutes.ts:144-149`) — and native's
-   does, which is the existing asymmetry, not a new one.
+   one (RF33).~~ **WITHDRAWN in revision 5, measured:** widening this member
+   breaks one PRODUCER (`frontDoorRoutes.ts(121,35) TS2322`) and produces
+   ZERO output from `tsc -b`, so the type binds the writer and not the reader
+   — and the reader is the half that has to store a native token and refetch
+   `me`. The declaration is still shared, but it is not a gate; Task 5 Step 2c
+   carries the client-layer tests that are. The web surface's copy of it
+   carries no token — `signed()` strips it and sets the cookie
+   (`frontDoorRoutes.ts:144-149`) — and native's does, which is the existing
+   asymmetry, not a new one.
 3. **`result()` gains the both-at-once case**, and the web callback's
    attempt-surviving branch gains the session `Set-Cookie` it does not emit
    today. Whichever shape these take, the test that decides them is the one in
@@ -563,13 +573,17 @@ modify `app/server/db/schema.ts`; test
       outside the access policy, and the follow-through is refused with
       `access_denied` rather than minting. Then a mutation probe removing the
       `requireAccess` call, confirming it goes red.
-- [ ] **Step 3c (revision 5) — `expires_at` at the second exchange is a
-      DECISION, not a default.** The arm this one sits beside refreshes it; Task
-      2 Step 1 pins it byte-identical on the earlier transition. James rules it
-      at Gate 0, because it decides whether the new confirmation can be read at
-      a human pace inside a 300 s window that now also contains a full provider
-      round trip. Whichever way it goes, assert the chosen value explicitly —
-      an unasserted `expires_at` is how this became invisible.
+- [ ] **Step 3c — the second exchange REFRESHES `expires_at` (Gate 0 ruling
+      2, James, 2026-09-15).** A fresh 300 s, matching what this arm's sibling
+      already does for link and delete at the same point. **His reason is the
+      one to keep:** _"what 300 second clock I don't see a clock"_ — nothing on
+      screen shows it, counts it down, or warns before it runs out, so a rower
+      cannot manage a deadline they are never told about, and the new
+      confirmation is a screen they are meant to READ. Accepted cost, stated:
+      the carried Apple identity can live across two windows rather than one.
+      **Assert the refreshed value explicitly** — an unasserted `expires_at` is
+      how this stayed invisible through three revisions — and pin it with an
+      independent literal, never by importing the TTL constant (RF21).
 - [ ] **Step 4** — failing test: the proven subject belongs to NO account. The
       rower must reach a stated outcome, not a thrown 500.
 - [ ] **Step 5** — run, implement, re-run.
@@ -689,11 +703,13 @@ starts. If it has not run, stop here.
 - [ ] **Step 5** — failing test: a follow-through that fails leaves a way
       forward. PR #444 just spent a Gate 0 on this screen's dead ends; it does
       not get to grow a new one.
-- [ ] **Step 5b (revision 5) — the REFUSAL case, which is not the failure
-      case.** The rower who reads the post-proof confirmation and says NO is
-      ALREADY SIGNED IN: the screen is no longer "sign in?" but "you're in —
-      attach Apple too?". What the No button does is unspecified. Gate 0
-      decides it; this step asserts whatever it decides.
+- [ ] **Step 5b — the REFUSAL case, which is not the failure case. The
+      button reads "Not now" (Gate 0 ruling 1).** The rower who reads the
+      post-proof confirmation and says no is ALREADY SIGNED IN: the screen is
+      "you're in, attach Apple too?", not "sign in?". Tapping it goes to Today,
+      signed in, with Apple unattached and the screen returning on the next
+      Apple sign-in. **Assert the signed-in destination**, not the absence of
+      an attach — "nothing happened" is true of a crash too.
 - [ ] **Step 6** — run, implement, re-run.
 - [ ] **Step 7** — per-file coverage on both files (RF2).
 - [ ] **Step 8** — commit.
@@ -729,59 +745,84 @@ starts. If it has not run, stop here.
       belongs in the record with its citation beside it.
 - [ ] **Step 8** — commit.
 
-### Task 7: the copy round riding this PR (revision 4)
+### Task 7: the copy round riding this PR
 
 Four ROADMAP rows on the two screens PR2 already edits. They ride this PR at
-James's instruction (2026-09-15) and share its Gate 0. **Row 1 and row 3 are
-open QUESTIONS, not known fixes** — they go into Gate 0 as questions, and
-nothing is implemented until James rules.
+James's instruction (2026-09-15) and shared its Gate 0. **All four are RULED
+(2026-09-15) and each step below carries its ruling** — rows 1 and 3 went in
+as open questions and came back decided.
 
-- [ ] **Step 1 — `Delete account` never says a provider re-auth is coming.**
-      James found it running the deletion twice for real. Disclosing it puts the
-      confirm screen's whole shape in question, so this is a Gate 0 item, not a
-      sentence. Present the screen, not the wording.
+- [ ] **Step 1 — `Delete account` discloses the re-auth AT THE TAP (Gate 0
+      ruling 3).** One sentence in the ACCOUNT quarantine box on You, naming
+      the provider the account actually holds, because the re-auth happens
+      BEFORE the confirm screen and a warning there arrives after the cost is
+      paid. **The confirm screen is left untouched**, which is what keeps its
+      own 2026-09-14 ruling (state facts, not prose) intact. Rendered at
+      `docs/design/pr2-gate0/renders/08-delete-reauth-options.png`.
 - [ ] **Step 2 — the redundant link-success notice.** "Apple is now connected.
       You can sign in either way." duplicates the row beneath it, which already
       reads CONNECTED. The second sentence does work the row cannot; the first
       is the duplication. Failing test on the rendered surface first.
-- [ ] **Step 3 — naming the "You" screen has no consistent treatment.**
-      **The census is SIX, not five, and there is a THIRD treatment (revision
-      5).** Measured across `app/src`, comments excluded: two QUOTED
-      (`you/SignInMethods.tsx:128` and `:130`, both from #444) and four
-      UNQUOTED — `SignIn.tsx:40`, `SignIn.tsx:101`, **`SignIn.tsx:173`**
-      ("Then open You → Sign-in methods to add …", which revision 4 missed) and
-      `today/Today.tsx:1479` ("You can type the other in on You" — pronoun and
-      screen name in one sentence, neither marked). The third treatment is
-      **"the You tab"**: `log/Concept2SendBlock.tsx:226` in live UI, plus three
-      UNDATED News article bodies (`news/content/bodies/yourFirstRow.tsx:28`
-      and `:36`, `baselines.tsx:63`), which Phase JC's ruling makes rendering
-      surfaces. Dated `releaseNotes.ts` entries stand as history and are
-      EXEMPT, by that same ruling. **The treatment is the open question**, not
-      just the inconsistency; the quotes were James's own suggestion and he
-      flagged the grammar himself. Gate 0 decides it, then one sweep applies it
-      and a test pins the census — **re-measure the count at implementation
-      time rather than copying this number**, since it moved once already.
-- [ ] **Step 4 — the `--rule` hairline measures 1.47:1 on `--surface`.**
-      Pre-existing, decorative, outside WCAG's 3:1 non-text minimum. Recompute
-      the ratio as a number in the Gate 0 pack and let James decide whether a
-      decorative hairline is worth changing.
-- [ ] **Step 5** — tick the four rows, and commit.
+- [ ] **Step 3 — the treatment is "the You tab" (Gate 0 ruling 4, James,
+      2026-09-15).** It is the only form that reads correctly in
+      `Today.tsx:1479` — "You can type the other in on the You tab" — where a
+      bare `You` puts a pronoun and a screen name side by side with neither
+      marked, which is the grammar James flagged himself. It also already has
+      the most live usage. **It applies to EVERY live string, including the
+      two `SignInMethods.tsx` ones #444 shipped as quoted**, so those change
+      too; #444's answer is superseded rather than extended.
+      **Re-measure the census at implementation time rather than trusting any
+      number written here** — it moved once already, from the row's five to
+      the Gate 0 pack's seven. At the time of the gate: two quoted
+      (`you/SignInMethods.tsx:128`, `:130`), four unquoted (`SignIn.tsx:40`,
+      `:101`, `:173`, `today/Today.tsx:1479`), one already in the chosen form
+      (`log/Concept2SendBlock.tsx:226`), plus three UNDATED News strings across TWO
+      article bodies (`news/content/bodies/yourFirstRow.tsx:28` and `:36`,
+      `baselines.tsx:63`) which Phase JC's ruling makes rendering surfaces.
+      Dated `releaseNotes.ts` entries stand as history and are EXEMPT.
+      **The test pins the count of strings NOT in the chosen form at zero**,
+      which is the assertion that does not rot as copy is added.
+- [ ] **Step 4 — the hairline STAYS at 1.47:1, and the POLICY is what gets
+      written down (Gate 0 ruling 5, James, 2026-09-15).** No colour change.
+      Add the rule to `app/src/theme/tokens.css` beside `--rule` itself:
+      **a boundary that carries meaning uses `--ink-4`** (4.76:1 on page,
+      computed in the Gate 0 pack) **and `--rule` stays decorative.**
+      The argument, recorded because the question will come back: WCAG's 3:1
+      non-text minimum governs boundaries needed to IDENTIFY a component or
+      its state, and this one sits between rows their own labels already
+      separate — so raising it would repaint every card, list and divider in
+      the app to fix a line carrying no information. **And the obvious small
+      step does not even work:** `#a39c88` measures 2.69:1 on `--surface` and
+      2.42:1 on `--page`; the lightest value clearing 3:1 against both is
+      `#928a78` (3.37:1 / 3.03:1) — the lightest on this token's own hue ramp,
+      though other warm neutrals are lighter and also clear, so it is one
+      workable value rather than the only one — and it no longer reads as a
+      hairline. Both measured in `docs/design/pr2-gate0/contrast.json`.
+      **Close the ROADMAP row with the ruling, not silently** — it is a
+      decision that the row was right to raise and wrong to assume.
+- [ ] **Step 5** — tick the four rows, each with its Gate 0 ruling beside
+      it, and commit.
 
 ---
 
 ## Gates
 
-- **Gate 0:** REQUIRED, and it runs **FIRST, before Task 0** — the PM moved
+- **Gate 0: RUN AND RULED, 2026-09-15.** The pack is
+  `docs/design/pr2-gate0/` (15 captures, both orientations, every pairing
+  computed); its five rulings are prescribed into the tasks below. It ran
+  **FIRST, before Task 0** — the PM moved
   it there and the reason is that James's confirm-after-the-proof ruling is the
   load-bearing input to the whole architecture. If the rendered screen sends the
   confirmation back before the proof, Tasks 0-4 are partly wasted. RC-24 is the
   precedent. It also covers the copy round below, which is why rolling those
   rows in is grouping rather than scope creep: **one Gate 0 instead of four.**
-  **Revision 5 gives it four decisions to carry besides the rendered screen:**
-  whether the second exchange refreshes `expires_at` (Task 3 Step 3c), what the
-  No button does now that refusing leaves the rower signed in (Task 5 Step 5b),
-  the "You" naming treatment across six strings and three shapes (Task 7 Step
-  3), and whether the 1.47:1 hairline is worth changing (Task 7 Step 4).
+  **It carried five decisions besides the rendered screen, and all five came
+  back ruled:** the No button is "Not now" (Task 5 Step 5b); the second
+  exchange REFRESHES `expires_at` (Task 3 Step 3c); the delete re-auth is
+  disclosed at the tap (Task 7 Step 1); the "You" treatment is "the You tab"
+  (Task 7 Step 3, which orders a re-measure of the census rather than trusting
+  any count written here); and the 1.47:1 hairline STAYS, with the
+  `--ink-4`-for-meaning policy written down instead (Task 7 Step 4).
 - **PM, BEFORE Gate 0 (revision 5):** the `ACCESS_MODE` build-now call. Staging
   stays `restricted` (James, 2026-09-14), `compose.yml:48` and
   `accessPolicy.ts:14` both default to it, and `requireAccess(identity.email)`

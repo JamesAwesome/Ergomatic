@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Ergomatic · PR2 follow-through Gate 0</title>
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/newsreader/400.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/newsreader/500.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/archivo/400.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/archivo/500.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/archivo/600.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/ibm-plex-mono/400.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/ibm-plex-mono/500.css">
+  <style>
+    :root {
+      --page: #f4f1e8;
+      --surface: #fffdf7;
+      --surface-sunken: #efeade;
+      --ink: #1b1a17;
+      --ink-2: #3f3c35;
+      --ink-3: #57544c;
+      --ink-4: #6f6a5f;
+      --rule: #d8d3c4;
+      --rule-2: #ded8c9;
+      --accent: #b5341f;
+      --accent-hover: #9c2c19;
+      --on-color: #fffdf7;
+      --focus: #1d4e89;
+      --success: #49624f;
+      --radius: 2px;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Archivo", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      background: #ddd8cc;
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 14px;
+    }
+    button { font: inherit; }
+    button:focus-visible, [tabindex]:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+    .handoff {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(258px, 310px) 1fr;
+    }
+    .artifact-nav {
+      background: var(--surface);
+      border-right: 1px solid var(--ink-4);
+      padding: 24px;
+      min-height: 100vh;
+      overflow-y: auto;
+    }
+    .artifact-nav h1 {
+      margin: 0 0 4px;
+      font: 500 27px/1.1 var(--font-serif);
+    }
+    .artifact-kicker, .artifact-note, .control-label {
+      font: 500 10px/1.45 var(--font-mono);
+      letter-spacing: .12em;
+      color: var(--ink-3);
+      text-transform: uppercase;
+    }
+    .artifact-note { margin: 14px 0 22px; text-transform: none; letter-spacing: .05em; }
+    .control-group { border-top: 1px solid var(--rule); padding-top: 14px; margin-top: 14px; }
+    .control-label { display: block; margin-bottom: 8px; }
+    .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .control {
+      min-height: 44px;
+      border: 1px solid var(--ink-4);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      padding: 7px 8px;
+      text-align: left;
+      font-size: 12px;
+    }
+    .control[aria-pressed="true"] { background: var(--ink); color: var(--on-color); }
+    .device-shell {
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      min-width: 0;
+      overflow: auto;
+    }
+    .device-wrap { display: grid; justify-items: center; gap: 10px; }
+    .device {
+      width: 390px;
+      height: 844px;
+      position: relative;
+      overflow: hidden;
+      background: var(--page);
+      border: 1px solid var(--ink-4);
+      border-radius: 34px;
+      box-shadow: 0 16px 44px rgba(27, 26, 23, .18);
+    }
+    .device.landscape { width: 844px; height: 390px; border-radius: 28px; }
+    .device-caption {
+      font: 500 10px var(--font-mono);
+      letter-spacing: .12em;
+      color: var(--ink-3);
+      text-transform: uppercase;
+    }
+    .status-bar {
+      display: none;
+      position: absolute;
+      z-index: 4;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 47px;
+      padding: 15px 27px 0;
+      justify-content: space-between;
+      align-items: flex-start;
+      font: 600 11px var(--font-sans);
+      pointer-events: none;
+    }
+    .status-icons { letter-spacing: .06em; }
+    .platform-native:not(.landscape) .status-bar { display: flex; }
+    .app-screen {
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      background: var(--page);
+      padding: 20px;
+    }
+    .platform-native:not(.landscape) .app-screen { padding: 59px 20px 54px; }
+    .platform-native.landscape .app-screen { padding: 16px 64px 31px; }
+    .screen-inner { width: min(100%, 480px); min-height: 100%; margin: 0 auto; }
+    .signin-layout {
+      max-width: 440px;
+      display: flex;
+      min-height: 100%;
+      flex-direction: column;
+      justify-content: center;
+      gap: 12px;
+    }
+    .brand-title, .screen-title, .identity-name {
+      font-family: var(--font-serif);
+      font-weight: 500;
+    }
+    .brand-title { font-size: 31px; line-height: 1.08; margin: 0 0 28px; }
+    .tagline { color: var(--ink-3); font-size: 16px; margin: 0 0 14px; white-space: nowrap; }
+    .comparison-inner { width: 100%; min-height: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: center; }
+    .compare-pane { background: var(--surface); border: 1px solid var(--rule); padding: 18px; min-width: 0; }
+    .compare-label { margin: 0 0 18px; padding-bottom: 8px; border-bottom: 1px solid var(--ink-4); font: 500 11px var(--font-mono); letter-spacing: .12em; color: var(--ink-3); }
+    .compare-pane .brand-title { font-size: 27px; margin-bottom: 16px; }
+    .compare-pane .tagline { font-size: 14px; margin-bottom: 12px; }
+    .auth-stack, .action-stack { display: grid; gap: 12px; }
+    .auth-button, .button-l1, .button-l2 {
+      width: 100%;
+      min-height: 52px;
+      padding: 0;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      position: relative;
+    }
+    .auth-button.apple {
+      border: 1px solid #000;
+      background: #000;
+      color: #fff;
+    }
+    .auth-button.apple img {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: auto;
+    }
+    .auth-button.google, .button-l1 {
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: var(--on-color);
+    }
+    .button-l2 {
+      border: 1px solid var(--ink);
+      background: var(--surface);
+      color: var(--ink);
+    }
+    .auth-button:hover.google, .button-l1:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .auth-button:hover.apple { background: #1b1b1b; }
+    .button-l2:hover { background: var(--surface-sunken); }
+    .intro { max-width: 38ch; color: var(--ink-3); line-height: 1.45; margin: 0 0 8px; }
+    .back-button {
+      min-width: 44px;
+      min-height: 44px;
+      border: 0;
+      background: transparent;
+      color: var(--ink-3);
+      padding: 0;
+      text-align: left;
+      cursor: pointer;
+      font: 500 11px var(--font-mono);
+      letter-spacing: .12em;
+    }
+    .flow-screen { display: flex; flex-direction: column; min-height: 100%; }
+    .flow-header { margin-bottom: 18px; }
+    .screen-title { font-size: 31px; line-height: 1.1; margin: 4px 0 8px; }
+    .flow-body { flex: 1; display: flex; flex-direction: column; }
+    .identity-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--rule);
+      border-radius: var(--radius);
+      min-width: 0;
+    }
+    .avatar {
+      flex: 0 0 46px;
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      background: var(--ink);
+      color: var(--on-color);
+      font-weight: 600;
+    }
+    .identity-copy { min-width: 0; flex: 1; }
+    .identity-name { font-size: 24px; line-height: 1.1; margin: 0; }
+    .identity-email { color: var(--ink-3); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 3px 0 0; }
+    .flow-body > .identity-card .identity-email { white-space: nowrap; font-size: 12px; }
+    .flow-body > .identity-card .provider-mark { display: none; }
+    .provider-mark, .connected-mark {
+      font: 500 10px var(--font-mono);
+      letter-spacing: .1em;
+      color: var(--ink-3);
+    }
+    .explain-card {
+      background: var(--surface-sunken);
+      border-left: 3px solid var(--ink-4);
+      padding: 14px 14px 14px 16px;
+      margin: 16px 0;
+      color: var(--ink-2);
+      line-height: 1.5;
+    }
+    .explain-card p { margin: 0; }
+    .flow-actions { margin-top: auto; padding-top: 18px; }
+    .you-screen { display: flex; flex-direction: column; min-height: 100%; padding-bottom: 48px; }
+    .you-screen .identity-card { margin-top: 8px; }
+    .signout {
+      min-width: 72px;
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid var(--ink);
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--ink);
+    }
+    .stats-strip { padding: 16px 2px 14px; border-bottom: 1px solid var(--rule); }
+    .stat-line { margin: 0 0 5px; font: 500 12px var(--font-mono); letter-spacing: .08em; }
+    .stat-bar { display: grid; grid-template-columns: 6fr 27fr 43fr 10fr 14fr; height: 24px; margin: 10px 0 7px; gap: 2px; }
+    .stat-bar span:nth-child(1) { background: #5c4382; }
+    .stat-bar span:nth-child(2) { background: #8a5f18; }
+    .stat-bar span:nth-child(3) { background: #2a6275; }
+    .stat-bar span:nth-child(4) { background: var(--ink); }
+    .stat-bar span:nth-child(5) { background: #7a766d; }
+    .stat-legend { font: 400 9px var(--font-mono); color: var(--ink-3); word-spacing: 7px; }
+    .methods { margin-top: 16px; }
+    .section-label { margin: 0 2px 7px; font: 500 11px var(--font-mono); letter-spacing: .12em; color: var(--ink-3); }
+    .method-list { border-top: 1px solid var(--rule); }
+    .method-row {
+      width: 100%;
+      min-height: 54px;
+      border: 0;
+      border-bottom: 1px solid var(--rule);
+      background: transparent;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 2px;
+      text-align: left;
+    }
+    button.method-row { cursor: pointer; }
+    .method-name { font-weight: 500; }
+    .method-action { color: var(--ink-2); }
+    .connected-mark { color: var(--success); }
+    .you-doors { margin-top: auto; padding-top: 26px; border-top: 1px solid var(--rule); }
+    .door-row {
+      min-height: 44px;
+      border-bottom: 1px solid var(--rule);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--ink-3);
+      font: 400 11px var(--font-mono);
+      letter-spacing: .1em;
+    }
+    .notice {
+      padding: 13px 14px;
+      border: 1px solid var(--ink);
+      background: var(--surface);
+      border-radius: var(--radius);
+      line-height: 1.4;
+      margin: 12px 0 2px;
+    }
+    .notice.success { border-color: var(--success); }
+    .notice.error { border-color: var(--accent); }
+    .steps { margin: 8px 0 18px; border-top: 1px solid var(--rule); }
+    .step { display: grid; grid-template-columns: 32px 1fr; gap: 9px; padding: 13px 0; border-bottom: 1px solid var(--rule); }
+    .step-index { font: 500 11px var(--font-mono); color: var(--ink-3); }
+    .step.done .step-index { color: var(--success); }
+    .step strong { display: block; font-size: 14px; }
+    .step small { display: block; color: var(--ink-3); font-size: 12px; margin-top: 3px; line-height: 1.35; }
+    .tabbar {
+      height: 44px;
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      background: var(--surface);
+      border-top: 1px solid var(--rule);
+      z-index: 3;
+    }
+    .platform-native:not(.landscape) .tabbar { bottom: 0; padding-bottom: 9px; height: 53px; }
+    .tab { display: grid; place-items: center; font: 500 9px var(--font-mono); letter-spacing: .14em; color: var(--ink-3); }
+    .tab.active { color: var(--ink); box-shadow: inset 0 3px 0 var(--accent); }
+
+    body.capture .handoff { display: block; }
+    body.capture .artifact-nav, body.capture .device-caption { display: none; }
+    body.capture .device-shell { display: block; padding: 0; overflow: hidden; }
+    body.capture .device-wrap { display: block; }
+    body.capture .device {
+      width: 100vw;
+      height: 100vh;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    @media (max-width: 760px) {
+      body:not(.capture) .handoff { grid-template-columns: 1fr; }
+      body:not(.capture) .artifact-nav { min-height: auto; border-right: 0; border-bottom: 1px solid var(--ink-4); }
+      body:not(.capture) .device-shell { place-items: start center; padding: 18px 0; }
+    }
+    @media (max-width: 520px) {
+      .comparison-inner { grid-template-columns: 1fr; align-items: stretch; padding: 12px 0; }
+    }
+    @media (max-height: 460px) {
+      .signin-layout { justify-content: center; }
+      .brand-title { margin-bottom: 6px; }
+      .tagline { margin-bottom: 4px; }
+      .flow-header { margin-bottom: 8px; }
+      .screen-title { font-size: 28px; }
+    }
+  </style>
+  <style>
+    /* PR2 additions. Everything above is the apple-signin Gate 0 pack's CSS,
+       copied verbatim so the two packs render the same product. */
+    .dest-card {
+      display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+      background: var(--surface); border: 1px solid var(--ink-4);
+      border-radius: var(--radius); min-width: 0;
+    }
+    .dest-card .avatar { flex: 0 0 38px; width: 38px; height: 38px; font-size: 13px; }
+    .attach-arrow {
+      font: 500 11px var(--font-mono); letter-spacing: .12em; color: var(--ink-3);
+      text-align: center; padding: 7px 0 6px;
+    }
+    .arrow-h { display: none; }
+    .landscape .arrow-v { display: none; }
+    .landscape .arrow-h { display: inline; font-size: 18px; }
+    .attach-pair { display: grid; gap: 0; margin-top: 4px; }
+    /* THE RELAY ADDRESS MUST BE READABLE IN FULL. The spec's global
+       constraint is that the confirmation "names the provider AND the relay
+       address"; the shared .identity-email rule ellipsises it, which on a
+       390 px frame cut it at "…appleid…" — the half that says it is a relay
+       is exactly the half that was lost. Wrap instead of truncate, here
+       only. */
+    .attach-pair .identity-email {
+      white-space: normal;
+      overflow-wrap: break-word;
+      text-overflow: clip;
+      overflow: visible;
+      line-height: 1.35;
+    }
+    /* LANDSCAPE PUTS THE PAIR SIDE BY SIDE. Stacked, the two identity cards
+       plus the arrow plus the explain card push the actions 267 px below the
+       fold on an 844 x 390 frame — measured by render.mjs, and it is the
+       RC-24 failure: the one control the screen exists for, off-screen on
+       the orientation a rower is most likely holding at an erg. Beside each
+       other, the whole decision fits with the buttons visible. */
+    .landscape .attach-pair {
+      grid-template-columns: 1fr 44px 1fr;
+      align-items: center;
+      column-gap: 0;
+    }
+    .landscape .attach-pair .field-label:nth-of-type(1) { grid-column: 1; grid-row: 1; }
+    .landscape .attach-pair .identity-card:nth-of-type(1) { grid-column: 1; grid-row: 2; }
+    .landscape .attach-pair .attach-arrow { grid-column: 2; grid-row: 2; padding: 0; }
+    .landscape .attach-pair .field-label:nth-of-type(2) { grid-column: 3; grid-row: 1; }
+    .landscape .attach-pair .identity-card:nth-of-type(2) { grid-column: 3; grid-row: 2; }
+    .landscape .explain-card { margin: 12px 0; padding: 10px 12px; }
+    .landscape .flow-actions { padding-top: 12px; }
+    .landscape .flow-actions.action-stack { grid-template-columns: 1fr 1fr; display: grid; gap: 12px; }
+    .landscape .screen-title { font-size: 24px; margin: 2px 0 4px; }
+    .landscape .flow-header { margin-bottom: 10px; }
+    .landscape .flow-header .intro { margin-bottom: 0; max-width: none; }
+    .landscape .identity-card { padding: 10px 12px; }
+    .landscape .identity-card .avatar { flex: 0 0 38px; width: 38px; height: 38px; font-size: 13px; }
+    .landscape .identity-name { font-size: 19px; }
+    .landscape .field-label { margin-bottom: 4px; }
+    .landscape .auth-button, .landscape .button-l1, .landscape .button-l2 { min-height: 48px; }
+    .landscape .explain-card { margin: 10px 0 0; }
+    .landscape .you-screen .methods { margin-top: 10px; }
+    .landscape .you-screen .notice { margin: 8px 0 2px; padding: 10px 12px; }
+    .landscape .you-screen { padding-bottom: 8px; }
+    .landscape .method-row { min-height: 48px; }
+    .field-label {
+      display: block; margin: 0 2px 6px;
+      font: 500 10px var(--font-mono); letter-spacing: .12em;
+      color: var(--ink-3); text-transform: uppercase;
+    }
+    .opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; width: 100%; }
+    .opt-grid.three { grid-template-columns: repeat(3, 1fr); }
+    .opt-pane { background: var(--surface); border: 1px solid var(--rule); padding: 16px; min-width: 0; }
+    .opt-pane.current { background: var(--surface-sunken); }
+    .opt-label {
+      margin: 0 0 12px; padding-bottom: 7px; border-bottom: 1px solid var(--ink-4);
+      font: 500 11px var(--font-mono); letter-spacing: .12em; color: var(--ink-3);
+    }
+    .opt-pane p { line-height: 1.45; margin: 0 0 10px; }
+    .opt-pane p:last-child { margin-bottom: 0; }
+    .opt-cost {
+      margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--rule);
+      font-size: 12px; color: var(--ink-3); line-height: 1.45;
+    }
+    .measured { font: 500 10px var(--font-mono); letter-spacing: .1em; color: var(--ink-2); }
+    .untested { color: var(--accent); font-weight: 600; }
+    .string-row {
+      display: grid; grid-template-columns: 148px 1fr; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid var(--rule); align-items: baseline;
+    }
+    .string-where { font: 400 10px var(--font-mono); color: var(--ink-3); word-break: break-all; }
+    .string-text { line-height: 1.4; }
+    .rule-demo { background: var(--surface); padding: 18px; border: 1px solid var(--ink-4); }
+    .rule-sample { padding: 14px 0; border-bottom: 1px solid var(--rule); }
+    .rule-sample.raised { border-bottom-color: #928a78; }
+    .scroll-note { margin-top: 14px; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+    .stack-tight { display: grid; gap: 10px; }
+  </style>
+</head>
+<body>
+  <main class="handoff">
+    <aside class="artifact-nav" aria-label="Prototype controls">
+      <p class="artifact-kicker">Wave A PR2 · Gate 0</p>
+      <h1>Following through to a link</h1>
+      <p class="artifact-note">Navigation-only mock. No provider or Ergomatic authentication calls are made. Copy is the shipped copy where a screen exists today.</p>
+      <div class="control-group">
+        <span class="control-label">The flow, end to end</span>
+        <div class="control-grid">
+          <button class="control" data-screen="flow-compare">Today vs proposed</button>
+          <button class="control" data-screen="create">1 · Create account</button>
+          <button class="control" data-screen="proving">2 · Proving</button>
+          <button class="control" data-screen="attach">3 · Attach (NEW)</button>
+          <button class="control" data-screen="attached">4 · Attached</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="control-label">The open question on that screen</span>
+        <div class="control-grid">
+          <button class="control" data-screen="refuse-options">No button: A / B / C</button>
+          <button class="control" data-screen="clock">The 300 s clock</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="control-label">Copy round (rides this PR)</span>
+        <div class="control-grid">
+          <button class="control" data-screen="delete-options">1 · Delete re-auth</button>
+          <button class="control" data-screen="notice-options">2 · Link notice</button>
+          <button class="control" data-screen="naming-options">3 · Naming "You"</button>
+          <button class="control" data-screen="hairline">4 · The hairline</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="control-label">Surface</span>
+        <div class="control-grid">
+          <button class="control" data-platform="native">Native</button>
+          <button class="control" data-platform="web">Web</button>
+          <button class="control" data-orientation="portrait">390 × 844</button>
+          <button class="control" data-orientation="landscape">844 × 390</button>
+        </div>
+      </div>
+    </aside>
+    <section class="device-shell" aria-label="Rendered mockup">
+      <div class="device-wrap">
+        <div class="device platform-native" id="device">
+          <div class="status-bar" aria-hidden="true"><span>9:41</span><span class="status-icons">● ◓ ▰</span></div>
+          <div class="app-screen" id="screen"></div>
+        </div>
+        <div class="device-caption" id="caption">Native safe-area desk mock</div>
+      </div>
+    </section>
+  </main>
+  <script>
+    const query = new URLSearchParams(location.search);
+    let current = query.get("screen") || "flow-compare";
+    let platform = query.get("platform") || "native";
+    let orientation = query.get("orientation") || "portrait";
+    const capture = query.get("capture") === "1";
+    if (capture) document.body.classList.add("capture");
+
+    // The carried identity is the Apple one the attempt has held since its
+    // first exchange. The destination is the account the rower has just
+    // re-proved with their usual provider. Relay address is realistic shape.
+    const carried = { name: "Rower", initials: "R", email: "9m3x7k2p1r@privaterelay.appleid.com" };
+    const dest = { name: "Maya Chen", initials: "MC", email: "maya.chen@example.com" };
+
+    function header(back, title, intro) {
+      return `<header class="flow-header">
+        <button class="back-button">${back}</button>
+        <h1 class="screen-title">${title}</h1>
+        ${intro ? `<p class="intro">${intro}</p>` : ""}
+      </header>`;
+    }
+    function identityCard(who, mark) {
+      return `<div class="identity-card">
+        <div class="avatar" aria-hidden="true">${who.initials}</div>
+        <div class="identity-copy">
+          <p class="identity-name">${who.name}</p>
+          <p class="identity-email">${who.email.replace("@", "@<wbr>")}</p>
+        </div>
+        ${mark ? `<span class="provider-mark">${mark}</span>` : ""}
+      </div>`;
+    }
+
+    // 1 — today's screen, unchanged. Copy verbatim from app/src/SignIn.tsx.
+    function create() {
+      return `<div class="screen-inner flow-screen">
+        ${header("← BACK", "Create your account", "Your workouts and training plan will be saved here.")}
+        <div class="flow-body">
+          ${identityCard(carried)}
+          <div class="explain-card"><p>This makes a new Ergomatic account. If you already row here, sign in the way you usually do and add Apple from You.</p></div>
+          <div class="flow-actions action-stack">
+            <button class="button-l1">Create account</button>
+            <button class="button-l2">I already have an account</button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    // 2 — the second authentication. Today this screen IS the dead end: the
+    // attempt is cancelled and the rower is told to come back via You.
+    function proving() {
+      return `<div class="screen-inner flow-screen">
+        ${header("← BACK", "Sign in the way you usually do", "We will attach Apple to that account when you come back. Nothing is created until you confirm.")}
+        <div class="flow-body">
+          <div class="auth-stack"><button class="auth-button google"><span>Continue with Google</span></button></div>
+          <div class="explain-card"><p>Your workouts stay with the account you already have.</p></div>
+        </div>
+      </div>`;
+    }
+
+    // 3 — THE NEW SCREEN. After the proof, before the attach.
+    function attach(refusal) {
+      const no = {
+        a: `<button class="button-l2">Not now</button>`,
+        b: `<button class="button-l2">Don't attach Apple</button>`,
+        c: `<button class="button-l2">Cancel</button>`
+      }[refusal || "a"];
+      return `<div class="screen-inner flow-screen">
+        ${header("← BACK", "Attach Apple to this account?", "You are signed in. Nothing has been attached yet.")}
+        <div class="flow-body">
+          <div class="attach-pair">
+            <span class="field-label">Attaching</span>
+            ${identityCard(carried, "APPLE")}
+            <p class="attach-arrow"><span class="arrow-v">↓ TO ↓</span><span class="arrow-h">→</span></p>
+            <span class="field-label">This account</span>
+            ${identityCard(dest, "GOOGLE")}
+          </div>
+          <div class="explain-card"><p>After this you can sign in either way. Your workouts, plan and log are unchanged.</p></div>
+          <div class="flow-actions action-stack">
+            <button class="button-l1">Attach Apple</button>
+            ${no}
+          </div>
+        </div>
+      </div>`;
+    }
+
+    // 4 — the outcome, on You, with the row beneath already reading CONNECTED.
+    function attached(trimmed) {
+      const notice = trimmed
+        ? `<p class="notice success">You can sign in either way.</p>`
+        : `<p class="notice success">Apple is now connected. You can sign in either way.</p>`;
+      return `<div class="screen-inner you-screen">
+        ${header("", "You", "")}
+        ${identityCard(dest, "GOOGLE")}
+        <div class="methods">
+          ${notice}
+          <p class="section-label">SIGN-IN METHODS</p>
+          <div class="method-list">
+            <div class="method-row"><span class="method-name">Apple</span><span class="connected-mark">CONNECTED</span></div>
+            <div class="method-row"><span class="method-name">Google</span><span class="connected-mark">CONNECTED</span></div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function pane(label, body, cost, cls) {
+      return `<section class="opt-pane ${cls || ""}">
+        <p class="opt-label">${label}</p>
+        ${body}
+        ${cost ? `<p class="opt-cost">${cost}</p>` : ""}
+      </section>`;
+    }
+
+    function flowCompare() {
+      return `<div class="comparison-inner">
+        ${pane("TODAY · 2 ROUND TRIPS", `
+          <p><strong>1.</strong> Tap "I already have an account".</p>
+          <p><strong>2.</strong> The attempt is cancelled and the proven Apple identity is destroyed.</p>
+          <p><strong>3.</strong> Sign in with Google.</p>
+          <p><strong>4.</strong> Go to You → Sign-in methods.</p>
+          <p><strong>5.</strong> Tap Add Apple.</p>
+          <p><strong>6.</strong> Authorize Apple <em>again</em>.</p>`,
+          `The same screen returns on every future Apple sign-in until step 6 is done. <span class="measured">Shipped since #436.</span>`, "current")}
+        ${pane("PROPOSED · 1 ROUND TRIP", `
+          <p><strong>1.</strong> Tap "I already have an account".</p>
+          <p><strong>2.</strong> Sign in with Google. The Apple identity is carried, not destroyed.</p>
+          <p><strong>3.</strong> Confirm the attach. Done.</p>
+          <p style="margin-top:14px;color:var(--ink-3)">Steps 4 to 6 disappear. The second Apple authorization disappears with them.</p>`,
+          `It is not a rescue from a dead end. The two-step recovery is already printed on the sign-in screen. <strong>This turns six steps into three.</strong>`)}
+      </div>`;
+    }
+
+    function refuseOptions() {
+      return `<div class="comparison-inner" style="grid-template-columns:repeat(3,1fr)">
+        ${pane("A · NOT NOW", `
+          <p>Goes to Today, signed in. Apple stays unattached and the same screen returns next Apple sign-in.</p>
+          <p style="color:var(--ink-3)">Reads as a deferral, which is what it is.</p>`,
+          `Honest, and the rower keeps the session their own Google credential already earned. <span class="untested">Costs nothing measured.</span>`)}
+        ${pane("B · DON'T ATTACH APPLE", `
+          <p>Same behaviour, blunter word. Goes to Today, signed in.</p>
+          <p style="color:var(--ink-3)">Names the thing being declined rather than the timing.</p>`,
+          `Clearest about consequence. Slightly heavier for a screen the rower reached by accident.`)}
+        ${pane("C · CANCEL", `
+          <p>Matches the word used on every other auth screen in the app.</p>
+          <p style="color:var(--accent)"><strong>But it is a lie here.</strong> The sign-in already happened. Cancel cannot undo it.</p>`,
+          `Consistent with Delete account and the link flow, and wrong on this screen for exactly the reason those are right.`)}
+      </div>`;
+    }
+
+    function clock() {
+      return `<div class="comparison-inner">
+        ${pane("DO NOT REFRESH expires_at", `
+          <p>The whole flow fits in one 300 s window set at the first Apple exchange.</p>
+          <p>That window must now hold: read this screen, tap, Google consent (password, 2FA, app switch), return, <strong>read the new confirmation</strong>, tap Attach.</p>
+          <p style="color:var(--accent)">A slow second round trip expires the attempt while the rower is reading the screen the design exists to show them.</p>`,
+          `Keeps the spec's constraint literally: the carried subject is bound to the attempt's five-minute expiry. <span class="untested">No measurement of a real two-provider round trip exists.</span>`, "current")}
+        ${pane("REFRESH IT at the second exchange", `
+          <p>The second exchange resets the window, as the link and delete flows already do at the same point.</p>
+          <p>The rower gets a fresh 300 s to read and decide.</p>
+          <p style="color:var(--ink-3)">Matches the sibling arm this code sits beside, so "unchanged" stops being a silent departure from it.</p>`,
+          `The carried Apple subject then outlives the original five-minute bound. Total exposure is bounded by two windows, not one. <span class="untested">Untested either way — this is the decision, not a recommendation.</span>`)}
+      </div>`;
+    }
+
+    function deleteOptions() {
+      return `<div class="comparison-inner">
+        ${pane("TODAY · NO DISCLOSURE", `
+          <p class="string-where">You → ACCOUNT</p>
+          <div class="rule-demo" style="margin:8px 0 12px"><button class="button-l2" style="border-color:var(--accent);color:var(--accent)">Delete account</button></div>
+          <p style="color:var(--accent)"><strong>Tapping it starts a full provider sign-in round trip.</strong> Nothing says so.</p>
+          <p class="string-where" style="margin-top:12px">Then, after the round trip:</p>
+          <p style="font-family:var(--font-serif);font-size:20px;margin:6px 0">Delete this account?</p>
+          <p>Deletes your workouts, session log, plan, baselines, and test history.</p>`,
+          `James, 2026-09-14, after running it twice for real: <em>"we really need to make it more obvious that the reauth is required to delete the account."</em>`, "current")}
+        ${pane("PROPOSED · DISCLOSE AT THE TAP", `
+          <p class="string-where">You → ACCOUNT</p>
+          <div class="rule-demo" style="margin:8px 0 12px">
+            <button class="button-l2" style="border-color:var(--accent);color:var(--accent)">Delete account</button>
+            <p style="margin:10px 0 0;font-size:13px;color:var(--ink-3);line-height:1.4">Asks you to sign in with Google first.</p>
+          </div>
+          <p>The confirm screen is then unchanged — the list of what goes is still the only warning it carries.</p>
+          <p style="color:var(--ink-3)">The disclosure sits where the decision is made, not after the cost has been paid.</p>`,
+          `Respects the 2026-09-14 ruling for that screen (state facts, not prose) by <strong>not touching it</strong>. One sentence, in the quarantine box, naming the provider the account actually holds.`)}
+      </div>`;
+    }
+
+    function noticeOptions() {
+      return `<div class="comparison-inner">
+        ${pane("TODAY", attached(false), `The row directly beneath already reads CONNECTED, so the same fact is stated twice in one viewport. James: <em>"I don't need this blurb here forever. Apple says connected below it."</em>`, "current")}
+        ${pane("PROPOSED", attached(true), `Keeps the half the row cannot say — the consequence — and drops the half it already says. <span class="measured">One sentence removed, no other change.</span>`)}
+      </div>`;
+    }
+
+    function namingOptions() {
+      const strings = [
+        ["SignIn.tsx:40", "…sign in to that account, delete it from <b>You</b>, then add this sign-in."],
+        ["SignIn.tsx:101", "If you already row here, sign in the way you usually do and add Apple from <b>You</b>."],
+        ["SignIn.tsx:173", "Then open <b>You</b> → Sign-in methods to add Apple."],
+        ["Today.tsx:1479", "Targets stay words until both are set. You can type the other in on <b>You</b>."],
+        ["SignInMethods.tsx:128", "On <b>&ldquo;You&rdquo;</b>, tap Delete account."],
+        ["SignInMethods.tsx:130", "Sign in to this account again. On <b>&ldquo;You&rdquo;</b>, tap Add Apple."],
+        ["Concept2SendBlock.tsx:226", "Concept2 stopped accepting this link. Reconnect on <b>the You tab</b>."]
+      ];
+      const rows = strings.map(([where, text]) => `<div class="string-row"><span class="string-where">${where}</span><span class="string-text">${text}</span></div>`).join("");
+      return `<div class="screen-inner">
+        <p class="opt-label">THE CENSUS · SEVEN LIVE STRINGS, THREE TREATMENTS</p>
+        ${rows}
+        <p class="scroll-note">Plus three <strong>undated</strong> News strings using "the You tab", across two article bodies (<span class="string-where">yourFirstRow.tsx:28, :36 · baselines.tsx:63</span>), which Phase JC's ruling makes rendering surfaces. Dated release notes stand as history and are exempt.</p>
+        <p class="scroll-note"><strong>Today.tsx:1479 is the one to read aloud:</strong> "You can type the other in on You" puts the pronoun and the screen name in one sentence with neither marked. James flagged that grammar himself.</p>
+        <div class="opt-grid three" style="margin-top:18px">
+          ${pane("BARE · You", `<p>Targets stay words until both are set. You can type the other in on <b>You</b>.</p>`, `Cheapest. Leaves the Today sentence ambiguous, which is the complaint.`, "current")}
+          ${pane("QUOTED · &ldquo;You&rdquo;", `<p>Targets stay words until both are set. You can type the other in on <b>&ldquo;You&rdquo;</b>.</p>`, `Your own suggestion, and what #444 shipped to two strings without asking. Reads as a quotation, not a place.`)}
+          ${pane("TAB · the You tab", `<p>Targets stay words until both are set. You can type the other in on <b>the You tab</b>.</p>`, `Unambiguous in every sentence, including the Today one. Already in live UI at Concept2SendBlock.tsx:226 and in three article bodies, so it is the treatment with the most existing usage.`)}
+        </div>
+      </div>`;
+    }
+
+    function hairline() {
+      return `<div class="screen-inner">
+        <p class="opt-label">THE --rule HAIRLINE ON --surface</p>
+        <div class="opt-grid">
+          ${pane("TODAY · #d8d3c4", `
+            <div class="rule-demo">
+              <div class="rule-sample"><b>Apple</b> <span style="float:right;color:var(--success)">CONNECTED</span></div>
+              <div class="rule-sample"><b>Google</b> <span style="float:right;color:var(--success)">CONNECTED</span></div>
+              <div class="rule-sample" style="border-bottom:0"><b>Sign out</b></div>
+            </div>`,
+            `<span class="measured">1.47:1</span> against #fffdf7, computed. WCAG's non-text minimum is 3:1 — but that minimum applies to boundaries that <em>carry meaning</em>. This one separates rows that are already separated by their own text.`, "current")}
+          ${pane("RAISED · #928a78", `
+            <div class="rule-demo">
+              <div class="rule-sample raised"><b>Apple</b> <span style="float:right;color:var(--success)">CONNECTED</span></div>
+              <div class="rule-sample raised"><b>Google</b> <span style="float:right;color:var(--success)">CONNECTED</span></div>
+              <div class="rule-sample raised" style="border-bottom:0"><b>Sign out</b></div>
+            </div>`,
+            `<span class="measured">3.37:1</span> on #fffdf7 and <span class="measured">3.03:1</span> on #f4f1e8, computed. It is the lightest value <em>on this token's own hue ramp</em> that clears 3:1 against both grounds; other warm neutrals of different hue are lighter and also clear, so treat it as one workable value, not the only one. The point it makes: <strong>#a39c88, which looks like the obvious small step, measures 2.69:1 and 2.42:1 and does NOT clear it.</strong> And --rule is used across the whole app, so this is not a local change: every card, list and divider moves with it, and it is visibly darker than a hairline.`)}
+        </div>
+        <p class="scroll-note">The row calls it pre-existing and decorative. The question for you is whether a hairline that reads as decoration should be held to a boundary's standard, given the change is global rather than local to this screen.</p>
+      </div>`;
+    }
+
+    const screens = {
+      "flow-compare": flowCompare,
+      create,
+      proving,
+      attach: () => attach("a"),
+      attached: () => attached(false),
+      "refuse-options": refuseOptions,
+      clock,
+      "delete-options": deleteOptions,
+      "notice-options": noticeOptions,
+      "naming-options": namingOptions,
+      hairline
+    };
+
+    function render() {
+      const device = document.getElementById("device");
+      device.className = `device platform-${platform}${orientation === "landscape" ? " landscape" : ""}`;
+      document.getElementById("screen").innerHTML = (screens[current] || flowCompare)();
+      document.getElementById("caption").textContent =
+        `${platform === "native" ? "Native safe-area desk mock" : "Web"} · ${orientation === "landscape" ? "844 × 390" : "390 × 844"} · ${current}`;
+      for (const control of document.querySelectorAll(".control")) {
+        const on = control.dataset.screen === current
+          || control.dataset.platform === platform
+          || control.dataset.orientation === orientation;
+        control.setAttribute("aria-pressed", String(Boolean(on)));
+      }
+    }
+
+    document.addEventListener("click", event => {
+      const control = event.target.closest(".control");
+      if (!control) return;
+      if (control.dataset.screen) current = control.dataset.screen;
+      if (control.dataset.platform) platform = control.dataset.platform;
+      if (control.dataset.orientation) orientation = control.dataset.orientation;
+      render();
+    });
+    render();
+  </script>
+</body>
+</html>

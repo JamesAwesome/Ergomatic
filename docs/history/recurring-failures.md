@@ -1072,3 +1072,65 @@ repo depend on them.
     sequences…` on stderr naming the exact flag. What hides it is a pipe —
     `| tee`, `| grep` — because the pipeline's status is the last
     command's, which is almost certainly how the wrong version was written.
+
+## RF43
+
+43. **A merge-conflict marker reaching a commit, in the files that ARE the
+    agent instructions (2026-09-15).** PR #446 merged to main on 2026-09-15 carrying
+    `<<<<<<< HEAD`, `=======` and `>>>>>>> origin/main` in three files:
+    `.claude/agents/antagonist-techniques.md`,
+    `.claude/agents/antagonist-ledger.md` and `.claude/agents/pm-ledger.md`.
+    They came from the branch's own `47a5b423` ("Merge main into
+    wave-a-pr2, keeping both deploy findings"), which resolved some files and
+    left these three.
+
+    **Nothing anywhere went red, and each gate was blind for its own correct
+    reason** — which is why no single fix would have caught it:
+
+    - `scripts/ci-changes.sh`'s `DOCS_ONLY_RE` includes `\.claude/`, so the
+      `app`, `docker` and `e2e` jobs skipped. Correctly: the paths really are
+      documentation as far as the app is concerned.
+    - lint-staged's globs in the root `package.json` are `app/**/*.{ts,tsx}`
+      and `app/**/*.{json,css,md,html}`, so no formatter has ever opened a
+      file under `.claude/`.
+    - The files are prose. No compiler, type-check or test reads them.
+
+    So the markers survived a merge commit and a green post-merge CI run on
+    main (`6989d2ac success`), and landed as INSTRUCTIONS every future agent
+    reads. They were found the same day, by an agent appending to one of the
+    three files and reading its tail. **An earlier draft of this entry said
+    they also survived "a full review and a PM gate"; that is not supported.**
+    `gh pr view 446 --json reviews,comments` returns zero of each, and both PM
+    verdict commits on that branch (`9dfaa9e8` 21:02Z, `e5091225` 22:43Z)
+    PREDATE the merge that introduced the markers (`47a5b423`, 02:03Z). The
+    claim was strengthened while adding no evidence, which is the failure this
+    file exists to record — so it is recorded rather than quietly deleted.
+
+    **The resolution is the second half of the lesson.** Both sides of the
+    `antagonist-techniques.md` conflict had appended to the SAME numbered
+    list, and both began at 57 — one side ran 57-63, the other 57-64, because
+    two branches had each added entries to the end of the same list. "Pick a
+    side" would have silently deleted seven or eight real entries. The
+    resolution keeps both and renumbers one.
+
+    **And renumbering is a claim about every citation of the old numbers.**
+    The first fix renumbered the entries and did not sweep: eight citations
+    inside `antagonist-ledger.md`'s own Wave A PR2 entry still pointed at
+    57-63, and every one of them then resolved to an unrelated technique — a
+    ledger citing seven wrong techniques about itself. Found by the branch
+    review, after the PR had merged. The rule it produces is the same one
+    CLAUDE.md already states for withdrawn claims: correcting where a claim is
+    ARGUED and leaving it where it is USED is the failure.
+
+    **The gate:** `scripts/conflict-markers.sh`, run in CI's always-run
+    `scripts` job, both as a test and as a real-tree check whose output
+    survives. It checks CONTENT of tracked files, not conflict STATE — a
+    checkout mid-rebase is the human's business, and a marker in a commit is
+    not. It fails loud (exit 2) outside a git work tree rather than reporting
+    clean, takes no pathspec exclusions so it can see a conflict inside
+    itself, and matches a marker whose branch label has been deleted. Its
+    test carries a red case for each of the three arms separately; a single
+    combined case left two of three ungated, which is RF21's shape.
+    Two accepted false positives, both documented at the script: a setext
+    heading underlined with exactly seven `=`, and a fenced block in a
+    document demonstrating a conflict.
