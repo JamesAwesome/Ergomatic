@@ -1,5 +1,11 @@
 import type { WeekBar } from "../../../domain/stats/weekly.js";
-import { chooseTicks, formatTick, niceMax } from "../../charts/axis";
+import {
+  ADVANCE,
+  chooseTicks,
+  formatTick,
+  labelRoom,
+  niceMax,
+} from "../../charts/axis";
 import { layoutBars } from "../../charts/bars";
 import { linearScale } from "../../charts/scale";
 import { weekBarsLabel } from "./chartLabels";
@@ -8,10 +14,23 @@ import { TWO_ROWS_MAKE_A_CHART } from "./TimeByTypeGroup";
 
 const W = 320;
 const H = 132;
-/** 44, not A3's 36: a six-glyph tick (`15,000`) at 9 px mono is ~34 px
- *  wide and end-anchored at `PAD_L - 6`, so 36 clipped its first digit on
- *  the first capture — the same overhang `TraceChart`'s `LEFT_PAD` fixed. */
-const PAD_L = 44;
+/** DERIVED, not tuned (invariant I4, Gate 0A ruling 1): five glyphs at
+ *  `.stats-tick`'s measured advance, end-anchored 6 units left of the plot
+ *  — `labelRoom(["1000k"], ADVANCE.spaced, 6)` = ceil(5 x 5.94) + 6 = 36.
+ *  The 44 it replaces was the third hand-tuned guess in this class and
+ *  still clipped a seventh glyph by 3.59.
+ *
+ *  THE BOUND, STATED RATHER THAN ASSUMED. `niceMax`'s ladder has no upper
+ *  limit, so the shortened format does not top out at five glyphs — it
+ *  reaches six at a total above **8,000,000 m**, where the grid becomes
+ *  `0 / 5000k / 10000k` and needs 42 into this 36. Five glyphs covers
+ *  every total at or below that; 8,000 km in one season is several times
+ *  the highest-volume rowing anyone does, which is the reason this is a
+ *  fixed gutter rather than a per-render one (a per-render gutter moves
+ *  the plot's left edge as the data grows, and Gate 0A approved the fixed
+ *  frame). `axis.test.ts` pins both sides of that boundary with
+ *  independent literals, so this paragraph cannot rot quietly. */
+const PAD_L = labelRoom(["1000k"], ADVANCE.spaced, 6);
 const PAD_R = 8;
 const PAD_T = 14;
 const PAD_B = 18;

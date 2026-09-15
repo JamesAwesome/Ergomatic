@@ -1,0 +1,119 @@
+[
+  {
+    "element": ".stats-group-title",
+    "sample": "TOTALS",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(244, 241, 232)",
+    "fontPx": "12px",
+    "fontWeight": "600",
+    "ratio": 15.41
+  },
+  {
+    "element": ".stats-tick",
+    "sample": "0",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "9px",
+    "fontWeight": "400",
+    "ratio": 7.43
+  },
+  {
+    "element": ".stats-point-label",
+    "sample": "163,012 TODAY",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "9px",
+    "fontWeight": "500",
+    "ratio": 17.11
+  },
+  {
+    "element": ".stats-bar-label",
+    "sample": "122,000",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "9px",
+    "fontWeight": "500",
+    "ratio": 17.11
+  },
+  {
+    "element": ".stats-caption",
+    "sample": "ALL TIME · SINCE 8",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(244, 241, 232)",
+    "fontPx": "11px",
+    "fontWeight": "400",
+    "ratio": 6.69
+  },
+  {
+    "element": ".stats-caption",
+    "sample": "1 ROW PREDATES WOR",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "11px",
+    "fontWeight": "400",
+    "ratio": 7.43
+  },
+  {
+    "element": ".stats-table th",
+    "sample": "",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "10px",
+    "fontWeight": "400",
+    "ratio": 7.43
+  },
+  {
+    "element": ".stats-table td",
+    "sample": "176,752",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "15px",
+    "fontWeight": "500",
+    "ratio": 17.11
+  },
+  {
+    "element": ".stats-chip",
+    "sample": "ALL",
+    "fg": "rgb(255, 253, 247)",
+    "bg": "rgb(27, 26, 23)",
+    "fontPx": "11px",
+    "fontWeight": "500",
+    "ratio": 17.11
+  },
+  {
+    "element": ".stats-chip",
+    "sample": "SEASON",
+    "fg": "rgb(63, 60, 53)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "11px",
+    "fontWeight": "500",
+    "ratio": 10.81
+  },
+  {
+    "element": ".trace-tick-label",
+    "sample": "1:50",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(244, 241, 232)",
+    "fontPx": "9px",
+    "fontWeight": "400",
+    "ratio": 6.69
+  },
+  {
+    "element": ".trace-toggle-button",
+    "sample": "PACE",
+    "fg": "rgb(255, 253, 247)",
+    "bg": "rgb(27, 26, 23)",
+    "fontPx": "12px",
+    "fontWeight": "500",
+    "ratio": 17.11
+  },
+  {
+    "element": ".trace-toggle-button",
+    "sample": "RATE",
+    "fg": "rgb(63, 60, 53)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "12px",
+    "fontWeight": "500",
+    "ratio": 10.81
+  }
+]

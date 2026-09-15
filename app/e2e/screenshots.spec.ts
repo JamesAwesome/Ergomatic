@@ -4207,10 +4207,15 @@ test("log-detail", async ({ page }) => {
     .locator(".trace-tick-label-y")
     .allTextContents();
   expect(yTickTexts.length).toBeGreaterThan(0);
+  // The tenth is OPTIONAL since Gate 0A (number-provenance, ruling 4):
+  // a pace GRIDLINE prints whole seconds (`1:50`), the `split` kind the
+  // stats charts already use. Both spellings parse here, so this
+  // assertion still measures what it was written to measure — where the
+  // y-domain's slow edge sits — rather than how the tick is spelled.
   const yTickSeconds = yTickTexts.map((text) => {
-    const m = text.match(/^(\d+):(\d\d)\.(\d)$/);
+    const m = text.match(/^(\d+):(\d\d)(?:\.(\d))?$/);
     if (!m) throw new Error(`unparsed y-axis tick label "${text}"`);
-    return Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 10;
+    return Number(m[1]) * 60 + Number(m[2]) + Number(m[3] ?? 0) / 10;
   });
   const slowestTickSeconds = Math.max(...yTickSeconds);
   // Nowhere near either rest excursion's own 189-330s range (204.1±15,

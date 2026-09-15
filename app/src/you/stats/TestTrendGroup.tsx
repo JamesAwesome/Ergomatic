@@ -12,7 +12,7 @@ import {
   type TestPoint,
 } from "../../../domain/stats/testTrend.js";
 import type { TestHistoryState } from "../../api/useTestHistory";
-import { chooseTicks, formatTick } from "../../charts/axis";
+import { ADVANCE, chooseTicks, formatTick, labelRoom } from "../../charts/axis";
 import { polylinePoints } from "../../charts/line";
 import { domainFromReadings, linearScale } from "../../charts/scale";
 import { trendLabel } from "./chartLabels";
@@ -20,18 +20,22 @@ import { fmtMonth } from "./format";
 
 const W = 320;
 const H = 150;
-const PAD_L = 40;
+/** DERIVED (invariant I4, Gate 0A ruling 1). This axis prints whole-second
+ *  splits, so its widest tick is four glyphs (`2:05`):
+ *  ceil(4 x 5.94) + 6 = 30. The 40 it replaces had 10.23 of slack. */
+const PAD_L = labelRoom(["2:05"], ADVANCE.spaced, 6);
 const PAD_R = 52;
 const PAD_T = 12;
 const PAD_B = 18;
 const PLOT_BOTTOM = H - PAD_B;
 /** ≤ 6 month labels along the x-axis (A3 draws six over eleven months). */
 const MAX_MONTH_LABELS = 6;
-/** A last-point label (`2K 1:54.0`, 9 glyphs of 9 px mono ≈ 50 px) plus
- *  its 8 px gap: past `W − LABEL_ROOM` it would overrun the viewBox (a test
- *  on its month's last day sits at x ≈ 268), so it flips to the LEFT of
- *  the dot. A 60 % rule would flip the seed's own labels onto the line. */
-const LABEL_ROOM = 58;
+/** DERIVED (invariant I4, Gate 0A ruling 1) from the label itself at
+ *  `.stats-point-label`'s measured 5.40 plus its 8 px gap — `2K 1:54.0` is
+ *  9 glyphs, so ceil(48.6) + 8 = 57. The 58 it replaces was adequate, but
+ *  only by luck: its comment priced the glyph at 5.56 and the class that
+ *  draws it advances 5.40. Past `W − room` the label flips LEFT of the dot. */
+const labelRoomFor = (label: string) => labelRoom([label], ADVANCE.plain, 8);
 /** The y-domain floor for a single test (`domainFromReadings` needs two). */
 const ONE_POINT_HALF_SPAN = 5;
 // One line-height at the label's 9 px type: closer than this and the two end
@@ -209,23 +213,23 @@ export function TestTrendChart({ points }: { points: readonly TestPoint[] }) {
                 r={4}
               />
             ))}
-            {last && (
-              <text
-                className="stats-point-label"
-                x={
-                  x(toDayNumber(last.date)) + LABEL_ROOM <= W
-                    ? x(toDayNumber(last.date)) + 8
-                    : x(toDayNumber(last.date)) - 8
-                }
-                y={labelY.get(k) ?? y(last.splitSeconds)}
-                textAnchor={
-                  x(toDayNumber(last.date)) + LABEL_ROOM <= W ? "start" : "end"
-                }
-                dominantBaseline="middle"
-              >
-                {k.toUpperCase()} {fmtSplit(last.splitSeconds)}
-              </text>
-            )}
+            {last &&
+              (() => {
+                const label = `${k.toUpperCase()} ${fmtSplit(last.splitSeconds)}`;
+                const tx = x(toDayNumber(last.date));
+                const right = tx + labelRoomFor(label) <= W;
+                return (
+                  <text
+                    className="stats-point-label"
+                    x={right ? tx + 8 : tx - 8}
+                    y={labelY.get(k) ?? y(last.splitSeconds)}
+                    textAnchor={right ? "start" : "end"}
+                    dominantBaseline="middle"
+                  >
+                    {label}
+                  </text>
+                );
+              })()}
           </g>
         );
       })}

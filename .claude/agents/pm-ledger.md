@@ -6915,6 +6915,7 @@ confirmation; (5) `ACCESS_MODE=public`.
 configured (console fact, already a spec release gate), whether any duplicate
 account exists today.
 
+<<<<<<< HEAD
 ## 2026-09-14 — Wave A PR2 pre-implementation gate (the link follow-through)
 
 **Target:** `docs/superpowers/plans/2026-09-14-wave-a-pr2-follow-through.md`
@@ -7030,3 +7031,79 @@ something; it is a checklist you finish. The controller recounted rather than
 taking the PM's figure: seven pastes across five distinct blocks, not four
 across three.
 
+=======
+## Phase-open gate, 2026-09-14 (the "say which number this is" design pass — eight members, four PRs)
+
+**APPROVED the slate with four amendments; one blocking before Gate 0 runs.**
+
+**Blocking (cleared same day by `d31478c9`): the pass's only PRIMARY evidence
+was uncommitted.** The `L00,000` phone frame was the whole basis for M8's
+urgency AND is board 5 of §4 — a board §1.3 says Chromium cannot reproduce.
+Committed to `docs/design/number-provenance/evidence/` with a README saying
+what it shows and why it is committed rather than described.
+
+**Refused the dispatch's framing that M8 is the only live member.** M6 is a
+defect JAMES reported being misled by ("it makes it look like the rests were
+different lengths", 2026-08-31); M2's 3.5-15.2 bpm disagreement is on screen
+today. M8's distinction is that it is a RENDERING defect, not a semantic one —
+cheapest to fix, cannot be fixed wrong, and both its decisions were already
+ruled. Recommended PR 2 (M8 + appendix) ship DECOUPLED from the pass's Gate 0
+on that basis, not on "only live defect". **James ruled for the split and the
+early ship, 2026-09-14.**
+
+**Gate 0 split into 0A (You→Stats: M7, M8, appendix — one open question, two
+decisions already ruled) and 0B (the session screens: M1-M6).** Argued FROM the
+2026-08-31 ruling, not against it: its words are "a third of a SCREEN at a
+time", and each half approves a whole screen. Two mitigations owed: 0A's tick
+board shows all four charts (M8 binds `TraceChart`'s pace ticks, on 0B's
+screen), and 0B uses 0A's provenance vocabulary verbatim or states a deviation.
+
+**PR 1 and PR 3 are the SAME SCREEN** (`PostWorkoutSummary.tsx` renders
+`MachineTierBlock`:438, `MachineSummaryTable`:824, `TraceChart`:833). Between
+them the screen labels twelve figures while the chart beneath sits unnamed
+under `MACHINE CONFIRMED · WORK ONLY` — and PR 1 makes that gap MORE
+conspicuous. Ruled: same release, and PR 1 introduces no screen-level
+provenance claim it cannot keep. I1 is true at the END of the pass and cannot
+gate PRs 1-3.
+
+**M7 is on the Stats screen, so PR 4 as mapped spans two screens and two risk
+models.** Move it to PR 2's group if Gate 0 rules it a label; keep it in PR 4
+only if Gate 0 rules it a population change.
+
+**Do not draw the wall-clock axis** — superseded the same day by the antagonist
+anchor pass, which falsified the premise this rested on (the monitor DOES
+report per-interval rest time and we already store it). The PM's own
+recommendation stands only in its weaker form: whatever axis is drawn, the
+board must carry its falsifying case.
+**The option nobody argued, and probably the right one: a work-only axis with
+rests as FIXED-WIDTH gaps printing the interval's own rest duration.** It
+asserts nothing (the gap is a separator, the number is a fact about the
+program) and it fixes M6 completely. Board 2 owes it a frame.
+
+**I4 is stated over one of the places it governs (RF34).** Four charts, three
+values, zero derivations. And a FIFTH constant in the same class that I4 does
+not reach because it is not an axis gutter: `TestTrendGroup.tsx:33`
+`LABEL_ROOM = 58`, whose comment prices a 9-glyph label at "~50 px" =
+5.56/glyph. Against the measured 5.94: 53.46 + 8 px gap = 61.46 into 58, short
+by 3.46, so the flip-left threshold is wrong. (INFERENCE — computed, not
+rendered.) I4 must govern every constant reserving space for text.
+
+**Exit criteria: 3 and 4 rewritten, one added.** Criterion 4 read the BOARDS,
+i.e. the design — replaced with a census derived from the shipped tree.
+Criterion 3 pinned a seven-glyph tick that the approved `150k` fix probably
+makes unreachable — restated as I4's invariant. ADDED: the release notes name
+each changed figure and why the new one is right, because a before/after board
+reaches James and not a tester.
+
+**Ordering, counted:** ten phases have opened ahead of Wave A since it read
+"next" on 2026-09-04. The objection does not survive contact — PS waits on
+James's own logbook eyeball, MT is code-complete, TD closed 2026-09-14, and
+Wave A's PR is blocked on an interrupted code-review gate, not capacity. But a
+four-PR pass in flight is what keeps that PR in draft; **PR 4 should not be
+live when Wave A's `dies 2026-10-10` arrives.**
+
+**Housekeeping:** the throwaway `app/e2e/axisProbe.spec.ts` must name who
+deletes it and in which PR, or it ships as dead code with no row (RF29).
+
+**Overdue sweep (tr form):** zero. Earliest live stamp 2026-09-19.
+>>>>>>> origin/main

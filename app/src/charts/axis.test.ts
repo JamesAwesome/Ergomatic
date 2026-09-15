@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { chooseTicks, formatTick, niceMax } from "./axis.js";
+import {
+  ADVANCE,
+  chooseTicks,
+  formatTick,
+  labelRoom,
+  niceMax,
+} from "./axis.js";
 import { domainFromReadings } from "./scale.js";
-import { fmtSplit } from "../../domain/format.js";
 
 describe("chooseTicks", () => {
   it("returns round values that fall inside the domain", () => {
@@ -60,11 +65,6 @@ describe("chooseTicks", () => {
 });
 
 describe("formatTick", () => {
-  it("formats a pace tick with the house fmtSplit formatter, never a bespoke one", () => {
-    expect(formatTick(130, "pace")).toBe("2:10.0");
-    expect(formatTick(130, "pace")).toBe(fmtSplit(130));
-  });
-
   it("formats a rate tick as a rounded stroke-rate number", () => {
     expect(formatTick(28.4, "rate")).toBe("28");
     expect(formatTick(28.6, "rate")).toBe("29");
@@ -93,10 +93,91 @@ describe("formatTick split and metres", () => {
       "2:05",
     ]);
   });
-  it("metres prints the house thousands grouping and 0 at the floor", () => {
+  // Gate 0A, ruling 1 (James, 2026-09-14). A metres GRIDLINE is a scale
+  // marker, not a figure: the full grouping needs a seventh glyph past
+  // 100,000 and every gutter in the repo was hand-tuned against six, which
+  // is how a production frame came to read `L00,000`. The exact figure the
+  // card carries beside these (`122,000` on a bar, `163,012 TODAY`) keeps
+  // its grouping — ruling 3, same gate.
+  it("metres prints a shortened thousands tick, 0 at the floor", () => {
     expect(formatTick(0, "metres")).toBe("0");
-    expect(formatTick(5000, "metres")).toBe("5,000");
-    expect(formatTick(20000, "metres")).toBe("20,000");
+    expect(formatTick(5000, "metres")).toBe("5k");
+    expect(formatTick(20000, "metres")).toBe("20k");
+    expect(formatTick(150000, "metres")).toBe("150k");
+  });
+  // `niceMax` floors its ladder at `base = 1000`, so every tick above zero
+  // is a whole thousand and no `0k` is reachable — the low end the
+  // antagonist attacked this shape at. Pinned with an independent literal
+  // rather than by calling `niceMax` here (RF21: a gate that imports the
+  // constant it exists to gate retunes with it).
+  it("never prints a fractional or zero k above the floor", () => {
+    for (const step of [1000, 2000, 5000, 10000, 20000, 50000]) {
+      expect(formatTick(step, "metres")).toBe(`${step / 1000}k`);
+    }
+    expect(formatTick(1000000, "metres")).toBe("1000k");
+  });
+});
+
+// Gate 0A, ruling 1: invariant I4 — no constant reserving space for text is
+// chosen by looking at a chart. The advances are MEASURED, in Chromium, and
+// the arithmetic here is what four charts now derive their gutters from.
+describe("labelRoom — the space a set of formatted labels needs", () => {
+  it("takes the widest label, at the class's own advance, plus the gap", () => {
+    // 5 glyphs x 5.94 = 29.7, ceil 30, + 6 of anchor gap.
+    expect(labelRoom(["1000k"], ADVANCE.spaced, 6)).toBe(36);
+    // The widest wins, not the last or the first.
+    expect(labelRoom(["0", "1000k", "50k"], ADVANCE.spaced, 6)).toBe(36);
+    // 4 glyphs x 5.40 = 21.6, ceil 22, + 6.
+    expect(labelRoom(["1:50"], ADVANCE.plain, 6)).toBe(28);
+  });
+
+  // The two advances differ because the two classes differ: `.stats-tick`
+  // carries `letter-spacing: 0.06em` at 9px (0.54 per glyph) and
+  // `.trace-tick-label`/`.stats-point-label` carry none. Measured
+  // 2026-09-14; a change to either CSS rule must change these.
+  it("distinguishes the spaced class from the plain one", () => {
+    expect(ADVANCE.spaced - ADVANCE.plain).toBeCloseTo(0.54, 5);
+    expect(labelRoom(["100,000"], ADVANCE.spaced, 6)).toBeGreaterThan(
+      labelRoom(["100,000"], ADVANCE.plain, 6),
+    );
+  });
+
+  // THE BOUND THE TWO METRES GUTTERS REST ON, pinned at its boundary with
+  // INDEPENDENT literals (RF21/RF33: never `niceMax`'s own output, never
+  // the charts' `PAD_L`). Both gutters reserve five glyphs = 36 units, and
+  // the first draft of their comments claimed five glyphs was all the
+  // shortened format could EVER print. It is not — `niceMax`'s ladder is
+  // unbounded, and at a total above 8,000,000 m the grid becomes
+  // `0 / 5000k / 10000k`, whose six glyphs need 42. Five glyphs covers
+  // every total at or below 8,000,000 m, which is several times the
+  // highest-volume rowing anyone does. If this test goes red, a gutter is
+  // now too small and the comments in `WeekBarsGroup` and `SeasonGroup`
+  // are wrong with it.
+  it("five glyphs holds every metres grid up to 8,000,000 m, and six are needed just past it", () => {
+    const gridRoom = (total: number): number => {
+      const { max, step } = niceMax(total);
+      const ticks = chooseTicks([0, max], max / step + 1);
+      return labelRoom(
+        ticks.map((t) => formatTick(t, "metres")),
+        ADVANCE.spaced,
+        6,
+      );
+    };
+    expect(gridRoom(43_012)).toBeLessThanOrEqual(36);
+    expect(gridRoom(163_012)).toBeLessThanOrEqual(36);
+    expect(gridRoom(8_000_000)).toBe(36);
+    expect(gridRoom(8_000_001)).toBe(42);
+  });
+
+  it("an empty label set reserves only the gap", () => {
+    expect(labelRoom([], ADVANCE.spaced, 6)).toBe(6);
+  });
+
+  // The defect this exists to make unreachable: the gutter that shipped was
+  // 38 units of room for a label needing 41.59.
+  it("the seventh glyph that clipped needs more room than the gutter had", () => {
+    expect(labelRoom(["100,000"], ADVANCE.spaced, 0)).toBeGreaterThan(38);
+    expect(labelRoom(["150k"], ADVANCE.spaced, 0)).toBeLessThan(38);
   });
 });
 

@@ -517,6 +517,7 @@ is exactly what happened: every section in this file stopped growing on
     value from the factory's return to the `app.use()` call before believing
     any route exists — and require ONE test that reaches it over HTTP, because
     tests calling the store directly cannot see the gap.
+<<<<<<< HEAD
 57. **A CHECK constraint is not the authority on which rows a state machine
     admits — find the module's own consistency predicate and run the row
     through it.** Wave A PR2's plan proved `auth_attempts_session_check` and
@@ -585,3 +586,68 @@ is exactly what happened: every section in this file stopped growing on
     print a three-column before/naive/intended table. Measured: the literal
     wording broke every link and every delete at its starting stage, and every
     probe the plan prescribed entered on a signin row (RF24).
+=======
+
+57. **"The machine does not report X" is a claim about ONE FIELD; ask whether
+    it reports X's COMPONENTS and whether we already store them.** The
+    number-provenance spec concluded a session wall clock is "asserted on the
+    machine's behalf" from 0x0039 being work-only — while §27.3's own table two
+    subsections down carries per-interval rest time `[12..13]`, which we store
+    as `storedSummary.ts`'s `machineRestSeconds` and already transmit to
+    Concept2 as `rest_time`. Measured on
+    `walk-2026-08-25/rests-finished-recording.jsonl.gz`: work-only 254.8 s +
+    machine rest 120 s = 374.8 s against a host wall clock of 374.76 s. Grep
+    the stored shape for the field before writing "we would have to invent
+    this".
+58. **A "the rower might do X" failure mode needs a mechanism by which the
+    rower CAN do X.** The same spec rejected a wall-clock axis because "the
+    rower rests longer than the program says, the ordinary case at a real erg".
+    A PM5 fixed rest is a machine-run countdown (measured 59.5 s and 59.0 s of
+    host wall clock against 60 s programmed) and `commands.ts:29-31` never
+    emits undefined rest (`docs/monitor/undefined-rest.md`: "We do NOT support
+    it at any layer"), so the rower has no mechanism to extend one. The real
+    failure mode was elsewhere and larger — see 59.
+59. **Replay the JUST ROW capture before generalising any clock claim.**
+    `walk-2026-08-31-justrow`: at the rower's stop, 104.63 s of host wall clock
+    passed while the PM5's elapsed advanced 1.69 s, frozen at exactly
+    185.81/656.7 for 104 consecutive frames — the row ran 499.52 s wall against
+    393.58 s elapsed, a 26.9 % gap. A free row has no program, no steps
+    (`server/concept2/intervals.ts:27`) and no rest-marked samples, so the
+    pause is invisible to the series, to the rest bands and to any
+    program-derived reconstruction — and `traceModel.ts`'s gap break does not
+    fire on 1.69 s, so the trace line is drawn CONTINUOUS across it. The free
+    row is the worst case for every session-clock design, not the edge case.
+60. **A gutter that clips at the corrected metric usually clipped at the
+    assumed one too — run the arithmetic BOTH ways before naming the
+    mechanism.** A spec pinned a live axis clip on a 5 % per-glyph advance
+    error (5.94 measured vs ~5.67 assumed). At the assumed 5.67 a seven-glyph
+    label still needs 39.69 into a 38-unit gutter. The mechanism is GLYPH
+    COUNT, not advance, and the fix follows from the invariant, never from the
+    measurement that motivated it.
+61. **`document.fonts.check(...)` returns TRUE for a family that does not
+    exist**, and a monospace fallback measures the same ~0.6 em advance — so
+    neither a `check()` nor a per-glyph measurement can identify the face.
+    Measured: a fabricated family returned `true`, and a deliberately
+    Plex-free `ui-monospace` control measured `perGlyph = 5.942`, identical to
+    the real one. Any "the intended font IS drawing it" claim needs a metric
+    the fallback does not share, or it is untagged inference.
+62. **jsdom has no layout engine: `getBBox`/`getComputedTextLength` are
+    `undefined` and `getBoundingClientRect()` returns a zero rect.** Any
+    prescribed "assert the label's own box" gate in the `client` project is
+    RF21's purest form — `expect(box.x >= 0)` passes forever on 0. Name the
+    layer (Playwright e2e) in the plan, or the implementer invents an
+    un-reddenable substitute.
+63. **A gate prescribed as "build the row the seed does not have" is a claim
+    about the seed — open it.** `domain/stats/gate0Seed.ts:28` already IS a
+    stored-tier pm5 row carrying 6,240 m, and `StatsScreen.test.tsx:292`
+    already asserts it beside `AVG WATTS —`. The prescribed gate would have
+    passed identically before and after the fix, because the behaviour is
+    deliberate and mutation-pinned (`aggregate.test.ts:44-51`); what needed a
+    gate was the ABSENCE OF THE EXPLANATION.
+64. **A member whose "agrees when" clause offers two options usually spans two
+    RISK MODELS — so a PR table written before a design gate assigns a risk
+    model to a decision nobody has made.** "The tile says it is ours" is copy;
+    "the tile reads the same source the column does" moves a number. Diff each
+    member's options against its PR row's risk model before the table is
+    believed.
+>>>>>>> origin/main

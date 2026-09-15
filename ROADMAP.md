@@ -2993,7 +2993,50 @@ question, not a re-raised one.
 | **C2 account injection**  | The Concept2 callback's Branch A account-injection residual (PR1 final review, F1): an attacker mints the authorize URL on their OWN Ergomatic account and hands it to a victim, whose Concept2 account then links to the ATTACKER's user — bounded today by THREE FIRM bounds (the single-use nonce; the 15-minute `ATTEMPT_MAX_AGE_MS` window; and, since 2026-09-04, the per-user `C2_ALLOWED_EMAILS` gate — the VICTIM must be on that list for the callback to complete at all, because the hop re-checks `availableFor(user.email)` at step 3b after resolving its principal, so on a one-account rollout the population that can be victimised is one) plus the `C2_LINK_ENABLED` dark flag, and two SOFT/best-effort factors the acceptance does not lean on: `ALLOWED_EMAILS` bounds who can OBTAIN a NEW Ergomatic account, not who currently may act (`signin.ts:30-36` only allowlist-checks the create-account branch) — for the household threat model the population is still effectively "household," stated precisely; "one live attempt per user" is ENFORCED since PR1.75a (#269): migration 0021's `UNIQUE(user_id)` + one atomic `INSERT … ON CONFLICT (user_id) DO UPDATE` at mint (`server/stores/concept2.ts`, `createAttempt`). Blast radius is a server-mediated capability (post the attacker's OWN eligible rows into the victim's C2 log, see/unlink the association), NOT token exfiltration. **RULED (James, 2026-09-01, PR1.5 design gate): ACCEPT the bounded residual for the dark plumbing. REAFFIRMED (James, 2026-09-01) on this corrected evidence** — the correction narrows the bound census, not the decision: the residual is unreachable while dark, and full option (g) still gates activation. Setting `C2_LINK_ENABLED=1` on any real cohort is GATED on fully authenticated option (g) — attempt-surface binding AND identity-checked completion on BOTH web and native (`attempt.userId === req.user.id` before exchange — BUILT server-side at PR1.75a on both the cookie-authenticated web callback and `POST /api/concept2/exchange`; the native RETURN that reaches the exchange is BUILT and device-walked at PR1.75b, PASS — **so option (g)'s code-side precondition is now met in full; the gate on a real cohort stays closed on the flag flip and live-portal registration, not on any remaining code**; and since 2026-09-04 "a real cohort" is itself gated on `C2_ALLOWED_EMAILS`, so the flag flip alone no longer admits one) — or an explicit re-ruling; detect-identity treatment (the callback/linked card naming which account the link goes to) ships with PR2's surface. Option (g)'s own delivery is now **PR1.75** (below), sequenced PR1.5 → PR1.75 → PR2, TRIAD (AUTH). Seven options / four buckets in `2026-09-01-concept2-pr15-gate.md`. | `2026-09-01-concept2-pr15-gate.md` |
 | **App-wide `ambiguous_auth` promotion** | **RULED (James, 2026-09-03): KEEP — bearer-wins + the `auth_disagreement` log app-wide, the hard refusal only on `/api/concept2/*`. Security read: bearer-wins is not an escalation (the request acts as the bearer holder, who already has that access); cross-site cannot pair a victim's cookie with an attacker's bearer (no CORS middleware, so the custom header fails preflight); the routes where identity binds an external account already refuse; promoting would risk a silent app-wide brick on a shared household phone if a web sign-in ever lands `erg_session` in the native jar beside another account's bearer, on 42-requests-one-install evidence. Trigger to revisit: prod ever logs an `auth_disagreement` line.** Was LIVE (2026-09-02, from #277's walk). `requireUser` logs `auth_disagreement` app-wide and only `/api/concept2/*` refuses when a bearer and a cookie resolve to different users (design §1, PM ruling at #269's shape gate: the app-wide refusal must not ship on an unmeasured premise). The premise is now measured: 42/42 native requests on the walk carried a bearer and NO cookie, 0 disagreements. **James decides whether to promote the refusal app-wide** (a three-line change; the 42/42 is one install on one dev server, so the evidence supports bearer-wins but does not prove the native jar can never carry a cookie). |
 
-## The "say which number this is" design pass — TRIGGER FIRED 2026-09-04, STILL UNOPENED
+## The "say which number this is" design pass — OPENED 2026-09-14
+
+**PR 2 (M8 + the appendix) is the first to land; Gate 0A approved it
+2026-09-14** (boards at `docs/design/number-provenance/gate0a/`, artifact
+`MZsVEJ1rSsxYLFQRuCrbtS`). **M8 and the appendix are STRUCK by that PR.**
+Measuring M8 for the gate found **two more of the same class nobody had
+seen** and widened the member: the trace chart clipped its last x tick by
+2.80 units on the log screen, and `SeasonGroup`'s `LABEL_ROOM` was 0.22
+short at the worst placement its own rule allows. Seven constants reserve
+space for text, not four; three were short; the per-glyph advance is **5.94**
+where the class carries letter-spacing and **5.40** where it does not, both
+measured, against the ~5.67 every constant assumed. Invariant I4 now governs
+all seven and each is derived by `labelRoom` from the widest string its own
+data can produce. **Gate 0A ruling 2, the MACHINE column's caption: RULED C — no caption**
+(James, 2026-09-14). Rulings 18/19 stand; M7's "the column says they do
+not" arm is closed, so M7 survives only as the population change and stays
+TRIAD in PR 4. **Gate 0B (M1-M6 and the new M9) is still owed**, and PRs
+3 and 4 are PROVISIONAL until it runs.
+
+**Spec:**
+[docs/superpowers/specs/2026-09-14-number-provenance-design.md](docs/superpowers/specs/2026-09-14-number-provenance-design.md).
+**Scope ruled by James 2026-09-14: "everything agrees"** — labelling, the
+chart, AND making live and stored quantities agree where they diverge. Four
+PRs grouped by risk model, not by screen; PR 4 (M4/M5/M7) is TRIAD.
+
+**The pass gained an EIGHTH member and an appendix on the day it opened,
+both from James, and the eighth is the only one a rower can see today: the
+y-axis clips its own numbers.** His 2026-09-14 phone screenshot of Season
+2027 reads `L50,000` and `L00,000` — a seven-glyph tick into a gutter
+hand-sized for six. Third occurrence of one class (`TraceChart` 36→42,
+`WeekBars` 36→44, `SeasonGroup` copied 44), and the first with a production
+frame — **and the count went to five once the gate measured it** (see the PR
+2 note at the top of this section). The advance was MEASURED at 5.94 units
+at 9 px for `.stats-tick` and **5.40** for the classes carrying no
+letter-spacing, against the ~5.67 every constant assumed (probe
+`6b76f902`, branch `number-provenance`); **"all four are ~5 % under-sized"
+was wrong** — only the two metres gutters clipped, and they clipped on a
+SEVENTH GLYPH, which overflows at the assumed advance too. No gate we owned
+could see the class, because jsdom leaves `getBBox` undefined and the
+screenshot seed's widest tick is six glyphs; **there is one now**, in
+Playwright (`e2e/stats.spec.ts`), asserting that no chart text escapes its
+own viewBox. Ruled the same day: shorten metres ticks to `150k`. The
+appendix is the CUSTOM filter printing the dates its own pickers already
+show — drop the echo, keep `NO ROWS`.
 
 **Phase OD, 2026-09-09: this heading said "(post-Wave F, unopened)" for five
 days after Wave F closed on 2026-09-04.** The trigger fired; the heading kept
@@ -3036,16 +3079,16 @@ watts is itself a derivation of pace, so nothing on that strip is
 measured.** The honest axis is WHOSE ARITHMETIC, which James already ruled
 (§3.1, the logbook's). Putting the wrong axis on the board asks him to rule
 on a distinction that does not exist.
-**NEXT (≤0.25): none owed — this one needed a date, not an answer, and now
-has one.** · dies 2026-10-12 (set 2026-09-12, proposed by the controller at
-the housekeeping sweep before Wave A opens; James rules at that PR's review) ·
-this is a row and not a fix now because its five members share ONE Gate 0 by
-James's own 2026-08-31 ruling, and fixing any one of them alone is the
-third-of-a-screen approval that ruling exists to prevent. The date is two days
-past Wave A's own (2026-10-10), so it asks the only question that rots here:
-did Wave A finish, and did this then open. **The accretion is the cost of
-waiting** — the pass gained two members in one day on 2026-09-07, so a slip
-re-dates a LARGER gate than the one being deferred.
+**NEXT: Gate 0** — five boards, both orientations, before any implementation
+task (spec §4). · dies 2026-10-12 (set 2026-09-12 at the housekeeping sweep;
+James rules at the PR that carries it) · **the date's own question is now
+ANSWERED and the answer was not the expected one.** It asked "did Wave A
+finish, and did this then open"; the pass opened on 2026-09-14 ahead of Wave
+A, because James asked for it. The date now governs the Gate 0, not the
+opening. **The accretion prediction held:** the pass gained two members in
+one day on 2026-09-07 and gained two more (M8 and the appendix) on the day
+it opened — eight and an appendix, against the "five" this paragraph was
+written under.
 
 - [ ] **Phase LP's strip eyebrow says `PM5 · PER INTERVAL` over two
       columns that are Concept2's arithmetic** (PM final gate #327,
@@ -3421,6 +3464,53 @@ Each needs erg time or a deliberate recording session.
   "off Connect Device". (`phase-nf.md`)
 
 ## Small, queued, rides the next PR in its area
+
+- **`deploy.sh` treats a git lock collision as an unhealthy build, so a
+  momentary one silently costs a deploy.** First sighting 2026-09-14, run
+  `34907509845` (merge `a847148b`): `git checkout --force` could not take
+  `.git/HEAD.lock`, the `ERR` trap rolled back to `PREV`, every container
+  came up healthy and the job exited 1 — prod served the previous commit
+  while main looked merged and green. The lock was **transient** (absent on
+  the host minutes later), so a re-run was the entire recovery; recovery is
+  documented in `docs/deploy.md`. The rollback behaved correctly. The
+  problem is that nothing distinguishes "the new build is unhealthy" from
+  "git could not check it out", and the second is not fixed by rolling back.
+  What would fix it now: **retry the checkout** (a few seconds' backoff)
+  rather than a pre-flight lock check, which cannot help against a race —
+  it would fail faster and still not deploy — plus a distinct exit code so
+  the log says what went wrong instead of burying it above 160 lines of
+  healthy containers. **What held the lock is not established**; the
+  leading candidate is the background `git gc --auto` that the preceding
+  `git fetch --prune` can spawn (INFERENCE, still open). **The two obvious
+  reads do not discriminate** and were run on 2026-09-14: an unset
+  `gc.auto` is the 6700 default rather than "off", and `.git/gc.log` exists
+  only when auto-gc FAILS, so both came back empty under the hypothesis AND
+  under its negation. **`git count-objects -v` is the read that decides** —
+  a loose `count` far below 6700 kills the candidate. Not done
+  here because `scripts/deploy.sh` is only exercised on the real host
+  (`deploy.test.sh` covers its argument guards), so a change to it wants a
+  deploy to verify against rather than riding a docs PR.
+  **S** · dies 2026-10-14 · one sighting, recovery is a re-run; the code fix
+  wants a real deploy to verify against and a named culprit first
+
+- **One unidentified `client`/`unit` test failure, seen once on 2026-09-14 and
+  not reproduced in nine runs since.** A full
+  `pnpm test --project client --project unit` at PR #445's head reported
+  `1 failed | 8535 passed`; **the name was lost** — the command was piped
+  through a `grep` that matched nothing, so the failure line never reached a
+  file, and nine consecutive full runs afterwards were green at exit 0. It is
+  a real assertion failure and NOT a kill: none of RF40's three signatures
+  applies (exit was not >= 128, the run did not go through `pnpm exec`, and
+  `app/.test-kills/` was never created). CI was green on the same tree twice.
+  Closest known relative is the vitest `doMock` race that turned main red once
+  and was fixed in #346; `StatsScreen.test.tsx` still uses `vi.doMock` in its
+  retry test. What would fix it now: nothing that can be aimed — there is no
+  name to chase and no reproduction. **The actionable half is a habit, not a
+  fix:** never pipe a suite's output through a filter that can swallow the
+  failure list; write it to a file and grep the file (the same lesson as
+  TESTING.md §11's `process.stdout.write` rule, one layer up).
+  **S** · dies 2026-10-14 · one sighting in ten runs with no captured
+  identity; a second sighting carrying its name is what makes it fixable
 
 - [ ] **`scripts/ci-changes.sh` skips the code jobs on `docs/monitor/sessions/` changes that tests read by name.** `app/src/test/captures.ts:21` resolves that directory and `captures.test.ts` reads two named capture files at runtime, so a rename, re-gzip or deletion there is "documentation" to the script and the `app` job never runs the test it broke — the same class PS PR 1 patched for `seed.mjs`. What would fix it now: add the prefix to `CODE_UNDER_DOCS_RE` with a case in `ci-changes.test.sh` — not done because the capture corpus is append-only today and widening the regex inside a TRIAD PR mixes two risk models. **S** · dies 2026-10-12 · pre-existing, one-line fix, but it belongs in the PR that next touches the captures.
 - **Move the PM5 NFC fixture loader (`loadPm5NfcFixture`, `FIXTURE_PM5_NAME`
