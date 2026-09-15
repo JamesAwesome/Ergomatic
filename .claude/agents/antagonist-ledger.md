@@ -113,6 +113,66 @@ finding folded into the plan the same day.
   already imported `fmtSplit` (the plan's import line said otherwise).
 - Techniques 43-44 proposed and landed.
 
+## Erg machine-type floor + vendor tokens (PR #452), 2026-09-15 (TRIAD: stored shape)
+
+- **BROKEN:** the stored token for value 32 came from the wrong document.
+  `ergMachineToken` was transcribed from
+  `docs/monitor/PM5_CSAFECommunicationDefinition.pdf` rev 0.27
+  (`LINKED_DYNAMIC = 32`), but the field is DEFINED by PM5 BLE Interface
+  Definition rev 1.30, whose Appendix A spells it `SLIDES_DYNAMIC = 32`. All
+  23 values and 22 of 23 names are identical across the two; 32 is the sole
+  divergence and the one the new test pinned. `ergMachine.test.ts` in the SAME
+  FILE already carried `[32, "SLIDES_DYNAMIC"]` from rev 1.30, so the file
+  asserted two vendor names for one value. **Technique:** fetched the mirror
+  URL `pm5-interface-notes.md` already records, `pdftotext -layout`, and
+  diffed both enums member by member instead of spot-checking. Value 32 is the
+  Dynamic RowErg the News prose names to rowers.
+- **BROKEN:** 15 of 23 tokens had no assertion. Mutations, both GREEN at
+  37/37: `[225, "MULTIERG_SKI"]` -> `"MULTIERG_SKl"` (capital I to lowercase
+  L), and deleting `[19, "SLIDES_D"]` outright. This is the rule
+  `ergMachine.test.ts` states verbatim ("THE TABLE IS WRITTEN FROM THE VENDOR
+  ENUM, NOT FROM THE MODULE'S OWN MAP"), applied exhaustively to
+  `unsupportedErgMachine` and spot-checked for `ergMachineToken` — RF34,
+  inside the file that wrote the rule down. Closed with a string-literal union
+  (typos) AND an exhaustive table (dropped rows); neither alone suffices.
+- **BROKEN (comment):** the floor rejected a driver-scoped flag because
+  "`useMonitorSession` builds a NEW driver per connect attempt against the
+  SAME log". It builds a new LOG too, in the same block, so the flag would
+  behave identically and the feared stale reading cannot exist. The chosen
+  shape is still better; the stated cost was false (RF30).
+- **BROKEN (comment, 3 files):** "runs on EVERY clean decode of EVERY
+  subscribed characteristic". Only the FIVE routed through `mergeStatus` reach
+  `classifyErgMachine`. The material claim (three non-carriers) is right; the
+  quantifier is not.
+- **HELD — the bug's mechanism**, decoded from the walk's own capture: 174 x
+  0x0031/0x0032/0x0033, tick order `0x0031 -> 0x0032 -> 0x0033`, last status
+  frame 0x0033, offset 16 = 0 on all 174. No fourth non-carrier, no bypass.
+- **HELD — the floor gives no wrong answers.** One writer; a number always
+  overwrites (so MultiErg interval changes still update); the null write is
+  gated on the log's own meta; no path restores a persisted header into a live
+  log.
+- **HELD — the order claim, by demonstration.** Restoring the flat write AND
+  reordering the unit test to `0x0031 -> 0x0032` PASSES; the shipped order
+  goes red. "The obvious test is decoration" is measured, not asserted.
+- **HELD — `barrierTimeoutMs: 1` does not weaken the replay test.** Every rx
+  frame delivered; `run()` pushes a divergence and continues. SCOPE LIMIT: it
+  uses `createSubscribedDriver`, bypassing the production subscription-deferral
+  seam.
+- **HELD — lockstep, consumers, News trigger.** One writer, one patch, one
+  local value; `MonitorLogMeta` has one non-test user and `tryParseLogExport`
+  casts meta wholesale, so the new field is additive-safe; the PHASE MT
+  TRIGGER reads "adding or removing a value HERE" and this PR adds neither.
+- **BRITTLENESS:** the floor is DETERMINISTIC — no timing, threshold, counting
+  or absence, and neither a false positive nor a false negative is
+  constructible. But the SOURCE is per-interval, not the connected machine;
+  `0x0016` ("Connected Erg Machine Type") is the deterministic answer and rev
+  1.30's characteristic table still lists it with firmware validity ranges, in
+  tension with the revision-history line about its deletion in V1.21 (RF16's
+  fourth corollary). The existing ROADMAP row owns it.
+- **LIMIT:** no hardware. Could not establish whether firmware answers
+  `0x0016`, whether rev 1.30 is the current BLE revision, or which name
+  Concept2's own tooling uses for 32 today.
+
 ## 2026-09-12 — News layout-shift spec (`/harden` lens 1, full pass: invented mechanism + RF27)
 
 Spec: `docs/superpowers/specs/2026-09-12-news-layout-shift-design.md`. Eight

@@ -115,12 +115,22 @@ nothing on the screen says why. This is M3's axis question with a real
 figure attached, and it belongs in board 2.
 
 **3. `ergMachineType` is logged as `null` on a machine that reports it 174
-times.** The wire byte is `0` (RowErg) on both carriers; the log header says
-`null`. `classifyErgMachine` writes the meta on every decode of every
-characteristic, 0x0031 carries no such field, and `setMeta` is
-last-write-wins — so 0x0031 clobbers 0x0032's honest reading. Filed in
-ROADMAP (`dies 2026-10-15`) as a quick follow rather than fixed on this
-branch. Found by James reading this walk's own ring.
+times.** The wire byte is `0` on both carriers; the log header says `null`.
+`classifyErgMachine` writes the meta on every decode of the five
+characteristics routed through `mergeStatus`,
+and THREE of them carry no such field (0x0031, 0x0033, 0x0037), and `setMeta`
+is last-write-wins — so each erases a reading it never had. Found by James
+reading this walk's own ring.
+
+**[CORRECTED 2026-09-15]** The first version of this item named 0x0031 as the
+clobberer. Decoded from this directory's own capture, the tick is
+**`0x0031 -> 0x0032 -> 0x0033`, 174 times, and the session's LAST status
+frame is 0x0033** — so the carrier's honest `0` is overwritten by the 0x0033
+that follows it every tick, not by the 0x0031 that precedes it. The 0x0031
+story would have left the header reading `0`. **The error was not cosmetic:
+the test it implies — notify 0x0031 then 0x0032 — passes against the bug**,
+because there the carrier speaks last. This capture is now the fixture for
+the replay test that closes it.
 
 ## Cost
 

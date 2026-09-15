@@ -177,6 +177,42 @@ toolkit, not a history.
 
 ## Techniques that keep paying
 
+- **Transcribe a wire field's enum from the document that DEFINES the field,
+  not from a sibling vendor document that also contains it.** Concept2 ships
+  two: PM5 BLE Interface Definition rev 1.30 (revision history: "Added Erg
+  Machine Type parameter to characteristic 0x0032/0x0038") and PM5 CSAFE
+  Communication Definition rev 0.27. Their `OBJ_ERGMACHINETYPE_T` agree on all
+  23 values and 22 of 23 names, and disagree on exactly one:
+  `SLIDES_DYNAMIC = 32` versus `LINKED_DYNAMIC = 32`. **Diff the two enums
+  mechanically before storing any name** — one divergence in twenty-three is
+  invisible to spot-checking, and it was the value the transcription pinned.
+- **A spot-checked transcription table is the rule's half-application (RF34);
+  prove it with a typo mutation on an UNPINNED row.** Corrupt one capital in a
+  row nobody asserted (`MULTIERG_SKI` -> `MULTIERG_SKl`) and delete another
+  outright; a green suite means "the vendor's own token" is untested for every
+  unpinned value. The cheap deterministic close is a string-literal union on
+  the map's value type — `pnpm typecheck` then names the typo and suggests the
+  fix, covering every row with no new test. Only the exhaustive `it.each`
+  table catches a DROPPED row, so do both.
+- **"A new X per attempt against the SAME Y" is a lifetime claim: count the
+  construction sites before rejecting an option on it.**
+  `grep -rn "createPm5Driver(\|createEventLog(" app/src | grep -v test`
+  returned one apiece, 94 lines apart in one block — so the reconnect scenario
+  a design option was rejected on cannot occur. A rejected option's stated
+  cost carries the evidence bar of the chosen one (RF30), and a false one is
+  still false when the chosen option happens to be right.
+- **Prove a test is order-sensitive by writing the WRONG order against the
+  restored bug.** Restoring the defect AND reordering the two frames made
+  every assertion pass, while the shipped order went red — which turns "the
+  obvious test would be decoration" from rhetoric into a measurement a
+  reviewer can re-run.
+- **A replay test that releases its tx barriers can still prove an rx-ordering
+  claim — count what the driver received, do not infer it either way.**
+  Wrapping `transport.subscribe` to tally callbacks showed all 174x3 status
+  frames delivered under `barrierTimeoutMs: 1`, with seven tx divergences,
+  because `transports/replay.ts`'s `run()` pushes a divergence and CONTINUES
+  rather than aborting. Read the loop, then count.
+
 - **An access check after session resolution can refresh the credential it denies.** Put policy before expiry extension; enumerate direct resolver consumers and the losing credential in bearer/cookie precedence.
 - **A pending-new identity can become an existing account at conflict resolution.** Check the candidate before creation and the canonical row returned by the conflict path before grants or sessions. The pending provider email no longer owns access once a subject winner exists.
 - **A live original-session foreign key proves liveness, not current entitlement.** Trace every attempt transition through its original-session resolver and apply current account policy before advancement.
