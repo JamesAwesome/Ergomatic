@@ -7,6 +7,19 @@ function providerName(provider: "apple" | "google") {
   return provider === "apple" ? "Apple" : "Google";
 }
 
+/** The same two-initial fallback the confirm screen uses inline, lifted so
+ *  both identity cards on the attach confirmation can share it. */
+function initialsOf(name: string) {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]!.toUpperCase())
+      .join("") || "R"
+  );
+}
+
 function Welcome({ auth }: { auth: AuthFlowController }) {
   const busy = auth.view.kind === "busy";
   return (
@@ -113,6 +126,85 @@ function ConfirmAccount({
             onClick={() => void auth.useUsualSignIn()}
           >
             I already have an account
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/** WAVE A PR2: the post-proof confirmation, rendered on the SIGN-IN screen
+ *  because that is where the rower still is — `onSignedIn` is deliberately
+ *  not called until they choose, so `me` stays out and this screen stays
+ *  mounted.
+ *
+ *  IT NAMES THREE THINGS, and the third is what makes it a control rather
+ *  than a notice: the identity being attached, the account it attaches TO,
+ *  and that the rower is already signed in. "Attach this to WHICH account?"
+ *  is a question they cannot answer without the second. */
+function AttachConfirm({
+  auth,
+  view,
+}: {
+  auth: AuthFlowController;
+  view: Extract<AuthFlowController["view"], { kind: "attach_confirm" }>;
+}) {
+  const target = providerName(view.targetProvider);
+  return (
+    <main className="auth-flow-screen">
+      <header className="auth-flow-header">
+        <h1>Attach {target} to this account?</h1>
+        <p className="auth-intro">
+          You are signed in. Nothing has been attached yet.
+        </p>
+      </header>
+      <div className="auth-flow-body">
+        <p className="auth-field-label">ATTACHING</p>
+        <section className="auth-identity">
+          <div className="avatar" aria-hidden="true">
+            {initialsOf(view.carried.name)}
+          </div>
+          <div className="auth-identity-copy">
+            <p className="auth-identity-name">{view.carried.name}</p>
+            <p className="auth-identity-email auth-identity-email-full">
+              {view.carried.email}
+            </p>
+          </div>
+          <span className="auth-identity-mark">{target.toUpperCase()}</span>
+        </section>
+        <p className="auth-attach-arrow" aria-hidden="true">
+          &darr; TO &darr;
+        </p>
+        <p className="auth-field-label">THIS ACCOUNT</p>
+        <section className="auth-identity">
+          <div className="avatar" aria-hidden="true">
+            {initialsOf(view.account.name)}
+          </div>
+          <div className="auth-identity-copy">
+            <p className="auth-identity-name">{view.account.name}</p>
+            <p className="auth-identity-email auth-identity-email-full">
+              {view.account.email}
+            </p>
+          </div>
+        </section>
+        <div className="auth-explain">
+          <p>
+            After this you can sign in either way. Your workouts, plan and log
+            are unchanged.
+          </p>
+        </div>
+        <div className="auth-actions">
+          <button
+            className="button-l1"
+            onClick={() => void auth.confirmAttach()}
+          >
+            Attach {target}
+          </button>
+          <button
+            className="button-l2"
+            onClick={() => void auth.declineAttach()}
+          >
+            Not now
           </button>
         </div>
       </div>
@@ -237,6 +329,9 @@ export default function SignIn({
   if (auth) {
     if (auth.view.kind === "confirm") {
       return <ConfirmAccount auth={auth} view={auth.view} />;
+    }
+    if (auth.view.kind === "attach_confirm") {
+      return <AttachConfirm auth={auth} view={auth.view} />;
     }
     if (auth.view.kind === "usual") {
       return <UsualSignIn auth={auth} provider={auth.view.provider} />;

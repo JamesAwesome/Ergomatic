@@ -80,6 +80,8 @@ function idleAuthFlow(): AuthFlowController {
     startSignIn: vi.fn(),
     confirmAccount: vi.fn(),
     useUsualSignIn: vi.fn(),
+    confirmAttach: vi.fn(),
+    declineAttach: vi.fn(),
     prepareLink: vi.fn(),
     startPreparedLink: vi.fn(),
     authorizeLinkTarget: vi.fn(),
