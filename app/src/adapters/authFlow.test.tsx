@@ -901,9 +901,12 @@ describe("useAuthFlow", () => {
       expect(result.current.view.kind).toBe("attach_confirm"),
     );
     await act(async () => result.current.confirmAttach());
-    // Gate 0 ruling: Today, signed in, NO notice. `idle` plus `onSignedIn`
-    // is what routes them into the app.
-    expect(result.current.view).toStrictEqual({ kind: "idle" });
+    // Gate 0 ruling: Today, signed in, NO notice. ASSERT THE DESTINATION,
+    // not just the view — every earlier version of this test checked
+    // `{kind:"idle"}` and `onSignedIn`, which stayed true while the rower was
+    // silently being left on You. A view assertion cannot see a landing.
+    expect(result.current.view).toStrictEqual({ kind: "attached" });
+    expect(result.current.destination).toBe("/");
     expect(onSignedIn).toHaveBeenCalledOnce();
   });
 
@@ -926,7 +929,8 @@ describe("useAuthFlow", () => {
     // By this point the session was minted and the rower is authenticated.
     // A "That sign-in didn't work" screen would be false twice over — the
     // sign-in worked, and what failed was the attach.
-    expect(result.current.view).toStrictEqual({ kind: "idle" });
+    expect(result.current.view).toStrictEqual({ kind: "attached" });
+    expect(result.current.destination).toBe("/");
     expect(onSignedIn).toHaveBeenCalledOnce();
     // THE END STATE ALONE CANNOT TELL A FAILED ATTACH FROM A SUCCESSFUL ONE —
     // the success test asserts the same `idle` + one `onSignedIn`. Pin the
@@ -953,7 +957,8 @@ describe("useAuthFlow", () => {
     // credential at their own provider, so they stay signed in; only the
     // attach is declined.
     expect(finalized).toBe(false);
-    expect(result.current.view).toStrictEqual({ kind: "idle" });
+    expect(result.current.view).toStrictEqual({ kind: "attached" });
+    expect(result.current.destination).toBe("/");
     expect(onSignedIn).toHaveBeenCalledOnce();
   });
 
@@ -1034,7 +1039,8 @@ describe("useAuthFlow", () => {
 
     await act(async () => result.current.confirmAttach());
     expect(finalized).toBe(true);
-    expect(result.current.view).toStrictEqual({ kind: "idle" });
+    expect(result.current.view).toStrictEqual({ kind: "attached" });
+    expect(result.current.destination).toBe("/");
     expect(onSignedIn).toHaveBeenCalledOnce();
   });
 
@@ -1276,6 +1282,10 @@ describe("useAuthFlow", () => {
     // signed-in tree is Today, which left the rower in the app with the
     // confirmation set on a component that had no frame.
     ["attach_confirm", "/you/sign-in-methods"],
+    // The terminal both exits reach. It draws nothing — it exists so the
+    // rower is routed HOME rather than left standing on the auth surface,
+    // where the route's own fallback would send them to You.
+    ["attached", "/"],
     ["link_confirm", "/you/sign-in-methods"],
     ["link_authorize", "/you/sign-in-methods"],
     ["linked", "/you"],

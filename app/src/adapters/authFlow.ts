@@ -53,6 +53,15 @@ export type AuthFlowView =
   // held ever since). `account` is the one it attaches TO, which is what
   // makes this a control rather than a notice — "attach this to WHICH
   // account?" is the question a rower cannot answer without it.
+  // THE TERMINAL FOR BOTH EXITS OF THE ATTACH CONFIRMATION, and it exists
+  // for ROUTING, not for drawing — James ruled no notice. Without it the
+  // rower is stranded: they are standing on `/you/sign-in-methods`, the view
+  // goes `idle`, `destinationFor(idle)` is `null` so nothing navigates, and
+  // the route's own fallback sends them to `/you`. That silently reversed his
+  // "Today, signed in" ruling as a side effect of giving the screen a frame,
+  // and no test caught it because they all asserted the VIEW and never a
+  // location.
+  | { kind: "attached" }
   | {
       kind: "attach_confirm";
       targetProvider: AuthProvider;
@@ -226,6 +235,10 @@ export function destinationFor(
   // routing on it too would send every signin `busy` — including the ordinary
   // sign-in that has not reached this flow — to the auth surface.
   if (view.kind === "attach_confirm") return "/you/sign-in-methods";
+  // TODAY, per the ruling. Both exits land here — attaching and declining
+  // reach the same end state, and the rower set out to sign in, not to visit
+  // settings.
+  if (view.kind === "attached") return "/";
   if (
     view.kind === "confirm" ||
     (view.kind === "cancelled" && view.purpose === "signin") ||
@@ -250,8 +263,30 @@ export function destinationFor(
  *  `busy` IS INCLUDED, and it is what makes `AttachConfirm`'s disabled
  *  controls reachable at all. Without it the screen unmounts the moment its
  *  own request starts, which is a weaker guard wearing an attribute that can
- *  never be true. In the signed-in tree a `busy` signin can only be this
- *  flow — a rower cannot be signing in while already in. */
+ *  never be true.
+ *
+ *  AN EARLIER VERSION OF THIS COMMENT GAVE THE WRONG REASON, and the wrong
+ *  reason is the dangerous half. It said a signed-in rower can never be at
+ *  `busy`/`signin`. They can: the web link and delete SUCCESS redirect is
+ *  `/?authAttempt=<id>` with NO `authPurpose` (unlike the failure and cancel
+ *  redirects, which carry one), `consumeReturnParams()` defaults an absent
+ *  purpose to `"signin"`, and the return effect sets exactly that view.
+ *
+ *  What actually makes this safe is LOCATION, not purpose: that redirect
+ *  lands at `/`, `destinationFor(busy)` is `null`, so nothing routes the
+ *  rower onto the auth surface during the window, and by the time a
+ *  destination exists the view has moved to `link_authorize` /
+ *  `delete_ready` / `linked`. No reachable break exists today.
+ *
+ *  BUT THAT IS AN INVARIANT HELD UP BY THE CURRENT CALL GRAPH (RF18), and
+ *  the cost if a redirect ever moves is a BLANK ROUTE: this predicate
+ *  shadows the `<Navigate to="/you">` fallback, and `AttachConfirm` draws
+ *  nothing without a remembered payload. The root-cause fix — carrying
+ *  `authPurpose` on both attempt-surviving redirects — was tried and backed
+ *  out: it changes a redirect contract that four integration tests pin by
+ *  exact location, including two about stale-callback safety, and that is
+ *  not a change to make late in a PR to close a case nobody can reach.
+ *  Filed in ROADMAP.md instead. */
 export function ownsAttachScreen(view: AuthFlowView): boolean {
   return (
     view.kind === "attach_confirm" ||
@@ -1075,7 +1110,11 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
         // screen they just approved named both identities, and the proof it
         // worked is being in the app. Landing them on a settings subpage
         // would put one navigation between them and rowing.
-        setView({ kind: "idle" });
+        //
+        // `attached` RATHER THAN `idle`, because `idle` routes nowhere and
+        // the rower is standing on the auth surface — they would be left on
+        // You, which is the subpage this ruling exists to avoid.
+        setView({ kind: "attached" });
         onSignedInRef.current();
       } catch {
         // THE ROWER IS ALREADY SIGNED IN, SO A SIGN-IN ERROR SCREEN LIES
@@ -1096,7 +1135,7 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
         if (generation.current !== attachGeneration) return;
         operation.current = null;
         setTargetAuthorizationBusy(false);
-        setView({ kind: "idle" });
+        setView({ kind: "attached" });
         onSignedInRef.current();
       }
     },
@@ -1113,7 +1152,9 @@ export function useAuthFlow(onSignedIn: () => void): AuthFlowController {
       if (generation.current !== declineGeneration) return;
       operation.current = null;
       setTargetAuthorizationBusy(false);
-      setView({ kind: "idle" });
+      // Same terminal as a successful attach: the end state is identical, so
+      // the landing is too.
+      setView({ kind: "attached" });
       onSignedInRef.current();
     },
     async prepareLink(provider) {
