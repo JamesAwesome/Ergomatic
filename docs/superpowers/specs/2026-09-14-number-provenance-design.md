@@ -132,13 +132,44 @@ work-only is recoverable from the series alone, and it has a machine oracle
 (0x0039) that wall clock does not.
 
 **The question that is genuinely open, and PR 3 needs it:** does 0x0031's
-elapsed freeze during a **work** interval when the rower stops? The Just Row
-capture proves the freeze mechanism exists; every work interval in the
-rest-bearing capture was rowed continuously (wall and elapsed agreeing to
-0.65 s), so nothing there discriminates. **If it does freeze,
-`wall = work + machineRest` breaks for programmed rows too.** Answerable at
-a desk from any capture holding a mid-interval pause; **it is PR 3's first
-task, not Gate 0A's business.**
+elapsed freeze during a **work** interval when the rower stops? **If it does,
+`wall = work + machineRest` breaks for programmed rows too.**
+
+**[CORRECTED 2026-09-14] It is NOT answerable at a desk, and this spec said
+it was.** Both halves of the corpus were swept and neither can settle it:
+
+- **The wire recordings: 13 of them, zero instances.** Decoding 0x0031 per
+  §10 (elapsed `0-2` at 0.01 s, distance `3-5` at 0.1 m, workout state byte
+  8, rowing state byte 9) and looking for elapsed frozen across consecutive
+  frames while the workout state is an ACTIVE WORK state (§5's 1, 4, 5, 6,
+  7) and elapsed is already past zero: **every hit is `wstate = 1`,
+  `WORKOUTROW` — a free row.** Not one frame pair anywhere sits in
+  `INTERVALWORKTIME` or `INTERVALWORKDISTANCE` with a stopped clock. The
+  programmed walks were all rowed continuously. (PRIMARY — measured
+  2026-09-14.)
+- **Two apparent hits are false, and both are worth naming** so the next
+  sweep does not re-find them. `walk-2026-08-23/keystone`'s 89.64 s freeze
+  at elapsed 68.55 / 250.0 m is `wstate = 12`, `WORKOUTLOGGED` — it is that
+  walk's README's own "90.3 s held-open window" AFTER the piece ended.
+  `walk-2026-08-31-justrow/waiting`'s 896.77 s is a free row, and its
+  filename says what it is. A sweep that filters only on "elapsed stopped"
+  reports both as pauses.
+- **The saved rows cannot settle it either, and the reason generalises.**
+  `seriesRecorder` emits one sample per work-clock SECOND, and the work
+  clock IS 0x0031's elapsed — so a frozen clock emits NOTHING for the pause
+  and the trace is seamless, while a running clock emits a run of samples
+  whose distance sits flat. **The signature of "it froze" is therefore
+  indistinguishable from "the rower never stopped".** Measured on staging
+  2026-09-14: across every `source = 'pm5'` row carrying steps and a
+  series, **the longest flat-distance run in the whole database is 4
+  seconds** — ordinary between-stroke coasting, not a pause. That is
+  evidence only if paired with a rower who remembers stopping in a named
+  row, and James does not (asked 2026-09-14, "not sure").
+
+**So the honest options are a hardware walk leg (one programmed piece, stop
+mid-interval ~30 s, resume) or an assumption carried at Gate 0B.** The
+consequence for the board is in §4: exactly one of the three axis candidates
+is immune to the answer.
 
 ### 1.3 What this spec measured
 
@@ -432,12 +463,24 @@ provenance vocabulary verbatim or states a deviation.
 **0B's boards:**
 
 1. The post-workout summary / log detail: tiles + eyebrow + table (M1, M2).
-2. The trace chart: work-only and wall-clock candidates, with five equal
-   rests drawn under each, **and the free row's frozen 104 s (M9)**, and
-   **the option nobody argued** (PM, 2026-09-14): a work-only axis with
-   rests as FIXED-WIDTH gaps printing the interval's own rest duration — it
-   asserts nothing, the gap is a separator, the number is a fact about the
-   program, and it fixes M6 completely.
+2. The trace chart: **three candidates**, five equal rests drawn under each,
+   **and the free row's frozen 104 s (M9)**, which every one of them must be
+   shown against because it is invisible to all three and to today's axis.
+
+   | candidate | what the x axis is | survives the open freeze question? |
+   | --- | --- | --- |
+   | **A · work-only, named** | today's quantity, finally labelled | **yes** — recoverable from the series alone, and 0x0039 is its oracle |
+   | **B · wall clock** | `work + machineRest` | **NO** — it is exactly what a frozen work clock breaks (§1.2) |
+   | **C · work-only + fixed-width rest gaps** (PM, unargued) | work-only, each rest a separator printing the interval's own rest seconds | **yes** — asserts nothing about time during a rest |
+
+   **[ADDED 2026-09-14] The open question is now a decision input, not a
+   footnote.** Since it cannot be settled at a desk (§1.2), candidate B
+   goes to the gate carrying an unquantified risk that A and C do not: if
+   elapsed freezes during work, B silently under-reports the session's real
+   duration by however long the rower stood still, and nothing on the
+   screen would say so. **C is the only candidate that both fixes M6
+   completely AND is immune** — the gap is a separator, the number is a
+   fact about the program.
 3. The connected live surface's total beside the stored total for the same
    session (M4, M5).
 
@@ -535,9 +578,12 @@ plan.
 - **dba — PR 4 only.** PRs 1-3 touch no `app/server/db`, no store, no bulk
   read: SKIP, said aloud.
 - **Gate 0A — required before PR 2. Gate 0B — required before PRs 1, 3, 4.**
-- **Hardware walk — none.** Nothing here reaches the wire. The one open
-  hardware-shaped question (§1.2) is answerable at a desk from a committed
-  capture.
+- **Hardware walk — [CORRECTED] none for PRs 1, 2 and 4; PR 3 may need one.**
+  Nothing in this pass reaches the wire, but §1.2's open question is NOT
+  desk-answerable after all — the corpus was swept and cannot discriminate.
+  A walk leg for it would be one programmed piece with a ~30 s mid-interval
+  stop, and it is PR 3's to propose with a PM readiness PASS, not this
+  pass's to assume.
 
 ## 9. Exit criteria
 
