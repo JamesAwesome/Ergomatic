@@ -3124,6 +3124,11 @@ that on 2026-09-07 with option C rejected on measured numbers — RF18. The
 screen now says what that code already knew. **Gate 0B boards 2 (the axis:
 M3, M6, M9) and 3 (live total vs stored: M4, M5) are STILL OWED**, and PRs
 3 and 4 stay PROVISIONAL until they run.
+**PRs 3 AND 4 ARE NOW FILED ROWS IN PHASE TD** (James, 2026-09-15: "I want to
+ensure they get closed out"), with dates and with the open question each is
+blocked behind named. They lived here as PROSE — no checkbox, no date — which
+is the third state this file's own rule says is where orders die. This
+paragraph is no longer their home; Phase TD is.
 
 **Spec:**
 [docs/superpowers/specs/2026-09-14-number-provenance-design.md](docs/superpowers/specs/2026-09-14-number-provenance-design.md).
@@ -4728,6 +4733,41 @@ than back in the queue this was built to replace.
       `deliverSummary` never writes) is UNRESOLVED and is the next thing to
       find out. This is a FAKE-side gap only: the same fold works on real
       wire bytes, which is what `justRowReplay.test.ts` gates.
+
+- [ ] **PR 3 of the number-provenance pass — the chart's axis (M3, M6, M9).**
+      · dies 2026-10-06 · a row and not a fix now because it cannot start
+      until Gate 0B board 2 is drawn and ruled, and a board is James's
+      decision rather than work I can do ahead of him.
+      **MOVED HERE FROM THE PASS'S OWN SECTION 2026-09-15 (James: "I want to
+      ensure they get closed out")** — it lived in that section's PROSE with
+      no checkbox and no date, which is the third state where orders die.
+      **THE OPEN QUESTION, scheduled before the order (Phase OD's rule), and
+      it is ANSWERED:** the 2026-09-15 walk settled whether 0x0031's elapsed
+      clock freezes during a programmed work interval. **It does not** — the
+      clock RUNS, so `wall = work + machineRest` holds and board 2's
+      candidate B is alive. Nothing blocks drawing the board.
+      **What board 2 must show, already known:** a mid-interval stop stores
+      as 250 m in 129.2 s, so a piece pulled at about 2:15 saves as roughly
+      4:18/500m with nothing on screen saying why. **S**
+
+- [ ] **PR 4 of the number-provenance pass — live total versus stored
+      (M4, M5, M7), and it is TRIAD.** · dies 2026-10-08 · a row and not a
+      fix now because it moves a STORED figure, so it carries the full
+      antagonist pass and a PM final gate, and it needs Gate 0B board 3 —
+      which is unstarted.
+      **MOVED HERE FROM PROSE 2026-09-15, same reason as PR 3.**
+      **THE DATE IS NOT ARBITRARY AND IS THE POINT OF FILING IT:** the PM
+      ruled PR 4 must not be live when Wave A's `dies 2026-10-10` arrives,
+      and while it sat in prose nothing enforced that. 10-08 puts it in
+      front of James with two days of room.
+      **THE OPEN QUESTION, and it is NOT answered:** M7 measured ZERO on
+      production, because a stored-tier pm5 row is not what the career-stats
+      spec says it is — `monitorRun.ts` makes `workSeconds`/`workMeters`
+      unconditional over any non-empty `actuals`, so a dropped link still
+      feeds AVG WATTS. The stored tier needs a monitor row with NO measured
+      interval at all. **Until someone establishes that such a row can exist
+      in production, PR 4's headline member may have no subject.** That is
+      the read to do before scheduling the work, not during it. **M**
 
 
 # Icebox

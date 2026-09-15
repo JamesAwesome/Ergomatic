@@ -3,7 +3,6 @@ import {
   FIXED_SOURCES,
   heartRateProvenance,
   rateProvenance,
-  targetProvenance,
   type MachineTileProvenance,
   type TileSource,
 } from "./tileProvenance";
@@ -99,17 +98,6 @@ describe("tileProvenance: AVG HR switches on whether the monitor sent one", () =
     expect(heartRateProvenance(true).label).toBe(
       heartRateProvenance(false).label,
     );
-  });
-});
-
-describe("TARGET, the third source", () => {
-  it("is neither measured nor derived — the rower authored it", () => {
-    const p = targetProvenance();
-    expect(p.source).toBe("planned");
-    expect(p.label).toBe("TARGET");
-    // and it must NOT claim Concept2's formula, which the census below also
-    // guards now that a third member exists.
-    expect(p.detail).not.toMatch(/Concept2/);
   });
 });
 

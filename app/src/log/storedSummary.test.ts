@@ -139,7 +139,6 @@ import {
   FIXED_SOURCES,
   heartRateProvenance,
   rateProvenance,
-  targetProvenance,
 } from "../session/tileProvenance";
 
 describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL line", () => {
@@ -187,9 +186,6 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
         ...FIXED_SOURCES,
         rate: rateProvenance(true),
         avgHr: heartRateProvenance(true),
-        // this fixture's intervals agree a target, so the RATE tile shows
-        // TWO numbers and the sheet owes an entry for the second one.
-        target: targetProvenance(),
       },
     });
   });

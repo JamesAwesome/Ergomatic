@@ -6,21 +6,15 @@ import {
   FIXED_SOURCES,
   heartRateProvenance,
   rateProvenance,
-  targetProvenance,
 } from "./tileProvenance";
 
 const DASH = "—";
 
-function sources(opts?: {
-  finished?: boolean;
-  monitorHr?: boolean;
-  target?: boolean;
-}) {
+function sources(opts?: { finished?: boolean; monitorHr?: boolean }) {
   return {
     ...FIXED_SOURCES,
     rate: rateProvenance(opts?.finished ?? false),
     avgHr: heartRateProvenance(opts?.monitorHr ?? false),
-    ...(opts?.target === true ? { target: targetProvenance() } : {}),
   };
 }
 
@@ -29,7 +23,6 @@ const NUMBERS = {
   calories: "32",
   calPerHour: "929",
   rate: "26",
-  target: "26",
   drag: "100",
   avgHr: "140",
 };
@@ -60,7 +53,7 @@ describe("TileSourceSheet: a row with no number claims nothing about it", () => 
     });
     expect(dialog).not.toHaveTextContent(/from the monitor's calorie count/i);
     expect(dialog).not.toHaveTextContent(/your belt's reading/i);
-    expect(dialog).toHaveTextContent(/no cal \/ hour to show/i);
+    expect(dialog).toHaveTextContent(/no number here/i);
   });
 
   it("keeps the sentence where the value is real", async () => {
@@ -74,28 +67,11 @@ describe("TileSourceSheet: a row with no number claims nothing about it", () => 
   });
 });
 
-describe("TileSourceSheet: TARGET", () => {
-  it("appears under its own heading, because it is neither reading nor arithmetic", async () => {
-    const dialog = await open(NUMBERS, { target: true });
-    expect(dialog).toHaveTextContent("FROM YOUR PLAN");
-    const planned = within(dialog).getByText("FROM YOUR PLAN").parentElement!;
-    expect(planned).toHaveTextContent("TARGET");
-  });
-
-  it("is absent entirely when no target was agreed", async () => {
-    const dialog = await open(NUMBERS);
-    expect(dialog).not.toHaveTextContent("FROM YOUR PLAN");
-    expect(dialog).not.toHaveTextContent("TARGET");
-  });
-});
-
 describe("TileSourceSheet: row order follows the tile grid", () => {
   it("lists every tile in the grid's order, not the object's key order", async () => {
-    const dialog = await open(NUMBERS, { target: true, finished: true });
+    const dialog = await open(NUMBERS);
     const labels = within(dialog)
-      .getAllByText(
-        /^(AVG WATTS|CALORIES|CAL \/ HOUR|RATE|TARGET|DRAG|AVG HR)$/,
-      )
+      .getAllByText(/^(AVG WATTS|CALORIES|CAL \/ HOUR|RATE|DRAG|AVG HR)$/)
       .map((el) => el.textContent);
     // The grid reads AVG WATTS, CALORIES, CAL / HOUR, RATE (· TARGET), DRAG,
     // AVG HR. Grouping reorders across groups but never within one, so the
@@ -105,13 +81,12 @@ describe("TileSourceSheet: row order follows the tile grid", () => {
       "CALORIES",
       "CAL / HOUR",
       "RATE",
-      "TARGET",
       "DRAG",
       "AVG HR",
     ];
     const seen = labels.map((l) => grid.indexOf(l!));
     const withinGroups = seen.filter((v, i) => i === 0 || seen[i - 1]! < v);
     expect(withinGroups.length).toBeGreaterThan(0);
-    expect(labels).toHaveLength(7);
+    expect(labels).toHaveLength(6);
   });
 });

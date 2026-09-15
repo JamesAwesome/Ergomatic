@@ -121,7 +121,6 @@ import {
   FIXED_SOURCES,
   heartRateProvenance,
   rateProvenance,
-  targetProvenance,
 } from "../session/tileProvenance";
 import {
   rowContribution,
@@ -830,7 +829,6 @@ function storedMachineTier(
       ...FIXED_SOURCES,
       rate: rateProvenance(finished),
       avgHr: heartRateProvenance(ms?.avgHeartRateBpm != null),
-      ...(targetRate === undefined ? {} : { target: targetProvenance() }),
     },
   };
 }

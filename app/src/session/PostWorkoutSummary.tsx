@@ -395,15 +395,12 @@ export function MachineTierBlock({ machine }: { machine: MachineTier }) {
           avgWatts: fmt(machine.avgWatts),
           calories: fmt(machine.calories),
           calPerHour: fmt(machine.calPerHour),
-          // The TILE packs both numbers into one cell (`RATE · TARGET
-          // 26 / 26`); the sheet SPLITS them, because they have different
-          // sources — the rate is a reading, the target is what the rower
-          // asked for. So this stays the bare rate and `target` below gets
-          // its own row under its own heading. The first version printed
-          // the bare rate with NO target row at all, which drilled into a
-          // tile showing two numbers and explained one.
+          // The RATE tile can pack two numbers (`RATE · TARGET  26 / 26`)
+          // and this is the first of them. The TARGET is deliberately NOT
+          // in this sheet — James, 2026-09-15, on seeing it rendered: it is
+          // not a reading, it is what he asked for, and a provenance sheet
+          // is the wrong place to explain it.
           rate: fmt(machine.rate),
-          target: fmt(machine.targetRate),
           drag: fmt(machine.drag),
           avgHr: fmt(machine.avgHr),
         }}

@@ -30,9 +30,7 @@ function Row({ p, value }: { p: TileProvenance; value: string }) {
         <span className="tile-source-value">{value}</span>
       </div>
       {!hasNumber && (
-        <p className="tile-source-because">
-          This piece has no {p.label.toLowerCase()} to show.
-        </p>
+        <p className="tile-source-because">This piece has no number here.</p>
       )}
       {hasNumber && p.detail !== undefined && (
         <p className="tile-source-because">{p.detail}</p>
@@ -66,7 +64,6 @@ export function TileSourceSheet({
     "calories",
     "calPerHour",
     "rate",
-    "target",
     "drag",
     "avgHr",
   ] as const satisfies readonly (keyof MachineTileProvenance)[];
@@ -76,7 +73,6 @@ export function TileSourceSheet({
   // always true rather than true on average.
   const derived = keys.filter((k) => of(k).source === "derived");
   const measured = keys.filter((k) => of(k).source === "measured");
-  const planned = keys.filter((k) => of(k).source === "planned");
 
   return (
     <>
@@ -116,17 +112,6 @@ export function TileSourceSheet({
               Straight from the monitor, as it sent them.
             </p>
             {measured.map((k) => (
-              <Row key={k} p={of(k)} value={values[k]} />
-            ))}
-          </section>
-        )}
-        {planned.length > 0 && (
-          <section className="tile-source-group">
-            <h3 className="tile-source-group-head">FROM YOUR PLAN</h3>
-            <p className="tile-source-group-note">
-              Not a reading at all. This is what you asked for.
-            </p>
-            {planned.map((k) => (
               <Row key={k} p={of(k)} value={values[k]} />
             ))}
           </section>

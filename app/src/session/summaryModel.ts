@@ -120,7 +120,6 @@ import {
   FIXED_SOURCES,
   heartRateProvenance,
   rateProvenance,
-  targetProvenance,
   type MachineTileProvenance,
 } from "./tileProvenance";
 
@@ -1302,8 +1301,6 @@ export function machineTierFromRun(run: MonitorRun): MachineTier {
       ...FIXED_SOURCES,
       rate: rateProvenance(finished),
       avgHr: heartRateProvenance(monitorSentHeartRate),
-      // Only when the tile actually renders a second number.
-      ...(targetRate === undefined ? {} : { target: targetProvenance() }),
     },
   };
 }
