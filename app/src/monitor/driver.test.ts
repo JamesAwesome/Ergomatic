@@ -13733,6 +13733,48 @@ describe("Phase MT: unsupported erg machine", () => {
     expect(log.meta().ergMachineType).toBe(0);
   });
 
+  // THE ORDER IS THE TEST. On hardware a status tick is
+  // 0x0031 -> 0x0032 -> 0x0033, 174 times, and the session's LAST status
+  // frame is 0x0033 (measured:
+  // `docs/monitor/sessions/walk-2026-09-15-work-clock/`). Only 0x0032 and
+  // 0x0038 carry `ergMachineType`; 0x0031, 0x0033 and 0x0037 all reach
+  // `classifyErgMachine` with nothing to say. Because `setMeta` is
+  // last-write-wins (`eventLog.ts`), a non-carrier arriving AFTER the
+  // carrier used to overwrite the honest reading with `null` — which is how
+  // a real RowErg exported `"ergMachineType":null` while reporting 0 on the
+  // wire 174 times.
+  //
+  // WRITE THIS ORDER, NOT THE OBVIOUS ONE. The natural test — 0x0031 then
+  // 0x0032 — PASSES against the bug, because there the carrier speaks last.
+  // Measured, and reported in the PR that fixed this, so nobody writes the
+  // decoration version again (RF21).
+  it("a non-carrier arriving AFTER the carrier does not erase the machine type", () => {
+    const { transport, log } = subscribed();
+    transport.notify(ADDITIONAL_STATUS_1_UUID, as1(0));
+    expect(log.meta().ergMachineType).toBe(0);
+    // 0x0031: carries no such field.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      buildGeneralStatusBytes({
+        elapsedSeconds: 30,
+        distanceMeters: 100,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: 5,
+        rowingState: 1,
+        strokeState: 2,
+        totalWorkDistanceMeters: 100,
+        workoutDurationRaw: 250,
+        workoutDurationType: 128,
+        dragFactor: 100,
+      }),
+    );
+    expect(log.meta().ergMachineType).toBe(0);
+    // 0x0033: the one that actually bit — last in every hardware tick.
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    expect(log.meta().ergMachineType).toBe(0);
+  });
+
   it("records NULL for a monitor too old to carry the field, which is itself the answer", () => {
     // Pre-v1.26 wire form omits `ergMachineType` entirely. `null` here is
     // not "we did not look" — it is "this monitor cannot tell us", which is
