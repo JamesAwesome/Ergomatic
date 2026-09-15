@@ -1604,6 +1604,139 @@ describe("front-door transactions against Postgres", () => {
       );
     });
 
+    // --- TASK 3: the second exchange resolves the account, mints a session
+    //     and ADOPTS it onto the attempt. Driven end to end from `begin()`
+    //     so the test starts upstream of every producer it asserts about
+    //     (RF24) — seeding a row at `reauth_exchanging` would skip exactly
+    //     the transitions Tasks 1 and 2 built.
+    async function followedThrough(googleSub: string) {
+      const user = await seedUser({ googleSub, appleSub: null });
+      const b = await signin();
+      const claimed = await store.claim(b.attempt);
+      const confirmStage = (await store.accept(claimed, apple)).attempt!;
+      const carried = (await store.followThrough(confirmStage)).attempt!;
+      const exchanging = await store.claim(carried);
+      return { user, exchanging };
+    }
+    const usual = (sub: string) => ({
+      sub,
+      email: "rower@test",
+      emailVerified: true,
+      name: "Rower",
+    });
+
+    it("the second exchange adopts a session for the resolved account, keeping the carried identity", async () => {
+      const { user, exchanging } = await followedThrough("g-follow");
+      const result = await store.accept(exchanging, usual("g-follow"));
+      const after = result.attempt!;
+      expect(after.stage).toBe("link_ready");
+      // The attempt now holds a session, and it belongs to the account the
+      // rower just proved — not to whoever happened to be signed in.
+      expect(after.originalSessionId).not.toBeNull();
+      const owner = (
+        await pool.query<{ userId: string }>(
+          'SELECT user_id AS "userId" FROM sessions WHERE id=$1',
+          [after.originalSessionId],
+        )
+      ).rows[0]!;
+      expect(owner.userId).toBe(user.id);
+      // THE CARRIED APPLE IDENTITY IS UNTOUCHED. The second exchange's
+      // identity is CONSUMED, never stored — that is what makes
+      // confirm-after-the-proof affordable at all.
+      expect(after.verifiedSubject).toBe(apple.sub);
+      expect(after.reauthenticatedAt).not.toBeNull();
+    });
+
+    it("the second exchange REFRESHES the attempt window (Gate 0 ruling 2)", async () => {
+      const { exchanging } = await followedThrough("g-clock");
+      // Pin to an independent literal first, so "refreshed" cannot be
+      // confused with "left at a coincidentally similar value" — the trap
+      // Task 2's own probe fell into.
+      await pool.query(
+        "UPDATE auth_attempts SET expires_at=now()+interval '11 min' WHERE id=$1",
+        [exchanging.id],
+      );
+      const pinned = (
+        await pool.query<{ expiresAt: Date }>(
+          'SELECT expires_at AS "expiresAt" FROM auth_attempts WHERE id=$1',
+          [exchanging.id],
+        )
+      ).rows[0]!.expiresAt;
+      const after = (
+        await store.accept(
+          { ...exchanging, expiresAt: pinned },
+          usual("g-clock"),
+        )
+      ).attempt!;
+      // James, 2026-09-15: "what 300 second clock I don't see a clock".
+      // The rower is about to be shown a screen they have to READ, and
+      // nothing on it counts down, so the window restarts here.
+      expect(after.expiresAt.getTime()).toBeLessThan(pinned.getTime());
+      expect(after.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it("the second exchange refuses a proven subject that belongs to no account", async () => {
+      const { exchanging } = await followedThrough("g-known");
+      await expect(
+        store.accept(exchanging, usual("g-stranger")),
+      ).rejects.toThrow(/account_changed/);
+    });
+
+    // --- THE FALSIFICATION TEST (Task 3 Steps 6-7). The design's central
+    //     claim is that `finalize()` attaches UNCHANGED once the attempt has
+    //     EARNED the session its `currentSessionId === originalSessionId`
+    //     binding already requires. If this needs an edit to `finalize`, the
+    //     claim is wrong and the plan goes back to James rather than being
+    //     patched. Nothing below touches `finalize`.
+    it("finalize then attaches with NO edit to finalize itself", async () => {
+      const { user, exchanging } = await followedThrough("g-finalize");
+      const ready = (await store.accept(exchanging, usual("g-finalize")))
+        .attempt!;
+      // The rower presents the session the attempt adopted — which is the
+      // only session this flow ever put in their hands.
+      const result = await store.finalize(ready, ready.originalSessionId!);
+      expect(result.linked).toBe(true);
+      const row = (
+        await pool.query<{ appleSub: string | null; googleSub: string | null }>(
+          'SELECT apple_sub AS "appleSub", google_sub AS "googleSub" FROM users WHERE id=$1',
+          [user.id],
+        )
+      ).rows[0]!;
+      // ONE account, BOTH subjects. The Apple one is the identity the attempt
+      // carried the whole way from the first exchange.
+      expect(row.googleSub).toBe("g-finalize");
+      expect(row.appleSub).toBe(apple.sub);
+      // And the Apple grant is written, so a later deletion has something to
+      // revoke.
+      const grants = await pool.query(
+        "SELECT client_id FROM apple_grants WHERE user_id=$1",
+        [user.id],
+      );
+      expect(grants.rowCount).toBe(1);
+      // The attempt is consumed.
+      const left = await pool.query(
+        "SELECT id FROM auth_attempts WHERE id=$1",
+        [ready.id],
+      );
+      expect(left.rowCount).toBe(0);
+    });
+
+    it("finalize still refuses a session that is not the one the attempt adopted", async () => {
+      const { exchanging } = await followedThrough("g-other");
+      const ready = (await store.accept(exchanging, usual("g-other"))).attempt!;
+      // A live session belonging to a DIFFERENT account. Invariant 1: the
+      // attach follows the PROVEN subject, never whatever cookie the client
+      // happens to be holding.
+      const stranger = await seedUser({
+        googleSub: "g-stranger2",
+        appleSub: null,
+      });
+      const strangerSession = await seedSession(stranger.id);
+      await expect(store.finalize(ready, strangerSession.id)).rejects.toThrow(
+        /account_changed/,
+      );
+    });
+
     // --- Step 6: no edit expected. If this needs one, the migration is wrong.
     it("attemptProvider resolves to the USUAL provider for a follow-through", async () => {
       const id = await insert({

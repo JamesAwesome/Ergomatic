@@ -263,18 +263,26 @@ export function createAttempts(
   async function mintSession(
     tx: pg.PoolClient,
     user: AuthUser,
-  ): Promise<SignedIn> {
+  ): Promise<{ signedIn: SignedIn; sessionId: string }> {
     const token = random();
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
-    await tx.query(
-      "INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)",
-      [user.id, hashToken(token), expiresAt],
-    );
+    // RETURNING id, because Wave A PR2's follow-through has to ADOPT this
+    // session onto the attempt. The id stays out of `SignedIn`, which is a
+    // wire type — a session's row id is not something a client should hold.
+    const sessionId = (
+      await tx.query<{ id: string }>(
+        "INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3) RETURNING id",
+        [user.id, hashToken(token), expiresAt],
+      )
+    ).rows[0]!.id;
     return {
-      outcome: "signed_in",
-      user,
-      token,
-      expiresAt: expiresAt.toISOString(),
+      signedIn: {
+        outcome: "signed_in",
+        user,
+        token,
+        expiresAt: expiresAt.toISOString(),
+      },
+      sessionId,
     };
   }
   async function finishSignin(
@@ -284,7 +292,7 @@ export function createAttempts(
   ): Promise<AttemptResult> {
     requireAccess(user.email);
     await grant(tx, user.id, a);
-    const signedIn = await mintSession(tx, user);
+    const { signedIn } = await mintSession(tx, user);
     await tx.query("DELETE FROM auth_attempts WHERE id=$1", [a.id]);
     return { signedIn };
   }
@@ -487,6 +495,52 @@ export function createAttempts(
         if (identity.grant) {
           a.appleClientId = identity.grant.clientId;
           a.appleRefreshToken = identity.grant.refreshToken;
+        }
+        // WAVE A PR2: THE SIGNIN ARM RUNS FIRST, and it must, because the
+        // existing branch's first statement is
+        // `original(tx, a.originalSessionId!, true)` — and a signin
+        // follow-through reaches here with `original_session_id` NULL by
+        // design. That `!` is why this arm sits ahead of it rather than
+        // inside it.
+        //
+        // The second exchange's identity is CONSUMED, NEVER STORED. It
+        // resolves the account and is then discarded; the attempt keeps
+        // carrying the target provider's identity in its single set of
+        // `verified_*` columns, which is what makes confirming AFTER the
+        // proof affordable without a second identity slot.
+        if (a.stage === "reauth_exchanging" && a.purpose === "signin") {
+          const user = await find(tx, a.existingProvider!, identity.sub);
+          // A STATED OUTCOME, NOT A 500. The rower proved a real identity at
+          // a real provider; it simply is not on any account here. Same code
+          // the link flow uses when the account moves underneath it.
+          if (!user) throw new AuthFailure("account_changed");
+          // BEFORE THE MINT, like every other mint in this module
+          // (`finishSignin` and `legacyGoogle` both guard first). Without it
+          // this would be the only path that puts a session in a rower's
+          // hands without consulting the access policy.
+          requireAccess(user.email);
+          const { sessionId } = await mintSession(tx, user);
+          // ONE STATEMENT AGAIN. `auth_attempts_session_check`'s signin arm
+          // requires `original_session_id` NOT NULL at `link_ready` and NULL
+          // at `reauth_exchanging`, so the stage and the session must cross
+          // together or the row is refused with 23514 mid-transition.
+          // `save()` does not write `original_session_id`, so this owns its
+          // UPDATE.
+          //
+          // THE WINDOW RESTARTS HERE (Gate 0 ruling 2, James, 2026-09-15:
+          // "what 300 second clock I don't see a clock"). The rower is about
+          // to be shown a confirmation they have to READ, and nothing on
+          // screen counts the attempt down — so the clock they cannot see
+          // does not get to expire while they read it.
+          const row = (
+            await tx.query<Attempt>(
+              `UPDATE auth_attempts SET stage='link_ready',original_session_id=$2,reauthenticated_at=$3,expires_at=$4,version=version+1 WHERE id=$1 AND version=$5 AND expires_at>now() RETURNING ${projection}`,
+              [a.id, sessionId, now, new Date(now.getTime() + ttl), a.version],
+            )
+          ).rows[0];
+          if (!row) throw new AuthFailure("attempt_expired");
+          consistent(row);
+          return { attempt: row };
         }
         if (a.stage === "reauth_exchanging") {
           const session = await original(tx, a.originalSessionId!, true);
@@ -814,7 +868,7 @@ export function createAttempts(
           )
         ).rows[0];
         requireAccess(user.email);
-        return mintSession(tx, user);
+        return (await mintSession(tx, user)).signedIn;
       });
     },
   };
