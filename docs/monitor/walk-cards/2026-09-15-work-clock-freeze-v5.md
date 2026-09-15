@@ -210,7 +210,7 @@ table holds.)
 
 | # | When | What | Kind |
 | --- | --- | --- | --- |
-| 1 | setup | the backdoor login from the lab card | paste |
+| 1 | setup | open DevTools, paste the backdoor login from the lab card, reload | **console paste** |
 | 2 | setup | reload after the backdoor | tap |
 | 3 | setup | navigate to `/library/import` | tap |
 | 4 | setup | the workout block below | paste |
@@ -237,7 +237,13 @@ the header's reads `TAP AGAIN` (`ConnectedSurface.tsx:704-716`), the slot's
 reads `AGAIN` (`:916`). The card names the header one so there is no guessing
 at the erg.
 
-**No DevTools.** Nothing in this walk needs a console.
+**[v6] ONE DevTools paste, and v1-v5 said there were none.** Found by
+actually booting the lab: `walk-lab.sh up` prints the backdoor as *"paste
+this in the DevTools console BEFORE hitting any login wall, then reload"* —
+so interaction 1 is a console paste and the console must be open before it.
+It is the walk's ONLY console use; nothing else needs one. (The card claimed
+"No DevTools. Nothing in this walk needs a console." That was wrong, and
+wrong in the direction that strands an operator at a login wall.)
 
 The workout block, in the house grammar the skill's own canned set uses:
 
@@ -261,7 +267,12 @@ have started while the stack built.
 1. `bash scripts/walk-lab.sh up` from this worktree's `app/`, to green,
    and the printed HEAD confirmed as this branch. (Cold `--build --wait` is
    minutes; it happens before he is asked.)
-2. **The CONTROL path rehearsed with the FAKE monitor, no erg** —
+2. **The CONTROL path rehearsed with the FAKE monitor, no erg — DONE
+   2026-09-14, and this is the evidence:** `pnpm e2e e2e/connected.spec.ts`
+   against this branch's own lab stack, **15 passed**, including the walk
+   that drives `End session` → `Tap again to end` and asserts the hand-off
+   (`connected.spec.ts:884-888`). So the transition the ending ADDED is
+   proven on this build before James is asked. Original wording follows. —
    `VITE_ENABLE_FAKE_MONITOR=1` is already a build arg of this stack
    (`compose.e2e.yml`). Walk connect → program → session → **END → TAP
    AGAIN** → the app navigating itself to the log screen → the saved row
