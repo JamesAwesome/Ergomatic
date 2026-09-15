@@ -1384,7 +1384,7 @@ while we are in here.
       the four unsafe-`any` rules there. Do not queue
       `noPropertyAccessFromIndexSignature` without a real failure class; its
       current volume is mostly access style. **M**
-- [ ] **Two more order-dependent flakes, both seen during Phase JC's release
+- [ ] **THREE order-dependent flakes now — two seen during Phase JC's release
       (2026-09-08/09), both filed here rather than shrugged at.** · dies
       2026-11-14 · dated on the way past (campsite rule) by the 2026-09-14
       flake hunt, which refuted (a)'s stated mechanism but did not reproduce
@@ -1413,6 +1413,22 @@ while we are in here.
       the store full with no cleanup at all. The fill and the freeing now sit
       inside the `try`, with `added` declared above it so the `finally` can
       still see it.
+      (c) **A THIRD, unit project, seen 2026-09-14** in this branch's pre-push:
+      `server/routes/data.test.ts` > "Phase LP: rejects a malformed per-split
+      machine field {machineDragFactor:256}, naming it" asserted 400 and got
+      **401**. Same signature as (a) and (b): it passed alone immediately after
+      (387/387, `--project unit server/routes/data.test.ts`), the same suite had
+      passed in full two commits earlier on the same branch, and the commit that
+      hit it changes `ROADMAP.md` and nothing else — so it cannot be a
+      regression. Not a signal death either (RF40): exit 1 with a real
+      assertion diff and a complete `Test Files` summary, not 137/134 and no
+      `Allocation failed`. **INFERENCE, not measured:** 401 is the auth
+      middleware refusing, and this test's subject is body validation that never
+      runs if auth rejects first — so the leak is most likely a neighbour
+      resetting or replacing the auth stub, which makes it a MOCK-lifetime
+      question rather than a storage one. That is a different mechanism from
+      (a)'s refuted origin-storage theory and from (b)'s client-only shape, so
+      the three may not share a cause at all.
       (b) `src/news/Releases.test.tsx`'s "renders each release's version,
       date, and every item" failed once in a full `--project client --project
       unit` run and passed both alone (6/6) and on an immediate full re-run
