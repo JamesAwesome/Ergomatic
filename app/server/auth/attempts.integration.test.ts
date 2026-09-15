@@ -1347,4 +1347,179 @@ describe("front-door transactions against Postgres", () => {
       holder.release();
     }
   });
+  // WAVE A PR2, Task 1. THE SCHEMA IS NOT THE AUTHORITY on which rows the
+  // machine admits — `consistent()` is, and it runs on both the read path
+  // (`load()`) and the write path (`save()`). Task 0 widened the CHECK; until
+  // this widens too, a follow-through row is refused with `attempt_expired`
+  // by the module itself.
+  //
+  // THE WIDENING IS ASYMMETRIC AND THAT IS THE WHOLE DIFFICULTY. The stages
+  // are SHARED: `begin()` starts a link and a delete at `reauth_authorize`
+  // (`attempts.ts`, `input.purpose === "signin" ? "authorize" : "reauth_authorize"`),
+  // and the rule is `(purpose === "signin") !== signup`. So simply adding the
+  // three stages to the `signup` array admits the signin AND refuses every
+  // link and every delete at a stage they legitimately occupy. The guard
+  // tests below are the five cells that would break; they pass today and must
+  // still pass afterwards.
+  describe("PR2: consistent() admits a signin follow-through", () => {
+    const SECRET = "pr2-binding-secret";
+
+    async function insert(row: {
+      purpose: "signin" | "link" | "delete";
+      stage: string;
+      targetProvider?: AuthProvider;
+      existingProvider?: AuthProvider | null;
+      sessionId?: string | null;
+      verified?: boolean;
+      reauthenticated?: boolean;
+    }) {
+      const id = crypto.randomUUID();
+      const verified = row.verified ?? true;
+      await pool.query(
+        `INSERT INTO auth_attempts(id,binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,reauthenticated_at,verified_subject,verified_email,verified_name,expires_at)
+         VALUES($1,$2,'native',$3,$4,$5,$6,1,$7,$8,$9,$10,$11,$12,$13,now()+interval '5 min')`,
+        [
+          id,
+          hashToken(SECRET),
+          row.purpose,
+          row.targetProvider ?? "apple",
+          row.existingProvider ?? null,
+          row.stage,
+          `state-${id}`,
+          `nonce-${id}`,
+          row.sessionId ?? null,
+          (row.reauthenticated ?? false) ? new Date() : null,
+          verified ? "carried-subject" : null,
+          verified ? "relay@privaterelay.appleid.com" : null,
+          verified ? "Rower" : null,
+        ],
+      );
+      return id;
+    }
+    const read = (id: string) => store.read(id, SECRET, "native");
+
+    // --- Step 1: the three the design produces. Red before the widening.
+    it("reads a signin at reauth_authorize, its usual provider written", async () => {
+      const id = await insert({
+        purpose: "signin",
+        stage: "reauth_authorize",
+        existingProvider: "google",
+      });
+      expect((await read(id)).stage).toBe("reauth_authorize");
+    });
+
+    it("reads a signin at reauth_exchanging", async () => {
+      const id = await insert({
+        purpose: "signin",
+        stage: "reauth_exchanging",
+        existingProvider: "google",
+      });
+      expect((await read(id)).stage).toBe("reauth_exchanging");
+    });
+
+    it("reads a signin at link_ready once a session is adopted", async () => {
+      const session = await freshSession("pr2");
+      const id = await insert({
+        purpose: "signin",
+        stage: "link_ready",
+        existingProvider: "google",
+        sessionId: session.id,
+        reauthenticated: true,
+      });
+      expect((await read(id)).stage).toBe("link_ready");
+    });
+
+    // --- Step 2b: THE GUARD. Five cells the naive widening breaks, measured
+    //     over 27 purpose x stage combinations. Revision 4 named two of them;
+    //     the link flow's own TERMINAL stage is the third, and it is the one
+    //     a careless widening would take out of production entirely.
+    // ONE SESSION PER ROW, because `auth_attempts_link_session_unique` is a
+    // partial unique index on `original_session_id` and permits exactly one
+    // live attempt per session. Sharing one session across the three link
+    // rows below raised 23505 — the real schema refusing a row a scratch
+    // table carrying only the CHECK's five columns would have admitted,
+    // which is precisely why these run against the migrated table.
+    async function freshSession(tag: string) {
+      const user = await seedUser({ googleSub: `g-${tag}`, appleSub: null });
+      return seedSession(user.id);
+    }
+
+    it("still reads a link at every stage it occupies today", async () => {
+      const authorize = await insert({
+        purpose: "link",
+        stage: "reauth_authorize",
+        existingProvider: "google",
+        sessionId: (await freshSession("l1")).id,
+        verified: false,
+      });
+      expect((await read(authorize)).purpose).toBe("link");
+      const exchanging = await insert({
+        purpose: "link",
+        stage: "reauth_exchanging",
+        existingProvider: "google",
+        sessionId: (await freshSession("l2")).id,
+        verified: false,
+      });
+      expect((await read(exchanging)).stage).toBe("reauth_exchanging");
+      // The link flow's own TERMINAL stage — the cell revision 4 missed, and
+      // the one a naive widening would take out of production entirely.
+      const ready = await insert({
+        purpose: "link",
+        stage: "link_ready",
+        existingProvider: "google",
+        sessionId: (await freshSession("l3")).id,
+        reauthenticated: true,
+      });
+      expect((await read(ready)).stage).toBe("link_ready");
+    });
+
+    it("still reads a delete at every stage it occupies today", async () => {
+      const authorize = await insert({
+        purpose: "delete",
+        stage: "reauth_authorize",
+        targetProvider: "google",
+        existingProvider: "google",
+        sessionId: (await freshSession("d1")).id,
+        verified: false,
+      });
+      expect((await read(authorize)).purpose).toBe("delete");
+      const exchanging = await insert({
+        purpose: "delete",
+        stage: "reauth_exchanging",
+        targetProvider: "google",
+        existingProvider: "google",
+        sessionId: (await freshSession("d2")).id,
+        verified: false,
+      });
+      expect((await read(exchanging)).stage).toBe("reauth_exchanging");
+    });
+
+    // --- Step 4: the OTHER half. The carried identity is what the whole
+    //     design rests on, so the machine must keep requiring it at exactly
+    //     the stages that carry it — FOR A SIGNIN. A link at its first stage
+    //     legitimately carries none, which is why the clause is
+    //     purpose-qualified rather than stage-only.
+    it("refuses a signin follow-through that has lost its carried identity", async () => {
+      const id = await insert({
+        purpose: "signin",
+        stage: "reauth_exchanging",
+        existingProvider: "google",
+        verified: false,
+      });
+      await expect(read(id)).rejects.toThrow(/attempt_expired/);
+    });
+
+    // --- Step 6: no edit expected. If this needs one, the migration is wrong.
+    it("attemptProvider resolves to the USUAL provider for a follow-through", async () => {
+      const id = await insert({
+        purpose: "signin",
+        stage: "reauth_authorize",
+        targetProvider: "apple",
+        existingProvider: "google",
+      });
+      const a = await read(id);
+      expect(a.existingProvider).toBe("google");
+      expect(a.targetProvider).toBe("apple");
+    });
+  });
 });

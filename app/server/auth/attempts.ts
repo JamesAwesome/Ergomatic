@@ -74,10 +74,37 @@ function same(a: Attempt, b: Attempt) {
   );
 }
 function consistent(a: Attempt) {
-  const signup = ["authorize", "exchanging", "confirm"].includes(a.stage);
-  const verified = ["confirm", "link_ready"].includes(a.stage);
+  // THE STAGES ARE SHARED, SO THE RULE IS ASYMMETRIC (Wave A PR2). A signin
+  // used to live only at these three; the follow-through carries it through
+  // `reauth_authorize`, `reauth_exchanging` and `link_ready` as well. But
+  // `begin()` starts a LINK and a DELETE at `reauth_authorize`, and the link
+  // flow ENDS at `link_ready` — so the widening cannot be "add three stages
+  // to the signup set". Measured over 27 purpose x stage cells: doing that
+  // refuses five rows the shipped machine produces, including the link
+  // flow's own terminal stage.
+  //
+  // Read it as two statements rather than one equality:
+  //   a signin must be at a stage a signin can occupy;
+  //   a link or a delete must NOT be at a signup-only stage.
+  const signupOnly = ["authorize", "exchanging", "confirm"].includes(a.stage);
+  const followThrough = [
+    "reauth_authorize",
+    "reauth_exchanging",
+    "link_ready",
+  ].includes(a.stage);
+  const stageFitsPurpose =
+    a.purpose === "signin" ? signupOnly || followThrough : !signupOnly;
+  // AND THE `verified` CLAUSE IS PURPOSE-QUALIFIED FOR THE SAME REASON. The
+  // carried identity is what the whole follow-through rests on, so it must
+  // be required at the stages that carry it — but only for a signin. A link
+  // at `reauth_authorize` legitimately has no `verified_*` yet; requiring it
+  // there would refuse every link at its first stage.
+  const verified =
+    ["confirm", "link_ready"].includes(a.stage) ||
+    (a.purpose === "signin" &&
+      ["reauth_authorize", "reauth_exchanging"].includes(a.stage));
   if (
-    (a.purpose === "signin") !== signup ||
+    !stageFitsPurpose ||
     (verified &&
       (!a.verifiedSubject || a.verifiedEmail === null || !a.verifiedName)) ||
     Boolean(a.appleClientId) !== Boolean(a.appleRefreshToken) ||
@@ -93,10 +120,14 @@ function consistent(a: Attempt) {
     // `delete_ready` entry, so a delete can never reach `target_exchanging`;
     // that is an invariant held up by the current call graph with nothing
     // naming it (RF18). This names it, and closes the mirror case too
-    // rather than the one counterexample (RF34). The signin-only stages are
-    // already covered by the `signup` rule at the top.
-    ((a.stage.startsWith("target_") || a.stage === "link_ready") &&
-      a.purpose !== "link") ||
+    // rather than the one counterexample (RF34). The signup-only stages are
+    // already covered by `stageFitsPurpose` above.
+    // `link_ready` IS NO LONGER LINK-ONLY: a signin follow-through ends
+    // there too, holding an adopted session. `target_*` stays link-only.
+    (a.stage.startsWith("target_") && a.purpose !== "link") ||
+    (a.stage === "link_ready" &&
+      a.purpose !== "link" &&
+      a.purpose !== "signin") ||
     (a.stage === "delete_ready" && a.purpose !== "delete")
   )
     throw new AuthFailure("attempt_expired");
