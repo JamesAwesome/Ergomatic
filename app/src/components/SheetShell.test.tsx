@@ -291,6 +291,25 @@ describe("SheetShell: focus never leaves the modal", () => {
     expect(btn("Close")).toHaveFocus();
   });
 
+  it("pins WHERE a sheet opens, because widening the focusable set moved it", async () => {
+    // `ConnectionLogSheet` gives its log list `tabIndex={0}`, and that list
+    // sits BEFORE its first button — so once the set stopped being
+    // buttons-only, the sheet began opening on the scroll region instead of
+    // on COPY LOG. That is arguably better for a reader, but it is a
+    // behaviour change to a shared component's caller that nothing asserted
+    // at any layer, so nothing would have caught it moving again.
+    shellWith(
+      <>
+        <div tabIndex={0} data-testid="scroller">
+          log
+        </div>
+        <button type="button">COPY LOG</button>
+        <button type="button">Close</button>
+      </>,
+    );
+    expect(screen.getByTestId("scroller")).toHaveFocus();
+  });
+
   it("C — a DISABLED primary is skipped, and the wrap lands on the real ends", async () => {
     // Both filter sheets disable their primary whenever nothing matches. The
     // disabled button must be neither a tab stop nor the wrap target.

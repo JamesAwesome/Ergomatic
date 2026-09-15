@@ -1258,8 +1258,10 @@ export function machineTierFromRun(run: MonitorRun): MachineTier {
   // derived number as measured — caught by `summaryModel.test.ts`, which is
   // why the stamp is asserted at the producer and not just at the sheet.
   const monitorSentHeartRate = detail?.avgHeartRateBpm != null;
-  // HOISTED for the same reason as `finished`: the TILE renders a second
-  // number iff this is defined, and the stamp must read that same expression.
+  // Hoisted when TARGET briefly had a provenance stamp; James struck that
+  // from the sheet on 2026-09-15, so nothing in `sources` reads this now and
+  // the hoist is presentational only. The tile's own label still branches on
+  // it, and one expression is better than two.
   const targetRate = agreedTargetSpm(
     run.program.intervals.map((i) => i.displaySpm),
   );

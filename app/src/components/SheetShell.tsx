@@ -40,9 +40,9 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
  * house's one-L1-per-screen rule means a shell that always emitted a
  * `.button-l1` would have handed that sheet a second primary it does not
  * want. Omitting the prop renders no button at all; the caller's own
- * buttons in `children` are still the focus trap's `focusableElements()`,
- * since that reads every `<button>` in the dialog rather than a list this
- * component keeps. */
+ * controls in `children` are still the focus trap's `focusableElements()`,
+ * since that reads what the browser will Tab to (see its own doc below)
+ * rather than a list this component keeps. */
 export function SheetShell({
   open,
   titleId,
@@ -77,7 +77,17 @@ export function SheetShell({
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  /** Every control the browser will actually Tab to, in document order.
+  /** The controls the browser will Tab to, in document order: enabled
+   *  buttons and form fields, links, and anything with a non-negative
+   *  `tabindex`.
+   *
+   *  NOT an exhaustive enumeration of focusable HTML — `summary` and
+   *  `[contenteditable]` are absent — and that matters MORE than it used to,
+   *  because the handler below hard-stops on anything unlisted: an
+   *  unenumerated control cannot be Tabbed PAST. Before that handler existed
+   *  such an element matched neither end and the browser advanced normally.
+   *  No caller renders one today (measured: all four); add to this list
+   *  rather than working around it.
    *
    *  NOT just `button`. A DISABLED button is matched by that selector and
    *  cannot hold focus, so with a disabled primary — which both filter
@@ -98,7 +108,14 @@ export function SheetShell({
     if (!dialog) return [];
     return Array.from(
       dialog.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+        [
+          "button:not([disabled])",
+          "a[href]",
+          'input:not([type="hidden"]):not([disabled])',
+          "select:not([disabled])",
+          "textarea:not([disabled])",
+          '[tabindex]:not([tabindex="-1"])',
+        ].join(", "),
       ),
     );
   }
