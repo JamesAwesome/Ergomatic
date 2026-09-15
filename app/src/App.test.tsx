@@ -223,6 +223,12 @@ describe("App", () => {
     const user = { id: "u1", email: "maya@example.com", name: "Maya Chen" };
     const finalized = vi.fn();
     let finalizeMethod: string | undefined;
+    let release!: (response: Response) => void;
+    const held = {
+      promise: new Promise<Response>((resolve) => {
+        release = resolve;
+      }),
+    };
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -265,9 +271,9 @@ describe("App", () => {
         if (url.endsWith("/api/auth/web/attempts/att-1/finalize")) {
           finalized();
           finalizeMethod = init?.method;
-          return new Response(JSON.stringify({ outcome: "linked" }), {
-            status: 200,
-          });
+          // HELD, so the in-flight screen is observable rather than raced
+          // past. Released at the bottom of the test.
+          return held.promise;
         }
         return new Response(JSON.stringify({}), { status: 404 });
       }),
@@ -283,6 +289,25 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "Attach Apple" }));
     expect(finalized).toHaveBeenCalledOnce();
     expect(finalizeMethod).toBe("POST");
+
+    // THE IN-FLIGHT SCREEN, FROM THE REAL PRODUCER. The view-layer tests
+    // assert that `busy` CARRIES the identities; the screen tests assert
+    // that a hand-built one DRAWS them. Neither watches the join, which is
+    // where this defect lived three times: the payload the server's own
+    // `link_ready` produced has to reach the rendered screen and survive the
+    // flip to `busy`. Both controls inert, both identities still named.
+    expect(screen.getByRole("button", { name: "Attach Apple" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Not now" })).toBeDisabled();
+    expect(
+      screen.getByText("9m3x@privaterelay.appleid.com"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("maya@example.com")).toBeInTheDocument();
+
+    await act(async () => {
+      release(
+        new Response(JSON.stringify({ outcome: "linked" }), { status: 200 }),
+      );
+    });
     expect(
       await screen.findByRole("heading", { name: "Today" }),
     ).toBeInTheDocument();

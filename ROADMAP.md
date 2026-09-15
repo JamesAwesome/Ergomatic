@@ -1181,7 +1181,11 @@ it lands the stranger on this same denial.
       only by location, and argued in a comment. PR #453's verify round keyed
       the predicate on the carried identities instead, so the shadow is gone
       by construction rather than by argument. What remains is the ambiguity
-      itself, with no consumer relying on it today.
+      itself. `authFlow.ts:928` reads the same defaulted purpose a second time
+      (`step.outcome === "signed_in" ? returned.purpose : step.purpose`); it
+      looks unreachable for a link or delete return, since those attempt reads
+      never answer `signed_in` — INFERENCE, not run, and the reason this row
+      does not claim the ambiguity has no readers.
       **The root fix was tried and backed out in PR #453**, deliberately:
       adding `authPurpose` to both redirects changes a contract four
       integration tests pin by exact location, two of them about
@@ -1189,7 +1193,23 @@ it lands the stranger on this same denial.
       that has already had three review rounds. **S**
       · dies 2026-11-15 · a row and not a fix now because it is a redirect
       contract change with unaudited consumers, and with the attach predicate
-      no longer keyed on purpose, nothing downstream is currently wrong.
+      no longer keyed on purpose, the one consumer this had bitten is fixed.
+- [ ] **After an attach, Back goes to the You subpage the landing ruling
+      avoids.** Measured through the web landing by instrumenting
+      `history.pushState`/`replaceState`: `push /you/sign-in-methods` →
+      **`replace /you`** → `push /` → `replace /today`. The `/you` is the
+      route arm's own `<Navigate to="/you" replace>` fallback firing in the
+      same effect flush as `attached`, before App's effect corrects it. The
+      rower lands on Today, which is the ruling — but the history entry
+      underneath says `/you`, so one Back tap puts them on the settings
+      subpage the ruling exists to keep them off. Introduced by the
+      `attached` terminal in #453, found by its fourth verify pass. **S**
+      · dies 2026-11-15 · a row and not a fix now because every candidate
+      fix is another navigation change to this flow, and the last three
+      review rounds were each a defect inside the previous round's
+      navigation fix — the landing itself is correct and gated, and this
+      costs a rower one extra tap on a screen they reach once.
+
 - [ ] **A failed provider attach tells the rower nothing, ever.** PR2's
       `confirmAttach` catch deliberately swallows the failure and lands the
       rower in the app signed in — correct, because by then the sign-in HAS
