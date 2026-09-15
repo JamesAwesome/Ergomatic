@@ -139,6 +139,72 @@ describe("App", () => {
     expect(window.location.pathname).toBe("/you/sign-in-methods");
   });
 
+  // AND A SIGNED-OUT TREE NEVER MOVES THE URL. This is the native rower's
+  // whole confirmation: `onSignedIn` is withheld until they choose, so `me`
+  // stays out, `SignIn` draws the screen itself and the route tree does not
+  // exist. `destinationFor(attach_confirm)` still says
+  // `/you/sign-in-methods` — it has to, for the web frame — and writing that
+  // path here would leave a location under a tree that owns no routes.
+  //
+  // THE SURFACE IS SIMULATED, AND THAT IS THE LAYER THIS TEST WORKS AT: it
+  // reaches the view through the web return because that is the producer
+  // available in jsdom, and holds `me` OUT to put the app in the tree the
+  // native rower is actually in. It gates App's effect, not the native
+  // transport.
+  it("holds the auth destination while the rower is signed out", async () => {
+    window.history.replaceState(null, "", "/?authAttempt=att-2");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/me"))
+          return new Response(JSON.stringify({}), { status: 401 });
+        if (url.includes("/api/auth/options"))
+          return new Response(
+            JSON.stringify({
+              frontDoorEnabled: true,
+              apple: { native: true, web: true },
+              google: { native: true, web: true },
+            }),
+            { status: 200 },
+          );
+        if (url.endsWith("/api/auth/web/attempts/att-2"))
+          return new Response(
+            JSON.stringify({
+              outcome: "link_ready",
+              attemptId: "att-2",
+              purpose: "signin",
+              targetProvider: "apple",
+              expiresAt: "2026-09-15T00:05:00.000Z",
+              profile: {
+                email: "9m3x@privaterelay.appleid.com",
+                name: "Rower",
+              },
+              session: {
+                outcome: "signed_in",
+                user: {
+                  id: "u1",
+                  email: "maya@example.com",
+                  name: "Maya Chen",
+                },
+                expiresAt: "2026-11-14T00:00:00.000Z",
+              },
+            }),
+            { status: 200 },
+          );
+        return new Response(JSON.stringify({}), { status: 404 });
+      }),
+    );
+    render(<App />);
+    // The screen is on — drawn by `SignIn`, which needs no route at all.
+    expect(
+      await screen.findByRole("heading", {
+        name: "Attach Apple to this account?",
+      }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/");
+  });
+
   // WAVE A PR2: THE WHOLE WEB ATTACH RETURN, AND THE LANDING IS THE POINT.
   // James ruled the rower ends on Today, signed in, with no notice
   // (Gate 0, 2026-09-15) — and that ruling has already been reversed once as

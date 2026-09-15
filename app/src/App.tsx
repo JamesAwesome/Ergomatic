@@ -71,16 +71,21 @@ function AppContent() {
   // `me.state` changes, and the ref is only consumed on a run that
   // actually navigates.
   //
-  // THE TEST IS NARROWER THAN THE INVARIANT, deliberately. `out` leaves
-  // `<Routes>` equally unmounted (it renders `SignIn` instead), so the
-  // stated rule covers it too — but `SignIn` owns no routes and no root
-  // redirect, and the only destinations `destinationFor` yields to a
-  // signed-out rower are `/` and `null`, so there is nothing there for a
-  // redirect to eat. Widen this to `me.state !== "in"` the day `SignIn`
-  // grows routes of its own, or the day a signed-out view routes anywhere
-  // but `/`.
+  // IT COVERS `out` TOO SINCE WAVE A PR2, AND ITS OWN COMMENT ASKED FOR THAT.
+  // This gated on `loading` alone, under a note saying to widen it "the day a
+  // signed-out view routes anywhere but `/`" — true until then, because the
+  // only destinations a signed-out rower could yield were `/` and `null` and
+  // `SignIn` owns no routes for a redirect to eat. `attach_confirm` is that
+  // day: it routes to `/you/sign-in-methods`, and on NATIVE the rower sits
+  // there SIGNED OUT for the whole confirmation, because `onSignedIn` is
+  // withheld until they choose. `SignIn` draws that screen itself, so the URL
+  // move bought nothing and wrote a path under a tree that owns no routes.
+  //
+  // Nothing is lost by holding it. The destination is held, not dropped, and
+  // by the time `me` resolves IN the flow has reached `attached`, whose
+  // destination is `/` — the landing James ruled.
   useEffect(() => {
-    if (me.state === "loading") return;
+    if (me.state !== "in") return;
     if (consumedAuthDestination.current === auth.destination) return;
     consumedAuthDestination.current = auth.destination;
     if (auth.destination && auth.destination !== location.pathname) {

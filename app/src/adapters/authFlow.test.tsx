@@ -39,7 +39,7 @@ vi.mock("../native/session", () => ({
 vi.mock("./webNavigate", () => ({ navigateWeb: seam.navigateWeb }));
 
 import { destinationFor, useAuthFlow } from "./authFlow";
-import type { AuthFlowView } from "./authFlow";
+import type { AuthFlowController, AuthFlowView } from "./authFlow";
 import LinkSignInMethod from "../auth/LinkSignInMethod";
 import You from "../You";
 import DeleteAccount from "../you/DeleteAccount";
@@ -876,6 +876,58 @@ describe("useAuthFlow", () => {
     });
   });
 
+  // THE WINDOW BETWEEN THE TAP AND THE ANSWER, which is where this defect
+  // has now hidden four times. Both exits leave the confirmation on screen,
+  // inert, until their request answers — and BOTH FRAMES that draw it read
+  // the identities off the `busy` view, so a `busy` that drops them is the
+  // native rower watching the screen fall through to the welcome page.
+  //
+  // It is asserted at THIS layer, and for both exits, because the screen
+  // tests can only assert what a view already carries. Dropping the payload
+  // from `declineAttach` alone reddened nothing across 163 of them.
+  it.each([
+    ["confirmAttach", (flow: AuthFlowController) => flow.confirmAttach()],
+    ["declineAttach", (flow: AuthFlowController) => flow.declineAttach()],
+  ])(
+    "PR2: %s keeps the identities on screen until its request answers",
+    async (_name, exit) => {
+      window.history.replaceState(null, "", "/?authAttempt=ft");
+      const held = deferred<Response>();
+      seam.api.mockImplementation(async (path: string) => {
+        if (path === "/api/auth/options") return ok(options);
+        if (path === "/api/auth/web/attempts/ft")
+          return ok(readyStep("signin"));
+        // BOTH EXITS' REQUESTS ARE HELD, so the in-flight view is observable
+        // rather than raced past. Releasing them is the last step.
+        if (
+          path === "/api/auth/web/attempts/ft/finalize" ||
+          path === "/api/auth/web/attempts/ft/cancel"
+        )
+          return held.promise;
+        throw new Error(`unexpected ${path}`);
+      });
+      const { result } = renderHook(() => useAuthFlow(() => {}));
+      await waitFor(() =>
+        expect(result.current.view.kind).toBe("attach_confirm"),
+      );
+      act(() => void exit(result.current));
+      await waitFor(() => expect(result.current.view.kind).toBe("busy"));
+      expect(result.current.view).toStrictEqual({
+        kind: "busy",
+        purpose: "signin",
+        attaching: {
+          targetProvider: "apple",
+          carried: { email: "relay@apple.test", name: "Rower" },
+          account: { id: "u1", email: "maya@test", name: "Maya Chen" },
+        },
+      });
+      await act(async () => {
+        held.resolve(ok({ outcome: "linked" }));
+      });
+      await waitFor(() => expect(result.current.view.kind).toBe("attached"));
+    },
+  );
+
   it("PR2: a LINK link_ready still finalizes immediately, unchanged", async () => {
     window.history.replaceState(null, "", "/?authAttempt=ft");
     let finalized = false;
@@ -933,7 +985,7 @@ describe("useAuthFlow", () => {
     expect(result.current.destination).toBe("/");
     expect(onSignedIn).toHaveBeenCalledOnce();
     // THE END STATE ALONE CANNOT TELL A FAILED ATTACH FROM A SUCCESSFUL ONE —
-    // the success test asserts the same `idle` + one `onSignedIn`. Pin the
+    // the success test asserts the same `attached` + one `onSignedIn`. Pin the
     // attempt itself, so a mutation that stops `postJson` throwing is caught
     // here rather than passing as "the rower ended up in the app".
     expect(finalizeAttempts).toBe(1);
