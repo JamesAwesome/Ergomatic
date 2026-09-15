@@ -380,3 +380,188 @@ test("gate 0B round 2: the grouped table's geometry", async ({ page }) => {
     path: path.join(OUT, "block-grouped-portrait.png"),
   });
 });
+
+// ROUND 2 — ruling 1's drill-down, on the row where it has the most to say:
+// a TERMINATED piece, where RATE is computed here and AVG HR is too (the
+// monitor's own average field is empty on every capture this repo holds).
+// Captured closed and open, both orientations, plus the hit-target height,
+// which is a hard requirement here rather than a preference.
+for (const [orient, size] of [
+  ["portrait", { width: 390, height: 844 }],
+  ["landscape", { width: 844, height: 390 }],
+] as const) {
+  test(`gate 0B round 2: the tile-source sheet, ${orient}`, async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await page.setViewportSize(size);
+    await signInViaBackdoor(page, {
+      email: `gate0b-sheet-${orient}-${RUN_ID}@e2e.test`,
+      name: "Gate 0B sheet",
+    });
+    fs.mkdirSync(OUT, { recursive: true });
+
+    await seedAndOpen(
+      page,
+      machineRow({
+        title: "Terminated piece",
+        endedBy: "rower",
+        spm: 52,
+        withHr: true,
+      }),
+    );
+    await expect(
+      page.getByRole("heading", { name: "Terminated piece" }),
+    ).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+
+    const opener = page.getByRole("button", {
+      name: /where these numbers come from/i,
+    });
+    await expect(opener).toBeVisible();
+    await opener.scrollIntoViewIfNeeded();
+
+    const box = await opener.boundingBox();
+    process.stdout.write(
+      `\nGATE0B-R2 OPENER ${orient} height=${box?.height ?? "null"}\n`,
+    );
+
+    const tiles = page.getByTestId("summary-machine-tier");
+    await tiles.screenshot({
+      path: path.join(OUT, `tiles-with-opener-${orient}.png`),
+    });
+
+    await opener.click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({ path: path.join(OUT, `sheet-open-${orient}.png`) });
+
+    fs.writeFileSync(
+      path.join(OUT, `opener-${orient}.json`),
+      JSON.stringify({ height: box?.height ?? null }, null, 2),
+    );
+  });
+}
+
+// ROUND 2 contrast — the pairings ROUND 2 ADDS: the table's group row, the
+// drill-down opener, and every text class inside the sheet. Measured from
+// the live cascade with the sheet OPEN, because half of these do not exist
+// until it is. One SELECTORS list feeds both the measurement and the
+// coverage check — board 1's version spelled its list twice, which is a
+// drift waiting to happen even though both copies agree today.
+const R2_SELECTORS = [
+  ".machine-summary-groups th",
+  ".tile-source-opener",
+  ".tile-source-title",
+  ".tile-source-group-head",
+  ".tile-source-group-note",
+  ".tile-source-label",
+  ".tile-source-value",
+  ".tile-source-because",
+] as const;
+
+test("gate 0B round 2: contrast on everything round 2 adds", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signInViaBackdoor(page, {
+    email: `gate0b-r2-contrast-${RUN_ID}@e2e.test`,
+    name: "Gate 0B R2",
+  });
+  await seedAndOpen(
+    page,
+    machineRow({
+      title: "Terminated piece",
+      endedBy: "rower",
+      spm: 52,
+      withHr: true,
+    }),
+  );
+  await expect(
+    page.getByRole("heading", { name: "Terminated piece" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /where these numbers come from/i })
+    .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+
+  const rows = await page.evaluate(
+    (selectors) => {
+      const parse = (c: string): [number, number, number] => {
+        const m = /rgba?\(([^)]+)\)/.exec(c);
+        if (m === null) return [0, 0, 0];
+        const [r, g, b] = m[1]!.split(",").map((v) => parseFloat(v));
+        return [r!, g!, b!];
+      };
+      const lum = ([r, g, b]: [number, number, number]) => {
+        const f = (v: number) => {
+          const s = v / 255;
+          return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+        };
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+      };
+      const bgOf = (el: Element): string => {
+        let n: Element | null = el;
+        while (n !== null) {
+          const c = getComputedStyle(n).backgroundColor;
+          if (!c.startsWith("rgba(0, 0, 0, 0)") && c !== "transparent")
+            return c;
+          n = n.parentElement;
+        }
+        return getComputedStyle(document.body).backgroundColor;
+      };
+      const out: {
+        element: string;
+        sample: string;
+        fg: string;
+        bg: string;
+        fontPx: string;
+        fontWeight: string;
+        ratio: number;
+      }[] = [];
+      const seen = new Set<string>();
+      for (const sel of selectors) {
+        for (const el of Array.from(document.querySelectorAll(sel))) {
+          const st = getComputedStyle(el);
+          const fg = st.color;
+          const bg = bgOf(el);
+          const key = `${sel}|${fg}|${bg}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const [l1, l2] = [lum(parse(fg)), lum(parse(bg))].sort(
+            (a, b) => b - a,
+          );
+          out.push({
+            element: sel,
+            sample: (el.textContent ?? "").slice(0, 16),
+            fg,
+            bg,
+            fontPx: st.fontSize,
+            fontWeight: st.fontWeight,
+            ratio: Number(((l1! + 0.05) / (l2! + 0.05)).toFixed(2)),
+          });
+        }
+      }
+      return out;
+    },
+    R2_SELECTORS as unknown as string[],
+  );
+
+  const covered = new Set(rows.map((r) => r.element));
+  expect(
+    R2_SELECTORS.filter((sel) => !covered.has(sel)),
+    "round 2 selectors that matched no element",
+  ).toEqual([]);
+
+  fs.mkdirSync(OUT, { recursive: true });
+  fs.writeFileSync(
+    path.join(OUT, "contrast-round2.json"),
+    `${JSON.stringify(rows, null, 2)}\n`,
+  );
+  const worst = rows.reduce((m, r) => Math.min(m, r.ratio), Infinity);
+  process.stdout.write(
+    `\nGATE0B-R2 CONTRAST ${rows.length} pairings, lowest ${worst}\n`,
+  );
+});

@@ -116,6 +116,7 @@ import {
 } from "./logbookDerived";
 import type { SessionRun } from "./run";
 import { deriveAverageHeartRate } from "../../domain/monitor/derivedHeartRate.js";
+import type { MachineTileProvenance } from "./tileProvenance";
 
 /** Per §2A: `AUG 10 · 18:57 · PM5 <id>` / `· TIMER` / `· LOGGED BY HAND`,
  *  plus Phase LM Task 4's fourth answer `· NO MONITOR READING`
@@ -199,6 +200,13 @@ export interface MachineTier {
    *  it repeated the total line's rest metres from a second source — and
    *  AVG HR takes its cell; the PM5's rest total stays stored for PR 2. */
   avgHr?: number;
+  /** GATE 0B ROUND 2 PROTOTYPE (ruling 1). Stamped at the SAME site that
+   *  picks each value, because a renderer cannot re-derive `rate`'s or
+   *  `avgHr`'s branch from the values alone and two copies of a predicate
+   *  drift. Optional only while this is a prototype: the implementing PR
+   *  must stamp it in BOTH producers — here and `storedMachineTier` — or
+   *  the sheet tells the truth on one door and not the other (RF24). */
+  sources?: MachineTileProvenance;
 }
 
 /** Phase LP §3: one MACHINE SUMMARY row. `index` is the INTERVALS table's

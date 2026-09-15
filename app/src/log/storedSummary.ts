@@ -118,6 +118,11 @@ import {
 } from "../session/logbookDerived";
 import { deriveAverageHeartRate } from "../../domain/monitor/derivedHeartRate.js";
 import {
+  FIXED_SOURCES,
+  heartRateProvenance,
+  rateProvenance,
+} from "../session/tileProvenance";
+import {
   rowContribution,
   statsRowInput,
   type StatsRowInput,
@@ -817,6 +822,13 @@ function storedMachineTier(
       ms?.avgHeartRateBpm ??
       deriveAverageHeartRate(row.series?.samples ?? []) ??
       undefined,
+    // Stamped from the SAME `finished` and the SAME presence check the two
+    // values above branch on — not re-derived.
+    sources: {
+      ...FIXED_SOURCES,
+      rate: rateProvenance(finished),
+      avgHr: heartRateProvenance(ms?.avgHeartRateBpm !== undefined),
+    },
   };
 }
 

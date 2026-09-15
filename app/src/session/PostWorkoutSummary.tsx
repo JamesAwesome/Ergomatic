@@ -9,6 +9,7 @@ import TraceChart from "../log/TraceChart";
 import BackLink from "../shell/BackLink";
 import { DASH } from "../workout/connected/surfaceModel";
 import MachineSummaryTable from "./MachineSummaryTable";
+import { TileSourceSheet } from "./TileSourceSheet";
 import type {
   MachineTier,
   MeasuredRow,
@@ -385,8 +386,31 @@ export function MachineTierBlock({ machine }: { machine: MachineTier }) {
           cell, not REST — rest metres already live on the total line and a
           second source four lines apart said nothing a rower could act on. */}
       <MachineTile label="AVG HR" value={machine.avgHr} />
+      {/* GATE 0B ROUND 2 PROTOTYPE (ruling 1). Renders only where the
+          producer stamped provenance, so the live door is unaffected until
+          it stamps too. */}
+      {machine.sources !== undefined && (
+        <TileSourceSheet
+          sources={machine.sources}
+          values={{
+            avgWatts: fmt(machine.avgWatts),
+            calories: fmt(machine.calories),
+            calPerHour: fmt(machine.calPerHour),
+            rate: fmt(machine.rate),
+            drag: fmt(machine.drag),
+            avgHr: fmt(machine.avgHr),
+          }}
+        />
+      )}
     </div>
   );
+}
+
+/** The house dash for a number the row does not have — the sheet names a
+ *  source even then, because "computed here, and there was nothing to
+ *  compute from" is still the honest answer. */
+function fmt(v: number | undefined): string {
+  return v === undefined ? DASH : String(v);
 }
 
 export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {

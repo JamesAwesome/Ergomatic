@@ -59,18 +59,18 @@ export default function MachineSummaryTable({
           <thead>
             <tr className="machine-summary-groups">
               <th className="machine-summary-pin" aria-hidden="true" />
-              <th scope="colgroup" colSpan={REPORTED.length}>
-                REPORTED BY THE PM5
-              </th>
               <th scope="colgroup" colSpan={COMPUTED.length}>
                 COMPUTED HERE
+              </th>
+              <th scope="colgroup" colSpan={REPORTED.length}>
+                REPORTED BY THE PM5
               </th>
             </tr>
             <tr>
               <th scope="col" className="machine-summary-pin">
                 #
               </th>
-              {[...REPORTED, ...COMPUTED].map((c) => (
+              {[...COMPUTED, ...REPORTED].map((c) => (
                 <th scope="col" key={c}>
                   {c}
                 </th>
@@ -81,12 +81,12 @@ export default function MachineSummaryTable({
             {rows.map((r) => (
               <tr key={r.index}>
                 <td className="machine-summary-pin">{r.index}</td>
+                <td>{cell(r.watts)}</td>
+                <td>{cell(r.calPerHour)}</td>
                 <td>{cell(r.hr)}</td>
                 <td>{cell(r.calories)}</td>
                 <td>{cell(r.drag)}</td>
                 <td>{cell(r.restMeters)}</td>
-                <td>{cell(r.watts)}</td>
-                <td>{cell(r.calPerHour)}</td>
               </tr>
             ))}
           </tbody>
