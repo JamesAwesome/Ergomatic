@@ -1995,4 +1995,97 @@ describe("migration 0032: the delete purpose and the delete_ready stage", () => 
     );
     expect(rows.rows[0].stage).toBe("delete_ready");
   });
+
+  // WAVE A PR2, Task 0. The `signin` arm becomes STAGE-KEYED so a signin
+  // attempt can carry its proven identity through a second authorization with
+  // the rower's usual provider. Seven cases, not four: the three admits below
+  // are the states the design's own transition produces, and the middle one
+  // (`reauth_authorize`, provider written, no session yet) is where the rower
+  // sits for the WHOLE second round trip. A two-state arm refuses it.
+  //
+  // These run against the REAL migrated table, never a scratch one carrying
+  // only the arm's five columns — such a table has none of the sibling
+  // CHECKs, the FK, or `auth_attempts_link_session_unique`, and admits two
+  // rows this design produces that the real schema refuses.
+  const PR2 = "signin follow-through (PR2):";
+
+  it(`${PR2} admits the middle state, provider written and no session yet`, async () => {
+    await pool.query(
+      `INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,verified_subject,verified_email,verified_name,expires_at)
+       VALUES('bh','native','signin','apple','google','reauth_authorize',1,'p2-a','p2-a-n',NULL,'sub-a','r@privaterelay.appleid.com','Rower',now()+interval '5 min')`,
+    );
+    const rows = await pool.query(
+      "SELECT stage,existing_provider,original_session_id FROM auth_attempts WHERE state='p2-a'",
+    );
+    expect(rows.rows[0].stage).toBe("reauth_authorize");
+    expect(rows.rows[0].existing_provider).toBe("google");
+    expect(rows.rows[0].original_session_id).toBeNull();
+  });
+
+  it(`${PR2} admits reauth_exchanging, still with no session`, async () => {
+    await pool.query(
+      `INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,verified_subject,verified_email,verified_name,expires_at)
+       VALUES('bh','native','signin','apple','google','reauth_exchanging',1,'p2-b','p2-b-n',NULL,'sub-b','r@privaterelay.appleid.com','Rower',now()+interval '5 min')`,
+    );
+    const rows = await pool.query(
+      "SELECT stage FROM auth_attempts WHERE state='p2-b'",
+    );
+    expect(rows.rows[0].stage).toBe("reauth_exchanging");
+  });
+
+  it(`${PR2} admits link_ready once a session has been adopted`, async () => {
+    const user = await seedUser({ googleSub: "g-p2", appleSub: "a-p2" });
+    const session = await seedSession(user.id);
+    await pool.query(
+      `INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,reauthenticated_at,verified_subject,verified_email,verified_name,expires_at)
+       VALUES('bh','native','signin','apple','google','link_ready',1,'p2-c','p2-c-n',$1,now(),'sub-c','r@privaterelay.appleid.com','Rower',now()+interval '5 min')`,
+      [session.id],
+    );
+    const rows = await pool.query(
+      "SELECT stage,original_session_id FROM auth_attempts WHERE state='p2-c'",
+    );
+    expect(rows.rows[0].stage).toBe("link_ready");
+    expect(rows.rows[0].original_session_id).toBe(session.id);
+  });
+
+  it(`${PR2} still admits an ordinary signin at confirm, both columns null`, async () => {
+    await pool.query(
+      `INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,verified_subject,verified_email,verified_name,expires_at)
+       VALUES('bh','native','signin','apple',NULL,'confirm',1,'p2-d','p2-d-n',NULL,'sub-d','r@privaterelay.appleid.com','Rower',now()+interval '5 min')`,
+    );
+    const rows = await pool.query(
+      "SELECT stage FROM auth_attempts WHERE state='p2-d'",
+    );
+    expect(rows.rows[0].stage).toBe("confirm");
+  });
+
+  it(`${PR2} refuses a signin at reauth_authorize that already holds a session`, async () => {
+    const user = await seedUser({ googleSub: "g-p2e", appleSub: "a-p2e" });
+    const session = await seedSession(user.id);
+    await expect(
+      pool.query(
+        `INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,verified_subject,verified_email,verified_name,expires_at)
+         VALUES('bh','native','signin','apple','google','reauth_authorize',1,'p2-e','p2-e-n',$1,'sub-e','r@privaterelay.appleid.com','Rower',now()+interval '5 min')`,
+        [session.id],
+      ),
+    ).rejects.toThrow(/auth_attempts_session_check/);
+  });
+
+  it(`${PR2} refuses a signin at confirm carrying an existing provider`, async () => {
+    await expect(
+      pool.query(
+        `INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,verified_subject,verified_email,verified_name,expires_at)
+         VALUES('bh','native','signin','apple','google','confirm',1,'p2-f','p2-f-n',NULL,'sub-f','r@privaterelay.appleid.com','Rower',now()+interval '5 min')`,
+      ),
+    ).rejects.toThrow(/auth_attempts_session_check/);
+  });
+
+  it(`${PR2} refuses a follow-through whose usual provider IS the target`, async () => {
+    await expect(
+      pool.query(
+        `INSERT INTO auth_attempts(binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,verified_subject,verified_email,verified_name,expires_at)
+         VALUES('bh','native','signin','apple','apple','reauth_authorize',1,'p2-g','p2-g-n',NULL,'sub-g','r@privaterelay.appleid.com','Rower',now()+interval '5 min')`,
+      ),
+    ).rejects.toThrow(/auth_attempts_session_check/);
+  });
 });

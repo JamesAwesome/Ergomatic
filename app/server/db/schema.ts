@@ -767,9 +767,33 @@ export const authAttempts = pgTable(
     // a delete re-proves a provider the rower already holds, so existing
     // and target are equal by design (task-1-brief.md Step 3). The `link`
     // arm's clause stays untouched — widening for delete must not loosen it.
+    //
+    // WAVE A PR2: THE `signin` ARM IS STAGE-KEYED, and it names THREE states
+    // rather than two. A signin attempt now carries its proven identity
+    // through a second authorization with the rower's usual provider, and the
+    // middle state — `reauth_authorize`/`reauth_exchanging`, `existing_provider`
+    // WRITTEN, `original_session_id` still NULL — is where the rower sits for
+    // the entire second round trip. A two-state arm refuses exactly that row.
+    //
+    // The looser alternative (drop `original_session_id is null` and let any
+    // stage through) was measured and rejected: it admits `reauth_authorize`
+    // with `existing_provider` NULL, which is a follow-through that forgot its
+    // write, and `attemptProvider()` then hands `null` to the authorize-URL
+    // builder. Keying on stage refuses that, and refuses `confirm` carrying an
+    // existing provider.
+    //
+    // A CHECK IS EVALUATED PER STATEMENT, so this arm dictates statement
+    // granularity: the two crossing transitions each need their own single
+    // UPDATE, because `SET stage=...` alone lands on a state the arm forbids.
+    // That is the predicate earning its keep, not a cost.
+    //
+    // THE SCHEMA IS NOT THE AUTHORITY on which rows the machine admits —
+    // `consistent()` in server/auth/attempts.ts is, and it is called from both
+    // `load()` and `save()`. Widening here without widening there changes
+    // nothing a caller can observe.
     check(
       "auth_attempts_session_check",
-      sql`(${t.purpose}='signin' and ${t.originalSessionId} is null and ${t.existingProvider} is null) or (${t.purpose}='link' and ${t.originalSessionId} is not null and ${t.existingProvider} is not null and ${t.existingProvider}<>${t.targetProvider}) or (${t.purpose}='delete' and ${t.originalSessionId} is not null and ${t.existingProvider} is not null)`,
+      sql`(${t.purpose}='signin' and ((${t.stage} in ('authorize','exchanging','confirm') and ${t.originalSessionId} is null and ${t.existingProvider} is null) or (${t.stage} in ('reauth_authorize','reauth_exchanging') and ${t.originalSessionId} is null and ${t.existingProvider} is not null and ${t.existingProvider}<>${t.targetProvider}) or (${t.stage}='link_ready' and ${t.originalSessionId} is not null and ${t.existingProvider} is not null and ${t.existingProvider}<>${t.targetProvider}))) or (${t.purpose}='link' and ${t.originalSessionId} is not null and ${t.existingProvider} is not null and ${t.existingProvider}<>${t.targetProvider}) or (${t.purpose}='delete' and ${t.originalSessionId} is not null and ${t.existingProvider} is not null)`,
     ),
     check("auth_attempts_expiry_check", sql`${t.expiresAt}>${t.createdAt}`),
     check("auth_attempts_version_check", sql`${t.version}>0`),
