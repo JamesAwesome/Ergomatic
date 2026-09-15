@@ -517,77 +517,6 @@ is exactly what happened: every section in this file stopped growing on
     value from the factory's return to the `app.use()` call before believing
     any route exists — and require ONE test that reaches it over HTTP, because
     tests calling the store directly cannot see the gap.
-<<<<<<< HEAD
-57. **A CHECK constraint is not the authority on which rows a state machine
-    admits — find the module's own consistency predicate and run the row
-    through it.** Wave A PR2's plan proved `auth_attempts_session_check` and
-    `auth_attempts_stage_check` admit `purpose='signin'` at `stage='reauth_*'`
-    and concluded "no migration". True and irrelevant: `attempts.ts`'s
-    `consistent()` refuses it at `(a.purpose === "signin") !== signup`, and it
-    is called by BOTH `load()` and `save()`, so the read path and the write
-    path each reject it. Measured on `postgres:18.4`, one row, three stages,
-    nothing else varied: `confirm` reads OK, `reauth_authorize` and
-    `reauth_exchanging` both throw `attempt_expired`.
-58. **A column a CHECK forces NULL is still being READ — grep the `!`
-    assertions over it before calling it unused.** The same plan said a signin
-    attempt "may not record which provider the rower is about to prove. It does
-    not need to." `attemptProvider()` is
-    `a.stage.startsWith("reauth_") ? a.existingProvider! : a.targetProvider`,
-    so it returns `null` for exactly that row — and the web callback's own
-    `attemptProvider(a) !== provider` guard then rejects BOTH providers with
-    `invalid_proof`. Enumerate every read of the forced-NULL column and sort
-    them into null-safe (`IS NOT DISTINCT FROM`, `if (x)`, `===`) and
-    asserting (`x!`); the asserting ones are the design's real cost.
-59. **A confirmation screen is a control only if the ACCOUNT OWNER is the one
-    reading it — name the reader, not the screen.** Moving a link confirmation
-    before the second authentication satisfies "the confirmation names the
-    provider and the address" and voids its function, because the threat model
-    the control exists for (a per-client secret collapses the attack to one
-    device, two people) puts the attacker in front of it. Ask who is holding
-    the phone at each screen before crediting any confirmation.
-60. **Two clocks guarding one lifetime: prove the new one can bite before the
-    old one.** A carried identity gated by both `expires_at` (never refreshed)
-    and a fresh `reauthenticated_at` is gated by `expires_at` alone —
-    `reauthenticated_at >= exchange time` makes its window strictly wider, so
-    its check can never fire first, and the test prescribed for it ("proved
-    more than ttl ago, expires_at still in the future") describes a state the
-    design cannot produce. RF21, applied to a redundant timer instead of an
-    assertion.
-61. **RFC 9700 contains NO account-linking section — a repo that cites it
-    correctly four times will transfer its authority to a fifth claim it does
-    not support.** Measured: 2569 lines, `grep -ci linking` = 0, the four
-    `account` hits are all "take into account", §4's TOC runs 4.1-4.17 with
-    nothing on linking. The real primary is NIST SP 800-63C-4 §3.8.1 ("the RP
-    SHALL require an authenticated session with the subscriber account for all
-    linking functions"), plus Sudhodanan & Paverd, USENIX Security 2022, for
-    the attack. Neither addresses CONSENT ORDERING — that is a genuine
-    nothing-found and therefore a judgment call, not a citable one. RF16's
-    second corollary: download the document and grep it before inheriting a
-    peer artifact's confident phrasing (technique 10).
-62. **"Function X works unchanged" is a claim about X's CALLERS, not about X.**
-    Wave A PR2's design turned on `finalize()` needing no edit, and it does not
-    — every precondition in its body is satisfiable. But its second argument is
-    `req.sessionId` behind `requireUser`, and no route could hand the client a
-    session while keeping the attempt alive: the callback's attempt-surviving
-    branch never sets the session cookie, the shared `result()` returns one or
-    the other, the client nulls the operation on `outcome === "signed_in"`, and
-    the wire union makes `SignedIn` and `link_ready` mutually exclusive members.
-    **Trace every parameter of the "unchanged" function back to the request
-    field that fills it, and find the code that puts it there** — a
-    falsification test scoped to the store certifies a narrower claim than the
-    plan is making, and passes.
-63. **Widening a predicate that cross-checks TWO enums: run every value of the
-    OTHER enum through the widened form before believing it.** `consistent()`'s
-    first clause is `(purpose === "signin") !== stageIsSignup` — an EQUALITY, so
-    "add three stages so signin may sit there" also refuses link and delete at
-    those stages, and a stage-keyed `verified` requirement refuses rows the
-    producer inserts with those columns NULL. Extract the predicate verbatim,
-    build one row per (purpose x stage) pair the producer can actually emit, and
-    print a three-column before/naive/intended table. Measured: the literal
-    wording broke every link and every delete at its starting stage, and every
-    probe the plan prescribed entered on a signin row (RF24).
-=======
-
 57. **"The machine does not report X" is a claim about ONE FIELD; ask whether
     it reports X's COMPONENTS and whether we already store them.** The
     number-provenance spec concluded a session wall clock is "asserted on the
@@ -650,4 +579,113 @@ is exactly what happened: every section in this file stopped growing on
     "the tile reads the same source the column does" moves a number. Diff each
     member's options against its PR row's risk model before the table is
     believed.
->>>>>>> origin/main
+
+65. **A CHECK constraint is not the authority on which rows a state machine
+    admits — find the module's own consistency predicate and run the row
+    through it.** Wave A PR2's plan proved `auth_attempts_session_check` and
+    `auth_attempts_stage_check` admit `purpose='signin'` at `stage='reauth_*'`
+    and concluded "no migration". True and irrelevant: `attempts.ts`'s
+    `consistent()` refuses it at `(a.purpose === "signin") !== signup`, and it
+    is called by BOTH `load()` and `save()`, so the read path and the write
+    path each reject it. Measured on `postgres:18.4`, one row, three stages,
+    nothing else varied: `confirm` reads OK, `reauth_authorize` and
+    `reauth_exchanging` both throw `attempt_expired`.
+66. **A column a CHECK forces NULL is still being READ — grep the `!`
+    assertions over it before calling it unused.** The same plan said a signin
+    attempt "may not record which provider the rower is about to prove. It does
+    not need to." `attemptProvider()` is
+    `a.stage.startsWith("reauth_") ? a.existingProvider! : a.targetProvider`,
+    so it returns `null` for exactly that row — and the web callback's own
+    `attemptProvider(a) !== provider` guard then rejects BOTH providers with
+    `invalid_proof`. Enumerate every read of the forced-NULL column and sort
+    them into null-safe (`IS NOT DISTINCT FROM`, `if (x)`, `===`) and
+    asserting (`x!`); the asserting ones are the design's real cost.
+67. **A confirmation screen is a control only if the ACCOUNT OWNER is the one
+    reading it — name the reader, not the screen.** Moving a link confirmation
+    before the second authentication satisfies "the confirmation names the
+    provider and the address" and voids its function, because the threat model
+    the control exists for (a per-client secret collapses the attack to one
+    device, two people) puts the attacker in front of it. Ask who is holding
+    the phone at each screen before crediting any confirmation.
+68. **Two clocks guarding one lifetime: prove the new one can bite before the
+    old one.** A carried identity gated by both `expires_at` (never refreshed)
+    and a fresh `reauthenticated_at` is gated by `expires_at` alone —
+    `reauthenticated_at >= exchange time` makes its window strictly wider, so
+    its check can never fire first, and the test prescribed for it ("proved
+    more than ttl ago, expires_at still in the future") describes a state the
+    design cannot produce. RF21, applied to a redundant timer instead of an
+    assertion.
+69. **RFC 9700 contains NO account-linking section — a repo that cites it
+    correctly four times will transfer its authority to a fifth claim it does
+    not support.** Measured: 2569 lines, `grep -ci linking` = 0, the four
+    `account` hits are all "take into account", §4's TOC runs 4.1-4.17 with
+    nothing on linking. The real primary is NIST SP 800-63C-4 §3.8.1 ("the RP
+    SHALL require an authenticated session with the subscriber account for all
+    linking functions"), plus Sudhodanan & Paverd, USENIX Security 2022, for
+    the attack. Neither addresses CONSENT ORDERING — that is a genuine
+    nothing-found and therefore a judgment call, not a citable one. RF16's
+    second corollary: download the document and grep it before inheriting a
+    peer artifact's confident phrasing (technique 10).
+70. **"Function X works unchanged" is a claim about X's CALLERS, not about X.**
+    Wave A PR2's design turned on `finalize()` needing no edit, and it does not
+    — every precondition in its body is satisfiable. But its second argument is
+    `req.sessionId` behind `requireUser`, and no route could hand the client a
+    session while keeping the attempt alive: the callback's attempt-surviving
+    branch never sets the session cookie, the shared `result()` returns one or
+    the other, the client nulls the operation on `outcome === "signed_in"`, and
+    the wire union makes `SignedIn` and `link_ready` mutually exclusive members.
+    **Trace every parameter of the "unchanged" function back to the request
+    field that fills it, and find the code that puts it there** — a
+    falsification test scoped to the store certifies a narrower claim than the
+    plan is making, and passes.
+71. **Widening a predicate that cross-checks TWO enums: run every value of the
+    OTHER enum through the widened form before believing it.** `consistent()`'s
+    first clause is `(purpose === "signin") !== stageIsSignup` — an EQUALITY, so
+    "add three stages so signin may sit there" also refuses link and delete at
+    those stages, and a stage-keyed `verified` requirement refuses rows the
+    producer inserts with those columns NULL. Extract the predicate verbatim,
+    build one row per (purpose x stage) pair the producer can actually emit, and
+    print a three-column before/naive/intended table. Measured: the literal
+    wording broke every link and every delete at its starting stage, and every
+    probe the plan prescribed entered on a signin row (RF24).
+72. **A "the client does X unconditionally" finding is about a CALL SITE, not a
+    branch — grep the function name before prescribing the fix.** Wave A PR2's
+    revision 4 correctly found `acceptStep`'s unconditional `finalizeLink`
+    (`authFlow.ts:477`) and prescribed qualifying that branch;
+    `grep -n "finalizeLink("` returns a SECOND site at `:553` inside
+    `authorizeNative`, which runs BEFORE the `acceptStep` call on `:558` and is
+    the native surface's only route. The prescribed fix would have left the
+    primary surface defeating the ruling with every server test green.
+73. **Widening a `shared/` union member proves nothing about the CONSUMER —
+    paste-test both projects and read which one is silent.** Adding required
+    `profile` + `session` to `AuthStep`'s `link_ready` member broke exactly one
+    producer (`frontDoorRoutes.ts:121`, TS2322) and produced ZERO output from
+    `tsc -b`. So "one declaration both sides compile against, so a renamed
+    field is a build error" (RF33) is true for the writer and FALSE for the
+    reader — and the reader was the half that had to store a native token and
+    refetch `me`. Technique 55's mirror: there the silent project was the
+    client because only the server was checked; here both were checked and the
+    client is silent by construction.
+74. **When a design MOVES a confirmation later in a bounded window, the
+    window's own field becomes a decision — name it, or the plan is silent on
+    whether the feature works at a rower's pace.** PR2 moved the confirm after
+    the proof inside a 300 s `expires_at`; the plan pinned `expires_at` as
+    unchanged in one task and said nothing in the other, while the sibling arm
+    it copies (`accept()`'s reauth branch) DOES refresh it. Both answers have
+    consequences; neither was stated.
+75. **A census a plan pins a test to is a number — run it.** "Five user-facing
+    strings, two quoted and three not" measured as two quoted and FOUR
+    unquoted, plus a THIRD treatment ("the You tab") in live UI and three
+    undated article bodies the step never mentions. Strip comments before
+    counting: half the grep hits for a screen name in this repo are rationale
+    prose.
+76. **A merge-conflict marker is a defect NO gate in this repo could see, and
+    it reached main in the agent instructions themselves.** PR #446 landed
+    `<<<<<<< HEAD` / `=======` / `>>>>>>> origin/main` in
+    `antagonist-techniques.md`, `antagonist-ledger.md` and `pm-ledger.md`:
+    `.claude/` paths, so `ci-changes.sh` correctly skipped app/docker/e2e;
+    lint-staged's globs are `app/**`, so no formatter opened them; prose, so
+    no compiler or test could. **After resolving a conflict in a NUMBERED
+    list, both sides usually renumber from the same integer** — here both
+    began at 57 — so the resolution is to keep both and renumber one, never to
+    pick. `scripts/conflict-markers.sh` is now the gate.

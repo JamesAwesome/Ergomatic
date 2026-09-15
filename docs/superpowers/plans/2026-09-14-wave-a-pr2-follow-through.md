@@ -94,7 +94,8 @@ either transport can put that session in the client's hands while the attempt is
 still alive.** The antagonist's own verdict is that `finalize()` needs no edit —
 that still holds — but `finalize()` is reached through `requireUser`, and the
 rower has no session to present until the mint that the follow-through performs.
-Four independent confirmations, all read in the tree at `45e6843a`:
+Five independent confirmations, all read in the tree at `45e6843a` and all
+reproduced by the antagonist at `34589267`:
 
 - **`app/shared/auth.ts`** makes `SignedIn` and `link_ready` MUTUALLY EXCLUSIVE
   members of `AuthStep`, and the `link_ready` member is
@@ -177,6 +178,127 @@ test.
   that skips the access policy, on the one path that reaches it without a
   confirm-stage check. The email to check is the RESOLVED ACCOUNT's, which is
   the account the session is being minted for.
+
+## Revision 5, after the scoped third antagonist pass (2026-09-15)
+
+Revision 4 came back **NOT READY** on three findings, all inside revision 4's
+own additions. **The diagnosis of the transport gap was right; the CLOSURE was
+web-only.** Everything else revision 4 claimed reproduced verbatim, including
+all five confirmations, the 60-day TTL and the `requireAccess` census.
+
+**The chosen shape survived a genuine attempt to break it and is KEPT.** The
+alternative — authenticate `finalize` by the attempt's binding secret so no
+session exists until after the confirmation — was costed and is worse: the
+proven subject is consumed rather than stored, so `finalize` would need a new
+`resolved_user_id` column and FK, a **second stored shape** against this plan's
+one CHECK widening. And the early session grants nothing, because the second
+exchange is a full authentication with the account's own provider — anyone who
+passes it can sign in normally in one tap from the same screen.
+
+### Blocking 1 — there is a SIXTH place, and it is the one that matters on native
+
+`finalizeLink` has **two** call sites, not one:
+
+    app/src/adapters/authFlow.ts:477   acceptStep's link_ready branch
+    app/src/adapters/authFlow.ts:553   authorizeNative, after POST /proof
+
+Line 553 sits BEFORE the `acceptStep` call on line 558, so a native second
+exchange **never reaches `acceptStep` at all** — and native is the primary
+surface. Revision 4's Task 5 Step 2b qualifies only line 477, which leaves the
+phone attaching the identity with no confirmation shown while every server test
+stays green. That is the same defect revision 4 correctly found, one call site
+over.
+
+### Blocking 2 — nothing CONSUMES the delivered session, on either surface
+
+Revision 4 stopped at "the server delivers it".
+
+- **Native:** `storeToken` has exactly one caller in the flow,
+  `finishSignedIn` (`authFlow.ts:334-336`). A session arriving on a `link_ready`
+  step is never written to the Keychain, so no `Authorization` header is sent
+  and `finalize`'s `requireUser` answers 401.
+- **Web:** after a successful follow-through the cookie is set but
+  `onSignedIn` is never called — `finalizeLink` sets `{kind:"linked"}` and
+  returns. `App.tsx:116` still reads `me.state === "out"`, and `SignIn.tsx` has
+  no `linked` branch (its `kind ===` reads are busy/deleted/error/confirm/usual).
+  **The rower lands back on the sign-in screen, apparently signed out, holding a
+  live 60-day session.** A reload fixes it; nothing in the plan does.
+
+**And the compiler will not catch either.** Measured by paste-testing revision
+4's edit 2 in a scratch copy of `app/`: widening the `link_ready` member to
+carry required `profile` and `session` breaks exactly ONE producer
+(`frontDoorRoutes.ts(121,35): error TS2322`) and produces **zero output from
+`tsc -b`** — the client project is silent. So revision 4's own RF33
+justification for edit 2 is **measured false on the side that needs it**: the
+consumer's obligation is unguarded, which is exactly how the auto-finalize
+defect got here in the first place.
+
+**Two consequences for the edit's shape.** `session` cannot be a required
+non-null field, because a LINK attempt's `link_ready` legitimately has none — it
+is a required key with `null` meaning absent, so the compiler is the gate
+(RF33's real form). And the consumer's obligation needs its own failing test at
+the client layer, because no type will produce one.
+
+### Blocking 3 — the confirmation now sits inside the 300 s window, and `expires_at` is unspecified
+
+Revision 4 moved the confirmation AFTER the proof, so it is now the last thing
+in the attempt's window. Task 2 Step 1 pins `expires_at` byte-identical across
+`followThrough`; **Task 3 Step 3 lists what the new signin arm writes and is
+silent on `expires_at`** — and "unchanged" is not the inherited default, because
+the existing `reauth_exchanging` arm this one sits beside DOES refresh it.
+
+The window must now hold: read the confirm screen, tap, provider consent
+(possibly password, 2FA and an app switch), return, **read the new
+confirmation**, tap Attach. Both answers have consequences and neither is
+stated — refresh it and the carried subject outlives the spec's "bound to the
+attempt's five-minute expiry" constraint; do not, and a slow second round trip
+expires the attempt while the rower is reading the screen the whole design
+exists to show them. **This is James's call and it goes into Gate 0 with the
+screen**, because it decides whether the screen can be read at a human pace.
+
+### Two things revision 4 got right, and one coupling it did not say
+
+**Task 4 Step 1d is right** that the confirmation shows the CARRIED (target
+provider's) identity: that is "what is about to be attached", which is James's
+ruling. **But a control also has to name the DESTINATION** — "attach
+`x@privaterelay.appleid.com` to WHICH account?" — and that email is the resolved
+account's, available only because edit 2 delivers the session. **The two edits
+are coupled**; revision 4 reads as though they were independent.
+
+**And the refusal case is unspecified.** The rower who reads the confirmation
+and says NO is already signed in. The screen is no longer "sign in?" but
+"you're in — attach Apple too?", and what the No button does is not stated.
+Task 5 Step 5 covers FAILURE, not REFUSAL. Gate 0 decides it.
+
+### The asymmetric widening holds, and the naive damage is UNDERSTATED
+
+`consistent()` was extracted verbatim and run over 27 purpose x stage cells plus
+four negatives, against three predicates. **The asymmetric form works** — signin
+reads at all three new stages, link and delete keep every cell they read today,
+a signin at `reauth_exchanging` with `verified_subject` NULL is still refused,
+and nothing the machine can reach is newly wrongly admitted.
+
+**The NAIVE widening breaks FIVE cells, not two.** Revision 4 said "every link
+and every delete at the stage they start at"; true and incomplete. The five are
+link at `reauth_authorize`, `reauth_exchanging` **and `link_ready`** — the link
+flow's own TERMINAL stage — plus delete at `reauth_authorize` and
+`reauth_exchanging`. Task 1 Step 2b's fixtures are widened to all five below,
+or Step 7b's mutation probe is credited with catching damage two thirds of
+which it never touches.
+
+### The `ACCESS_MODE` question is already answered, and it is owed BEFORE Gate 0
+
+Revision 3 left it open "to be settled before implementation". It is settled in
+the repo: `ROADMAP.md` records James's 2026-09-14 ruling that staging stays
+`restricted`, and `compose.yml:48` and `accessPolicy.ts:14` both default to it.
+So `requireAccess(identity.email)` at `attempts.ts:436` refuses any Apple **Hide
+My Email** identity before the attempt ever reaches `confirm` — **PR2's own
+entry point.** Under the live configuration the flow is reachable only for
+*Share My Email* by an already-allowlisted address.
+
+**That is a build-now question for the PM, and it is owed before Gate 0, not
+before implementation** — there is no point rendering a screen for a path the
+host cannot reach.
 
 ## The design
 
@@ -359,9 +481,16 @@ modify `app/server/db/schema.ts`; test
       Today all three throw `attempt_expired` from `consistent()`; that is the
       proof this task is needed, and it is the antagonist's own probe.
 - [ ] **Step 2** — run, confirm all three fail.
-- [ ] **Step 2b (revision 4)** — failing test FIRST, before any widening: a
-      LINK attempt and a DELETE attempt at `reauth_authorize`, each with
-      `verified_*` NULL, read back today. They must STILL read after Task 1.
+- [ ] **Step 2b (revision 4; fixtures widened in revision 5)** — failing test
+      FIRST, before any widening: **all FIVE cells the naive widening breaks**
+      read back today, and must STILL read after Task 1. Measured over 27
+      purpose x stage cells: a LINK at `reauth_authorize`, `reauth_exchanging`
+      **and `link_ready`** — the link flow's own TERMINAL stage, which revision
+      4 missed — plus a DELETE at `reauth_authorize` and `reauth_exchanging`.
+      The `reauth_*` fixtures carry `verified_*` NULL; the `link_ready` one
+      carries them set, as the machine produces it. **Note the precondition:**
+      `load()` calls `original()` (`attempts.ts:156`), which needs a live
+      session AND `requireAccess(session.email)` to pass.
       This is the guard on the asymmetry: the naive widening (adding three
       stages to the `signup` array at `attempts.ts:77`) makes both of these go
       red, because the rule is `(purpose === "signin") !== signup` and `begin()`
@@ -389,7 +518,9 @@ modify `app/server/db/schema.ts`; test
       the widening symmetric (add the three stages to the `signup` array
       outright) and confirm Step 2b goes red while Step 1 stays green. This is
       the one mutation that separates a correct widening from the one revision
-      3's wording described.
+      3's wording described. **Record WHICH of Step 2b's five cells went red**
+      — with revision 4's two-cell fixture set the probe would have missed
+      three of them and still read as a passing proof (RF21).
 - [ ] **Step 8** — commit.
 
 ### Task 2: the follow-through transition
@@ -432,6 +563,13 @@ modify `app/server/db/schema.ts`; test
       outside the access policy, and the follow-through is refused with
       `access_denied` rather than minting. Then a mutation probe removing the
       `requireAccess` call, confirming it goes red.
+- [ ] **Step 3c (revision 5) — `expires_at` at the second exchange is a
+      DECISION, not a default.** The arm this one sits beside refreshes it; Task
+      2 Step 1 pins it byte-identical on the earlier transition. James rules it
+      at Gate 0, because it decides whether the new confirmation can be read at
+      a human pace inside a 300 s window that now also contains a full provider
+      round trip. Whichever way it goes, assert the chosen value explicitly —
+      an unasserted `expires_at` is how this became invisible.
 - [ ] **Step 4** — failing test: the proven subject belongs to NO account. The
       rower must reach a stated outcome, not a thrown 500.
 - [ ] **Step 5** — run, implement, re-run.
@@ -475,7 +613,16 @@ without them the rower reaches `link_ready` holding no session and cannot call
       (`frontDoorRoutes.ts:121`); only `confirm` does. Task 5 Step 3 renders it.
       Implement Steps 1b-1d together: they are one edit to `AuthStep`'s
       `link_ready` member in `app/shared/auth.ts`, plus `result()` and the web
-      callback branch.
+      callback branch. **`session` is a REQUIRED key with `null` meaning absent
+      (revision 5)** — a link attempt's `link_ready` legitimately carries none,
+      and an optional field is how RF33's real failure gets in. **And the two
+      edits are COUPLED:** the confirmation names the carried identity AND the
+      destination account, and the destination's email is only available because
+      edit 2 delivers the session.
+- [ ] **Step 1e (revision 5)** — flip the web callback's `if (r.signedIn) … else
+      …` branch order, or otherwise make it handle a result carrying BOTH. Today
+      the `signedIn` branch wins and abandons the attempt, which is the exact
+      outcome this task exists to prevent.
 - [ ] **Step 2** — run, implement, re-run.
 - [ ] **Step 3** — **invariant 1's real gate, at the layer that can reach it**
       (the antagonist's finding 7): drive the second callback while the client
@@ -503,16 +650,38 @@ starts. If it has not run, stop here.
       `cancelActive`. Assert the CONSEQUENCE — the attempt survives and the view
       advances — never the absence of a call.
 - [ ] **Step 2** — run, implement, re-run.
-- [ ] **Step 2b (revision 4) — the client auto-finalizes today, and no gate
-      had found it.** `acceptStep`'s `link_ready` branch
-      (`src/adapters/authFlow.ts:476-479`) calls `finalizeLink`
-      UNCONDITIONALLY. A signin follow-through arriving at `link_ready` would
-      attach the identity with NO confirmation shown, defeating James's
-      confirm-after-the-proof ruling in the client while every server test
-      stayed green. Failing test first: a signin `link_ready` renders the
-      confirmation and performs NO attach; a LINK `link_ready` still finalizes
-      immediately, unchanged. Qualify the branch by `step.purpose`. Mutation
-      probe: drop the qualification and confirm the signin leg goes red.
+- [ ] **Step 2b (revision 4; corrected in revision 5) — the client
+      auto-finalizes today, at TWO call sites, and no gate had found either.**
+      `grep -n "finalizeLink(" src/adapters/authFlow.ts` returns `422` (the
+      definition), **`477`** (`acceptStep`'s `link_ready` branch) and **`553`**
+      (`authorizeNative`, after `POST /proof`). Line 553 sits BEFORE the
+      `acceptStep` call on 558, so a native second exchange never reaches
+      `acceptStep` at all — and native is the primary surface. Revision 4 named
+      only 477; qualifying that alone leaves the phone attaching the identity
+      with NO confirmation shown while every server test stays green, which is
+      James's ruling defeated on the surface that matters. Failing test on BOTH
+      routes first: a signin `link_ready` renders the confirmation and performs
+      NO attach; a LINK `link_ready` still finalizes immediately, unchanged.
+      Mutation probe per call site — drop each qualification separately and
+      confirm the matching signin leg goes red. **One probe covering both is
+      not acceptable here:** a single green would have hidden 553 exactly as
+      revision 4 did.
+- [ ] **Step 2c (revision 5) — the client must CONSUME the delivered session,
+      and no type will tell you it does not.** Measured: widening `link_ready`
+      to carry `profile` and `session` breaks one producer
+      (`frontDoorRoutes.ts(121,35) TS2322`) and produces ZERO output from
+      `tsc -b`. Two failing tests, at the client layer, because the compiler is
+      silent here:
+      **(a) native** — `storeToken` has one caller in the flow
+      (`authFlow.ts:334-336`, inside `finishSignedIn`), so a `link_ready`
+      session is never written to the Keychain and `finalize`'s `requireUser`
+      answers 401. Assert the token is stored and the finalize call carries it.
+      **(b) web** — `finalizeLink` sets `{kind:"linked"}` and never calls
+      `onSignedIn`, so `App.tsx:116` still reads `me.state === "out"` and
+      `SignIn.tsx` (whose `kind ===` branches are busy/deleted/error/confirm/
+      usual) stays mounted. **The rower lands back on the sign-in screen,
+      apparently signed out, holding a live 60-day session.** Assert the
+      signed-in surface, not the absence of an error.
 - [ ] **Step 3** — failing test: the post-proof confirmation names the provider
       and the carried relay address, from the attempt's `verifiedEmail`, pinned
       as an independent literal.
@@ -520,6 +689,11 @@ starts. If it has not run, stop here.
 - [ ] **Step 5** — failing test: a follow-through that fails leaves a way
       forward. PR #444 just spent a Gate 0 on this screen's dead ends; it does
       not get to grow a new one.
+- [ ] **Step 5b (revision 5) — the REFUSAL case, which is not the failure
+      case.** The rower who reads the post-proof confirmation and says NO is
+      ALREADY SIGNED IN: the screen is no longer "sign in?" but "you're in —
+      attach Apple too?". What the No button does is unspecified. Gate 0
+      decides it; this step asserts whatever it decides.
 - [ ] **Step 6** — run, implement, re-run.
 - [ ] **Step 7** — per-file coverage on both files (RF2).
 - [ ] **Step 8** — commit.
@@ -570,13 +744,23 @@ nothing is implemented until James rules.
       You can sign in either way." duplicates the row beneath it, which already
       reads CONNECTED. The second sentence does work the row cannot; the first
       is the duplication. Failing test on the rendered surface first.
-- [ ] **Step 3 — naming the "You" screen has no consistent treatment.** Five
-      user-facing strings, two quoted by #444 and three not, including
-      `Today.tsx`'s "You can type the other in on You" — pronoun and screen name
-      in one sentence, neither marked. **The treatment is the open question**,
-      not just the inconsistency; the quotes were James's own suggestion and he
-      flagged the grammar himself. Gate 0 decides the treatment, then one sweep
-      applies it to all five and a test pins the census count.
+- [ ] **Step 3 — naming the "You" screen has no consistent treatment.**
+      **The census is SIX, not five, and there is a THIRD treatment (revision
+      5).** Measured across `app/src`, comments excluded: two QUOTED
+      (`you/SignInMethods.tsx:128` and `:130`, both from #444) and four
+      UNQUOTED — `SignIn.tsx:40`, `SignIn.tsx:101`, **`SignIn.tsx:173`**
+      ("Then open You → Sign-in methods to add …", which revision 4 missed) and
+      `today/Today.tsx:1479` ("You can type the other in on You" — pronoun and
+      screen name in one sentence, neither marked). The third treatment is
+      **"the You tab"**: `log/Concept2SendBlock.tsx:226` in live UI, plus three
+      UNDATED News article bodies (`news/content/bodies/yourFirstRow.tsx:28`
+      and `:36`, `baselines.tsx:63`), which Phase JC's ruling makes rendering
+      surfaces. Dated `releaseNotes.ts` entries stand as history and are
+      EXEMPT, by that same ruling. **The treatment is the open question**, not
+      just the inconsistency; the quotes were James's own suggestion and he
+      flagged the grammar himself. Gate 0 decides it, then one sweep applies it
+      and a test pins the census — **re-measure the count at implementation
+      time rather than copying this number**, since it moved once already.
 - [ ] **Step 4 — the `--rule` hairline measures 1.47:1 on `--surface`.**
       Pre-existing, decorative, outside WCAG's 3:1 non-text minimum. Recompute
       the ratio as a number in the Gate 0 pack and let James decide whether a
@@ -593,11 +777,28 @@ nothing is implemented until James rules.
   confirmation back before the proof, Tasks 0-4 are partly wasted. RC-24 is the
   precedent. It also covers the copy round below, which is why rolling those
   rows in is grouping rather than scope creep: **one Gate 0 instead of four.**
+  **Revision 5 gives it four decisions to carry besides the rendered screen:**
+  whether the second exchange refreshes `expires_at` (Task 3 Step 3c), what the
+  No button does now that refusing leaves the rower signed in (Task 5 Step 5b),
+  the "You" naming treatment across six strings and three shapes (Task 7 Step
+  3), and whether the 1.47:1 hairline is worth changing (Task 7 Step 4).
+- **PM, BEFORE Gate 0 (revision 5):** the `ACCESS_MODE` build-now call. Staging
+  stays `restricted` (James, 2026-09-14), `compose.yml:48` and
+  `accessPolicy.ts:14` both default to it, and `requireAccess(identity.email)`
+  at `attempts.ts:436` therefore refuses any Apple Hide My Email identity
+  BEFORE the attempt reaches `confirm` — PR2's own entry point. Under the live
+  configuration the flow is reachable only for Share My Email by an already
+  allowlisted address. **There is no point rendering a screen for a path the
+  host cannot reach**, so this is settled first.
 - **DBA:** REQUIRED at plan (Task 0 Step 5) and at PR. Revision 1 skipped it on
   a claim that turned out to be true about the schema and false about the work.
-- **Antagonist:** lens 1 has run TWICE (both NOT READY, both folded here).
-  **Revision 4 goes back to it for the TRANSPORT fix only** — Task 4 Steps
-  1b-1d and Task 5 Step 2b — not for the whole plan; the rest is vetted ground. The design CHANGED
+- **Antagonist:** lens 1 has run THREE times — revisions 1 and 3 in full, and
+  a SCOPED third pass on revision 4's transport additions (2026-09-15, NOT
+  READY, three blocking findings, all folded into revision 5). **It does not
+  run again.** The `harden` skill caps the pre-implementation loop at two
+  passes and this was the third; revision 5 changes no mechanism, it closes
+  three named holes in one. What remains is Gate 0 and the PM's build-now call
+  on `ACCESS_MODE`, neither of which is an antagonist question. The design CHANGED
   shape afterwards, and the route through was the antagonist's own INFERENCE
   which it did not build — so Task 3 Step 7 is the falsification test: if
   `finalize()` needs editing, the central claim is wrong and the plan comes back
