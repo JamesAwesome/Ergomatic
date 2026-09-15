@@ -3498,8 +3498,17 @@ Each needs erg time or a deliberate recording session.
   fields away reads `PM5 432331249 Row` on 13 of 13 committed captures —
   though that is one erg's advertised name, never observed on a SkiErg, so
   it defeats urgency without being a fact to build on.
-  **S** · dies 2026-11-15 · a vendor-enum transcription with a real evidence
-  bar and a stored-shape change, not a lookup; the byte is honest now
+  **DONE in the same PR** (James, 2026-09-15: "Do that as part of this it
+  sounds in scope" — filed as a row an hour earlier, then pulled forward at
+  his direction). Shipped as `ergMachineName`, the vendor's own token, absent
+  for unnamed values. **Two corrections the build earned, kept here because
+  the next transcription needs them:** the name came from the WRONG document
+  first — Concept2 ships two enums agreeing on 23 values and 22 of 23 names,
+  and `32` is `SLIDES_DYNAMIC` in BLE rev 1.30 (which defines the field) but
+  `LINKED_DYNAMIC` in CSAFE rev 0.27; and a spot-check of 8 of 23 tokens let
+  both a one-character typo and a deleted row ship green.
+  **S** · dies 2026-11-15 · row kept as the record of a shipped change, not
+  as owed work
 
 - **`ergMachineType` is recorded as `null` in every exported log, on a
   monitor that reports it 174 times a session.** Found by James reading the
