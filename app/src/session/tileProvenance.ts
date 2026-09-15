@@ -10,11 +10,16 @@
 // what it is handed.
 
 /** Who did the arithmetic. Deliberately not "ours" vs "theirs": AVG WATTS
- *  and CAL/HOUR run CONCEPT2'S OWN published logbook formula over measured
- *  inputs, so the formula is theirs and only the running of it is ours. And
- *  deliberately not "estimated", which is what the tilde already means on
- *  the baselines surface. */
-export type TileSource = "reported" | "computed";
+ *  and CAL/HOUR run CONCEPT2'S OWN published logbook formula over the
+ *  monitor's figures, so the formula is theirs and only the running of it is
+ *  ours. And deliberately not "estimated", which is what the tilde already
+ *  means on the baselines surface.
+ *
+ *  The user-facing words are MEASURED and DERIVED (James, 2026-09-15). See
+ *  `MachineSummaryTable.tsx` for the objection raised against "MEASURED" and
+ *  why it is weaker than it sounds. The same two words carry the same
+ *  distinction on BOTH surfaces, so a rower learns it once. */
+export type TileSource = "measured" | "derived";
 
 export interface TileProvenance {
   label: string;
@@ -46,28 +51,28 @@ export interface MachineTileProvenance {
 export const FIXED_SOURCES = {
   avgWatts: {
     label: "AVG WATTS",
-    source: "computed",
+    source: "derived",
     detail:
       "Concept2's published logbook formula, from your time and distance.",
   },
-  calories: { label: "CALORIES", source: "reported" },
+  calories: { label: "CALORIES", source: "measured" },
   calPerHour: {
     label: "CAL / HOUR",
-    source: "computed",
+    source: "derived",
     detail:
       "Concept2's published logbook formula, from the monitor's calorie count.",
   },
-  drag: { label: "DRAG", source: "reported" },
+  drag: { label: "DRAG", source: "measured" },
 } as const satisfies Record<string, TileProvenance>;
 
 /** RATE, per row. `finished` is the same flag `sessionStrokeRate` branches
  *  on — a free row counts as finished (James, 2026-09-07). */
 export function rateProvenance(finished: boolean): TileProvenance {
   return finished
-    ? { label: "RATE", source: "reported" }
+    ? { label: "RATE", source: "measured" }
     : {
         label: "RATE",
-        source: "computed",
+        source: "derived",
         because:
           "You stopped this piece early. The monitor's own average is not reliable when that happens, so this is the average of your splits instead.",
       };
@@ -78,10 +83,10 @@ export function rateProvenance(finished: boolean): TileProvenance {
  *  the screen has never said which one it is showing. */
 export function heartRateProvenance(monitorSentOne: boolean): TileProvenance {
   return monitorSentOne
-    ? { label: "AVG HR", source: "reported" }
+    ? { label: "AVG HR", source: "measured" }
     : {
         label: "AVG HR",
-        source: "computed",
+        source: "derived",
         because:
           "The monitor sent no average, so this is your belt's reading over the time you were working.",
       };

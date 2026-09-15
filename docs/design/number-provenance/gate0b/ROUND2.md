@@ -82,12 +82,31 @@ table scrolls sideways, so whatever sits rightmost is invisible at rest:
 **Recommended: computed first.** The measurement said the two variants were
 identical; the picture is what separated them.
 
-A copy correction rides with it: the board said the second group was "ours".
-It is not. `AVG WATTS` and `CAL/HOUR` run **Concept2's own published logbook
-formula** over measured inputs — the formula is theirs and only the running
-of it is ours — so the honest pair is **REPORTED / COMPUTED**, never
-theirs/ours, and never "estimated", which is what the tilde already means on
-the baselines surface.
+### The words
+
+**`DERIVED` / `MEASURED` (James, 2026-09-15.)** The board said the second
+group was "ours". It is not — `AVG WATTS` and `CAL/HOUR` run **Concept2's own
+published logbook formula**, so the formula is theirs and only the running of
+it is ours. "Estimated" was never available either: the tilde already means
+that on the baselines surface.
+
+**An objection was raised against MEASURED and OVERRULED, and it is recorded
+rather than dropped** (`MachineSummaryTable.tsx`): "measured" is loose over
+`CAL` and `DRAG`, which the monitor almost certainly computes from flywheel
+data. **That is NOT sourced from this repo.** `pm5-interface-notes.md`
+documents both as wire fields (`0x0039[6-7]`, `0x0038[16]`) and says nothing
+about how the monitor arrives at them — so the objection rests on outside
+knowledge and was put more confidently than the evidence supported. If a
+capture or a Concept2 sentence ever settles it, that comment is where to
+come back.
+
+Two things fell out of the change. It **resolved an inconsistency James
+caught by asking**: the table had said `REPORTED BY THE PM5` while the sheet
+said `REPORTED BY THE MONITOR` — the same distinction in two different
+words, which is exactly what this design claims to avoid. `MEASURED` has no
+"by the ..." clause, so both surfaces now carry the identical two words. And
+the labels got **shorter** (7 and 8 characters against 13 and 19), leaving
+room for the two-digit `#` the component's own comment warns about.
 
 ## Ruling 1 — the drill-down
 
@@ -105,13 +124,39 @@ table's two words so a rower learns one distinction rather than two.
 **Opener hit target measured at exactly 44px** in both orientations
 (`opener-*.json`) — the house hard requirement.
 
-**A defect found by looking at the first capture, and fixed before this
-board:** the first draft put *"Concept2's own published formula, run on this
-piece"* as a heading over all four computed rows — **true of exactly two of
-them**. RATE is a weighted mean of the splits; AVG HR is a time-weighted mean
-of the trace. A heading over-claiming what sits under it is the precise
-defect this whole pass exists to remove. The formula sentence now sits on the
-two rows it is true of; the group note says only what is true of all four.
+### THE LESSON, and it cost three rounds inside the fix for it
+
+**A group heading is a claim about EVERY row under it, and it is the easiest
+place in an interface to over-claim.** `PM5 · PER INTERVAL` over two columns
+that are not the PM5's is the defect this whole pass exists to remove — and
+while building the fix I wrote the same defect three times:
+
+1. *"Concept2's own published formula, run on this piece"* over all four
+   derived rows. True of **two**: RATE is a weighted mean of the splits and
+   AVG HR a time-weighted mean of the trace.
+2. *"Worked out on this device, from what the monitor measured"* — still
+   wrong for AVG HR, which comes from the **belt's** trace.
+3. *"Worked out on this device from the monitor's own figures"* — the same
+   error again, reworded.
+
+The group note is now **"Worked out on this device. Each line says from
+what."** — true of all four, and it does the one job a group heading can do
+safely: name the group, and delegate every specific claim to the rows.
+
+**None of the three was caught by a number.** The geometry file said "fits",
+the contrast file said 6.69:1, and every gate was green. All three were
+caught by opening the PNG and reading it — which is why RF7 exists, and why
+the design gate is a rendered artifact rather than a description.
+
+**And a fourth, in a different medium: AN EDIT SCRIPT'S SUCCESS MESSAGE IS A
+CLAIM ABOUT ITS OWN DIFF.** The script fixing defect 3 printed `ok`, asserted
+its anchor matched exactly once, and changed NOTHING — the next capture still
+carried the old sentence. It was caught by opening the PNG again, not by the
+script, the formatter, the typecheck or the suite. The habit that closes it:
+**read the file back from disk after writing and assert the new text is there
+and the old text is gone**, which is what the corrected script does. This is
+the same lesson this pass already learned once as "a fix-round summary is a
+claim about its own diff", now earned a second time in code.
 
 ## Contrast, measured
 

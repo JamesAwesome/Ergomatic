@@ -1,14 +1,23 @@
 import { DASH } from "../workout/connected/surfaceModel";
 import type { MachineSplitRow } from "./summaryModel";
 
-/** GATE 0B ROUND 2 PROTOTYPE — ruling 2 option B. Grouped so each heading
- *  is true of what sits under it. REPORTED = the monitor said it; COMPUTED =
- *  we ran Concept2's own published logbook formula over measured inputs
+/** GATE 0B ROUND 2 PROTOTYPE — ruling 2 option B. Grouped so each heading is
+ *  true of what sits under it. MEASURED = the monitor's own figures; DERIVED
+ *  = we ran Concept2's own published logbook formula over them
  *  (`summaryModel.ts:204-210`). Deliberately NOT "ours" — the formula is
- *  theirs, only the running of it is ours — and deliberately not "estimated",
- *  which is what the tilde already means elsewhere in this app. */
-const REPORTED = ["HR", "CAL", "DRAG", "REST m"] as const;
-const COMPUTED = ["WATTS", "CAL/HOUR"] as const;
+ *  theirs and only the running of it is ours.
+ *
+ *  WORDS CHOSEN BY JAMES, 2026-09-15, over a stated objection, and the
+ *  objection is recorded here rather than dropped: "MEASURED" is loose over
+ *  CAL and DRAG, which the monitor almost certainly computes from flywheel
+ *  data rather than measures. **That is NOT sourced from this repo** —
+ *  `pm5-interface-notes.md` documents both as wire fields (0x0039[6-7],
+ *  0x0038[16]) and says nothing about how the monitor arrives at them, so
+ *  the objection rests on outside knowledge and is weaker than it first
+ *  sounded. If a future capture or a Concept2 sentence settles it, this is
+ *  the comment to come back to. */
+const MEASURED = ["HR", "CAL", "DRAG", "REST m"] as const;
+const DERIVED = ["WATTS", "CAL/HOUR"] as const;
 
 /** `undefined` (no frame) and `null` (a belt that said nothing) both read
  *  as the house dash; `0` reads as 0 — "the machine did not say" and "the
@@ -59,18 +68,18 @@ export default function MachineSummaryTable({
           <thead>
             <tr className="machine-summary-groups">
               <th className="machine-summary-pin" aria-hidden="true" />
-              <th scope="colgroup" colSpan={COMPUTED.length}>
-                COMPUTED HERE
+              <th scope="colgroup" colSpan={DERIVED.length}>
+                DERIVED
               </th>
-              <th scope="colgroup" colSpan={REPORTED.length}>
-                REPORTED BY THE PM5
+              <th scope="colgroup" colSpan={MEASURED.length}>
+                MEASURED
               </th>
             </tr>
             <tr>
               <th scope="col" className="machine-summary-pin">
                 #
               </th>
-              {[...COMPUTED, ...REPORTED].map((c) => (
+              {[...DERIVED, ...MEASURED].map((c) => (
                 <th scope="col" key={c}>
                   {c}
                 </th>

@@ -3,8 +3,9 @@
 // Apple Health's pattern, not Strava's: the figure on the tile carries no
 // mark, and the answer lives one level down. That is deliberate. Strava's
 // rename ("Power" / "Estimated Power") encodes QUALITY, and our axis does
-// not — on a terminated piece the computed 26 is the number the monitor's
-// own View Detail screen shows and its reported 52 is the wrong one
+// not — on a terminated piece the 26 we DERIVE is the number the monitor's
+// own View Detail screen shows, and the 52 the monitor itself sends is the
+// wrong one
 // (pm5-interface-notes §27.6), so a mark on the tile face would brand the
 // MORE correct number as the less trustworthy one.
 //
@@ -45,8 +46,8 @@ export function TileSourceSheet({
   const keys = Object.keys(sources) as (keyof MachineTileProvenance)[];
   // Grouped by what each tile's source IS FOR THIS ROW, so the grouping is
   // always true rather than true on average.
-  const computed = keys.filter((k) => sources[k].source === "computed");
-  const reported = keys.filter((k) => sources[k].source === "reported");
+  const derived = keys.filter((k) => sources[k].source === "derived");
+  const measured = keys.filter((k) => sources[k].source === "measured");
 
   return (
     <>
@@ -67,24 +68,24 @@ export function TileSourceSheet({
         <h2 id={titleId} className="tile-source-title">
           WHERE THESE NUMBERS COME FROM
         </h2>
-        {computed.length > 0 && (
+        {derived.length > 0 && (
           <section className="tile-source-group">
-            <h3 className="tile-source-group-head">COMPUTED HERE</h3>
+            <h3 className="tile-source-group-head">DERIVED</h3>
             <p className="tile-source-group-note">
-              Worked out on this device, from what the monitor measured.
+              Worked out on this device. Each line says from what.
             </p>
-            {computed.map((k) => (
+            {derived.map((k) => (
               <Row key={k} p={sources[k]} value={values[k]} />
             ))}
           </section>
         )}
-        {reported.length > 0 && (
+        {measured.length > 0 && (
           <section className="tile-source-group">
-            <h3 className="tile-source-group-head">REPORTED BY THE MONITOR</h3>
+            <h3 className="tile-source-group-head">MEASURED</h3>
             <p className="tile-source-group-note">
-              The monitor&rsquo;s own figures, as it sent them.
+              Straight from the monitor, as it sent them.
             </p>
-            {reported.map((k) => (
+            {measured.map((k) => (
               <Row key={k} p={sources[k]} value={values[k]} />
             ))}
           </section>

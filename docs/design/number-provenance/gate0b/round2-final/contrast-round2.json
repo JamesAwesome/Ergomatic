@@ -1,0 +1,74 @@
+[
+  {
+    "element": ".machine-summary-groups th",
+    "sample": "",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(244, 241, 232)",
+    "fontPx": "10px",
+    "fontWeight": "400",
+    "ratio": 6.69
+  },
+  {
+    "element": ".tile-source-opener",
+    "sample": "Where these numb",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(244, 241, 232)",
+    "fontPx": "11px",
+    "fontWeight": "400",
+    "ratio": 6.69
+  },
+  {
+    "element": ".tile-source-title",
+    "sample": "WHERE THESE NUMB",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "11px",
+    "fontWeight": "600",
+    "ratio": 17.11
+  },
+  {
+    "element": ".tile-source-group-head",
+    "sample": "DERIVED",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "10px",
+    "fontWeight": "400",
+    "ratio": 7.43
+  },
+  {
+    "element": ".tile-source-group-note",
+    "sample": "Worked out on th",
+    "fg": "rgb(87, 84, 76)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "13px",
+    "fontWeight": "400",
+    "ratio": 7.43
+  },
+  {
+    "element": ".tile-source-label",
+    "sample": "AVG WATTS",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "11px",
+    "fontWeight": "400",
+    "ratio": 17.11
+  },
+  {
+    "element": ".tile-source-value",
+    "sample": "184",
+    "fg": "rgb(27, 26, 23)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "15px",
+    "fontWeight": "400",
+    "ratio": 17.11
+  },
+  {
+    "element": ".tile-source-because",
+    "sample": "Concept2's publi",
+    "fg": "rgb(63, 60, 53)",
+    "bg": "rgb(255, 253, 247)",
+    "fontPx": "13px",
+    "fontWeight": "400",
+    "ratio": 10.81
+  }
+]
