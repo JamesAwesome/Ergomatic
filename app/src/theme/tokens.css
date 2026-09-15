@@ -25,6 +25,21 @@
   --ink-3: #57544c;
   --ink-4: #6f6a5f;
   --ink-5: #a09a8c;
+  /* GATE 0 RULING 5 (James, 2026-09-15): --rule STAYS at 1.47:1 on --surface,
+     and the policy below is what that ruling bought instead of a repaint.
+
+     A BOUNDARY THAT CARRIES MEANING USES --ink-4 (4.76:1 on page, computed).
+     --rule STAYS DECORATIVE. WCAG's 3:1 non-text minimum governs boundaries
+     needed to IDENTIFY a component or its state; --rule sits between rows
+     their own labels already separate, so it is exempt — and raising it would
+     repaint every card, list and divider in the app to fix a line carrying no
+     information.
+
+     The numbers that decided it, so the question does not come back:
+     --rule on --surface 1.47:1, on --page 1.32:1. The obvious small step does
+     NOT work — #a39c88 is 2.69:1 and 2.42:1. The lightest value clearing both
+     is #928a78 (3.37:1 / 3.03:1), which no longer reads as a hairline.
+     Measured in docs/design/pr2-gate0/contrast.json. */
   --rule: #d8d3c4;
   --rule-2: #ded8c9;
   --rule-3: #c9c3b2;

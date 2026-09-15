@@ -1236,8 +1236,12 @@ it lands the stranger on this same denial.
       `docs/design/pr2-gate0/renders/08-delete-reauth-options.png`. The box it
       lives in MOVES under the account-submenu row above, which is why this
       rides that work rather than landing first.
-- [ ] **"Apple is now connected. You can sign in either way." says what the row
-      under it already says.** James, 2026-09-14, from the live screen: _"I
+- [x] **DONE 2026-09-15 (PR #453). "Apple is now connected. You can sign in
+      either way." said what the row under it already said.** The first
+      sentence is deleted; the notice now reads only "You can sign in either
+      way." — the half the row cannot say. Its test asserts the provider name
+      is ABSENT, which is the assertion that would have caught this being
+      re-added. James, 2026-09-14, from the live screen: _"I
       don't need this blurb here forever. Apple says connected below it."_ The
       success notice sits directly above the SIGN-IN METHODS list, where that
       provider's row now reads CONNECTED — so the same fact is stated twice in
@@ -1382,9 +1386,12 @@ it lands the stranger on this same denial.
       · dies 2026-10-15 · a row and not a fix-now because the fix already
       shipped here and only the confirming measurement is outstanding, and it
       needs post-merge CI jobs that do not exist yet.
-- [ ] **Raise the `--rule` hairline: it measures 1.47:1 on `--surface`.**
-      **SUPERSEDED BY GATE 0 RULING 5, JAMES, 2026-09-15 — DO NOT DO THE SWEEP
-      THIS ROW DESCRIBES.** He reversed the 2026-09-14 ruling below after
+- [x] **Raise the `--rule` hairline: it measures 1.47:1 on `--surface`.**
+      **CLOSED 2026-09-15 BY GATE 0 RULING 5 (PR #453) — THE SWEEP THIS ROW
+      DESCRIBES MUST NOT BE DONE.** The policy it was reduced to is now written
+      down beside `--rule` in `app/src/theme/tokens.css`, with the numbers, so
+      the question cannot come back as a fresh observation. Left as a ticked
+      record rather than struck, because striking is James's call. He reversed the 2026-09-14 ruling below after
       seeing both options rendered: `--rule` STAYS at 1.47:1, and the durable
       half is a policy instead — **a boundary that carries meaning uses
       `--ink-4`** (4.76:1 on page, computed) **and `--rule` stays decorative.**
