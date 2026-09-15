@@ -6990,6 +6990,122 @@ deletes it and in which PR, or it ships as dead code with no row (RF29).
 
 **Overdue sweep (tr form):** zero. Earliest live stamp 2026-09-19.
 
+
+## 2026-09-14 — Wave A PR2 pre-implementation gate (the link follow-through)
+
+**Target:** `docs/superpowers/plans/2026-09-14-wave-a-pr2-follow-through.md`
+rev 3 against the account-management spec rev 3, §"Following through to a link
+(PR2)". Pre-implementation pass on SHAPE, before the client Gate 0. TRIAD twice
+(auth + stored shape).
+
+**Verdict: shape APPROVED as ONE PR with Gate 0 moved AHEAD of Task 0;
+sequencing NOT NOW.** Revision 3 survived an antagonist NOT READY and a DBA
+FAIL with both folded and measured; it was not returned on mechanism. It was
+returned on position in the queue.
+
+1. **PR2 is not in Wave A's written exit.** The exit sentence describes a
+   stranger signing in with one provider; the follow-through screen needs two.
+   The exit-blocking row is "an open sign-up policy", unchecked, dying
+   **2026-09-26** against PR2's 2026-10-10. Every code gate on it is
+   discharged: `accessPolicy.ts` ships with 23 `public` test sites, and
+   `deploy.md`'s stated condition ("Public access and external TestFlight still
+   require in-app deletion") closed when James's real-provider deletion
+   completed on staging today. The row is unchecked because nobody flipped
+   `ACCESS_MODE`, not because anything is unbuilt.
+2. **The plan's own "open, owed to the PM" question is the build-now answer.**
+   `requireAccess` runs before the `confirm` stage, so under `restricted` the
+   private-relay case — spec condition 2's "discriminating power is weakest
+   exactly where permanence is worst" — is unreachable on the deployed host.
+3. **The defect is recoverable in-app today, and the recovery is printed on the
+   screen.** `SignIn.tsx` (shipped #436) + `Add Apple ›` on You. A misread costs
+   a second EMPTY account — no data loss — recoverable by delete-then-link,
+   which #444 just spent a Gate 0 naming in four steps.
+
+**Split ruled ONE PR**, against the surface reading: Tasks 0-4 alone grow a
+route no client reaches and widen a CHECK for a state nothing produces (RF29 +
+RF34). What moves is Gate 0, from blocking Task 5 to blocking Task 0.
+
+**Owed and missing from the plan:** the carried Apple grant's revocation on a
+FAILED attach; the follow-through row's stale "blocked on cross-surface subject
+continuity" clause, closed 2026-09-13; and a row for restricted-mode
+unreachability if PR2 ships before the flip.
+
+## 2026-09-14 — Wave A public-activation walk readiness (v1: NOT READY)
+
+Target: `docs/superpowers/runsheets/2026-09-14-public-activation-v1.md`, judged
+after James answered the Apple feasibility question ("I don't have a second
+Apple account") and Case B was struck in place.
+
+**Verdict NOT READY, twelve required revisions, none of them a redesign.** The
+two blockers were not on the dispatch's own list:
+
+1. **`scripts/deploy.sh` refuses on `git status --porcelain`, which counts
+   untracked files, and `.gitignore` ignores exactly `.env`.** Step 2's hand
+   edit of the host `.env` is the likeliest producer of a `.env.bak`/`.env~`/
+   `.env.swp`, and the cost is every subsequent CI deploy exiting 3, visible
+   only as a red `deploy` job on main (RF28's exact shape). v2 owes an
+   editor-free prescribed command pair, a backup outside the checkout, and a
+   clean-checkout check as a step-9 pass condition. The durable half went to
+   `docs/deploy.md`, whose Rollback section claimed a hand-rolled rollback was
+   the likeliest way to dirty the tree.
+2. **A1 had no control leg.** "The first-account confirmation appeared" cannot
+   distinguish an admitting gate from an unconsulted one, and the whole session
+   probes one boolean (`accessPolicy.ts`). The fix is free and also settles the
+   surviving feasibility unknown: take the same identity to the denial screen
+   under `restricted` at the desk first.
+
+**Case minimality.** Of five cases, one was the session (A1), one was teardown
+misfiled as evidence (A4 — an account left alive becomes the locked-out-rower
+exposure the ROADMAP documents the moment step 9 restores `restricted`, since
+`sessions.ts` re-checks the policy per request), and one had to be reduced to
+observe-only: A5's "and Today is empty" cannot be seen without tapping Create,
+so the final case manufactured the orphan the previous case had just removed.
+`attempts.ts`'s delete is a hard `DELETE FROM users`, so the confirmation screen
+appearing at all is the proof.
+
+**Two operator steps were missing entirely**: sign out of James's own account
+before A1, and sign back in after step 9.
+
+**One named non-risk**, since the operator will be juggling two Google accounts:
+a wrong-account re-auth on the delete path cannot destroy the wrong account —
+`attempts.ts` throws `account_changed` when the proven subject does not match
+the session's user.
+
+**Struck-case cost went to a dated ROADMAP row, not a runsheet paragraph**
+(RF14). The runsheet's "the one path to it is a newly created Apple ID" was an
+option ruled out on an unmeasured cost (RF30): any Apple ID that has never
+authorized Ergomatic works, and this cohort is a household.
+
+**Session shape recommended:** two stages — a ~3-minute desk rehearsal under
+`restricted` that answers the chooser question and produces the control leg,
+then a 20-minute door-open window, with the closing step outside the cap. The
+reason the door closes again is citable and was absent: no database backup
+exists, and PR2's follow-through is unshipped.
+
+**Re-gate, v2: NOT READY on three, all text.** Ten of twelve folded cleanly.
+The two failures were introduced BY the fold: the total wall-clock cap vanished
+when the timer table was restructured around the new 20-minute door clock, and
+S3's pinned denial string came from main rather than from `v0.48.0`, which the
+phone runs — `native/signin.ts` at that tag ends at "isn't invited to this
+Ergomatic." because #444 added "Ask the owner to add you." seven commits later,
+and `SignIn.tsx`'s `legacyGoogle` branch means both strings are reachable on the
+build under test. The third was a missing leading `\n` in the append, whose
+realistic failure is a corrupted `ALLOWED_EMAILS` locking out every account —
+detected by the check block's locked-out count and recovered by the restore, so
+five minutes inside a 20-minute clock rather than a disaster. Re-gate scoped to
+a six-item fold and said so, because NF-PRODUCT took seven gates by failing each
+round on defects inside the previous round's fix.
+
+**v3: PASS.** Six-item fold verified against the file. Two copy items rode it
+without another gate: the "Surfaces under test" sentence that C1's own fix
+falsified (the claim corrected where it was ARGUED, left standing where it was
+STATED), and the typing/paste count, which the v2 fold dropped along with the
+total cap — **the PM caught one of the two lost clauses and stopped at one.**
+Contract-coverage diffing between versions is not a scan you do until you find
+something; it is a checklist you finish. The controller recounted rather than
+taking the PM's figure: seven pastes across five distinct blocks, not four
+across three.
+
 ## 2026-09-14 — hardware-walk readiness gate: work-clock freeze (v1-v4 NOT READY, v5 PASS)
 
 **Final: PASS on `2026-09-15-work-clock-freeze-v5` (`3d2d9027`).** One question

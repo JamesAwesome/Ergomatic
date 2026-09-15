@@ -1231,6 +1231,24 @@ describes.
     ZERO times in 144 local runs, because its trigger is a slower, more
     contended runner. Local proves a failure real; only CI proves its absence.
 
+43. **A merge-conflict marker reaching a commit, in the files that ARE the
+    agent instructions.** PR #446 merged to main carrying `<<<<<<< HEAD`,
+    `=======` and `>>>>>>> origin/main` in `antagonist-techniques.md`,
+    `antagonist-ledger.md` and `pm-ledger.md`, and **nothing anywhere went
+    red** — the paths are under `.claude/`, so `ci-changes.sh` correctly
+    skipped `app`/`docker`/`e2e`; lint-staged's globs are `app/**`, so no
+    formatter ever opened them; and they are prose, so no compiler or test
+    could. The markers survived a merge commit, a review and a PM gate, and
+    landed as instructions every future agent reads. **`scripts/conflict-
+    markers.sh` is the gate now, in CI's always-run `scripts` job** — it
+    checks CONTENT of tracked files, not conflict STATE, because a checkout
+    mid-rebase is the human's business and a marker in a commit is not.
+    **And resolve a conflict in a NUMBERED list by keeping BOTH sides and
+    renumbering one** — both sides here began at 57, because both branches
+    appended to the same list, so "pick a side" silently deletes seven real
+    entries. _Found the same day, by an agent appending to one of the three
+    files and reading its tail._
+
 ## Commands
 
 - iOS: `pnpm ios:release` (full CLI TestFlight release from the current tag;

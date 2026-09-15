@@ -11008,3 +11008,253 @@ exists; every work interval in the rest capture was rowed continuously, wall
 and elapsed agreeing to 0.65 s). **If it does, `wall = work + machineRest`
 breaks for programmed rows too — the one question PR 3 genuinely needs**, and
 it is answerable at a desk from any capture holding a mid-interval pause.
+
+
+## 2026-09-14 — Wave A PR2, the link follow-through (anchor pass, TRIAD/auth)
+
+**Target:** `docs/superpowers/plans/2026-09-14-wave-a-pr2-follow-through.md`
+against `docs/superpowers/specs/2026-09-13-account-management-design.md` rev 3,
+§"Following through to a link (PR2)". Dispatched by `/harden` as lens 1.
+**Verdict: NOT READY.** Four blocking, three high, two medium, one question.
+
+**The headline.** The plan's decisions 2, 2b and 2c all argue from the DDL and
+conclude "PR2 carries no migration". The DDL half is CORRECT — proven on
+`postgres:18.4` with all 33 migrations applied: a `purpose='signin',
+stage='reauth_authorize', existing_provider=NULL, original_session_id=NULL` row
+inserts cleanly, and the same row with `existing_provider='google'` is refused
+by `auth_attempts_session_check` (23514). The conclusion is wrong, because the
+authority is `attempts.ts`'s `consistent()`, which the plan never cites.
+Measured through the real `createAttempts(...).read()`, one row, three stages,
+nothing else varied:
+
+    signin@confirm            -> READ OK, attemptProvider=apple
+    signin@reauth_authorize   -> THREW attempt_expired
+    signin@reauth_exchanging  -> THREW attempt_expired
+
+`consistent()` is called from `load()` and from `save()`, so read and write
+both refuse. A second clause of the same function
+(`(stage.startsWith("target_") || stage === "link_ready") && purpose !== "link"`)
+refuses the `link_ready` terminal the plan's decision 2 also names. See
+technique 57.
+
+**Second blocking find, independent of the first.** Decision 2 said the signin
+arm "does not need" to record the provider. `attemptProvider()` returns
+`a.existingProvider!` for every `reauth_*` stage; on the real row it returned
+`null`, and `frontDoorRoutes.ts`'s callback guard `attemptProvider(a) !==
+provider` then rejected BOTH providers with `invalid_proof`. Four consumers:
+`context()`, `view()`, the native authorization-code gate, the web callback.
+Technique 58.
+
+**Third.** Decision 2c named the wrong arm. `accept()` tests
+`a.stage === "reauth_exchanging"` FIRST with an early return; the `else if` the
+plan describes belongs to `target_exchanging`. The arm that would actually fire
+does `original(tx, a.originalSessionId!, true)` over a CHECK-forced NULL and
+throws `account_changed`, not the silent overwrite the plan calls "the hazard"
+and makes Task 1 Step 0.
+
+**Fourth — the design judgment.** Decision 3 moves the confirmation before the
+second proof and defends it with `binding_hash`. The two halves contradict:
+`binding_hash` collapses the attack to one device and two people, which puts
+the ATTACKER in front of the confirmation. The spec's own condition 2 states
+the control in victim terms. Counterweight recorded honestly: `attachProven`
+mints a session either way, so the marginal loss is the victim's chance to
+refuse the PERMANENT attach, for which spec condition 4 already names PR1's
+unlink as the compensating control. Decision 3 may be right; its argument is
+not. Technique 59.
+
+**Research.** RFC 9700 — cited by the spec, the plan and the 2026-09-14 handoff
+as the authority for "the OAuth pre-account-linking attack" — contains no such
+section (2569 lines, `grep -ci linking` = 0, four `account` hits all "take into
+account", §4 TOC 4.1-4.17). The repo's four PRIOR RFC 9700 citations are all
+real sections, which is what made the transfer plausible. Real primaries:
+NIST SP 800-63C-4 §3.8.1, which ENDORSES the design's shape ("the RP SHALL
+require an authenticated session with the subscriber account for all linking
+functions. This authenticated session SHOULD require authentication using one
+existing federated identifier before linking the new federated identifier");
+and Sudhodanan & Paverd, USENIX Security 2022, for the attack and for the
+observation that a confirmation is not a substitute for the ownership proof.
+NOTHING FOUND, across nine sources, on consent ORDERING or on shared-device
+binding — so decision 3 is not citable either way. Also unrecorded: NIST
+800-63C-4 §3.8's notice SHALL and 800-63B-4 §4.1.2's "mechanism independent of
+the transaction", from which the spec's "the You screen is the only detection
+channel" is an accepted deviation with no citation beside it. Technique 61.
+
+**Also found:** invariant 2's second clock can never bite before `expires_at`,
+and Step 3b's test state is unconstructible (technique 60); `followThrough`
+omits the `state`/`nonce` mint its own lifetime table requires and its sibling
+transition performs; invariant 1's gate is prescribed at a layer whose function
+signature takes no session, so it cannot go red (RF21); Task 5 ticks a ROADMAP
+row on a deletion verification the same-day handoff says is still owed; the
+carried Apple grant's revocation on a failed attach is unaddressed; and the
+whole surface may be unreachable under `ACCESS_MODE=restricted`, since
+`accept()` calls `requireAccess(identity.email)` before `confirm` and an Apple
+relay address is never on `ALLOWED_EMAILS`.
+
+**VETTED GROUND (attacked and held).** The two CHECK-constraint claims, proven
+both ways. Decision 2b's two mechanism claims (`reauthenticated_at` is unwritten
+on the signin path; `expires_at` is refreshed for signin only; `ttl = 300000`).
+Invariant 3's refusal code, which arrives as `account_conflict` by two routes —
+`finalize`'s conditional UPDATE and `users_apple_sub_unique`'s 23505 mapped in
+`transaction()`'s catch. Invariant 1 as a PROPERTY at the store layer (only its
+gate fails). Cross-surface subject continuity, closed 2026-09-13. The DBA skip
+— right answer, wrong reason. All seven named files exist.
+
+**The route through, INFERENCE, not built:** three edits in `attempts.ts` —
+widen `consistent()`'s signup rule AND extend its `verified` clause to the
+reauth stages (or the machine stops protecting the carried identity at exactly
+the two stages the design needs it); a signin arm in `attemptProvider()`; a
+signin arm inside `accept()`'s `reauth_exchanging` branch. No migration — but
+the cost moved from the schema into the module's central invariant guard, which
+is TRIAD-weight work the plan does not name. If confirm-AFTER is wanted, the
+cheaper migration is widening the `signin` arm of `auth_attempts_session_check`
+to permit an adopted `original_session_id` after the second proof, so the
+EXISTING `finalize()` does the attach under its existing binding — spec
+condition 1 says that binding "must be replaced"; it can instead be earned.
+
+### Re-pass on revision 3 (2026-09-14, requested by James before Gate 0)
+
+**Verdict: NOT READY — one blocking, three high, two medium.** The fold is
+honest and corrects one of this agent's own inferences correctly
+(`attemptProvider()` needs no arm once the migration writes `existing_provider`).
+
+**Blocking, and a new failure mode rather than a survival of the old one.**
+`finalize()` really does work unchanged — every precondition walked:
+`bound()`, `same()`, the stage test, the conditional UPDATE, `grant()`, and
+`original()`'s `requireAccess` are all satisfiable by an adopted-session signin
+attempt. The seventh is not.
+`currentSessionId !== a.originalSessionId` is fed by `req.sessionId!` behind
+`requireUser`, and **nothing delivers the minted session to the client while the
+attempt is still alive**: the web callback's attempt-surviving branch never
+calls `signed()`; `result()` returns a session OR an attempt view, never both;
+`finishSignedIn` nulls `operation.current`; and `AuthStep` makes `SignedIn` and
+`link_ready` mutually exclusive union members. Task 3 Step 7 is scoped to the
+store and will PASS, certifying a narrower claim than the plan makes.
+`shared/auth.ts` is named in no task and must change twice — once for the
+session, once for the `profile` the post-proof confirmation needs (`view()`'s
+`link_ready` branch carries none). Technique 62.
+
+**High.** (a) The prescribed `consistent()` edit, read literally, refuses
+link@`reauth_authorize`, delete@`reauth_authorize`, link@`reauth_exchanging` and
+link@`link_ready` — every link and delete at its starting stage — because the
+first clause is a purpose/stage EQUALITY and `begin()` inserts those rows with
+`verified_*` NULL. Measured by extracting `consistent()` verbatim and running 14
+rows through today's form, the literal widening and a purpose-qualified one.
+Every probe in Task 1 enters on a signin row, so none can see it (RF24). Fix:
+state the widening as asymmetric and make the `verified` requirement
+purpose-qualified. Technique 63. (b) The three-state CHECK boxes the
+`reauth_exchanging -> link_ready` transition in BOTH directions, so `save()` is
+unusable for it and for `followThrough` — and `save()` is where `consistent()`
+and the version guard live. Extending `save()` to write the two columns from `a`
+is the cheaper route and is a no-op for existing callers. (c) Task 4 Step 5's
+mutation cannot go red: `req.sessionId` is undefined on the callback routes, and
+after adoption the cookie and the proven subject name the same account by
+construction. The gate that bites is `finalize`'s binding comparison itself, and
+the fold's reason for moving the gate to the route is obsolete.
+
+**Medium.** The new arm would be the only `mintSession` caller skipping
+`requireAccess`. The carried Apple grant is still never revoked on an abandoned
+attach (pre-existing; confirm-after lengthens the window). The spec's condition
+1 ("must be replaced") is left standing in contradiction to the plan that
+supersedes it. The folded DBA row says "a minted session at its 30-day TTL";
+`sessions.ts` is 60 days.
+
+**Attacked and HELD — the phase's vetted ground.** `finalize()`'s body (every
+precondition but the binding). Widening the RF34 clause does not reopen RF34 —
+both mirror rows stay refused — but the job of keeping signin out of
+`target_*`/`delete_ready` transfers entirely onto the widened signup rule's
+stage list, which the plan does not state. Invariant 2's deletion is correct and
+generalises: `finalize`'s reauth-freshness check is already dead on the LINK
+path too. **The confirmation ordering HOLDS under attack:** after the second
+proof the reader is the account owner (technique 59's own test), and an
+abandoner holds only the session their credential already entitled them to, so
+session-before-consent is not the first pass's defect relocated. NIST SP
+800-63C-4 §3.8.1 is satisfied more literally by confirm-after than by revision
+1's shape. `attemptProvider()` needs no signin arm. Adoption introduces no new
+lock cycle.
+
+
+## 2026-09-15 — Wave A PR2, scoped third pass: revision 4's transport fix
+
+Scope: only revision 4's additions to
+`docs/superpowers/plans/2026-09-14-wave-a-pr2-follow-through.md` at `34589267`.
+Verdict **NOT READY**, three blocking findings, all inside revision 4's own
+scope. The diagnosis of the transport gap is right; the closure is web-only.
+
+**Held.** All five confirmations reproduce verbatim in the tree
+(`shared/auth.ts:32`, `frontDoorRoutes.ts:121`, `:150-159`, `:404-407`,
+`authFlow.ts:339`/`:457-459`). `SESSION_TTL_MS` is 60 days (`sessions.ts:7`).
+The `requireAccess` census is exact: `mintSession` (`:232`) has two call sites,
+`:256` and `:729`, guarded at `:254` and `:728`, and the resolved account's
+email is the right argument (matches `finishSignin` and `legacyGoogle`; the
+relay is the carried identity, never `users.email`). Task 7 Step 4's `--rule`
+on `--surface` = **1.47:1**, computed.
+
+**The chosen shape survives.** The costed alternative — authenticate
+`finalize` by the binding secret so no session exists until after the
+confirmation — saves `result()` and the web-callback `Set-Cookie`, but the
+proven subject is consumed rather than stored, so `finalize` needs a new
+`resolved_user_id` column and FK: a SECOND stored shape against the plan's one
+CHECK widening. And the early session grants nothing, because the second
+exchange is a full authentication with the account's own provider — anyone who
+passes it can sign in normally in one tap. It is also what supplies the
+confirmation's DESTINATION account email (`SignedIn.user.email`); Task 4 Step
+1d's carried-identity choice is right per James's ruling but is only a complete
+control because edit 2 exists. The two edits are coupled and revision 4 did not
+say so.
+
+**Blocking 1 — a sixth place.** `grep -n "finalizeLink("` → `422` def, `477`
+(`acceptStep`, the only one revision 4 named), **`553`** (`authorizeNative`,
+before its `acceptStep` call at `:558`). Native's follow-through never reaches
+`acceptStep`, so revision 4's fix left the primary surface attaching with no
+confirmation.
+
+**Blocking 2 — nothing consumes the session.** `storeToken` has one caller in
+the flow (`authFlow.ts:334-336`, inside `finishSignedIn`), so a native
+`link_ready` session is never stored and `finalize`'s `requireUser` 401s. On
+web `onSignedIn` is never called, `App.tsx:116` keeps `me.state === "out"`, and
+`SignIn.tsx` has no `linked` branch — the rower lands back on the sign-in
+screen holding a live 60-day cookie. **Measured:** widening `link_ready` to
+required `profile` + `session: SignedIn | null` in a scratch copy of `app/`
+broke `frontDoorRoutes.ts(121,35) TS2322` and produced ZERO output from
+`tsc -b`, so the RF33 argument in edit 2 does not bind the consumer. `session`
+also cannot be required-non-null: a link's `link_ready` has none.
+
+**Blocking 3 — `expires_at` at the second exchange is unspecified.** The
+confirmation is now last inside the 300 s window; Task 2 Step 1 pins
+`expires_at` byte-identical and Task 3 Step 3 is silent, while the arm it sits
+beside refreshes it.
+
+**Measured, `consistent()` (`attempts.ts:76-102`) extracted verbatim, 27
+purpose x stage cells + 4 negatives.** The asymmetric widening is sufficient
+and safe: signin reads at the three new stages, link/delete keep every cell
+they read today, `signin @ reauth_exchanging` with `verified_subject` NULL is
+still refused, `signin @ target_*` and `delete @ link_ready` still refused,
+nothing reachable newly admitted. The NAIVE widening breaks **five** cells, not
+two: link at `reauth_authorize`, `reauth_exchanging` and **`link_ready`**,
+delete at `reauth_authorize` and `reauth_exchanging`.
+
+**Measured on `postgres:18.4`, 33 migrations from `_journal.json`.** Task 1
+Step 2b's precondition holds: link and delete rows at `reauth_authorize` with
+`verified_*` NULL insert cleanly and survive the proposed arm. The arm and the
+statement-granularity claim reproduce exactly: `SET stage='reauth_authorize'`
+alone -> 23514; with `existing_provider` -> OK; `SET stage='link_ready'` alone
+-> 23514; with `original_session_id` + `reauthenticated_at` -> OK.
+
+**Task 7 Step 3's census is short and the plan pins a test to it.** Two quoted
+(`you/SignInMethods.tsx:128`, `:130`, both from `1aebec39`/#444 — confirmed
+from the diff) and FOUR unquoted (`SignIn.tsx:40`, `:101`, **`:173`**,
+`today/Today.tsx:1479`), plus a third treatment the step never names, "the You
+tab": `log/Concept2SendBlock.tsx:226` in live UI and three undated News article
+bodies.
+
+**The open `ACCESS_MODE` item is already answered in the repo.** `ROADMAP.md`
+records James's 2026-09-14 ruling that staging stays `restricted`;
+`compose.yml:48` and `accessPolicy.ts:14` both default to it. So
+`requireAccess(identity.email)` (`attempts.ts:436`) refuses any Hide My Email
+identity before `confirm`, and PR2 is reachable only for Share My Email by an
+allowlisted address. A PM build-now question, owed BEFORE Gate 0, not before
+implementation.
+
+**All three findings folded into revision 5 by the controller.** The
+antagonist does not run again on this plan: `/harden` caps the loop at two
+passes, this was the third, and revision 5 changes no mechanism.
