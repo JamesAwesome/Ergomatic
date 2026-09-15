@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 
 /**
- * The dialog machinery a bottom sheet needs, with zero knowledge of what it
+ * The dialog machinery a modal sheet needs, with zero knowledge of what it
  * holds: backdrop, `role="dialog"`/`aria-modal="true"`, and the focus trap
  * this codebase's first such element originally shipped without (Md4,
  * whole-branch review — see the extraction's own history in

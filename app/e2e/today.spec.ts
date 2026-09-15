@@ -1353,9 +1353,25 @@ test.describe("Today enhancements: sheet dismiss discards the draft", () => {
     await expect(effortCell3).toHaveAttribute("aria-pressed", "true");
 
     // The backdrop is the dialog's own parent (`.filter-sheet-backdrop`,
-    // SheetShell.tsx) — clicked near the top, well clear of the bottom-
-    // anchored panel itself, so this can't accidentally land on a group
-    // cell instead.
+    // SheetShell.tsx) — clicked at its top-left corner, which is outside the
+    // panel whether the sheet is centred (as it is since 2026-09-15) or
+    // bottom-anchored (as it was when this was written), so it cannot land on
+    // a group cell instead.
+    // THE PAGE MUST NOT MOVE WHILE THE SHEET IS OPEN (James, 2026-09-15:
+    // "the screen behind it can still scroll"). Asserted HERE, in a browser,
+    // because the unit tests can only check that an inline style was
+    // written — nothing in them goes red if `overflow: hidden` stopped
+    // preventing scroll. Chromium reproduces the real behaviour (an
+    // antagonist pass measured the same result on an iOS 26.5 simulator with
+    // injected touch drags: unlocked 0 -> 1576, locked 0 -> 0), so a wheel
+    // over the backdrop is a faithful gate.
+    const before = await page.evaluate(() => window.scrollY);
+    await page.locator(".filter-sheet-backdrop").hover();
+    await page.mouse.wheel(0, 600);
+    await page.waitForTimeout(150);
+    expect(await page.evaluate(() => window.scrollY)).toBe(before);
+    await expect(page.getByRole("dialog")).toBeVisible();
+
     await page
       .locator(".filter-sheet-backdrop")
       .click({ position: { x: 10, y: 10 } });

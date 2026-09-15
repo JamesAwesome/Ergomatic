@@ -1450,7 +1450,10 @@ button.auth-method-row:disabled .auth-method-action {
 }
 
 /* The sheet: fixed overlay over the list (Library.tsx never routes to it),
-   bottom-weighted so it reads as sliding up from the tab bar. Dismissible by
+   CENTRED in the viewport since 2026-09-15 — it was bottom-weighted, to read
+   as sliding up from the tab bar, and that left it floating a tab-bar's
+   height off the bottom under a large empty scrim (James: "it's also poorly
+   centered"). Dismissible by
    backdrop tap (`.filter-sheet-backdrop`'s own onClick) or the primary
    button — see FilterSheet.tsx's doc comment for what a BACK navigation
    does while this is open. */
@@ -8473,6 +8476,15 @@ section:not(.news-pinned) .news-row:last-of-type {
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   padding: 12px;
+  /* CONTAIN BELONGS ON THE BOX THAT SCROLLS. `.filter-sheet` carries it too,
+     but that is a NO-OP for this sheet: this list absorbs the overflow so the
+     sheet itself never becomes scrollable, and Safari ignores
+     `overscroll-behavior` on a box with no scrollable overflow (WebKit
+     243452, NEW since 2022; MDN BCD marks it `partial_implementation` with
+     that exact note). Measured on iOS 26.5 against this repo's served CSS:
+     with the list scrolling and the sheet fitting, contain 606 vs auto 484 —
+     the chain went straight through to the page either way. */
+  overscroll-behavior: contain;
 }
 
 .connected-log-line {
@@ -8490,21 +8502,14 @@ section:not(.news-pinned) .news-row:last-of-type {
   letter-spacing: 0.14em;
 }
 
-/* THE SHEET SITS ON A SURFACE WITH NO TAB BAR. `.filter-sheet-backdrop`
-   reserves `var(--tap)` at the bottom for the bar it normally slides up
-   from, and `.app-shell:has(.connected-surface)` has already hidden that
-   bar — so on this surface those 44px are 44px of log the rower could have
-   been reading. Scoped by ancestor: the Library and Today sheets are
-   untouched.
-
-   BOTH ORIENTATIONS, deliberately, and this is the one of the four
-   connected-sheet rules that is NOT inside the landscape query (task-7
-   review, L2a — the landscape block's own comment used to claim all four
-   were). The tab bar is hidden in portrait too; the reserve is just as dead
-   there. Behaviour, not prose: the portrait sheet gains 24px of list. */
-.connected-surface .filter-sheet-backdrop {
-  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-}
+/* REMOVED 2026-09-15. This rule reclaimed the `var(--tap)` the base backdrop
+   reserved for a tab bar that `.app-shell:has(.connected-surface)` has already
+   hidden — "the portrait sheet gains 24px of list", as its comment put it. The
+   base rule no longer reserves that space for anyone: the backdrop is centred
+   with symmetric padding, and this override's value became byte-identical to
+   it (verified in the SERVED bundle, not the source). It gained 0px, so it is
+   gone rather than left as a rule whose comment promises behaviour it no
+   longer has (RF29). */
 
 /* --- The lost-link banner (handoff §4, spec C5's lose-and-degrade) --- */
 
@@ -9701,12 +9706,18 @@ section:not(.news-pinned) .news-row:last-of-type {
      take 200 before a single log line is drawn. Measured at the shipped
      defaults: the list got 35px — one and a half lines — while 56px of
      backdrop padding and a 44px header minimum sat unused above it. These
-     THREE rules, plus the unconditional backdrop-padding rule in the base
-     block above, give the list about 150px instead. All four are scoped to
-     `.connected-surface`; the Library and Today sheets keep every default,
+     THREE rules give the list about 150px instead. There used to be a
+     FOURTH, an unconditional backdrop-padding rule in the base block; it was
+     removed on 2026-09-15 when the base backdrop stopped reserving tab-bar
+     height, which made its value identical to the base and its gain 0px. All
+     three are scoped to `.connected-surface`; the Library and Today sheets
+     keep every default,
      and `screenshots.spec.ts` measures the result in a browser so a portal
      refactor that drops the ancestor fails loudly. */
   .connected-surface .filter-sheet-backdrop {
+    /* Restates the base rather than overriding it since 2026-09-15 — the
+       base backdrop centres too now. Kept explicit so this surface's
+       landscape geometry does not silently follow a future base change. */
     align-items: center;
     padding-top: 12px;
     padding-bottom: 12px;
