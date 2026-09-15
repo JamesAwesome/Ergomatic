@@ -27,15 +27,39 @@ describe("tileProvenance: the four that never switch", () => {
     expect(p).not.toHaveProperty("because");
   });
 
-  it("names Concept2 on exactly the two that run Concept2's formula", () => {
-    const withFormula = (
-      Object.keys(FIXED_SOURCES) as (keyof typeof FIXED_SOURCES)[]
-    ).filter((k) => FIXED_SOURCES[k].detail?.includes("Concept2") === true);
-    // RATE and AVG HR are derived too but are NOT the logbook formula — one is
-    // a weighted mean of splits, the other of the trace. Claiming the formula
-    // over all four derived tiles is the defect this board was built around.
-    expect(withFormula.sort()).toStrictEqual(["avgWatts", "calPerHour"]);
-  });
+  // Scoped to the WHOLE tile set and every branch, not just the fixed four.
+  // The first version of this assertion read `FIXED_SOURCES` alone, and a
+  // mutant adding "Concept2's published logbook formula" to RATE — the exact
+  // over-claim this board was built around, written three times during the
+  // gate — passed it 12/12. A census that cannot see the conditional tiles
+  // cannot catch the defect that lives in them (RF21/RF24).
+  it.each([
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ])(
+    "names Concept2 on exactly AVG WATTS and CAL/HOUR (finished=%s, monitorHr=%s)",
+    (finished, monitorHr) => {
+      const all: MachineTileProvenance = {
+        ...FIXED_SOURCES,
+        rate: rateProvenance(finished),
+        avgHr: heartRateProvenance(monitorHr),
+      };
+      const named = (Object.keys(all) as (keyof MachineTileProvenance)[])
+        .filter((k) => {
+          const p = all[k];
+          return (
+            p.detail?.includes("Concept2") === true ||
+            p.because?.includes("Concept2") === true
+          );
+        })
+        .sort();
+      // RATE is a weighted mean of the splits and AVG HR a time-weighted mean
+      // of the trace. Neither is the logbook formula, on either branch.
+      expect(named).toStrictEqual(["avgWatts", "calPerHour"]);
+    },
+  );
 });
 
 describe("tileProvenance: RATE switches on whether the piece finished", () => {
