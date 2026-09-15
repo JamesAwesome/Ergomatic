@@ -409,9 +409,12 @@ export function MachineTierBlock({ machine }: { machine: MachineTier }) {
   );
 }
 
-/** The house dash for a number the row does not have — the sheet names a
- *  source even then, because "computed here, and there was nothing to
- *  compute from" is still the honest answer. */
+/** The house dash for a number the row does not have. The sheet still LISTS
+ *  the tile — its group is a fact about the tile, not about the value — but
+ *  it makes no claim about where a number came from when there is no number.
+ *  An earlier version of this comment argued the opposite and was the
+ *  rationale for sentences like "from the monitor's calorie count" printed
+ *  beside a dash. */
 function fmt(v: number | undefined): string {
   return v === undefined ? DASH : String(v);
 }

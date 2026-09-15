@@ -68,14 +68,18 @@ describe("TileSourceSheet: a row with no number claims nothing about it", () => 
 });
 
 describe("TileSourceSheet: row order follows the tile grid", () => {
-  it("lists every tile in the grid's order, not the object's key order", async () => {
-    const dialog = await open(NUMBERS);
+  it("lists the tiles in the grid's order within each group", async () => {
+    const dialog = await open(NUMBERS, { finished: true });
     const labels = within(dialog)
       .getAllByText(/^(AVG WATTS|CALORIES|CAL \/ HOUR|RATE|DRAG|AVG HR)$/)
-      .map((el) => el.textContent);
-    // The grid reads AVG WATTS, CALORIES, CAL / HOUR, RATE (· TARGET), DRAG,
-    // AVG HR. Grouping reorders across groups but never within one, so the
-    // relative order of any two labels must match the grid.
+      .map((el) => el.textContent!);
+    // The grid reads AVG WATTS, CALORIES, CAL / HOUR, RATE, DRAG, AVG HR.
+    // Grouping reorders ACROSS groups but must never reorder WITHIN one, so
+    // each group's labels must be ascending in grid position.
+    //
+    // The first version of this assertion was `seen.filter((v, i) => i === 0
+    // || seen[i-1] < v).length > 0`, which is true of ANY non-empty list —
+    // a fully reversed ORDER passed it 4/4 and the whole suite 8597/8597.
     const grid = [
       "AVG WATTS",
       "CALORIES",
@@ -84,9 +88,22 @@ describe("TileSourceSheet: row order follows the tile grid", () => {
       "DRAG",
       "AVG HR",
     ];
-    const seen = labels.map((l) => grid.indexOf(l!));
-    const withinGroups = seen.filter((v, i) => i === 0 || seen[i - 1]! < v);
-    expect(withinGroups.length).toBeGreaterThan(0);
-    expect(labels).toHaveLength(6);
+    expect(labels).toHaveLength(grid.length);
+
+    // finished=true puts RATE under MEASURED with CALORIES and DRAG, and
+    // leaves AVG WATTS, CAL / HOUR, AVG HR under DERIVED.
+    const derived = ["AVG WATTS", "CAL / HOUR", "AVG HR"];
+    const measured = ["CALORIES", "RATE", "DRAG"];
+    const positions = (group: string[]) =>
+      labels.filter((l) => group.includes(l)).map((l) => grid.indexOf(l));
+    for (const group of [derived, measured]) {
+      const p = positions(group);
+      expect(p).toStrictEqual([...p].sort((x, y) => x - y));
+      expect(p).toHaveLength(group.length);
+    }
+    // and DERIVED's rows all precede MEASURED's in the document
+    const firstMeasured = labels.indexOf("CALORIES");
+    const lastDerived = labels.lastIndexOf("AVG HR");
+    expect(lastDerived).toBeLessThan(firstMeasured);
   });
 });

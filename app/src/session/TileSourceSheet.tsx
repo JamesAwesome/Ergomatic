@@ -16,6 +16,12 @@ import { SheetShell } from "../components/SheetShell";
 import { DASH } from "../workout/connected/surfaceModel";
 import type { MachineTileProvenance, TileProvenance } from "./tileProvenance";
 
+/** NO GROUP NOTES, and that is the third time this lesson has been learned in
+ *  this one sheet. "Worked out on this device. Each line says from what." was
+ *  false of any line reading a dash; "Straight from the monitor, as it sent
+ *  them." sat over figures the monitor never sent. A heading cannot be
+ *  checked against a value — only a row can — so every claim lives on a row
+ *  and the headings say nothing but which group this is. */
 function Row({ p, value }: { p: TileProvenance; value: string }) {
   // A row with no number gets NO source sentence. Every `detail` and
   // `because` is an unconditional positive claim — "from the monitor's
@@ -97,9 +103,6 @@ export function TileSourceSheet({
         {derived.length > 0 && (
           <section className="tile-source-group">
             <h3 className="tile-source-group-head">DERIVED</h3>
-            <p className="tile-source-group-note">
-              Worked out on this device. Each line says from what.
-            </p>
             {derived.map((k) => (
               <Row key={k} p={of(k)} value={values[k]} />
             ))}
@@ -108,9 +111,6 @@ export function TileSourceSheet({
         {measured.length > 0 && (
           <section className="tile-source-group">
             <h3 className="tile-source-group-head">MEASURED</h3>
-            <p className="tile-source-group-note">
-              Straight from the monitor, as it sent them.
-            </p>
             {measured.map((k) => (
               <Row key={k} p={of(k)} value={values[k]} />
             ))}

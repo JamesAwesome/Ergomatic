@@ -124,7 +124,18 @@ export function SheetShell({
       if (focusable.length === 0) return;
       const first = focusable[0]!;
       const last = focusable[focusable.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
+      // The DIALOG ITSELF can hold focus (`focusTitleOnOpen`), and it is
+      // neither the first button nor the last — so without this clause
+      // Shift+Tab fell through to the browser and left the modal entirely.
+      // Measured: two Shift+Tabs reached the `← LOG` link behind the scrim
+      // and Enter navigated the rower off the screen, while `aria-modal`
+      // claimed that content was inert. Treat the dialog as sitting BEFORE
+      // the first control, which is where it visually is.
+      if (
+        e.shiftKey &&
+        (document.activeElement === first ||
+          document.activeElement === dialogRef.current)
+      ) {
         e.preventDefault();
         last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {

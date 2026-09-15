@@ -12969,12 +12969,6 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
 }
 
-.tile-source-group-note {
-  margin: 2px 0 8px;
-  font-size: 13px;
-  color: var(--ink-3);
-}
-
 .tile-source-row {
   padding: 8px 0;
   border-top: 1px solid var(--rule);
