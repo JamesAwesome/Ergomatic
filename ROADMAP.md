@@ -1119,6 +1119,26 @@ it lands the stranger on this same denial.
       `nativeSignOut` that came out from under it. **S**
       · dies 2026-10-12 · pre-existing debt, and cheaper to clear while the file
       is already open than as its own branch.
+- [ ] **Copy naming the "You" screen has no consistent treatment, and one
+      sentence uses the word both ways.** James, 2026-09-14: _"prose still says
+      You without the double quotes. I'm not sure if the double quotes are
+      correct grammar but it does make it more obvious to me it's talking about
+      something in the app and not just weird capitalization. Maybe a designer
+      knows how to fix that."_ **Census of user-facing sites, 2026-09-14:**
+      QUOTED at `you/SignInMethods.tsx` (two, shipped #444); UNQUOTED at
+      `SignIn.tsx` twice (the `account_conflict` recovery and the create-account
+      explainer, both shipped #436) and at `today/Today.tsx`, which reads
+      _"You can type the other in on You"_ — the pronoun and the screen name in
+      one sentence, neither marked, which is the ambiguity in its purest form.
+      **The treatment is the open question, not just the inconsistency.**
+      Double quotes were James's own suggestion and he flagged the grammar
+      himself; a designer may prefer a different device entirely (small caps, a
+      chip, bold, an icon) and the answer has to work for every in-app
+      destination this copy points at, not only `You`. **S**
+      · dies 2026-10-12 · a row and not a fix now because picking the treatment
+      is a design-gate question across five strings on three surfaces, and
+      because #444 shipped one answer to it without ever asking — applying that
+      answer more widely by reflex is how a house style gets set by accident.
 - [ ] **Delete account does not say that it will ask you to prove it is you.**
       James, 2026-09-14, immediately after running the deletion twice on a real
       account: _"we really need to make it more obvious that the reauth is
