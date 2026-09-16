@@ -163,5 +163,28 @@ staged lint, before typecheck or commit. Receipt
 `c6017c87-7237-43f9-ab8a-800efabb7842` records exit 130 / SIGINT and unresolved
 cleanup, so the heavy loop stopped without retry or ownership recovery.
 The task's three containers, network and disposable fixture volume were
-removed. Post-commit mutations and exact-head full CI remain outstanding;
-the local two-case pass is not a completed flake-fix claim.
+removed. James subsequently authorized recovery of that exact record and
+resumption. Under the existing maintenance/generation barrier, a fresh
+normal-pressure census found no owner, child, observed identity or owned
+process group. Recovery killed nothing and preserved the original receipt.
+
+The real pre-commit then passed, including E2E type membership 30/30 and
+verified cleanup (receipt `3d512452-ce20-4171-922c-9ea51c30a317`). The fix
+landed as `252a482f` before mutation probes:
+
+- Insert `await page.goto("/")` immediately before the fixture guard:
+  both cases failed, expected `[]`, received `["/"]`.
+- Insert `await page.reload()` after the saved-log navigation: both cases
+  failed, expected one saved-log document request, received two.
+- Append `-invalid` to the fixture sign-in secret: the portrait case failed
+  at the sign-in success check with HTTP 401.
+- Send fixture creation to `/api/logs/no-such-fixture-route`: the portrait
+  case failed at the log-creation success check with HTTP 404.
+
+All probes executed the real request/browser path, compiled, and used zero
+retries. Restored source matched the committed spec exactly; both cases then
+passed in 1.9 seconds. Browser PID 53268 exited normally and cleaned its
+temporary directories; the subsequent census found no WebKit survivors.
+The task's containers, network and disposable fixture volume were removed
+again. Pressure samples remained normal during the resumed checks. No
+screenshots or traces were captured. Exact-head full CI remains outstanding.
