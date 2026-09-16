@@ -82,7 +82,7 @@ real-hook receipts are in
 After463's squash merge,464 was reconciled at7c12b51b with a tree identical to
 reviewed5daf579e. Fresh exact-head CI35126121543 passed:9167app and603browser
 initial executions, zero first-attempt failures, retries or resource events.
-It landed asdae29d50 on2026-09-16. Its own post-merge CI35127501979 is pending,
+It landed asdae29d50 on2026-09-16. Its own post-merge CI35127501979 passed,
 not inferred from the PR's result. TestFlight is not needed; agent instructions
 and adversarial techniques were updated in the merged increment. The remaining
 approved work remains active on2026-09-16, beginning with tuning; merging these
@@ -101,8 +101,9 @@ committed in85eac349 with biting postcommit probes and restored30/30 native/
 outcome/snapshot tests. The final code lens then found two additional defects:
 inner-thread failure could pass with later bodies, and native ignored files
 could silently reduce exact scope. Their repairs pass named native gates
-4d508435/d23070da and the combined82-test gate95086cc3; postcommit proofs,
-independent review and CI still gate readiness. Both hardening lenses are
+4d508435/d23070da and the combined82-test gate95086cc3. Five postcommit
+mutations bit; restored native/outcome/snapshot39/39 passed4d916d47.
+Independent review and CI still gate readiness. Both hardening lenses are
 finished. Browser
 measurements still depend on the unimplemented ownership adapter.
 

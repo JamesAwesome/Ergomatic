@@ -435,6 +435,47 @@ The run.mjs diagnostic fixtures print simulated resource banners; this was
 not an actual host resource event. Frozen installation of both patches passed
 c1f40e51-0599-4fa5-a502-14ae8ff34a6f with verified cleanup and no downloads.
 
-Still owed: postcommit repair mutations, browser1/2/3, final candidate
+### Postcommit repair proofs at57026156
+
+The real commit hook dc76c705-aa86-45b0-b90b-66218cf0058a passed typed lint,
+every compiler project and E2E30/30. Five deciding-source mutations then bit:
+
+| Broken authority | Red receipt prefix | Observed failure |
+| --- | --- | --- |
+| Exact native membership option false |a10d1aef|Both mixed ignored requests publicly passed|
+| Inner patch marker check removed |2dd7c815|Real engine executed instead of refusing|
+| Actual native worker failure observer disabled |b0764abb|Both thread-exit0/1 cases ran five later bodies and publicly passed|
+| Native allocation error code unrecognized |3503d6cc|Synthetic allocation was resource-aborted instead of memory|
+| Parent drops native-thread failure IPC |caaf46ed|No later bodies, but five RuntimeErrors and false public success|
+
+Vendor mutations used only the prepared package plus guarded patch-commit.
+Production patch bytes and lock hashes were restored exactly. No real host
+resource event occurred; the enclosing deliberately red probes cleaned up.
+The IPC mutant demonstrates why stopping the inner queue alone is insufficient:
+the outer owner also needs the actual failure, not a fulfilled error summary.
+
+A speculative single-project pool-override probe initially demanded refusal
+(af3ddfce/337bc569/24f97a55). That premise was wrong, not another safety defect:
+Vitest4.1.11 resolveProjects applies native API `pool` after project options.
+A fixture-local factory sentinel remained absent while the real test body ran
+(a3d450a7). The speculative comparison guards were removed. The retained
+characterization asserts the protected API pool wins, not that unused config
+must be rejected; no additional production guard was added for this case.
+
+Final restored native29/outcome3/snapshot7 passed39/39, no skips, in
+4d916d47-781f-4a34-b47a-be3d30384463 with verified cleanup. The patch files,
+lockfile and production adapter match57026156 exactly; the extra fixture is
+the project-override characterization above.
+
+Still owed: browser1/2/3, final candidate
 hook/browser proof, worker-default decision, independent review and exact-head
 CI. None is silently waived by measurements or these scoped repairs.
+
+Scoped Node coverage ea4d29a2-3d66-4115-895e-c5175874fa52 passed27/27. Per-file
+line/branch percentages: mutation100/91.43, outcome100/85,
+selection-git99.48/80 and workloads95.31/86.17. The direct mutation-run row is
+42.77/22.22: its real execution cases run copied modules in fixture child
+processes, not that source-path row. Native29 cases supply those behavioral
+seams; no complete per-file coverage of the Vite-transformed reporter or vendor
+patch is claimed. Unrelated imported modules in this scoped report are not a
+whole-suite coverage measurement.

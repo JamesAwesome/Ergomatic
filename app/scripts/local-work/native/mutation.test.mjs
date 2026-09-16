@@ -312,6 +312,40 @@ test("public mutation pressure refusal executes no test body", (t) => {
   assert.equal(fs.existsSync(f.sentinel), false);
 });
 
+test("public mutation keeps its native pool over a project pool override", (t) => {
+  const f = publicFixture(t);
+  const foreignFactory = path.join(f.root, "foreign-factory");
+  const original = fs.readFileSync(
+    path.join(f.app, "vitest.stryker.config.ts"),
+    "utf8",
+  );
+  const replaced = original.replace(
+    'name: "unit",',
+    `name: "unit",
+    projects: [{extends: true, test: {name: "unit", pool: {
+      name: "ergomatic-threads", createPoolWorker: options => {writeFileSync(${JSON.stringify(foreignFactory)},'executed');return new ThreadsPoolWorker(options)}
+    }}}],`,
+  );
+  assert.notEqual(
+    replaced,
+    original,
+    "fixture reached the real config declaration",
+  );
+  f.put(
+    "app/vitest.stryker.config.ts",
+    `import {ThreadsPoolWorker} from 'vitest/node';import {writeFileSync} from 'node:fs';\n${replaced}`,
+  );
+  const result = f.run();
+  assert.equal(result.error, undefined, result.stdout + result.stderr);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.ok(fs.existsSync(f.sentinel));
+  assert.equal(
+    fs.existsSync(foreignFactory),
+    false,
+    "native API pool overrides project declarations",
+  );
+});
+
 for (const [kind, file] of [
   ["source", "domain/.next/ignored.ts"],
   ["witness", "domain/node_modules/ignored.test.ts"],

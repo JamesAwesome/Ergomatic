@@ -25,8 +25,9 @@ fixes. Commit85eac349's earlier postcommit gates pass, but the second and final
 hardening lens falsified two further claims: an actual inner-thread exit was
 converted into a passing result with later bodies, and native ignored paths
 silently reduced a mixed exact request. Their repairs now pass the scoped
-82-test gate95086cc3, including the actual native seams. Postcommit mutation
-proofs, independent review and exact-head CI still gate readiness. Task3
+82-test gate95086cc3, including the actual native seams. Five postcommit
+mutations bit at57026156; restored native/outcome/snapshot39/39 passed4d916d47.
+Independent review and exact-head CI still gate readiness. Task3
 investigation remains partial.
 The whole spec remains incomplete. James clarified on2026-09-16 that ready
 increments should merge as work proceeds, not wait for an arbitrary two-PR
@@ -209,7 +210,7 @@ the native contract; see the patch's maintenance record in the tuning document.
   missing-patch refusal also have native green evidence (71242313).
 - [x] Commit and self-mutate effective project-bound and ignored-input fixes;
   ensure the latter covers imported/nonselected files, not just argv selectors.
-- [ ] Commit and self-mutate the code-lens repairs: native-thread error/exit
+- [x] Commit and self-mutate the code-lens repairs: native-thread error/exit
   stops queued witnesses; missing inner patch refuses; native ignored paths
   cannot reduce exact scope; valid zero-mutant sources remain admissible.
 - [ ] Reconcile command consumers and exclusions; reuse independent task review
@@ -244,7 +245,7 @@ the native contract; see the patch's maintenance record in the tuning document.
 Author paste-tests are the actual modules/adjacent tests, not a second copied
 implementation in this plan. Hardening follows the bounded mechanism/code
 lenses after those commands run; both lenses have now finished, with the final
-inner-thread/native-membership postcommit proofs still owed. No third hardening pass:
+inner-thread/native-membership repairs now gated. No third hardening pass:
 author gates and normal task/PR reviews cover those fixes. No stored product
 shape, rower number, auth or hardware interaction changes: DBA and hardware
 gates do not apply. The approved phase scope remains; no new ROADMAP row.
