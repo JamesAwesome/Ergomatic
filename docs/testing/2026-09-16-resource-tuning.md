@@ -479,3 +479,18 @@ processes, not that source-path row. Native29 cases supply those behavioral
 seams; no complete per-file coverage of the Vite-transformed reporter or vendor
 patch is claimed. Unrelated imported modules in this scoped report are not a
 whole-suite coverage measurement.
+
+### Task-review compatibility gate
+
+The task review atdb762588 found no demonstrated production defect, but
+requested native survivor and timeout evidence at the changed recovery seam.
+Receipt ad1ceec2-207f-471d-8c75-66087b0207d7 passed both public fixtures:
+the untested zero boundary produced a real `n >= 0` survivor; a witness that
+waits forever only at a mutated zero produced a real `n >= 0` timeout.
+The timeout case's native statuses were only Killed/Timeout. Both retained
+the existing null break threshold, public exit0, completed mutation record,
+no workerFailure, verified cleanup and no remaining owner. The never-resolving
+promise allocates no stress memory. Native timeout/disposal took24seconds;
+that fixture alone allows60seconds at the outer harness, leaving Stryker's
+own timeout unchanged. This does not admit threshold controls: the local
+config remains closed. Postcommit fault proofs and review closure are pending.

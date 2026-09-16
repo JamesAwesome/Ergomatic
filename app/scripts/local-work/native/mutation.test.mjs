@@ -236,12 +236,12 @@ exec ${JSON.stringify(process.execPath)} "$@"
     "--test-file",
     "domain/witness.test.ts",
   ];
-  const run = (extra = {}) =>
+  const run = (extra = {}, timeout = 30000) =>
     spawnSync("pnpm", ["mutate", ...args], {
       cwd: app,
       env: { ...env, ...extra },
       encoding: "utf8",
-      timeout: 30000,
+      timeout,
       maxBuffer: 2 ** 20,
     });
   const receipts = () => {
@@ -768,6 +768,90 @@ else{appendFileSync(marker,'replacement body\\n');expect(positive(-1)).toBe(fals
     assert.deepEqual(f.receipts(), []);
   });
 }
+
+// These compatibility cases must fail if the local adapter rejects native
+// survivors, or if expected timeout disposal is mistaken for worker failure.
+test("public mutation preserves a survivor without inventing a breaking threshold", (t) => {
+  const f = publicFixture(t);
+  f.put(
+    "app/domain/witness.test.ts",
+    `import {test,expect} from 'vitest';import {positive} from './space ü,comma';
+test('nonzero signs',()=>{expect(positive(-1)).toBe(false);expect(positive(1)).toBe(true)});`,
+  );
+  const result = f.run();
+  assert.equal(result.error, undefined, result.stdout + result.stderr);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const directory = f.receipts()[0];
+  const receipt = JSON.parse(
+    fs.readFileSync(path.join(directory, "receipt.json")),
+  );
+  const record = JSON.parse(
+    fs.readFileSync(path.join(directory, "mutation.json")),
+  );
+  const report = JSON.parse(
+    fs.readFileSync(path.join(directory, "mutation-report.json")),
+  );
+  const boundary = report.files["domain/space ü,comma.ts"].mutants.find(
+    (mutant) => mutant.replacement === "n >= 0",
+  );
+  assert.equal(boundary?.status, "Survived", JSON.stringify(report));
+  assert.equal(report.thresholds.break, null);
+  assert.equal(record.status, "completed");
+  assert.equal(Object.hasOwn(record, "workerFailure"), false);
+  assert.equal(receipt.classification, "passed");
+  assert.equal(receipt.cleanup, "verified");
+  assert.equal(
+    fs.existsSync(path.join(f.root, ".git/ergomatic-local-work/owner")),
+    false,
+  );
+});
+
+test("public mutation preserves native timeout recovery without worker failure", (t) => {
+  const f = publicFixture(t);
+  f.put(
+    "app/domain/witness.test.ts",
+    `import {test,expect} from 'vitest';import {appendFileSync} from 'node:fs';import {positive} from './space ü,comma';
+test('mutated zero never resolves',async()=>{
+if(positive(0)){appendFileSync(${JSON.stringify(f.sentinel)},'waiting\\n');await new Promise(()=>{});}
+expect(positive(-1)).toBe(false);expect(positive(1)).toBe(true);
+},20000);`,
+  );
+  // Native Stryker timeout/recovery repeats for each hanging mutant; leave
+  // room for disposal on a hosted runner without changing native timeouts.
+  const result = f.run({}, 60000);
+  assert.equal(result.error, undefined, result.stdout + result.stderr);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const directory = f.receipts()[0];
+  const receipt = JSON.parse(
+    fs.readFileSync(path.join(directory, "receipt.json")),
+  );
+  const record = JSON.parse(
+    fs.readFileSync(path.join(directory, "mutation.json")),
+  );
+  const report = JSON.parse(
+    fs.readFileSync(path.join(directory, "mutation-report.json")),
+  );
+  const mutants = report.files["domain/space ü,comma.ts"].mutants;
+  assert.equal(
+    mutants.find((mutant) => mutant.replacement === "n >= 0")?.status,
+    "Timeout",
+    JSON.stringify(mutants),
+  );
+  assert.ok(
+    mutants.every((mutant) => ["Killed", "Timeout"].includes(mutant.status)),
+    JSON.stringify(mutants),
+  );
+  assert.match(fs.readFileSync(f.sentinel, "utf8"), /^waiting\n/);
+  assert.equal(report.thresholds.break, null);
+  assert.equal(record.status, "completed");
+  assert.equal(Object.hasOwn(record, "workerFailure"), false);
+  assert.equal(receipt.classification, "passed");
+  assert.equal(receipt.cleanup, "verified");
+  assert.equal(
+    fs.existsSync(path.join(f.root, ".git/ergomatic-local-work/owner")),
+    false,
+  );
+});
 
 test("public mutation keeps initial assertion failure nonzero with verified cleanup", (t) => {
   const f = publicFixture(t);
