@@ -85,3 +85,9 @@ Then changed ancestor cleanup from restoring `value` to `value || "hidden"`:
 both close and unmount cases failed because an originally absent axis stayed
 locked. Restored again: 21 component tests passed. Rebuilt the restored
 stack: all seven sheet/provenance/touch browser tests passed again.
+
+Specification review found the first test captured its reference offset only
+AFTER opening, leaving an opening jump unguarded. The test now saves the
+pre-open offset and compares it after opening, after the backdrop gesture,
+and after Close. Both orientations pass this stronger assertion. The
+connected diagnostics sheet's two portrait/landscape design tests also pass.

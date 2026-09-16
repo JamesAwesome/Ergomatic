@@ -339,8 +339,8 @@ it more narrowly than this section used to imply:**
   commit that added `touch` said there were TWO places and missed this one.
   `webkit-sheet` runs only `sheetScroll.spec.ts`: the log's fixed ancestor
   scrolls under its sheet in WebKit while Chromium's backdrop gesture does
-  not reach it. Both portrait and landscape must preserve the log offset,
-  leave the long sheet scrollable, and restore log scrolling after close.
+  not reach it. Both orientations preserve the log offset and restore log
+  scrolling after close; landscape also proves the long sheet can scroll.
   Local setup needs `pnpm exec playwright install webkit` once; CI installs
   both engines. See `docs/testing/2026-09-15-sheet-scroll.md` for the repro.
 - **Captures are for LAYOUT or STRUCTURE changes, never wording-only ones**

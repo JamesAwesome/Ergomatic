@@ -90,13 +90,14 @@ for (const viewport of [
     await page.mouse.move(scrimX, viewport.height - 100);
     await page.mouse.wheel(0, 300);
     await page.waitForTimeout(350);
-    expect(await log.evaluate((el) => el.scrollTop)).toBeGreaterThan(50);
+    const before = await log.evaluate((el) => el.scrollTop);
+    expect(before).toBeGreaterThan(50);
     await page
       .getByRole("button", { name: /where these numbers come from/i })
       .click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
-    const before = await log.evaluate((el) => el.scrollTop);
+    expect(await log.evaluate((el) => el.scrollTop)).toBe(before);
     expect(
       await page.evaluate(
         ([x, y]) => document.elementFromPoint(x!, y!)?.className,
