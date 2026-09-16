@@ -5,6 +5,17 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.50.2: both merges since v0.50.1 are accounted for.
+    // #459 locks the saved log's own scroll container — the item below.
+    // #457 changes test fixtures, accessibility scans and evidence capture;
+    // its transport changes are dev-only. No tester-facing note needed.
+    version: "v0.50.2",
+    date: "2026-09-16",
+    items: [
+      "Saved workouts now stay put while Where these numbers come from is open. The v0.50.1 fix missed this screen, so the log could still move behind the sheet.",
+    ],
+  },
+  {
     // v0.50.1: git log v0.50.0..main --oneline — ONE merge besides this notes
     // PR itself, and it reaches a rower (RF15; no --merges, which returns
     // empty on this squash-merged repo).
