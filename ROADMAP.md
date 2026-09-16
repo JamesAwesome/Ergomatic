@@ -4931,30 +4931,6 @@ than back in the queue this was built to replace.
       find out. This is a FAKE-side gap only: the same fold works on real
       wire bytes, which is what `justRowReplay.test.ts` gates.
 
-- [ ] **The modal scroll lock has no browser gate, and I could not build
-      one.** · dies 2026-10-13 · a row and not a fix now because closing it
-      means enabling touch on a shared Playwright project, which is a
-      config change for every spec in the suite and well outside the
-      fast-path change that found it.
-      `SheetShell`'s `body { overflow: hidden }` is gated only by unit tests
-      that assert the INLINE STYLE WAS WRITTEN. **Nothing goes red if the lock
-      stops preventing scroll.** Filed with what was already tried, so the
-      next person does not repeat it:
-      - `page.mouse.wheel(0, 600)` over the backdrop, on Library with 200+px
-        of real scroll room: page does not move **with the lock deleted**, so
-        the assertion passes either way.
-      - A CDP `Input.dispatchTouchEvent` drag: same, passes with the lock
-        deleted. **`app/playwright.config.ts` sets no `hasTouch`**, so the
-        context has no touch and dispatched touches are inert.
-      - An earlier version of the same leg sat on Today and on a log detail,
-        where `scrollHeight - innerHeight` measures **exactly 0** — the
-        fixtures have nothing to scroll, so it was vacuous twice over before
-        it was even wrong.
-      **What IS established:** an antagonist pass measured the real behaviour
-      on an iOS 26.5 simulator with injected touch drags — unlocked `scrollY`
-      0 to 1576, locked 0 to 0 — so the fix works; it is the GATE that is
-      missing, not the behaviour. **S**
-
 - [ ] **PR 3 of the number-provenance pass — the chart's axis (M3, M6, M9).**
       · dies 2026-10-06 · a row and not a fix now because it cannot start
       until Gate 0B board 2 is drawn and ruled, and a board is James's
