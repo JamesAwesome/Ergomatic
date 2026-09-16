@@ -392,3 +392,29 @@ test("pre-commit descendants cannot borrow their parent's owner to start another
     false,
   );
 });
+
+test("container version-stamp gate anchors version exports above the fixed build RUN", (t) => {
+  const f = fixture(t);
+  for (const filename of [
+    "app/Dockerfile",
+    "app/vite.config.ts",
+    "app/src/appVersion.ts",
+    "scripts/app-version-stamp.test.sh",
+    ".github/workflows/ci.yml",
+  ])
+    f.put(filename, fs.readFileSync(path.join(repo, filename), "utf8"));
+  // This fixture gates the real script's Dockerfile ordering checks only.
+  // Actual Compose rendering remains the existing hosted shell gate's job.
+  const docker = f.put(
+    "bin/docker",
+    '#!/bin/sh\n[ "$*" = "compose config" ] || exit 96\nprintf "  web:\\n    APP_VERSION: stamp-probe\\n"\n',
+  );
+  fs.chmodSync(docker, 0o755);
+  const result = spawnSync("bash", ["scripts/app-version-stamp.test.sh"], {
+    cwd: f.root,
+    env: f.env,
+    encoding: "utf8",
+    timeout: 15000,
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+});

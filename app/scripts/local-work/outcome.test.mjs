@@ -35,6 +35,14 @@ test("private outcomes reject missing, malformed, oversized, contradictory or im
     writeSync(value.fd, text);
     assert.throws(() => value.read(0), undefined, text);
   }
+  for (const [exitCode, verdict] of [
+    [1, "fake"],
+    [200, "signal"],
+  ]) {
+    const value = channel(t);
+    writeSync(value.fd, JSON.stringify({ exitCode, verdict }));
+    assert.throws(() => value.read(exitCode));
+  }
 });
 
 test("outcome channel cannot overwrite an existing file or follow a symlink", (t) => {
