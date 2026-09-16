@@ -136,6 +136,14 @@ test("native attempts, observer status and evidence remain independent through t
     assert.match(result.summary.stdout, new RegExp(expected), mode);
     assert.match(result.summary.stdout, /\[stdout\]\(stdout.log\)/);
     assert.equal(result.receipt.terminal, true);
+    assert.match(
+      result.receipt.cleanup.reason,
+      /Polling cannot exclude descendants/,
+    );
+    assert.doesNotMatch(
+      result.receipt.cleanup.reason,
+      /probes remain deferred/,
+    );
     assert.equal(result.receipt.argv[2], mode);
     assert.equal(result.receipt.cwd, process.cwd());
     assert.match(

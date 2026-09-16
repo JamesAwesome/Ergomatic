@@ -351,7 +351,7 @@ async function run(args) {
   receipt.cleanup = {
     status: survivors?.length ? "incomplete" : "unverified",
     reason:
-      "Polling cannot exclude descendants detached and reparented between samples; local browser probes remain deferred",
+      "Polling cannot exclude descendants detached and reparented between samples; cleanup requires separate ownership checks",
     observed: [...owned.values()],
     survivors,
   };
