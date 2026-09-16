@@ -3,8 +3,9 @@
 Scope: the cheaper-hooks increment stacked on admission `d61100b7`, not the
 whole resource spec. Implementation: `cfa8b6f3`; mechanism repairs: `c22909c8`.
 The plan author implemented inline with failing producer witnesses, real hooks,
-commits before mutations, and independent review. Full exact-head hosted CI and
-the final branch review are still outstanding. Worker defaults are unchanged.
+commits before mutations, and independent review. Tasks1–3 passed independent
+spec/quality review at `b15da9a0`. Exact-head hosted CI and the final branch
+review are still outstanding. Worker defaults are unchanged.
 No screenshots, Docker settings changes, broad cleanup or memory-savings claim.
 
 ## Reproducible gates
@@ -59,6 +60,33 @@ after cleanliness testing accepted the wrong push (`9ef404d5`); and removing
 the production staging-restoration flag falsely released the interrupted hook
 (`d6a221e3`). All were restored; `git diff --exit-code` was clean before the
 51-test restored coverage run.
+
+The code-lens diagnostic fix committed at `b15da9a0` also had a post-commit
+mutation: discard the initiating pressure reason (`4a9f8763`), then restore and
+pass (`7873de8f`). The real commit hook passed in `3ef788fb`.
+
+The native hook fixture now explicitly exercises local admission even beneath
+hosted CI. Its fixture-only driver uses the existing observation-injection
+seam on Linux and real pressure on macOS; this adds no production bypass or
+Linux admission claim. Ambient hosted-CI regression RED `6c352005`, repaired
+five-case real-hook fixture GREEN `743986a4`.
+
+## Actual full pre-push observation
+
+At clean `b15da9a0`, `pnpm push:full --set-upstream origin
+codex/memory-cheaper-hooks` passed in receipt
+`cccb90d2-f7be-4791-8062-9e2dfd75b6a0`:332 unique unit/client identities executed
+once in11batches. Summing each native `batch-*/report.json` gives8630passed,
+1existing skipped witness and0failed. Cleanup verified, no allocation failure
+or resource abort. This excludes integration, which remains hosted/explicit.
+
+The receipt's start/end give50.837s. Streaming `resources.jsonl` and taking
+the maxima of `observedTreeRssKiB` and `wrapperRssBytes` gives1513.28MiB test
+tree and73.70MiB wrapper separately; largest consecutive timestamp gap1031ms.
+All pressure states were normal. Host swap used moved4641.44MiB→4633.38MiB;
+that is background-sensitive host state, not attributable test memory saved.
+This is one sampled observation, not paired performance evidence. Existing
+React act/navigation diagnostic noise is retained in the logs.
 
 ## Coverage and limits
 

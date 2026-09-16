@@ -94,6 +94,31 @@ export default [{files:['**/*.ts'],languageOptions:{parser:tseslint.parser,parse
     path.join(appSource, "node_modules"),
     path.join(app, "node_modules"),
   );
+  // Hosted CI must exercise local ownership, not select runUnmanaged. This
+  // fixture-only driver uses main's injected observation seam on Linux;
+  // actual macOS runs retain real host-pressure observations.
+  put(
+    "hook-driver.mjs",
+    `import {main} from './app/scripts/local-work.mjs';
+import {readHost} from './app/scripts/local-work/host.mjs';
+process.exitCode=await main(process.argv.slice(2), {
+  env:{...process.env, ERGOMATIC_HOSTED_CI:'0'},
+  observe:()=>{const host=readHost();return process.platform==='darwin'?host:{...host,pressure:{state:'normal'}}},
+});`,
+  );
+  put(
+    "bin/node",
+    `#!/bin/sh
+case "$1" in *local-work.mjs) shift;exec ${JSON.stringify(process.execPath)} ${JSON.stringify(path.join(root, "hook-driver.mjs"))} "$@";; esac
+exec ${JSON.stringify(process.execPath)} "$@"
+`,
+  );
+  fs.chmodSync(path.join(root, "bin", "node"), 0o755);
+  const env = {
+    ...process.env,
+    pnpm_config_verify_deps_before_run: "false",
+    PATH: `${path.join(root, "bin")}${path.delimiter}${process.env.PATH}`,
+  };
   git("add", ".");
   git("commit", "-m", "fixture");
   // Use Husky's installed bootstrap and the production hook, not a simulated
@@ -101,14 +126,14 @@ export default [{files:['**/*.ts'],languageOptions:{parser:tseslint.parser,parse
   copy(".husky/_/h");
   copy(".husky/_/pre-commit");
   git("config", "core.hooksPath", ".husky/_");
-  const hook = () =>
+  const hook = (extraEnv = {}) =>
     spawnSync("sh", [".husky/_/pre-commit"], {
       cwd: root,
       encoding: "utf8",
       timeout: 30000,
-      env: { ...process.env, pnpm_config_verify_deps_before_run: "false" },
+      env: { ...env, ...extraEnv },
     });
-  return { root, put, git, hook };
+  return { root, put, git, hook, env };
 }
 
 test("real typed lint blocks a partially staged defect and restores index and worktree", (t) => {
@@ -140,6 +165,23 @@ test("real typecheck still blocks a type defect that staged lint accepts", (t) =
   assert.notEqual(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout + result.stderr, /TS2322/);
   assert.doesNotMatch(result.stdout + result.stderr, /no-floating-promises/);
+});
+
+test("real hook fixture keeps local admission under ambient hosted CI", (t) => {
+  const f = fixture(t);
+  f.put("app/src/witness.ts", "export const value: number = 2;\n");
+  f.git("add", "app/src/witness.ts");
+  const result = f.hook({
+    ERGOMATIC_HOSTED_CI: "1",
+    CI: "true",
+    GITHUB_ACTIONS: "true",
+    RUNNER_ENVIRONMENT: "github-hosted",
+    GITHUB_RUN_ID: "1",
+    GITHUB_RUN_ATTEMPT: "1",
+    GITHUB_WORKSPACE: f.root,
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /cleanup=verified; receipt=/);
 });
 
 for (const slowRestore of [false, true])
@@ -195,15 +237,14 @@ if(args.includes('stash') && args[args.indexOf('stash')+1]==='apply') {
 `,
           { mode: 0o700 },
         );
-        extraEnv = { PATH: `${shimDir}${path.delimiter}${process.env.PATH}` };
+        extraEnv = { PATH: `${shimDir}${path.delimiter}${f.env.PATH}` };
       }
       // This is the production shell hook itself: its exec leaves a live child
       // handle for the resource owner, not a census PID or the Husky parent shell.
       const child = spawn("sh", [".husky/pre-commit"], {
         cwd: f.root,
         env: {
-          ...process.env,
-          pnpm_config_verify_deps_before_run: "false",
+          ...f.env,
           ...extraEnv,
         },
         stdio: ["ignore", "pipe", "pipe"],
