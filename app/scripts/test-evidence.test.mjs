@@ -172,22 +172,47 @@ test("interrupt keeps the observer alive and marks detached survivors without to
   const ended = new Promise((resolve) =>
     observer.once("exit", (code, signal) => resolve({ code, signal })),
   );
-  let detached;
+  let detached, ordinary, leader, deadline;
   try {
     let dir;
     for (let n = 0; n < 100; n++) {
       await new Promise((resolve) => setTimeout(resolve, 30));
       if (!existsSync(root)) continue;
       dir = join(root, readdirSync(root)[0]);
+      if (existsSync(join(dir, "receipt.json")))
+        leader = JSON.parse(readFileSync(join(dir, "receipt.json"))).pid;
       if (!existsSync(join(dir, "tree.json"))) continue;
       const pids = JSON.parse(readFileSync(join(dir, "tree.json")));
       detached = pids.detached;
+      ordinary = pids.ordinary;
       const samples = readFileSync(join(dir, "resources.jsonl"), "utf8");
       if (samples.includes(`"pid":${detached}`)) break;
     }
     assert.ok(detached, "fixture descendant ready");
     observer.kill("SIGTERM");
-    assert.deepEqual(await ended, { code: 143, signal: null });
+    const outcome = await Promise.race([
+      ended,
+      new Promise((resolve) => {
+        deadline = setTimeout(() => resolve("observer did not stop"), 4000);
+      }),
+    ]);
+    assert.deepEqual(outcome, { code: 143, signal: null });
+    let ordinaryAlive = true;
+    for (let n = 0; n < 20 && ordinaryAlive; n++) {
+      try {
+        process.kill(ordinary, 0);
+      } catch (error) {
+        if (error.code !== "ESRCH") throw error;
+        ordinaryAlive = false;
+      }
+      if (ordinaryAlive)
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(
+      ordinaryAlive,
+      false,
+      "ordinary descendant must stop with its owned group",
+    );
     const receipt = JSON.parse(readFileSync(join(dir, "receipt.json")));
     assert.equal(receipt.terminal, true);
     assert.equal(receipt.interrupted, "SIGTERM");
@@ -196,9 +221,17 @@ test("interrupt keeps the observer alive and marks detached survivors without to
     assert.equal(invoke(["check", dir]).status, 1);
     assert.equal(process.kill(sentinel.pid, 0), true);
   } finally {
-    observer.kill("SIGTERM");
-    if (detached) process.kill(detached, "SIGTERM");
-    sentinel.kill("SIGTERM");
+    clearTimeout(deadline);
+    // Exact fixture PIDs only, including the ordinary child if forwarding broke.
+    observer.kill("SIGKILL");
+    for (const pid of [ordinary, detached, leader, sentinel.pid]) {
+      if (!pid) continue;
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch (error) {
+        if (error.code !== "ESRCH") throw error;
+      }
+    }
   }
 });
 
@@ -214,6 +247,14 @@ test("empty roots, symlink roots and reused invocation identities are refused", 
     2,
   );
   const r = capture("identity");
+  const originalArtifacts = [
+    "receipt.json",
+    "report.json",
+    "stdout.log",
+    "stderr.log",
+    "resources.jsonl",
+    "html/index.html",
+  ].map((name) => [name, readFileSync(join(r.dir, name))]);
   assert.equal(
     invoke([
       "run",
@@ -227,6 +268,12 @@ test("empty roots, symlink roots and reused invocation identities are refused", 
     ]).status,
     2,
   );
+  for (const [name, bytes] of originalArtifacts)
+    assert.deepEqual(
+      readFileSync(join(r.dir, name)),
+      bytes,
+      `rejected reuse must preserve ${name}`,
+    );
   const receiptPath = join(r.dir, "receipt.json");
   writeFileSync(receiptPath, JSON.stringify({ ...r.receipt, directory: base }));
   assert.equal(invoke(["check", r.dir]).status, 1);
