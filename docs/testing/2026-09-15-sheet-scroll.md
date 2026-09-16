@@ -110,3 +110,12 @@ browser tests, but Linux WebKit rejected the inherited Chromium-only
 could run (including their retries). The WebKit project now explicitly
 supplies an empty argument list. macOS WebKit had accepted that flag, so
 local green did not establish cross-platform browser startup.
+
+The corrected CI run (`35049486739`, 683b7603) passed 597 browser cases
+first try and one on retry. The portrait retry was a test-setup race:
+its fixed 350ms pause sampled the first 300px wheel at 167px, then that
+wheel completed at 300px after the sheet opened. The setup now positively
+awaits the wheel's full 300px delta before capturing the pre-open position.
+Sheet scrolling and post-close scrolling likewise await their observed
+movement. The backdrop's negative assertion retains its settling pause.
+The product lock is unchanged; this corrects when the test calls setup done.

@@ -89,7 +89,9 @@ for (const viewport of [
     // before opening. Window.scrollY is not the log's position.
     await page.mouse.move(scrimX, viewport.height - 100);
     await page.mouse.wheel(0, 300);
-    await page.waitForTimeout(350);
+    // Wait for the wheel's full delta, not a wall-clock slice of its scroll.
+    // Linux CI once sampled 167px mid-scroll and reached 300px after opening.
+    await expect.poll(() => log.evaluate((el) => el.scrollTop)).toBe(300);
     const before = await log.evaluate((el) => el.scrollTop);
     expect(before).toBeGreaterThan(50);
     await page
@@ -115,8 +117,9 @@ for (const viewport of [
       ).toBeGreaterThan(50);
       await page.mouse.move(viewport.width / 2, 220);
       await page.mouse.wheel(0, 600);
-      await page.waitForTimeout(350);
-      expect(await dialog.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+      await expect
+        .poll(() => dialog.evaluate((el) => el.scrollTop))
+        .toBeGreaterThan(0);
       expect(await log.evaluate((el) => el.scrollTop)).toBe(before);
     }
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
@@ -124,9 +127,8 @@ for (const viewport of [
     expect(await log.evaluate((el) => el.scrollTop)).toBe(before);
     await page.mouse.move(scrimX, viewport.height - 100);
     await page.mouse.wheel(0, 300);
-    await page.waitForTimeout(350);
-    expect(await log.evaluate((el) => el.scrollTop)).toBeGreaterThan(
-      before + 50,
-    );
+    await expect
+      .poll(() => log.evaluate((el) => el.scrollTop))
+      .toBeGreaterThan(before + 50);
   });
 }
