@@ -215,6 +215,12 @@ test("public mutation owns one bounded real Stryker run and keeps native evidenc
   assert.equal(receipt.cleanup, "verified");
   assert.equal(receipt.phases.length, 1);
   assert.equal(receipt.phases[0].workers.max, 1);
+  const options = JSON.parse(
+    fs.readFileSync(path.join(dirs[0], "stryker.config.json")),
+  );
+  assert.equal(options.concurrency, 1);
+  assert.equal(options.inPlace, false);
+  assert.equal(options.tempDirName, path.join(dirs[0], "sandbox"));
   const record = JSON.parse(
     fs.readFileSync(path.join(dirs[0], "mutation.json")),
   );
@@ -244,6 +250,23 @@ test("public mutation pressure refusal executes no test body", (t) => {
     result = f.run({ FIXTURE_PRESSURE: "warning" });
   assert.equal(result.status, 75, result.stdout + result.stderr);
   assert.equal(fs.existsSync(f.sentinel), false);
+});
+
+test("public mutation refuses a selector dropped inside the handoff before native preparation", (t) => {
+  const f = publicFixture(t);
+  const file = "app/scripts/local-work/workloads.mjs";
+  const original = fs.readFileSync(path.join(f.root, file), "utf8");
+  const broken = original.replace(
+    "const request = parseMutation(args);",
+    "const request = parseMutation(args); request.testFiles = [];",
+  );
+  assert.notEqual(broken, original, "fixture must actually corrupt the handoff");
+  f.put(file, broken);
+  const result = f.run();
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stderr, /original request/);
+  assert.equal(fs.existsSync(f.sentinel), false);
+  assert.equal(fs.existsSync(path.join(f.receipts()[0], "mutation.json")), false);
 });
 
 test("public mutation busy refusal cannot borrow an existing owner", (t) => {
