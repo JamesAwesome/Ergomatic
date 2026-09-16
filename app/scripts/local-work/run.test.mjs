@@ -15,13 +15,31 @@ import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { fileURLToPath } from "node:url";
 import { runWorkload } from "./run.mjs";
 import { inspectOwner } from "./owner.mjs";
 import { readHost } from "./host.mjs";
 
 function fixture(t) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "ergo-run-")));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(async () => {
+    try {
+      const record = inspectOwner(root).metadata;
+      const observed = record?.observed ?? [];
+      await until(
+        () =>
+          !readHost().processes.value.some(
+            (p) =>
+              p.pid === record?.child?.pid ||
+              observed.some(
+                (old) => old.pid === p.pid && old.started === p.started,
+              ),
+          ),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   const current = readHost().processes.value.find((p) => p.pid === process.pid);
   const metadata = {
     id: randomUUID(),
@@ -44,11 +62,21 @@ function fixture(t) {
 }
 const phase = (code) => ({
   command: process.execPath,
-  args: ["-e", code],
+  // This failsafe is not readiness evidence; it bounds broken cancellation mutants.
+  args: ["-e", `setTimeout(()=>process.exit(86),3000).unref();${code}`],
   cwd: process.cwd(),
 });
 const put = (path, text) =>
   `require('node:fs').writeFileSync(${JSON.stringify(path)}, ${JSON.stringify(text)});`;
+
+async function until(predicate, timeout = 5000) {
+  const deadline = Date.now() + timeout;
+  while (!predicate()) {
+    if (Date.now() >= deadline)
+      throw new Error("Owned fixture did not finish by its safety deadline");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 
 test("test-run resource outcomes survive the shell boundary into the owner receipt", async (t) => {
   for (const [code, stderr, classification, signal] of [
@@ -62,7 +90,10 @@ test("test-run resource outcomes survive the shell boundary into the owner recei
       phases: [
         {
           command: "bash",
-          args: [resolve("app/scripts/test-run.sh"), "--self-test"],
+          args: [
+            fileURLToPath(new URL("../test-run.sh", import.meta.url)),
+            "--self-test",
+          ],
           cwd: options.root,
           outcome: "test-run",
           env: {
@@ -94,16 +125,36 @@ test("signals delivered to the real owner stop its live child and release only a
     const script = `import {runWorkload} from ${JSON.stringify(new URL("./run.mjs", import.meta.url).href)};import {readHost} from ${JSON.stringify(new URL("./host.mjs", import.meta.url).href)};import{writeFileSync,existsSync}from'node:fs';const metadata=${JSON.stringify(options.metadata)};metadata.pid=process.pid;metadata.start=readHost().processes.value.find(p=>p.pid===process.pid).started;const ready=setInterval(()=>{if(existsSync(${JSON.stringify(ready)})){clearInterval(ready);process.send('ready');}},5);const result=await runWorkload({root:${JSON.stringify(options.root)},metadata,phases:[${JSON.stringify(body)}],observe:()=>({...readHost(),pressure:{state:'normal'}}),sampleMs:10});writeFileSync(${JSON.stringify(resultFile)},JSON.stringify(result));process.disconnect();process.exitCode=result.exitCode;`;
     const owner = spawn(
       process.execPath,
-      ["--input-type=module", "-e", script],
+      [
+        "--input-type=module",
+        "-e",
+        `setTimeout(()=>process.exit(87),6000).unref();${script}`,
+      ],
       { stdio: ["ignore", "inherit", "inherit", "ipc"] },
     );
-    const exit = once(owner, "exit");
-    await once(owner, "message");
+    let identity;
+    t.after(async () => {
+      if (owner.exitCode === null && owner.signalCode === null)
+        owner.kill("SIGTERM");
+      await until(() => owner.exitCode !== null || owner.signalCode !== null);
+      if (identity)
+        await until(
+          () =>
+            !readHost().processes.value.some(
+              (p) => p.pid === identity.pid && p.started === identity.started,
+            ),
+        );
+    });
+    const exit = once(owner, "exit", { signal: AbortSignal.timeout(7000) });
+    await once(owner, "message", { signal: AbortSignal.timeout(5000) });
+    const childPid = inspectOwner(options.root).metadata.child.pid;
+    identity = readHost().processes.value.find((p) => p.pid === childPid);
     owner.kill(signal);
     const [code] = await exit;
     const result = JSON.parse(readFileSync(resultFile, "utf8"));
     assert.equal(code, 75);
     assert.equal(result.classification, "resource-aborted");
+    assert.equal(result.reason, signal);
     assert.equal(result.cleanup, "verified");
     assert.equal(readFileSync(stopped, "utf8"), "SIGINT");
     assert.equal(inspectOwner(options.root).status, "free");
@@ -306,7 +357,7 @@ test("cancellation reaches the owned fork group but not a foreign live child", a
     }
   });
   await once(foreign, "message");
-  const grandchild = `process.on('SIGINT',()=>{${put(stopped, "owned fork stopped")}process.exit(0)});${put(ready, "yes")}setInterval(()=>{},1000)`;
+  const grandchild = `setTimeout(()=>process.exit(86),3000).unref();process.on('SIGINT',()=>{${put(stopped, "owned fork stopped")}process.exit(0)});${put(ready, "yes")}setInterval(()=>{},1000)`;
   const parent = `const child=require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(grandchild)}],{stdio:'inherit'});process.on('SIGINT',()=>{});child.on('exit',()=>process.exit(0));`;
   const result = await runWorkload({
     ...options,
