@@ -222,7 +222,9 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
       }),
     ).heroes;
     expect(heroes.machine!.sources.avgHr.source).toBe("derived");
-    expect(heroes.machine!.sources.avgHr.because).toMatch(/belt/i);
+    expect(heroes.machine!.sources.avgHr.because).toMatch(
+      /recorded heart-rate readings/i,
+    );
   });
 
   it("stamps RATE as DERIVED on a stored TERMINATED row, matching the live door's branch", () => {
