@@ -327,9 +327,15 @@ it more narrowly than this section used to imply:**
 
 - **Captures are documentation, not a CI gate** (2026-08-27: *"We honestly
   don't need to run these in ci. It can be part of the release skill and maybe
-  a scheduled reup."*). `playwright.config.ts:41` carries
-  `testIgnore: "**/screenshots.spec.ts"`, and CI runs `--project=chromium`
-  only. A missing capture does not turn CI red and is not supposed to.
+  a scheduled reup."*). The `chromium` project carries
+  `testIgnore: ["**/screenshots.spec.ts", "**/touch.spec.ts"]`, and CI runs
+  `--project=chromium --project=touch` — **captures are in neither**, so a
+  missing capture does not turn CI red and is not supposed to.
+  **THIS IS THE THIRD PLACE THAT NAMES THE PROJECT LIST**, after
+  `scripts/e2e.sh` and `.github/workflows/ci.yml`. A project added to the
+  config and not to the two runners never executes; one added to the runners
+  and not corrected here leaves this file lying about what CI does. The
+  commit that added `touch` said there were TWO places and missed this one.
 - **Captures are for LAYOUT or STRUCTURE changes, never wording-only ones**
   (2026-08-23). A copy diff gets no screenshot.
 - **Regenerate broadly; commit narrowly** (antagonist verdict adopted by

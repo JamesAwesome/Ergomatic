@@ -31,7 +31,7 @@ const COUNT_ID = "filter-sheet-count";
 
 /**
  * The FILTER sheet (Task 4, ui-fix round — DESIGN.md's "Library, second
- * pass"): slides up over the list (not a route — Library.tsx never pushes
+ * pass"): a centred modal over the list (not a route — Library.tsx never pushes
  * history for it), holding four filter groups (TIME, EFFORT, LAST
  * DONE, SOURCE) plus a live-counting L1 button. Operates entirely on a DRAFT
  * copy of Filters that the caller owns (`draft`/`onChangeDraft`) — nothing

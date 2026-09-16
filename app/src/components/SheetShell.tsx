@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 
 /**
- * The dialog machinery a bottom sheet needs, with zero knowledge of what it
+ * The dialog machinery a modal sheet needs, with zero knowledge of what it
  * holds: backdrop, `role="dialog"`/`aria-modal="true"`, and the focus trap
  * this codebase's first such element originally shipped without (Md4,
  * whole-branch review — see the extraction's own history in
@@ -141,6 +141,32 @@ export function SheetShell({
       restoreTarget?.focus?.();
     };
   }, [open, opener, focusTitleOnOpen]);
+
+  // THE PAGE BEHIND A MODAL MUST NOT SCROLL (James, 2026-09-15, reading the
+  // provenance sheet on his phone: "the screen behind it can still scroll").
+  // The backdrop covers the viewport and swallows taps, but nothing stopped
+  // the document itself moving under a wheel, a trackpad swipe or a drag that
+  // began on the scrim — so the rower's own log slid around behind the sheet
+  // they were reading. Every sheet in the app had this; it is fixed here
+  // rather than per caller.
+  //
+  // `overflow: hidden` ALONE, and deliberately no `window.scrollTo` to put
+  // the position back. The first version of this saved `scrollY` and restored
+  // it on close, which broke two of Library's own tests — they count calls to
+  // `scrollTo`, and the screen already owns its restoration. Two mechanisms
+  // proposing one screen's scroll position is RF23, and this repo has already
+  // shipped that bug once as the unmount clamp echo that wrote 0 over a saved
+  // position. `overflow: hidden` does not move the document, so there is
+  // nothing to put back; the `position: fixed` lock is what loses the offset,
+  // and that is exactly why it is not used here.
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

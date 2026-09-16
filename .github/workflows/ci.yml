@@ -150,7 +150,14 @@ jobs:
       - name: Run Playwright (flows + design)
         id: evidence
         working-directory: app
-        run: node scripts/test-evidence.mjs run playwright -- node_modules/.bin/playwright test --project=chromium
+        # BOTH projects, and this line is the CI half of a pair. CI does NOT
+        # go through `scripts/e2e.sh`, so naming a project there does nothing
+        # here — a project listed in only one of the two runs locally and
+        # never where it counts, which is a gate that cannot fail in the
+        # place that matters. `touch` is scoped by `testMatch` to
+        # `e2e/touch.spec.ts` and exists so that one spec has
+        # `hasTouch: true`; without it a dispatched touch is inert.
+        run: node scripts/test-evidence.mjs run playwright -- node_modules/.bin/playwright test --project=chromium --project=touch
       # Recovered retries remain report-only; publication also runs on red.
       - name: Publish Playwright evidence summary
         if: always()

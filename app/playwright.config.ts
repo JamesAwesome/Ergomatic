@@ -61,7 +61,27 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         viewport: { width: 390, height: 844 },
       },
-      testIgnore: "**/screenshots.spec.ts",
+      testIgnore: ["**/screenshots.spec.ts", "**/touch.spec.ts"],
+    },
+    {
+      // A THIRD project purely so one spec can have touch. `hasTouch` is what
+      // Playwright needs before a dispatched touch does anything, and without
+      // it a CDP `Input.dispatchTouchEvent` drag is inert — which is why the
+      // modal scroll lock had no gate that could fail.
+      //
+      // SCOPED by `testMatch` rather than added to `chromium`, so no existing
+      // spec changes by construction. It would very likely have been safe to
+      // set it on `chromium` directly — measured: nothing under `app/src`
+      // branches on `pointer: coarse`, `hover: none`, `maxTouchPoints` or
+      // `ontouchstart`, and nothing registers a touch listener — but a
+      // separate project costs one config block and needs no such argument.
+      name: "touch",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 390, height: 844 },
+        hasTouch: true,
+      },
+      testMatch: "**/touch.spec.ts",
     },
     {
       name: "screenshots",

@@ -6342,13 +6342,17 @@ for (const name of CONNECTED_STATES) {
       expect(endBox!.y).toBeLessThan(60);
     }
     if (name === "connected-log-sheet") {
-      // THE FOUR `.connected-surface .filter-sheet*` RULES, PINNED (task-7
-      // review, L2b). They are the only thing standing between the log list
-      // and the 35px — one and a half lines — it got at `.filter-sheet`'s
-      // shipped defaults on this frame. Nothing in a unit test can see them:
-      // the standard modal refactor (portalling `SheetShell` to
-      // `document.body`) silently deletes all four by removing the
-      // `.connected-surface` ancestor, and every other gate stays green. So
+      // THE THREE `.connected-surface .filter-sheet*` RULES, PINNED (task-7
+      // review, L2b). There were FOUR until 2026-09-15, when the base
+      // backdrop stopped reserving tab-bar height and the unconditional
+      // padding override became byte-identical to it — that one is gone, and
+      // this comment is the gate that counts them, so it moves with them.
+      // They are the only thing standing between the log list and the 35px —
+      // one and a half lines — it got at `.filter-sheet`'s shipped defaults
+      // on this frame. Nothing in a unit test can see them: the standard
+      // modal refactor (portalling `SheetShell` to `document.body`) silently
+      // deletes all three by removing the `.connected-surface` ancestor, and
+      // every other gate stays green. So
       // the measurement lives here, beside the five-row one, for the same
       // reason.
       const visible = await page.evaluate(() => {

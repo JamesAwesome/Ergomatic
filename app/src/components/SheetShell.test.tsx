@@ -328,3 +328,55 @@ describe("SheetShell: focus never leaves the modal", () => {
     expect(btn("MY WORKOUTS")).toHaveFocus();
   });
 });
+
+describe("SheetShell: the page behind a modal does not scroll", () => {
+  // James, 2026-09-15, reading the provenance sheet on his phone: "the screen
+  // behind it can still scroll". The backdrop covers the viewport and eats
+  // taps, but nothing stopped the DOCUMENT moving under a wheel, a trackpad
+  // swipe, or a drag begun on the scrim — so his own log slid around behind
+  // the sheet he was reading. Every sheet in the app had it.
+  it("locks body scroll while open and restores exactly what was there", async () => {
+    document.body.style.overflow = "scroll";
+    const opener = createRef<HTMLElement | null>();
+    const { rerender } = render(
+      <SheetShell open titleId="t" onDismiss={vi.fn()} opener={opener}>
+        <h2 id="t">Title</h2>
+        <button type="button">Close</button>
+      </SheetShell>,
+    );
+    expect(document.body.style.overflow).toBe("hidden");
+
+    rerender(
+      <SheetShell open={false} titleId="t" onDismiss={vi.fn()} opener={opener}>
+        <h2 id="t">Title</h2>
+        <button type="button">Close</button>
+      </SheetShell>,
+    );
+    // the CALLER's own value, not a blanket reset to ""
+    expect(document.body.style.overflow).toBe("scroll");
+    document.body.style.overflow = "";
+  });
+
+  it("never moves the scroll POSITION, which the screens own", async () => {
+    // Two mechanisms proposing one screen's scroll offset is RF23, and this
+    // repo already shipped that bug as the unmount clamp echo. Library's own
+    // tests count `scrollTo` calls; an earlier version of this lock restored
+    // the offset and broke two of them.
+    const spy = vi.spyOn(window, "scrollTo");
+    const opener = createRef<HTMLElement | null>();
+    const { rerender } = render(
+      <SheetShell open titleId="t" onDismiss={vi.fn()} opener={opener}>
+        <h2 id="t">Title</h2>
+        <button type="button">Close</button>
+      </SheetShell>,
+    );
+    rerender(
+      <SheetShell open={false} titleId="t" onDismiss={vi.fn()} opener={opener}>
+        <h2 id="t">Title</h2>
+        <button type="button">Close</button>
+      </SheetShell>,
+    );
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});

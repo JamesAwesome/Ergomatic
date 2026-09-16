@@ -1353,9 +1353,10 @@ test.describe("Today enhancements: sheet dismiss discards the draft", () => {
     await expect(effortCell3).toHaveAttribute("aria-pressed", "true");
 
     // The backdrop is the dialog's own parent (`.filter-sheet-backdrop`,
-    // SheetShell.tsx) — clicked near the top, well clear of the bottom-
-    // anchored panel itself, so this can't accidentally land on a group
-    // cell instead.
+    // SheetShell.tsx) — clicked at its top-left corner, which is outside the
+    // panel whether the sheet is centred (as it is since 2026-09-15) or
+    // bottom-anchored (as it was when this was written), so it cannot land on
+    // a group cell instead.
     await page
       .locator(".filter-sheet-backdrop")
       .click({ position: { x: 10, y: 10 } });

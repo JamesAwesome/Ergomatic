@@ -28,7 +28,7 @@ const TITLE_ID = "today-filter-sheet-title";
 const COUNT_ID = "today-filter-sheet-count";
 
 /**
- * Today's own FILTER sheet: slides up over the screen (Today.tsx never
+ * Today's own FILTER sheet: a centred modal over the screen (Today.tsx never
  * pushes history for it — same BACK-with-sheet-open decision as Library's
  * FilterSheet.tsx, documented there). Operates entirely on a DRAFT copy of
  * `{durationRange, effortLevels, lastDone, source}` that the caller
