@@ -25,6 +25,7 @@ export async function runWorkload({
   sampleMs = 1000,
   interruptMs = 5000,
   terminateMs = 5000,
+  cleanupMs = 1000,
 }) {
   const owner = acquireOwner(root, metadata);
   const receipts = join(root, "receipts");
@@ -317,16 +318,39 @@ export async function runWorkload({
       entry.exitCode = outcome.code;
       entry.signal = outcome.signal;
       entry.end = new Date().toISOString();
-      const after = sample("cleanup", child.pid, observed);
+      const cleanupDeadline = Date.now() + cleanupMs;
+      let after, survivors;
+      entry.cleanupSamples = 0;
+      for (;;) {
+        after = sample("cleanup", child.pid, observed);
+        entry.cleanupSamples++;
+        survivors = after.processes?.value?.filter(
+          (p) =>
+            p.pgid === child.pid || observed.get(p.pid)?.started === p.started,
+        );
+        // The leader is already reaped. Keep ownership while positively
+        // observed descendants finish; never signal identities from a census.
+        owner.update({ observed: [...observed.values()] });
+        if (
+          unresolved ||
+          !survivors?.length ||
+          after.pressure?.state !== "normal" ||
+          Date.now() >= cleanupDeadline
+        )
+          break;
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(50, cleanupDeadline - Date.now())),
+        );
+      }
       if (after.pressure?.state !== "normal")
         reason ??= `pressure: ${after.pressure?.state ?? "unknown"}`;
-      const survivors = after.processes?.value?.filter(
-        (p) =>
-          p.pgid === child.pid || observed.get(p.pid)?.started === p.started,
-      );
+      if (!after.processes?.value)
+        entry.cleanupUnavailable =
+          after.processes?.unavailable ?? "missing census";
       entry.survivors = survivors ?? null;
       let clean =
         !unresolved &&
+        !(entry.cleanupSamples > 1 && after.pressure?.state !== "normal") &&
         (entry.launchError || (survivors && survivors.length === 0));
       if (
         phase.verifySourceOnFailure &&

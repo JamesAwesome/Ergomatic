@@ -141,8 +141,10 @@ function guarded(operation) {
   }
 }
 
-// All mutations share recovery's barrier. Synchronous execution alone does not
-// exclude another process between a generation comparison and pathname removal.
+// Publication, updates and removal share recovery's barrier. An empty owner
+// reservation precedes it so a losing acquirer cannot block the incumbent.
+// Synchronous execution alone cannot exclude another process between a
+// generation comparison and pathname removal.
 // Any abandoned barrier is diagnosis-only, including one left by publication.
 function withMaintenance(root, operation) {
   return guarded(() => {
@@ -219,68 +221,78 @@ export function inspectOwner(root) {
 
 /** Caller supplies a fresh UUID and already canonical common/worktree identity. */
 export function acquireOwner(root, metadata) {
-  return withMaintenance(root, (checkBarrier) => {
+  return guarded(() => {
+    validateRoot(root);
     const record = JSON.parse(JSON.stringify(metadata));
     validateMetadata(record);
+    requireCondition(
+      !present(path.join(root, "maintenance")),
+      "Maintenance barrier present; explicit diagnosis required",
+    );
     const directory = path.join(root, "owner");
+    // Atomic reservation, not a check-then-lock: EEXIST must never take the
+    // incumbent's barrier. If a barrier appears now, keep this unpublished
+    // reservation for diagnosis rather than deleting it outside the barrier.
     fs.mkdirSync(directory, { mode: 0o700 });
     const directoryStat = privateNode(directory, true);
-    publish(root, record, () => {
+    return withMaintenance(root, (checkBarrier) => {
+      publish(root, record, () => {
+        checkBarrier();
+        requireCondition(
+          sameNode(directoryStat, privateNode(directory, true)),
+          "Owner directory changed before publication",
+        );
+      });
       checkBarrier();
-      requireCondition(
-        sameNode(directoryStat, privateNode(directory, true)),
-        "Owner directory changed before publication",
-      );
-    });
-    checkBarrier();
-    let released = false;
-    const current = () => {
-      requireCondition(!released, "Owner handle already released");
-      const state = snapshot(root);
-      requireCondition(
-        sameNode(directoryStat, state.directoryStat) &&
-          identityFields.every(
-            (field) => state.metadata[field] === record[field],
-          ),
-        "Owner generation changed",
-      );
-      return state;
-    };
-    return Object.freeze({
-      id: record.id,
-      update(patch) {
-        return withMaintenance(root, (check) => {
-          const previous = current();
-          requireCondition(
-            patch !== null &&
-              typeof patch === "object" &&
-              !Array.isArray(patch),
-            "Owner update must be an object",
-          );
-          const next = JSON.parse(
-            JSON.stringify({ ...previous.metadata, ...patch }),
-          );
-          requireCondition(
-            identityFields.every((field) => next[field] === record[field]),
-            "Owner identity is immutable",
-          );
-          // During publication our own temporary file is the only extra entry.
-          publish(root, next, () => {
-            check();
-            currentIdentity(root, previous);
+      let released = false;
+      const current = () => {
+        requireCondition(!released, "Owner handle already released");
+        const state = snapshot(root);
+        requireCondition(
+          sameNode(directoryStat, state.directoryStat) &&
+            identityFields.every(
+              (field) => state.metadata[field] === record[field],
+            ),
+          "Owner generation changed",
+        );
+        return state;
+      };
+      return Object.freeze({
+        id: record.id,
+        update(patch) {
+          return withMaintenance(root, (check) => {
+            const previous = current();
+            requireCondition(
+              patch !== null &&
+                typeof patch === "object" &&
+                !Array.isArray(patch),
+              "Owner update must be an object",
+            );
+            const next = JSON.parse(
+              JSON.stringify({ ...previous.metadata, ...patch }),
+            );
+            requireCondition(
+              identityFields.every((field) => next[field] === record[field]),
+              "Owner identity is immutable",
+            );
+            // During publication our own temporary file is the only extra entry.
+            publish(root, next, () => {
+              check();
+              currentIdentity(root, previous);
+            });
           });
-        });
-      },
-      release() {
-        return withMaintenance(root, (check) => {
-          const state = current();
-          check();
-          matchingSnapshot(root, state);
-          fs.unlinkSync(path.join(directory, "owner.json"));
-          fs.rmdirSync(directory);
-          released = true;
-        });
-      },
+        },
+        release() {
+          return withMaintenance(root, (check) => {
+            const state = current();
+            check();
+            matchingSnapshot(root, state);
+            fs.unlinkSync(path.join(directory, "owner.json"));
+            fs.rmdirSync(directory);
+            released = true;
+          });
+        },
+      });
     });
   });
 }

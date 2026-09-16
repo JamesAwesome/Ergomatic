@@ -18,7 +18,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import { runWorkload } from "./run.mjs";
-import { inspectOwner } from "./owner.mjs";
+import { acquireOwner, inspectOwner } from "./owner.mjs";
 import { readHost } from "./host.mjs";
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
@@ -642,6 +642,152 @@ test("live child generation and observed descendants are durable before release"
   assert.ok(metadata.observed.every((p) => p.uid === process.getuid()));
 });
 
+test("cleanup waits for an observed descendant that outlives its reaped parent", async (t) => {
+  const options = fixture(t),
+    ready = join(options.root, "leaf-pid"),
+    release = join(options.root, "leaf-release"),
+    done = join(options.root, "leaf-done"),
+    ownerPath = join(options.root, "owner", "owner.json");
+  const leaf = `const fs=require('node:fs');
+fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));
+setTimeout(()=>process.exit(86),3000).unref();
+setInterval(()=>{if(!fs.existsSync(${JSON.stringify(release)}))return;let phase;try{phase=JSON.parse(fs.readFileSync(${JSON.stringify(ownerPath)},'utf8')).phase}catch{phase='missing'}fs.writeFileSync(${JSON.stringify(done)},phase);process.exit(0)},5);`;
+  const parent = `const child=require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{stdio:'ignore'});child.unref();const timer=setInterval(()=>{if(require('node:fs').existsSync(${JSON.stringify(ready)}))clearInterval(timer)},5);`;
+  const originalKill = process.kill.bind(process);
+  const signals = t.mock.method(process, "kill", originalKill);
+  let blockedCompetitors = 0;
+  const result = await runWorkload({
+    ...options,
+    observe: ({ phase: stage, childPid }) => {
+      const host = options.observe();
+      if (
+        stage === "cleanup" &&
+        host.processes.value.some((p) => p.pgid === childPid)
+      ) {
+        assert.throws(
+          () =>
+            acquireOwner(options.root, {
+              ...options.metadata,
+              id: randomUUID(),
+            }),
+          { code: "RESOURCE_REFUSED" },
+        );
+        blockedCompetitors++;
+        writeFileSync(release, "positively observed after leader exit");
+      }
+      return host;
+    },
+    phases: [phase(parent)],
+  });
+  // Finish our harmless fixture even when the production gate fails first.
+  // This wait does not change the already-returned receipt under assertion.
+  writeFileSync(release, "fixture cleanup");
+  await until(() => existsSync(done));
+  const leafPid = Number(readFileSync(ready, "utf8"));
+  await until(() => !readHost().processes.value.some((p) => p.pid === leafPid));
+  assert.equal(readFileSync(done, "utf8"), "active");
+  assert.equal(result.cleanup, "verified", JSON.stringify(result.phases));
+  assert.ok(result.phases[0].cleanupSamples > 1);
+  assert.ok(blockedCompetitors > 0);
+  assert.equal(signals.mock.callCount(), 0);
+  assert.equal(result.exitCode, 0);
+  assert.equal(inspectOwner(options.root).status, "free");
+});
+
+test("cleanup settlement never upgrades an unavailable census, pressure change or surviving deadline", async (t) => {
+  for (const condition of [
+    "initial-census",
+    "lost-census",
+    "pressure",
+    "deadline",
+  ]) {
+    const options = fixture(t);
+    let samples = 0;
+    const result = await runWorkload({
+      ...options,
+      cleanupMs: 60,
+      observe: ({ phase: stage, childPid }) => {
+        const host = options.observe();
+        if (stage !== "cleanup") return host;
+        samples++;
+        if (
+          condition === "initial-census" ||
+          (condition === "lost-census" && samples > 1)
+        )
+          return { ...host, processes: { unavailable: "census witness" } };
+        if (condition === "pressure" && samples > 1)
+          return { ...host, pressure: { state: "warning" } };
+        return {
+          ...host,
+          processes: {
+            value: [
+              ...host.processes.value,
+              {
+                pid: 2147483647,
+                ppid: 1,
+                pgid: childPid,
+                uid: process.getuid(),
+                rssKiB: 0,
+                started: "synthetic cleanup identity",
+                executable: "harmless census-only witness",
+              },
+            ],
+          },
+        };
+      },
+      phases: [phase("process.exit(0)")],
+    });
+    assert.equal(result.cleanup, "unresolved", condition);
+    assert.notEqual(result.exitCode, 0, condition);
+    assert.equal(inspectOwner(options.root).status, "occupied", condition);
+    assert.equal(result.phases[0].exitCode, 0);
+    if (condition !== "deadline")
+      assert.equal(samples, condition === "initial-census" ? 1 : 2);
+  }
+});
+
+test("cleanup settlement retains descendants first discovered after the leader exit", async (t) => {
+  const options = fixture(t);
+  let samples = 0;
+  const result = await runWorkload({
+    ...options,
+    observe: ({ phase: stage, childPid }) => {
+      const host = options.observe();
+      if (stage !== "cleanup") return host;
+      samples++;
+      if (samples === 3)
+        assert.ok(
+          inspectOwner(options.root).metadata.observed.some(
+            (p) => p.pid === 2147483646,
+          ),
+        );
+      if (samples >= 4) return host;
+      const pid = samples === 1 ? 2147483647 : 2147483646;
+      return {
+        ...host,
+        processes: {
+          value: [
+            ...host.processes.value,
+            {
+              pid,
+              ppid: 1,
+              pgid: samples === 3 ? pid : childPid,
+              uid: process.getuid(),
+              rssKiB: 0,
+              started: "synthetic cleanup identity",
+              executable: "harmless census-only witness",
+            },
+          ],
+        },
+      };
+    },
+    phases: [phase("process.exit(0)")],
+  });
+  assert.equal(samples, 4);
+  assert.equal(result.cleanup, "verified");
+  assert.equal(result.exitCode, 0);
+});
+
 test("pressure interruption remains nonzero when the child handles SIGINT as success", async (t) => {
   const options = fixture(t),
     ready = join(options.root, "ready"),
@@ -741,6 +887,7 @@ test("a child refusing both signals remains blocked, without owner SIGKILL", asy
   assert.equal(inspectOwner(options.root).status, "occupied");
   assert.equal(result.classification, "resource-aborted");
   assert.equal(result.resourceAbort, true);
+  assert.equal(result.phases[0].cleanupSamples, 1);
   assert.match(result.diagnosticErrors.join(" "), /unresolved live child/);
   assert.ok(
     result.phases[0].survivors.some((p) => p.pid === result.phases[0].pid),
@@ -901,6 +1048,6 @@ test("an independent child invocation cannot borrow its parent's owner", async (
       },
     ],
   });
-  assert.equal(result.exitCode, 0);
+  assert.equal(result.exitCode, 0, JSON.stringify(result));
   assert.equal(readFileSync(refused, "utf8"), "75");
 });

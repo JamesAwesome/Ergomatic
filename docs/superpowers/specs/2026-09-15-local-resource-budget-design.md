@@ -147,14 +147,21 @@ user account.
    same explicit recovery, not an assumption that a PID cannot be reused.
 
 Recovery/release must not implement compare-then-delete against a reusable
-pathname. All synchronous ownership mutations acquire a separate exclusive
-maintenance barrier: publication, update, release and explicit recovery.
-A contender refuses before touching an owner while that barrier is held;
-its identity is checked again after publication, before launch. A workload
+pathname. Publication, update, release and explicit recovery acquire a separate
+exclusive maintenance barrier. Acquisition validates root/metadata and refuses
+an already-visible barrier, then atomically reserves an empty owner directory
+BEFORE taking maintenance. Only the reservation winner may publish; losing
+acquirers never take the incumbent's barrier. The barrier precheck is not atomic:
+if a barrier appears before publication, acquisition refuses and retains the
+unpublished reservation as unknown/occupied for diagnosis. This includes the
+window after an old release/recovery removes its directory but before it drops
+maintenance; neither operation subsequently removes the new reservation.
+The owner's identity is checked again after publication, before launch. A workload
 already past launch remains a live owner that recovery must refuse. Under the
 barrier, recovery re-reads the inspected generation and proves its cleanup
 preconditions before removing exactly it. No recovery decision or state
-mutation occurs after releasing the barrier. A malformed/crashed barrier is
+publication, update or removal occurs after releasing the barrier. A
+malformed/crashed barrier is
 diagnosis-only: no automatic recursive stale-lock recovery. The plan must
 paste-test the interleavings below before implementing the public command.
 
