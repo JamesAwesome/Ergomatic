@@ -142,9 +142,9 @@ jobs:
       - name: Install dependencies
         working-directory: app
         run: pnpm install --frozen-lockfile
-      - name: Install Playwright + Chromium (with OS deps)
+      - name: Install Playwright browsers (with OS deps)
         working-directory: app
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium webkit
       - name: Boot the compose stack (e2e override arms the test-signin backdoor)
         run: |
           POSTGRES_PASSWORD=devpass TEST_AUTH_SECRET=e2e-secret APP_VERSION=e2e \
@@ -152,14 +152,10 @@ jobs:
       - name: Run Playwright (flows + design)
         id: evidence
         working-directory: app
-        # BOTH projects, and this line is the CI half of a pair. CI does NOT
-        # go through `scripts/e2e.sh`, so naming a project there does nothing
-        # here — a project listed in only one of the two runs locally and
-        # never where it counts, which is a gate that cannot fail in the
-        # place that matters. `touch` is scoped by `testMatch` to
-        # `e2e/touch.spec.ts` and exists so that one spec has
-        # `hasTouch: true`; without it a dispatched touch is inert.
-        run: node scripts/test-evidence.mjs run playwright -- node_modules/.bin/playwright test --project=chromium --project=touch
+        # Keep the project list aligned with scripts/e2e.sh and TESTING.md.
+        # touch gates document gestures; webkit-sheet catches the nested
+        # log scroller leak Chromium does not reproduce.
+        run: node scripts/test-evidence.mjs run playwright -- node_modules/.bin/playwright test --project=chromium --project=touch --project=webkit-sheet
       # Recovered retries remain report-only; publication also runs on red.
       - name: Publish Playwright evidence summary
         if: always()
