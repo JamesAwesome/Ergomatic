@@ -594,15 +594,19 @@ inspect before sharing or committing; traces can contain tokens and cookies.
 From `app/`, the explicit capture entry point is:
 
 ```sh
-node scripts/test-evidence.mjs run vitest -- node scripts/local-work.mjs run test --project unit domain/pace.test.ts
+pnpm test:capture --project unit domain/pace.test.ts
 node scripts/test-evidence.mjs summary <printed-invocation-directory>
 node scripts/test-evidence.mjs check <printed-invocation-directory>
 ```
 
-Local captures wrap the admitted command; the older raw `bash test-run.sh`
-recipe bypasses admission and is retained only inside the isolated CI job.
+Local capture is internal to the admitted owner: one ownership lifetime,
+one resource sampler, and the same native report/summary/check authority as
+CI. Its printed directory is under the Git-common-directory admission
+receipts, not a second outer `.test-evidence` tree. Do not wrap this command
+in `test-evidence run`. No public token borrows an existing owner.
 
-An omitted `--root` uses ignored `.test-evidence` relative to cwd; an
+For the hosted CI observer, an omitted `--root` uses ignored
+`.test-evidence` relative to cwd; an
 explicitly empty root fails. Custom roots should be outside tracked source
 or git-ignored. Invocation IDs are UUIDs and existing directories are refused.
 Symlink path components are refused except the operating system's
@@ -616,8 +620,10 @@ The opt-in environment variable `ERGOMATIC_EVIDENCE_TRACE=1` selects
 Capture mode takes failed screenshots. Benchmark a named selection with
 and without tracing before adopting it across CI.
 
-This is a **passive evidence observer**, not a local resource admission
-controller. It does not enforce the hunt's pressure or time budgets.
+The hosted `test-evidence run` CLI remains a **passive evidence observer**,
+not a local resource admission controller. Its extracted recording helper
+has no sampler or signal handlers; locally the admitted owner supplies
+those lifetimes. The standalone observer does not enforce hunt budgets.
 The hunt controller must defer under warning/critical/unknown pressure,
 stop its owned command on rising pressure, and stop after a resource event.
 Local browser probes remain deferred until detached browser ownership and
@@ -666,7 +672,22 @@ historical per-test rate. Raw JSON retains per-test/project/repeat/retry
 details where the runner supplies them. Historical exposure remains unknown
 unless execution is independently evidenced.
 
-The lightweight gate is `node --test scripts/test-evidence.test.mjs`.
+Ordinary admission receipts also carry source SHA, a tracked index/worktree
+diff fingerprint, exact invocation and per-phase argv/scope, installed tool
+versions, times/status/pressure/cleanup, wrapper RSS and streamed stdout/stderr.
+The fingerprint excludes untracked files and is not a complete tree identity.
+Missing Git or version observations are explicitly unavailable, never invented;
+the native evidence check refuses unavailable local source provenance.
+Git/version subprocess probes are bounded. Configured worker limits record
+CLI/env/config provenance separately from the actual concurrent worker count,
+which remains unknown unless independently observed. Stream write/close errors
+make local evidence incomplete/nonzero while preserving each phase's actual
+wait status. Native assertions never override command failure or unresolved
+cleanup, and a resource event is not an assertion failure or an OOM diagnosis.
+
+The lightweight gates are `node --test scripts/test-evidence.test.mjs` and
+`node --test scripts/test-evidence-record.test.mjs scripts/local-work/*.test.mjs`
+(run serially with `--test-concurrency=1`).
 It launches harmless fixture children; it does not run Vitest, a browser,
 containers, or allocate artificial memory pressure.
 
@@ -700,7 +721,7 @@ and legacy fallback, visibly labelled as an exclusion.
 | Entry point                                                                                | Current ownership                                                    |
 | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | `lint`, `lint:prune`, `typecheck`, `build`                                                 | Fixed sequential foreground pipeline                                 |
-| `test` with only explicit unit/client projects                                             | Owner spans child wait and cleanup census                            |
+| `test`, `test:capture` with only explicit unit/client projects                             | Owner spans child wait and cleanup census; capture uses the same sampler |
 | Pre-commit                                                                                 | Owner before staged mutation, through typecheck                      |
 | Pre-push                                                                                   | Owner spans legacy related + whole-tree checks                       |
 | Integration/full coverage, browser/Compose, native, watch/dev, install/bootstrap, mutation | Not lifecycle-managed yet; controller coordination required          |

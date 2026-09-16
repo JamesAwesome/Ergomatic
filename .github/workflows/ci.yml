@@ -251,7 +251,7 @@ jobs:
         run: node --test --test-skip-pattern='^pre-(commit|push)' scripts/local-work/*.test.mjs
       - name: Test native evidence glue with small fixture children
         working-directory: app
-        run: node --test scripts/test-evidence.test.mjs
+        run: node --test --test-concurrency=1 scripts/test-evidence.test.mjs scripts/test-evidence-record.test.mjs
       # Runs against the real checkout, which is also what proves the
       # symlinks survived actions/checkout as symlinks.
       - name: Lint + run the skills parity gate

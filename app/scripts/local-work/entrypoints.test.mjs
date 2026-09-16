@@ -35,6 +35,14 @@ function fixture(t) {
     copy(path.join(repo, ".husky", file), `.husky/${file}`);
   copy(path.join(source, "package.json"), "app/package.json");
   copy(
+    path.join(source, "scripts/test-evidence-record.mjs"),
+    "app/scripts/test-evidence-record.mjs",
+  );
+  copy(
+    path.join(source, "scripts/test-evidence.mjs"),
+    "app/scripts/test-evidence.mjs",
+  );
+  copy(
     path.join(source, "scripts/local-work.mjs"),
     "app/scripts/local-work.mjs",
   );
@@ -118,6 +126,12 @@ process.exitCode=await main(process.argv.slice(2),{observe:()=>({...readHost(),p
   spawnSync("git", ["symbolic-ref", "HEAD", "refs/heads/fixture"], {
     cwd: root,
   });
+  spawnSync("git", ["read-tree", "HEAD"], { cwd: root });
+  const tracked = spawnSync("git", ["ls-files", "-z"], { cwd: root }).stdout;
+  spawnSync("git", ["update-index", "--skip-worktree", "-z", "--stdin"], {
+    cwd: root,
+    input: tracked,
+  });
   const calls = () =>
     fs.existsSync(path.join(root, "calls.jsonl"))
       ? fs
@@ -145,6 +159,194 @@ test("pre-commit hook refuses pressure before lint-staged and preserves Node ver
   assert.equal(old.status, 1);
   assert.match(old.stderr, /HOOK BLOCKED/);
 });
+
+test("documented local capture owns native evidence with exactly one resource sampler", (t) => {
+  const f = fixture(t);
+  const probes = path.join(f.root, "probes.jsonl");
+  for (const bin of ["ps", "sysctl"]) {
+    const script = f.put(
+      `bin/${bin}`,
+      `#!/bin/sh
+printf '%s\\n' "${bin} $*" >> ${quote(probes)}
+${bin === "ps" ? 'exec /bin/ps "$@"' : 'case "$2" in kern.memorystatus_vm_pressure_level) echo 1;; *) echo fixture-swap;; esac'}
+`,
+    );
+    fs.chmodSync(script, 0o755);
+  }
+  // Source-level observation seam routes real host parsing through controlled
+  // binaries. No production environment switch disables a sampler.
+  f.put(
+    "driver.mjs",
+    `import {main} from './app/scripts/local-work.mjs';import {readHost} from './app/scripts/local-work/host.mjs';import{spawnSync}from'node:child_process';import path from'node:path';
+const command=(bin,args)=>{const r=spawnSync(path.join(${JSON.stringify(f.root)},'bin',path.basename(bin)),args,{encoding:'utf8',timeout:2000});return r.status===0?{value:r.stdout.trim()}:{unavailable:r.stderr};};
+process.exitCode=await main(process.argv.slice(2),{observe:()=>readHost({platform:'darwin',command})});\n`,
+  );
+  const timers = path.join(f.root, "samplers.jsonl");
+  const sentinel = f.put(
+    "sampler-sentinel.mjs",
+    `import fs from 'node:fs';
+const original = globalThis.setInterval;
+globalThis.setInterval = function (...args) {
+  const stack = new Error().stack;
+  if (/scripts\\/(?:test-evidence|local-work\\/run)/.test(stack)) fs.appendFileSync(${JSON.stringify(timers)}, JSON.stringify({pid:process.pid,stack})+'\\n');
+  return original(...args);
+};\n`,
+  );
+  f.put(
+    "app/node_modules/vitest/runner.mjs",
+    `import fs from 'node:fs';import path from 'node:path';
+const directory=process.env.ERGOMATIC_EVIDENCE_DIR;
+if(!directory) throw new Error('native reporting directory missing');
+const owner=JSON.parse(fs.readFileSync(${JSON.stringify(path.join(f.root, ".git/ergomatic-local-work/owner/owner.json"))},'utf8'));
+if(path.basename(directory)!==owner.id) throw new Error('capture is outside owner lifetime');
+console.log('capture stdout');console.error('capture stderr');
+const deadline=setTimeout(()=>process.exit(91),5000);
+const timer=setInterval(()=>{
+ const rows=fs.readFileSync(path.join(directory,'resources.jsonl'),'utf8').trim().split('\\n').map(JSON.parse);
+ if(rows.filter(r=>r.phase==='running').length<2) return;
+ clearInterval(timer);clearTimeout(deadline);
+ fs.writeFileSync(path.join(directory,'report.json'),JSON.stringify({testResults:[{name:'fixture.test.ts',assertionResults:[{fullName:'owned capture',status:'passed'}]}]}));
+ console.log('Test Files 1 passed (1)');
+},10);\n`,
+  );
+  const result = spawnSync(
+    pnpm,
+    [
+      "--dir",
+      "app",
+      "test:capture",
+      "--project",
+      "unit",
+      "fixture.test.ts",
+      "--maxWorkers=2",
+    ],
+    {
+      cwd: f.root,
+      env: { ...f.env, NODE_OPTIONS: `--import=${sentinel}` },
+      encoding: "utf8",
+      timeout: 15000,
+    },
+  );
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /capture stdout/);
+  assert.match(result.stderr, /capture stderr/);
+  const samplerRows = fs
+    .readFileSync(timers, "utf8")
+    .trim()
+    .split("\n")
+    .map(JSON.parse);
+  assert.equal(samplerRows.length, 1, JSON.stringify(samplerRows));
+  const probeRows = fs.readFileSync(probes, "utf8").trim().split("\n");
+  const censuses = probeRows.filter((row) => row.startsWith("ps -axo"));
+  assert.ok(censuses.length >= 4);
+  assert.equal(
+    probeRows.filter(
+      (row) => row === "sysctl -n kern.memorystatus_vm_pressure_level",
+    ).length,
+    censuses.length,
+  );
+  const receipts = path.join(f.root, ".git/ergomatic-local-work/receipts");
+  const names = fs.readdirSync(receipts);
+  assert.equal(names.length, 1);
+  const directory = path.join(receipts, names[0]);
+  const receipt = JSON.parse(
+    fs.readFileSync(path.join(directory, "receipt.json"), "utf8"),
+  );
+  assert.equal(receipt.runner, "vitest");
+  assert.equal(receipt.cleanup, "verified");
+  assert.equal(receipt.phases[0].workers.max, 2);
+  assert.equal(receipt.phases[0].workers.source, "cli");
+  assert.equal(receipt.phases[0].workers.actual, null);
+  assert.deepEqual(receipt.scope.projects, ["unit"]);
+  assert.equal(receipt.phases[0].argv.includes("fixture.test.ts"), true);
+  assert.equal(fs.existsSync(path.join(f.root, "app/.test-evidence")), false);
+  for (const [action, needle] of [
+    ["check", /evidence: complete/],
+    ["summary", /initial executions: 1/],
+  ]) {
+    const evidence = spawnSync(
+      process.execPath,
+      [path.join(source, "scripts/test-evidence.mjs"), action, directory],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GITHUB_ACTIONS: "false",
+          GITHUB_STEP_SUMMARY: "",
+        },
+        timeout: 5000,
+      },
+    );
+    assert.equal(evidence.status, 0, evidence.stdout + evidence.stderr);
+    assert.match(evidence.stdout, needle);
+  }
+  assert.match(
+    fs.readFileSync(path.join(directory, "stdout.log"), "utf8"),
+    /capture stdout/,
+  );
+  assert.match(
+    fs.readFileSync(path.join(directory, "stderr.log"), "utf8"),
+    /capture stderr/,
+  );
+});
+test("hosted capture keeps the native observer and command failure independent of passing assertions", (t) => {
+  const f = fixture(t);
+  f.put(
+    "app/node_modules/vitest/runner.mjs",
+    `import fs from 'node:fs';import path from 'node:path';
+fs.writeFileSync(path.join(process.env.ERGOMATIC_EVIDENCE_DIR,'report.json'),JSON.stringify({testResults:[{name:'fixture',assertionResults:[{fullName:'passes',status:'passed'}]}]}));
+console.log('Test Files 1 passed (1)');process.exitCode=23;\n`,
+  );
+  const result = spawnSync(
+    pnpm,
+    ["--dir", "app", "test:capture", "--project", "unit"],
+    {
+      cwd: f.root,
+      encoding: "utf8",
+      timeout: 15000,
+      env: {
+        ...f.env,
+        CI: "true",
+        ERGOMATIC_HOSTED_CI: "1",
+        GITHUB_ACTIONS: "true",
+        RUNNER_ENVIRONMENT: "github-hosted",
+        GITHUB_RUN_ID: "1",
+        GITHUB_RUN_ATTEMPT: "1",
+        GITHUB_WORKSPACE: f.root,
+        GITHUB_OUTPUT: "",
+        GITHUB_STEP_SUMMARY: "",
+      },
+    },
+  );
+  assert.equal(result.status, 23, result.stdout + result.stderr);
+  assert.equal(
+    fs.existsSync(path.join(f.root, ".git/ergomatic-local-work")),
+    false,
+  );
+  const root = path.join(f.root, "app/.test-evidence");
+  const names = fs.readdirSync(root);
+  assert.equal(names.length, 1);
+  const directory = path.join(root, names[0]);
+  const receipt = JSON.parse(
+    fs.readFileSync(path.join(directory, "receipt.json"), "utf8"),
+  );
+  assert.equal(receipt.exitCode, 23);
+  assert.equal(receipt.runner, "vitest");
+  assert.equal(receipt.cleanup.status, "unverified");
+  const check = spawnSync(
+    process.execPath,
+    [path.join(source, "scripts/test-evidence.mjs"), "check", directory],
+    {
+      encoding: "utf8",
+      timeout: 5000,
+      env: { ...process.env, GITHUB_ACTIONS: "false", GITHUB_STEP_SUMMARY: "" },
+    },
+  );
+  assert.equal(check.status, 0, check.stdout + check.stderr);
+  assert.match(check.stdout, /command: exit 23/);
+  assert.match(check.stdout, /first-attempt failures: 0/);
+});
+
 test("pre-commit has one owner, fails fast after staged lint, and preserves typecheck exit under sh -e", (t) => {
   const f = fixture(t);
   const lint = f.hook("pre-commit", { FIXTURE_LINT_CODE: "17" });

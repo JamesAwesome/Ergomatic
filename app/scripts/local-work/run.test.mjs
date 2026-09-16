@@ -9,16 +9,20 @@ import {
   mkdirSync,
   symlinkSync,
   readdirSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import { runWorkload } from "./run.mjs";
 import { inspectOwner } from "./owner.mjs";
 import { readHost } from "./host.mjs";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
+import { provenance } from "../test-evidence-record.mjs";
 
 function fixture(t) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "ergo-run-")));
@@ -80,6 +84,9 @@ async function until(predicate, timeout = 5000) {
 
 test("test-run resource outcomes survive the shell boundary into the owner receipt", async (t) => {
   for (const [code, stderr, classification, signal] of [
+    [130, "", "signal", "SIGINT"],
+    [134, "FATAL ERROR: Allocation failed", "memory", "SIGABRT"],
+    [137, "FATAL ERROR: Allocation failed", "memory", "SIGKILL"],
     [1, "FATAL ERROR: Allocation failed", "memory", null],
     [137, "", "signal", "SIGKILL"],
     [23, "", "failed", null],
@@ -109,7 +116,257 @@ test("test-run resource outcomes survive the shell boundary into the owner recei
     assert.equal(result.exitCode, code);
     assert.equal(result.classification, classification);
     assert.equal(result.signal, signal);
+    assert.equal(result.phases[0].exitCode, code);
+    assert.equal(result.phases[0].signal, null);
     assert.equal(result.cleanup, "verified");
+  }
+});
+
+test("ordinary admitted receipts bind source, command, tools and streamed output without claiming observed workers", async (t) => {
+  const options = fixture(t);
+  const source = join(options.root, "source");
+  mkdirSync(source);
+  const git = (...args) => {
+    const result = spawnSync("git", args, { cwd: source, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  git("init", "-q");
+  // Source identity is the actual existing repo commit, supplied through an
+  // object alternate; no fixture commit or hook bypass is needed.
+  const common = spawnSync("git", ["rev-parse", "--git-common-dir"], {
+    encoding: "utf8",
+  }).stdout.trim();
+  mkdirSync(join(source, ".git/objects/info"), { recursive: true });
+  writeFileSync(
+    join(source, ".git/objects/info/alternates"),
+    resolve(common, "objects") + "\n",
+  );
+  const sha = spawnSync("git", ["rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).stdout.trim();
+  git("update-ref", "refs/heads/source", sha);
+  git("symbolic-ref", "HEAD", "refs/heads/source");
+  git("read-tree", "HEAD");
+  const files = spawnSync("git", ["ls-files", "-z"], { cwd: source }).stdout;
+  const skipped = spawnSync(
+    "git",
+    ["update-index", "--skip-worktree", "-z", "--stdin"],
+    { cwd: source, input: files },
+  );
+  assert.equal(skipped.status, 0);
+  git("update-index", "--no-skip-worktree", "README.md");
+  writeFileSync(
+    join(source, "README.md"),
+    "deliberately dirty tracked fixture\n",
+  );
+  writeFileSync(
+    join(source, "untracked.txt"),
+    "not covered by tracked fingerprint\n",
+  );
+  const command = {
+    ...phase("console.log('owned stdout');console.error('owned stderr')"),
+    cwd: source,
+  };
+  const result = await runWorkload({
+    ...options,
+    metadata: { ...options.metadata, worktree: source },
+    phases: [command],
+  });
+  assert.equal(result.sha.value, sha);
+  assert.equal(result.trackedDiff.dirty, true);
+  assert.match(result.trackedDiff.sha256, /^[a-f0-9]{64}$/);
+  assert.match(
+    result.sourceIdentity.scope,
+    /untracked files are not fingerprinted/,
+  );
+  assert.equal(result.sourceIdentity.status, "recorded");
+  writeFileSync(join(source, "untracked.txt"), "different untracked bytes\n");
+  assert.equal(
+    provenance({ cwd: source }).trackedDiff.sha256,
+    result.trackedDiff.sha256,
+  );
+  git("add", "README.md");
+  assert.equal(
+    provenance({ cwd: source }).trackedDiff.sha256,
+    result.trackedDiff.sha256,
+  );
+  writeFileSync(join(source, "README.md"), "different tracked bytes\n");
+  assert.notEqual(
+    provenance({ cwd: source }).trackedDiff.sha256,
+    result.trackedDiff.sha256,
+  );
+  assert.equal(result.versions.node, process.version);
+  assert.equal(result.versions.vitest, null);
+  assert.deepEqual(result.phases[0].argv, [command.command, ...command.args]);
+  assert.equal(result.phases[0].workers.actual, null);
+  assert.equal(result.phases[0].workers.applicability, "not-applicable");
+  assert.match(
+    readFileSync(join(result.directory, "stdout.log"), "utf8"),
+    /owned stdout/,
+  );
+  assert.match(
+    readFileSync(join(result.directory, "stderr.log"), "utf8"),
+    /owned stderr/,
+  );
+  const resources = readFileSync(
+    join(result.directory, "resources.jsonl"),
+    "utf8",
+  )
+    .trim()
+    .split("\n")
+    .map(JSON.parse);
+  assert.ok(resources.every((row) => row.wrapperRssBytes > 0));
+  assert.equal(result.cleanup, "verified");
+});
+
+test("native evidence reader reports unresolved local cleanup despite a passing native test", async (t) => {
+  const options = fixture(t);
+  const result = await runWorkload({
+    ...options,
+    metadata: { ...options.metadata, worktree: resolve("..") },
+    phases: [
+      {
+        ...phase(
+          `require('node:fs').writeFileSync(require('node:path').join(process.env.ERGOMATIC_EVIDENCE_DIR,'report.json'),JSON.stringify({testResults:[{name:'fixture',assertionResults:[{fullName:'passes',status:'passed'}]}]}))`,
+        ),
+        capture: "vitest",
+      },
+    ],
+    observe: ({ phase }) =>
+      phase === "cleanup"
+        ? {
+            pressure: { state: "normal" },
+            processes: { unavailable: "fixture cleanup unavailable" },
+          }
+        : options.observe(),
+  });
+  assert.equal(result.cleanup, "unresolved");
+  assert.equal(result.phases[0].exitCode, 0);
+  assert.equal(result.resourceAbort, true);
+  const read = (action) =>
+    spawnSync(
+      process.execPath,
+      ["scripts/test-evidence.mjs", action, result.directory],
+      {
+        encoding: "utf8",
+        timeout: 5000,
+        env: {
+          ...process.env,
+          GITHUB_ACTIONS: "false",
+          GITHUB_STEP_SUMMARY: "",
+        },
+      },
+    );
+  const check = read("check");
+  assert.equal(check.status, 1, check.stdout + check.stderr);
+  const summary = read("summary");
+  assert.match(summary.stdout, /initial executions: 1/);
+  assert.match(summary.stdout, /first-attempt failures: 0/);
+  assert.match(summary.stdout, /termination\/resource events: 1/);
+  assert.match(summary.stdout, /cleanup: unresolved/);
+  assert.match(summary.stdout, /evidence: incomplete/);
+});
+
+test("local native check cannot certify unavailable source provenance", async (t) => {
+  const options = fixture(t);
+  const result = await runWorkload({
+    ...options,
+    phases: [
+      {
+        ...phase(
+          `require('node:fs').writeFileSync(require('node:path').join(process.env.ERGOMATIC_EVIDENCE_DIR,'report.json'),JSON.stringify({testResults:[{name:'fixture',assertionResults:[{fullName:'passes',status:'passed'}]}]}))`,
+        ),
+        capture: "vitest",
+      },
+    ],
+  });
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.cleanup, "verified");
+  assert.equal(result.sourceIdentity.status, "unavailable");
+  const check = spawnSync(
+    process.execPath,
+    ["scripts/test-evidence.mjs", "check", result.directory],
+    {
+      encoding: "utf8",
+      timeout: 5000,
+      env: { ...process.env, GITHUB_ACTIONS: "false", GITHUB_STEP_SUMMARY: "" },
+    },
+  );
+  assert.equal(check.status, 1);
+  assert.match(check.stdout, /local source provenance unavailable/);
+  assert.match(check.stdout, /initial executions: 1/);
+});
+
+test("log write and close failures cannot produce a passing admitted receipt", async (t) => {
+  for (const [operation, memory] of [
+    ["writeSync", false],
+    ["closeSync", false],
+    ["closeSync", true],
+  ]) {
+    const options = fixture(t);
+    const logFds = new Set();
+    const open = fs.openSync,
+      write = fs.writeSync,
+      close = fs.closeSync;
+    t.mock.method(fs, "openSync", (path, ...args) => {
+      const fd = open(path, ...args);
+      if (/\/(?:stdout|stderr)\.log$/.test(path)) logFds.add(fd);
+      return fd;
+    });
+    t.mock.method(fs, "writeSync", (fd, ...args) => {
+      if (operation === "writeSync" && logFds.has(fd))
+        throw new Error("fixture writeSync failure");
+      return write(fd, ...args);
+    });
+    t.mock.method(fs, "closeSync", (fd) => {
+      const wasLog = logFds.delete(fd);
+      close(fd);
+      if (operation === "closeSync" && wasLog)
+        throw new Error("fixture closeSync failure");
+    });
+    syncBuiltinESMExports();
+    try {
+      const selected = memory
+        ? {
+            command: "bash",
+            args: [
+              fileURLToPath(new URL("../test-run.sh", import.meta.url)),
+              "--self-test",
+            ],
+            cwd: options.root,
+            outcome: "test-run",
+            env: {
+              ...process.env,
+              FAKE_RC: "134",
+              FAKE_ERR: "Allocation failed",
+              ERGOMATIC_TEST_KILLDIR: join(options.root, "kills"),
+            },
+          }
+        : phase(
+            "let n=0;const timer=setInterval(()=>{console.log('still visible');console.error('still visible error');if(++n===8)clearInterval(timer)},10)",
+          );
+      const result = await runWorkload({ ...options, phases: [selected] });
+      assert.equal(result.phases[0].exitCode, memory ? 134 : 0);
+      assert.equal(result.phases[0].signal, null);
+      assert.equal(result.exitCode, memory ? 134 : 75);
+      assert.equal(
+        result.classification,
+        memory ? "memory" : "evidence-incomplete",
+      );
+      assert.equal(result.signal, memory ? "SIGABRT" : null);
+      assert.equal(result.cleanup, "verified");
+      assert.ok(
+        result.diagnosticErrors.some((error) => error.includes(operation)),
+      );
+      assert.ok(
+        result.diagnosticErrors.length <= 2,
+        "keep only the first failure per stream",
+      );
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+    }
   }
 });
 
@@ -455,6 +712,9 @@ test("a child refusing both signals remains blocked, without owner SIGKILL", asy
   assert.equal(result.exitCode, 75);
   assert.equal(result.cleanup, "unresolved");
   assert.equal(inspectOwner(options.root).status, "occupied");
+  assert.equal(result.classification, "resource-aborted");
+  assert.equal(result.resourceAbort, true);
+  assert.match(result.diagnosticErrors.join(" "), /unresolved live child/);
   assert.ok(
     result.phases[0].survivors.some((p) => p.pid === result.phases[0].pid),
   );

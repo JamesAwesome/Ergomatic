@@ -18,6 +18,7 @@
     "lint:prune": "node scripts/local-work.mjs run lint-prune",
     "typecheck": "node scripts/local-work.mjs run typecheck",
     "test": "node scripts/local-work.mjs run test",
+    "test:capture": "node scripts/local-work.mjs run test-capture",
     "test:full": "node scripts/local-work.mjs run test-full",
     "test:watch": "NODE_OPTIONS=--no-experimental-webstorage vitest",
     "test:coverage": "node scripts/local-work.mjs run test-coverage",

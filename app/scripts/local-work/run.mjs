@@ -1,23 +1,17 @@
 import { spawn } from "node:child_process";
-import {
-  appendFileSync,
-  lstatSync,
-  mkdirSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { lstatSync, mkdirSync } from "node:fs";
 import { constants } from "node:os";
 import { join } from "node:path";
 import { acquireOwner } from "./owner.mjs";
 import { readHost } from "./host.mjs";
 import { outcomeChannel } from "./outcome.mjs";
-
-function atomic(path, value) {
-  writeFileSync(`${path}.tmp`, JSON.stringify(value, null, 2) + "\n", {
-    mode: 0o600,
-  });
-  renameSync(`${path}.tmp`, path);
-}
+import {
+  atomic,
+  bindNativeReport,
+  captureLogs,
+  evidenceReceipt,
+  recordResources,
+} from "../test-evidence-record.mjs";
 
 // No environment seam: production always supplies real observations. Tests
 // exercise this same owner/child path with controlled observation functions.
@@ -25,6 +19,7 @@ export async function runWorkload({
   root,
   metadata,
   phases,
+  invocation = {},
   observe = readHost,
   sampleMs = 1000,
   interruptMs = 5000,
@@ -50,11 +45,20 @@ export async function runWorkload({
   mkdirSync(directory, { mode: 0o700 });
   const path = join(directory, "receipt.json");
   const receipt = {
-    schema: 1,
-    id: metadata.id,
+    ...evidenceReceipt({
+      id: metadata.id,
+      root: receipts,
+      directory,
+      argv: invocation.argv ?? null,
+      cwd: invocation.cwd ?? metadata.worktree,
+      source: metadata.worktree,
+      env: invocation.env ?? process.env,
+    }),
+    scope: invocation.scope ?? {
+      unavailable:
+        "No public invocation supplied; exact commands recorded per phase",
+    },
     worktree: metadata.worktree,
-    start: new Date().toISOString(),
-    terminal: false,
     phases: [],
     exitCode: null,
     signal: null,
@@ -62,6 +66,7 @@ export async function runWorkload({
     classification: null,
   };
   atomic(path, receipt);
+  const logs = captureLogs(directory, receipt.diagnosticErrors);
   let interrupted = null;
   let cancelActive = null;
   const onInterrupt = () => {
@@ -119,23 +124,19 @@ export async function runWorkload({
     }
     const attributed =
       rows?.filter((p) => observed.get(p.pid)?.started === p.started) ?? [];
-    appendFileSync(
-      join(directory, "resources.jsonl"),
-      JSON.stringify({
-        at: new Date().toISOString(),
-        phase,
-        pressure: host.pressure,
-        swap: host.swap,
-        wrapperRssBytes: process.memoryUsage().rss,
-        observed: rows
-          ? attributed
-          : { unavailable: host.processes?.unavailable ?? "missing census" },
-        observedTreeRssKiB: rows
-          ? attributed.reduce((sum, p) => sum + p.rssKiB, 0)
-          : null,
-      }) + "\n",
-      { mode: 0o600 },
-    );
+    recordResources(directory, {
+      at: new Date().toISOString(),
+      phase,
+      pressure: host.pressure,
+      swap: host.swap,
+      wrapperRssBytes: process.memoryUsage().rss,
+      observed: rows
+        ? attributed
+        : { unavailable: host.processes?.unavailable ?? "missing census" },
+      observedTreeRssKiB: rows
+        ? attributed.reduce((sum, p) => sum + p.rssKiB, 0)
+        : null,
+    });
     return host;
   };
   try {
@@ -158,6 +159,13 @@ export async function runWorkload({
         selected = typeof phases === "function" ? await phases() : phases;
         if (!Array.isArray(selected) || selected.length === 0)
           throw new Error("Preparation must select a nonempty phase array");
+        if (selected.some((phase) => phase.capture)) {
+          if (selected.length !== 1 || selected[0].capture !== "vitest")
+            throw new Error(
+              "Native capture requires one supported Vitest phase",
+            );
+          receipt.runner = "vitest";
+        }
       } catch (error) {
         selected = [];
         receipt.exitCode = 2;
@@ -183,6 +191,13 @@ export async function runWorkload({
       const entry = {
         command: phase.command,
         args: phase.args,
+        argv: [phase.command, ...phase.args],
+        workers: phase.workers ?? {
+          applicability: "not-applicable",
+          max: null,
+          actual: null,
+          reason: "This phase does not declare a worker pool",
+        },
         cwd: phase.cwd,
         start: new Date().toISOString(),
         pid: null,
@@ -206,15 +221,18 @@ export async function runWorkload({
       mayRelease = false;
       const childEnv = { ...(phase.env ?? process.env) };
       delete childEnv.ERGOMATIC_TEST_OUTCOME;
+      delete childEnv.ERGOMATIC_EVIDENCE_DIR;
+      if (phase.capture) childEnv.ERGOMATIC_EVIDENCE_DIR = directory;
       if (channel) childEnv.ERGOMATIC_TEST_OUTCOME = "1";
       const child = spawn(phase.command, phase.args, {
         cwd: phase.cwd,
         env: childEnv,
         detached: true,
         stdio: channel
-          ? ["inherit", "inherit", "inherit", channel.fd]
-          : "inherit",
+          ? ["inherit", "pipe", "pipe", channel.fd]
+          : ["inherit", "pipe", "pipe"],
       });
+      const drain = logs.attach(child);
       entry.pid = child.pid ?? null;
       let reason = null,
         unresolved = false;
@@ -280,6 +298,15 @@ export async function runWorkload({
       clearInterval(interval);
       for (const timer of timers) clearTimeout(timer);
       cancelActive = null;
+      if (unresolved) {
+        // The cancellation deadline is not a child exit. Do not extend it
+        // with the post-exit drain budget or imply that output is complete.
+        child.stdout.destroy();
+        child.stderr.destroy();
+        receipt.diagnosticErrors.push(
+          "stdio capture stopped with unresolved live child; output incomplete",
+        );
+      } else await drain();
       entry.exitCode = outcome.code;
       entry.signal = outcome.signal;
       entry.end = new Date().toISOString();
@@ -344,10 +371,26 @@ export async function runWorkload({
     receipt.cleanup = "unresolved";
   } finally {
     channel?.close();
+    logs.close();
     process.removeListener("SIGINT", onInterrupt);
     process.removeListener("SIGTERM", onTerminate);
     receipt.terminal = true;
     receipt.end = new Date().toISOString();
+    receipt.allocationFailure = logs.allocationFailure;
+    receipt.resourceAbort = Boolean(
+      receipt.signal ||
+      receipt.exitCode >= 128 ||
+      receipt.classification === "memory" ||
+      receipt.classification.startsWith("resource-"),
+    );
+    if (receipt.runner) bindNativeReport(receipt);
+    if (
+      (receipt.diagnosticErrors.length || receipt.reportError) &&
+      receipt.exitCode === 0
+    ) {
+      receipt.exitCode = 75;
+      receipt.classification = "evidence-incomplete";
+    }
     atomic(path, receipt);
   }
   return { ...receipt, directory };

@@ -127,8 +127,22 @@ export async function main(
         path.dirname(fileURLToPath(import.meta.url)),
         "..",
       );
+      const phases = workloadPhases({ app, name, args, env, hosted, write });
       return await runUnmanaged(
-        workloadPhases({ app, name, args, env, hosted, write }),
+        name === "test-capture"
+          ? phases.map((phase) => ({
+              ...phase,
+              command: process.execPath,
+              args: [
+                path.join(app, "scripts/test-evidence.mjs"),
+                "run",
+                "vitest",
+                "--",
+                phase.command,
+                ...phase.args,
+              ],
+            }))
+          : phases,
         write,
       );
     }
@@ -166,8 +180,19 @@ export async function main(
       );
       return 0;
     }
-    const test = ["test", "test-full", "test-coverage"].includes(name);
-    const projects = test ? testScope(args, env, name !== "test") : [];
+    const test = [
+      "test",
+      "test-capture",
+      "test-full",
+      "test-coverage",
+    ].includes(name);
+    const projects = test
+      ? testScope(args, env, ["test-full", "test-coverage"].includes(name))
+      : [];
+    if (name === "test-capture" && projects.includes("integration"))
+      throw new Error(
+        "Local capture admits unit/client only; integration ownership is not installed",
+      );
     const excluded = projects.includes("integration");
     const phases = workloadPhases({
       app: ctx.app,
@@ -209,6 +234,12 @@ export async function main(
       metadata,
       phases,
       observe,
+      invocation: {
+        argv: [process.execPath, fileURLToPath(import.meta.url), ...argv],
+        cwd: ctx.app,
+        env,
+        scope: { workload: name, args, projects },
+      },
     });
     write(
       `local-work: ${receipt.classification}; exit=${receipt.exitCode}; signal=${receipt.signal ?? "none"}; cleanup=${receipt.cleanup}; receipt=${receipt.directory}`,

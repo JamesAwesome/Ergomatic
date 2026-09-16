@@ -4,6 +4,38 @@ import { spawnSync } from "node:child_process";
 
 const positiveWorker = (value) => /^(?:[1-9]|1[0-6])$/.test(value);
 
+// The configured upper bound is not an observed number of workers. CLI
+// overrides win over vitest.config.ts's local env/default cap.
+export function workerSettings(args, env, hosted = false) {
+  let max = hosted ? null : Number(env.ERGOMATIC_TEST_WORKERS ?? 4);
+  let source = hosted
+    ? "runner-default"
+    : env.ERGOMATIC_TEST_WORKERS
+      ? "environment"
+      : "vitest.config.ts default";
+  let min = null;
+  for (let i = 0; i < args.length; i++) {
+    const match = args[i].match(
+      /^--(maxWorkers|max-workers|minWorkers|min-workers)(?:=(.*))?$/,
+    );
+    if (!match) continue;
+    const value = Number(match[2] ?? args[++i]);
+    if (match[1].startsWith("max")) {
+      max = value;
+      source = "cli";
+    } else min = value;
+  }
+  return {
+    applicability: "vitest",
+    max,
+    min,
+    source,
+    actual: null,
+    reason:
+      "Configured limits only; native reports do not establish the actual concurrent worker count",
+  };
+}
+
 export function testScope(args, env, allowFull = false) {
   if (args.includes("--"))
     throw new Error(
@@ -89,7 +121,9 @@ export function workloadPhases({
     args: [file, ...rest],
     cwd: app,
     env: childEnv,
-    ...(file === "scripts/test-run.sh" ? { outcome: "test-run" } : {}),
+    ...(file === "scripts/test-run.sh"
+      ? { outcome: "test-run", workers: workerSettings(rest, childEnv, hosted) }
+      : {}),
   });
   const tsc = (...rest) =>
     node(join(app, "node_modules/typescript/bin/tsc"), rest);
@@ -102,14 +136,23 @@ export function workloadPhases({
   ];
   const eslint = (...rest) =>
     node(join(app, "node_modules/eslint/bin/eslint.js"), [".", ...rest]);
-  if (["test", "test-full", "test-coverage"].includes(name)) {
-    const projects = testScope(args, env, hosted || name !== "test");
+  if (["test", "test-capture", "test-full", "test-coverage"].includes(name)) {
+    const projects = testScope(
+      args,
+      env,
+      hosted || ["test-full", "test-coverage"].includes(name),
+    );
     if (!hosted && !allowExcluded && projects.includes("integration"))
       throw new Error(
         "integration lifecycle adapter is not installed; this foreground entry point refuses it",
       );
     if (name === "test-coverage") args = ["--coverage", ...args];
-    return [shell("scripts/test-run.sh", args)];
+    return [
+      {
+        ...shell("scripts/test-run.sh", args),
+        ...(name === "test-capture" ? { capture: "vitest" } : {}),
+      },
+    ];
   }
   if (args.length) throw new Error(`${name} does not accept extra arguments`);
   switch (name) {
