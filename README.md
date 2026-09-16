@@ -19,7 +19,7 @@ real environment. See `CLAUDE.md` for the local Postgres and OAuth invocations.
 ## The idea in one paragraph
 
 A rower has two **baseline splits**: their 2k and 6k pace, in time per 500 m.
-Every workout target is stored as an *offset* from one of them — `6k -2` means
+Every workout target is stored as an _offset_ from one of them — `6k -2` means
 "two seconds per 500 m faster than my 6k pace". Nothing stores an absolute
 target. The app resolves offsets against the rower's current baselines each time
 a workout is opened, so a library written months ago stays honest as fitness
@@ -92,17 +92,17 @@ fake (`pnpm dist:grep`).
 ## Native-first
 
 The iOS app (Capacitor) is the primary surface; design decisions favour it. The
-web build is the *same code*, serving as the Playwright/design/screenshot
+web build is the _same code_, serving as the Playwright/design/screenshot
 harness, the dev loop, and a fallback — never dropped, never polished at the
 app's expense. Platform conditionals are confined by lint rule to the adapter
 layer: `src/platform.ts`, `src/api.ts`, `src/native/`, `src/adapters/`.
 
 ## What gates a change
 
-`pnpm lint · typecheck · test · build` plus, for anything touching `app/src/`,
+`pnpm lint · typecheck · build` and named test projects/files, plus, for anything touching `app/src/`,
 the named e2e specs run locally against an already-booted stack, with the
 e2e job on the PR read for the full suite — `pnpm e2e` is the Playwright
-suite that runs flows *and* structural design assertions (44 px hit targets,
+suite that runs flows _and_ structural design assertions (44 px hit targets,
 WCAG AA contrast, token usage, safe-area insets) against the real compose
 stack. The gate is tiered deliberately: **CI owns the full suite; locally
 you run what your change touches** (a full local run also costs ~1.5x its
@@ -110,6 +110,13 @@ old wall-clock under the worker cap, but the tiering is the reason, not the
 cost — CLAUDE.md RF1). `pnpm screenshots` refreshes `docs/screenshots/`,
 which the phase PR body embeds. Coverage is gated at 90% repo-wide with
 `app/domain/**` pinned at 100.
+
+Local lint, typecheck, build, unit/client tests and Git hooks share one
+resource owner across cooperating worktrees and refuse unsafe host pressure.
+Bare `pnpm test` refuses: use `pnpm test --project unit <file>` (from `app/`).
+Full runs are explicit; browser, integration/container and native lifetimes
+still require controller coordination. See [local resource ownership](docs/TESTING.md#16-local-resource-ownership)
+for status, recovery and the staged boundary. Worker defaults are unchanged.
 
 Before writing tests, read `docs/TESTING.md`. Before starting any work, read the
 **Recurring failures** section of `CLAUDE.md` — it is a list of mistakes this

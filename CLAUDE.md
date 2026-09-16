@@ -64,9 +64,22 @@ requirements).
 
 ## Commands (run in `app/`)
 
+**Local resource ownership:** one controller schedules heavy validation,
+serially, across worktrees sharing the Git common directory. Use the routed
+package commands/hooks; `node scripts/local-work.mjs status` is read-only
+diagnosis. Warning/critical/unknown pressure or an occupied owner refuses
+without automatic retry. Do not borrow a parent's slot, launch raw tools to
+bypass refusal, kill census PIDs, change Docker's allocation or alter worker
+defaults. Reviewers reuse exact-head receipts and request only concrete gaps.
+Current participation and exclusions, including manual handling of browser,
+container and native lifetimes, are in `docs/TESTING.md` §16. Admission is not
+machine-wide and does not cover independent clones or old worktrees.
+
 - `pnpm dev` / `pnpm dev:server` — Vite client :5173 (proxies /api) / API :8080
-- `pnpm lint` · `pnpm format` / `pnpm format:check` · `pnpm typecheck` · `pnpm test` ·
-  `pnpm test:coverage` (90% gate) · `pnpm build`
+- `pnpm lint` · `pnpm format` / `pnpm format:check` · `pnpm typecheck` ·
+  `pnpm test --project unit <file>` · `pnpm build`. Bare local `pnpm test`
+  refuses. `pnpm test:full` / `pnpm test:coverage` explicitly include integration
+  and remain controller-managed until their lifecycle adapter lands.
 - **`--` SCOPES NEITHER `pnpm test` NOR `pnpm e2e`, and for two DIFFERENT
   reasons** — debugging the second from the first's explanation sends you to
   the wrong layer. `pnpm e2e -- <file>` does not swallow the `--`: it forwards
@@ -80,19 +93,17 @@ requirements).
   once with and once without; the counts are what they are on the day, and the
   ratio is the point.
 - Single Vitest project: `pnpm test --project unit|client|integration`.
-  `integration` needs Docker. **Two footguns:**
-  `pnpm test --project client -- <pattern>` **silently runs the full suite**
-  (pnpm swallows the scoped flag), and the obvious workaround
-  `pnpm exec vitest run --project client <file>` drops the
+  Pass a file bare, for example `pnpm test --project client src/lib/foo.test.ts`.
+  `integration` needs Docker and is not yet ownership-managed. The admitted
+  wrapper rejects a literal `--`; exact manifest selection is a separate
+  increment, so current Vitest patterns are not an exact-file guarantee.
+  Do not bypass admission with `pnpm exec vitest run`: it also drops the
   `NODE_OPTIONS=--no-experimental-webstorage` that `package.json`'s `test`
   script sets — Node 26's experimental webStorage global then collides with
   jsdom's `localStorage` (measured 2026-09-02: 1582 false failures across
-  client+unit against a green HEAD; not a jsdom-vs-Node issue). Prefix the
-  bare form yourself:
-  `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>`
-  — jsdom loads and the tests pass. Note this form collapses a signal death
-  to exit 1 — see recurring failure 40. Prefer `pnpm test --project client`
-  when you do not need a file filter.
+  client+unit against a green HEAD; not a jsdom-vs-Node issue). The
+  historical raw form required that prefix and collapsed signal deaths
+  to exit 1. Use the routed `pnpm test --project client <file>` instead.
   **A THIRD footgun on the same command: `console.log` from a client test
   never reaches stdout** (jsdom owns the console; `--silent=false` does not
   help), while `process.stdout.write` does. Assertions are unaffected — only
@@ -383,27 +394,27 @@ requirements).
       and automatic log collection. Any unavoidable console setup is one
       pretested batch declared up front, not repeated commands or manual
       receipt copying during the walk.
-    **Validate that each action is possible, not just that its control
-    exists (James, 2026-09-04).** For every gesture, button and transition,
-    record the exact platform/build, starting UI state, modal-sheet state,
-    and evidence that the operator can actually perform it. Source/API
-    documentation establishes a candidate, not on-device reachability.
-    Reuse compatible recorded demonstrations; no hidden rehearsal walk
-    may bypass this gate. Unknown action feasibility is NOT READY and
-    cannot be an assumed prerequisite. A bounded feasibility experiment
-    can itself be proposed to PM, explicitly labelled as the uncertainty
-    being tested, never as a known-working step. Unknown test outcomes
-    are legitimate; silently impossible instructions are not.
-    Finish builds, code review, desk debugging and capture preparation
-    before inviting James. Give complete short action blocks between
-    pieces; never ask for typing mid-piece. Start and record the agreed
-    wall-clock deadline when James begins setup or waiting for the walk.
-    At the cap, an unplanned failure, or an exhausted retry budget, STOP,
-    preserve the evidence and release James. No live repair/rebuild loop,
-    surprise case, or "one more scan". Revised scope, build, steps, timing,
-    retry or typing budgets require a new PM PASS and James's agreement
-    before another session. The hardware-walk skill's rowing budget is
-    additional to this total-time gate, not a substitute for it.
+      **Validate that each action is possible, not just that its control
+      exists (James, 2026-09-04).** For every gesture, button and transition,
+      record the exact platform/build, starting UI state, modal-sheet state,
+      and evidence that the operator can actually perform it. Source/API
+      documentation establishes a candidate, not on-device reachability.
+      Reuse compatible recorded demonstrations; no hidden rehearsal walk
+      may bypass this gate. Unknown action feasibility is NOT READY and
+      cannot be an assumed prerequisite. A bounded feasibility experiment
+      can itself be proposed to PM, explicitly labelled as the uncertainty
+      being tested, never as a known-working step. Unknown test outcomes
+      are legitimate; silently impossible instructions are not.
+      Finish builds, code review, desk debugging and capture preparation
+      before inviting James. Give complete short action blocks between
+      pieces; never ask for typing mid-piece. Start and record the agreed
+      wall-clock deadline when James begins setup or waiting for the walk.
+      At the cap, an unplanned failure, or an exhausted retry budget, STOP,
+      preserve the evidence and release James. No live repair/rebuild loop,
+      surprise case, or "one more scan". Revised scope, build, steps, timing,
+      retry or typing budgets require a new PM PASS and James's agreement
+      before another session. The hardware-walk skill's rowing budget is
+      additional to this total-time gate, not a substitute for it.
   - **They PROPOSE ledger entries; the controller lands them.** No
     agent writes to the repo — its own ledger, a spec, or a plan — in ANY
     checkout. The worktree is not an exception: the rule is about who owns
@@ -499,6 +510,7 @@ requirements).
     **This is not `/close-phase`'s business** — that skill closes a phase, and
     most work that files rows never runs it. It fires when a PR is opened,
     which is also what makes it reach fast-path and one-off changes.
+
   - _What this deliberately is NOT: a script, a marker on every heading, a CI
     check, or anything that strikes a row on its own. Phase RR built that and
     it was abandoned — `docs/history/phase-rr.md`._
@@ -778,7 +790,7 @@ describes.
     written down** — a diagnostic hidden behind a build flag is disarmed by
     anyone who edits the build command for unrelated reasons. _Phase CS's spec,
     its plan and two walk cards all said `VITE_ENABLE_FAKE_MONITOR=1
-    pnpm ios:build` puts a fake PM5 on the phone; `adapters/monitorTransport.ts`
+pnpm ios:build` puts a fake PM5 on the phone; `adapters/monitorTransport.ts`
     takes the Capacitor BLE arm whenever `isNative()`, so only the web arm ever
     reaches the fake seam. He built, tapped Connect, and found nothing._
 
@@ -840,7 +852,7 @@ describes.
     revision history; the conclusion was right and the method was not — the same
     pass found three GATT-versus-multiplexed divergences carrying no revision
     row at all. What rescued it was `length floor − (highest byte offset of a
-    field that has a consumer)` over our own parsers: exactly two had slack._
+field that has a consumer)` over our own parsers: exactly two had slack._
 
 17. **Opening a phase without writing it into the ROADMAP.** **The brainstorm
     that names a phase adds its ROADMAP section in the same commit as its spec.**
@@ -1177,11 +1189,10 @@ describes.
 40. **Reading a KILLED test run as a flaky one, and retrying it into a machine
     that just proved it has no room.** Three signatures, none of which is a test
     result: **(a) an exit code ≥ 128 is a signal death** — 137 is SIGKILL and
-    reads as memory on its own, 134 is SIGABRT and reads as memory only when
-    stderr carries `Allocation failed`, 130 is your own Ctrl-C and 143 a
+    proves termination, not its cause; 134 is SIGABRT. Memory attribution
+    requires allocation or corroborating OS evidence. 130 is Ctrl-C and 143 a
     SIGTERM; **(b) `pnpm exec` COLLAPSES all of them to exit 1** — which matters
-    because the Commands section prescribes `pnpm exec vitest` as the scoped-run
-    workaround, so the repo's own advice hides this signal; **(c) a fork-worker
+    because the former raw scoped-run workaround hid this signal; **(c) a fork-worker
     OOM exits 1 AND prints a full `Test Files` summary**, so the summary proves
     nothing and the tell is `Allocation failed` on stderr. **Never re-run a suite
     showing any of the three** — a retry is what turns one kill into a lost

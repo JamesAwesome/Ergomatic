@@ -47,19 +47,16 @@ trap 'rm -rf "$KILLDIR"' EXIT
 
 SUMMARY=" Test Files  1 passed (1)"
 
-# 134 and 137 are NOT symmetrical, and this trio is the whole reason.
-# 137 (SIGKILL) is memory with no message at all -- an OS memory kill leaves
-# nothing behind, so the absence is its only signature on this machine.
-# 134 (SIGABRT) fires for ANY abort: a V8 fatal OOM, `process.abort()`, a
-# native abort, a manual `kill -6`. A V8 fatal OOM always prints
-# "Allocation failed", so the needle is what separates the two, and a bare
-# SIGABRT reads as a signal death rather than claiming a memory cause it has
-# no evidence for (RF26). Before this round, 134 was memory unconditionally.
+# A signal proves termination, not its cause. Both ABRT and KILL need
+# allocation evidence before this output-only classifier can claim memory.
 check "134 SIGABRT WITH the needle is memory"  "MEMORY KILL"       "$(classify 134 "" "FATAL ERROR: Allocation failed - process out of memory")"
 check "134 SIGABRT with NO needle is a signal" "KILLED BY SIGNAL"  "$(classify 134 "" "")"
 case "$(classify 134 "" "")" in *"MEMORY KILL"*) r=1 ;; *) r=0 ;; esac
 check "a bare SIGABRT never claims memory"     "0"                 "$r"
-check "137 SIGKILL is a memory kill"        "MEMORY KILL"          "$(classify 137 "" "")"
+check "137 SIGKILL alone has unknown cause" "KILLED BY SIGNAL"    "$(classify 137 "" "")"
+case "$(classify 137 "" "")" in *"MEMORY KILL"*|*"not a memory kill"*) r=1 ;; *) r=0 ;; esac
+check "SIGKILL neither proves nor rules out memory" "0" "$r"
+check "137 WITH allocation evidence is memory" "MEMORY KILL" "$(classify 137 "" "FATAL ERROR: Allocation failed - process out of memory")"
 check "130 SIGINT is silent (Ctrl-C)"       "EMPTY"                "$(classify 130 "" "")"
 check "143 SIGTERM is a signal, not memory" "KILLED BY SIGNAL"     "$(classify 143 "" "")"
 check "fork OOM: exit 1 WITH a summary"     "MEMORY KILL"          "$(classify 1 "$SUMMARY" "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory")"
@@ -108,7 +105,7 @@ pipe_out="$(ERGOMATIC_TEST_RUN_BIN="$PIPEDIR/dies-by-signal" \
   ERGOMATIC_TEST_PEERDIR="$PIPEDIR/peers" \
   bash "$HERE/test-run.sh" 2>&1)"; pipe_rc=$?
 check "a SIGKILLed child through the real pipeline exits 137" "137" "$pipe_rc"
-case "$pipe_out" in *"MEMORY KILL"*) r=0 ;; *) r=1 ;; esac
+case "$pipe_out" in *"KILLED BY SIGNAL"*) r=0 ;; *) r=1 ;; esac
 check "a SIGKILLed child through the real pipeline banners" "0" "$r"
 
 # stderr is TEE'd, not buffered: it reaches the terminal as the run happens

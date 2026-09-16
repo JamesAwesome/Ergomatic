@@ -120,17 +120,29 @@ standing rules live here so they cannot drift between dispatches.
 
 ## Gates, scoped by change class
 
-| Your diff touches                   | You must run                                                                                                                                                                                           |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Your diff touches                   | You must run                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | any product code under `app/src/`   | `pnpm lint` · `typecheck` · `format:check` · `test --project unit --project client` · **the named e2e specs locally against an already-booted stack, then read the e2e job on the PR for the full suite** (James tiered the gate on 2026-09-08: CI owns the full suite, you run what your change touches — not a wall-clock argument, though a full local run does cost ~1.5x under the worker cap; CLAUDE.md RF1/RF40) — and `pnpm screenshots` if a screen's layout changed (open the images and describe what you see) |
-| `app/domain/` or `app/server/` only | lint · typecheck · format:check · `test --project unit` (+ integration if Docker is available)                                                                                                         |
-| tests only                          | lint · typecheck · format:check · the covering project(s)                                                                                                                                              |
-| comments/docs only                  | lint · typecheck · format:check                                                                                                                                                                        |
+| `app/domain/` or `app/server/` only | lint · typecheck · format:check · `test --project unit` (+ integration if Docker is available)                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| tests only                          | lint · typecheck · format:check · the covering project(s)                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| comments/docs only                  | lint · typecheck · format:check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
-The final whole-branch review always runs everything regardless — these
-scopes exist for task and fix rounds, not the last gate. Leaving e2e red
-after an `app/src/` change has gated CI three times; the full-suite row is
-not negotiable.
+The controller owns serial heavy validation; reviewers consume exact-head
+evidence and request named missing checks, not duplicate full-suite runs.
+CI still owns full correctness/coverage and full browser validation. Leaving
+e2e red after an `app/src/` change is not acceptable; read that CI result.
+
+Use the admitted package commands/hooks, and name the project plus intended
+test files. Bare local `pnpm test` refuses. Status is
+`node scripts/local-work.mjs status` from `app/`; refusal or resource abort
+is not a test pass and never authorizes an automatic retry or a raw-tool
+bypass. Do not run heavy work while pressure is warning, critical or unknown.
+Only one controller launches heavy work across cooperating worktrees; a
+subagent must ask that controller for its validation slot. No census-based
+kills, global Docker changes or worker-default changes. Browser/Compose,
+integration, native, watch/dev and install lifetimes are still excluded from
+automatic ownership: coordinate them manually and report that exclusion.
+See `docs/TESTING.md` §16 for commands and the implemented boundary.
 
 ## Definition of done includes self-mutation
 
@@ -179,7 +191,7 @@ a value where they agree).
   (2) Docker's LAYER CACHE can serve a stale image after a real source
   change even inside your own stack — if the served bundle doesn't match
   your latest source, `docker compose -f compose.yml -f compose.e2e.yml
-  build --no-cache` before `up`.
+build --no-cache` before `up`.
 - **Never override the e2e env contract**: `scripts/e2e.sh` and
   `e2e/helpers.ts` hardcode their shared `TEST_AUTH_SECRET`
   (`e2e-secret`); forcing your own value into the compose env 401s every

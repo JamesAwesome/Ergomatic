@@ -219,14 +219,18 @@ test("recovery holds the barrier across proof and deletion against independent p
       const contender = child(
         `
       import { acquireOwner, recoverOwner } from ${JSON.stringify(moduleUrl)};
-      const [root, json] = process.argv.slice(1);
+      import assert from 'node:assert/strict';
+      const [root, json, generation] = process.argv.slice(1);
       const record = JSON.parse(json);
-      for (const action of [() => acquireOwner(root, record), () => recoverOwner(root, record.id, () => true)]) {
+      let proofCalled = false;
+      for (const action of [() => recoverOwner(root, generation, () => { proofCalled = true; return false; }), () => acquireOwner(root, record)]) {
         try { action(); process.exit(1); } catch (error) { if (error.exitCode !== 75) throw error; }
+        assert.equal(proofCalled, false, 'competing recoverer must never reach proof');
       }
     `,
         root,
         JSON.stringify(metadata(root)),
+        owner.id,
       );
       assert.equal(contender.status, 0, contender.stderr);
       refused(() => owner.release());
@@ -451,3 +455,43 @@ test("partial publication failures retain the owner for diagnosis", (t) => {
   assert.equal(fs.existsSync(path.join(root, "owner")), true);
   refused(() => acquireOwner(root, metadata(root)));
 });
+
+for (const target of ["root", "owner", "metadata"]) {
+  test(`foreign filesystem UID on ${target} blocks mutation despite same-user JSON`, (t) => {
+    const root = fixture(t);
+    const owner = acquireOwner(root, metadata(root));
+    const filename =
+      target === "root"
+        ? root
+        : target === "owner"
+          ? path.join(root, "owner")
+          : ownerFile(root);
+    const originalStat = fs.lstatSync;
+    // A non-root test cannot chown a file to another user. Substitute only
+    // the OS stat UID; every pathname, file operation and JSON byte is real.
+    const statMock = t.mock.method(fs, "lstatSync", (location, ...args) => {
+      const stat = originalStat(location, ...args);
+      return location === filename
+        ? Object.assign(Object.create(stat), { uid: process.getuid() + 1 })
+        : stat;
+    });
+    try {
+      assert.equal(inspectOwner(root).status, "unknown");
+      refused(() => acquireOwner(root, metadata(root)));
+      refused(() => owner.update({ phase: "wrong" }));
+      refused(() => owner.release());
+      let called = false;
+      refused(() =>
+        recoverOwner(root, owner.id, () => {
+          called = true;
+          return true;
+        }),
+      );
+      assert.equal(called, false);
+    } finally {
+      statMock.mock.restore();
+    }
+    assert.equal(inspectOwner(root).metadata.id, owner.id);
+    assert.equal(inspectOwner(root).metadata.phase, "preflight");
+  });
+}
