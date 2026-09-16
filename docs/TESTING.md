@@ -34,7 +34,7 @@ SQL).
 | Stores | `app/server/stores/**` | Vitest `integration` project (Testcontainers Postgres, started through `app/server/testing/postgres.ts`, which retries testcontainers' hardcoded 10 s port-bind timeout once) | seconds | The only place SQL behavior is truth: constraints, error codes, transactions, real UUID/type coercion. If a store test passes here, it passes against real Postgres — not an approximation of it. |
 | Routes | `app/server/routes/**`, `app/server/auth/**` | Vitest `unit` project (in-memory fakes) | milliseconds | Request handling, validation, auth gating, status codes — fast, because it runs against fakes. The store **contract suites** (§5) are what keep those fakes honest so "fast" doesn't mean "fictional." |
 | Client | `app/src/**` | Vitest `client` project (jsdom) | milliseconds | Rendered output and behavior, queried **by role and accessible name** (React Testing Library) — never by snapshot, never by implementation detail. |
-| E2E | `app/e2e/**` | Playwright, Chromium, against the real `docker compose` stack | ~1–2s per test, minutes for the stack boot | A few golden flows through the fully wired app (real server, real DB, real static-file serving) — the layer that catches boundary bugs no layer below it can see by construction (see the incident above). |
+| E2E | `app/e2e/**` | Playwright, Chromium + scoped WebKit, against the real `docker compose` stack | ~1–2s per test, minutes for the stack boot | A few golden flows through the fully wired app (real server, real DB, real static-file serving) — the layer that catches boundary bugs no layer below it can see by construction (see the incident above). |
 
 ## 2. Test naming
 
@@ -328,14 +328,21 @@ it more narrowly than this section used to imply:**
 - **Captures are documentation, not a CI gate** (2026-08-27: *"We honestly
   don't need to run these in ci. It can be part of the release skill and maybe
   a scheduled reup."*). The `chromium` project carries
-  `testIgnore: ["**/screenshots.spec.ts", "**/touch.spec.ts"]`, and CI runs
-  `--project=chromium --project=touch` — **captures are in neither**, so a
+  exclusions for `screenshots.spec.ts`, `touch.spec.ts` and
+  `sheetScroll.spec.ts`. CI runs `--project=chromium --project=touch
+  --project=webkit-sheet` — **captures are in none of them**, so a
   missing capture does not turn CI red and is not supposed to.
   **THIS IS THE THIRD PLACE THAT NAMES THE PROJECT LIST**, after
   `scripts/e2e.sh` and `.github/workflows/ci.yml`. A project added to the
   config and not to the two runners never executes; one added to the runners
   and not corrected here leaves this file lying about what CI does. The
   commit that added `touch` said there were TWO places and missed this one.
+  `webkit-sheet` runs only `sheetScroll.spec.ts`: the log's fixed ancestor
+  scrolls under its sheet in WebKit while Chromium's backdrop gesture does
+  not reach it. Both portrait and landscape must preserve the log offset,
+  leave the long sheet scrollable, and restore log scrolling after close.
+  Local setup needs `pnpm exec playwright install webkit` once; CI installs
+  both engines. See `docs/testing/2026-09-15-sheet-scroll.md` for the repro.
 - **Captures are for LAYOUT or STRUCTURE changes, never wording-only ones**
   (2026-08-23). A copy diff gets no screenshot.
 - **Regenerate broadly; commit narrowly** (antagonist verdict adopted by

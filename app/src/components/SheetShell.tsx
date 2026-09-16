@@ -142,29 +142,42 @@ export function SheetShell({
     };
   }, [open, opener, focusTitleOnOpen]);
 
-  // THE PAGE BEHIND A MODAL MUST NOT SCROLL (James, 2026-09-15, reading the
-  // provenance sheet on his phone: "the screen behind it can still scroll").
-  // The backdrop covers the viewport and swallows taps, but nothing stopped
-  // the document itself moving under a wheel, a trackpad swipe or a drag that
-  // began on the scrim — so the rower's own log slid around behind the sheet
-  // they were reading. Every sheet in the app had this; it is fixed here
-  // rather than per caller.
-  //
-  // `overflow: hidden` ALONE, and deliberately no `window.scrollTo` to put
-  // the position back. The first version of this saved `scrollY` and restored
-  // it on close, which broke two of Library's own tests — they count calls to
-  // `scrollTo`, and the screen already owns its restoration. Two mechanisms
-  // proposing one screen's scroll position is RF23, and this repo has already
-  // shipped that bug once as the unmount clamp echo that wrote 0 over a saved
-  // position. `overflow: hidden` does not move the document, so there is
-  // nothing to put back; the `position: fixed` lock is what loses the offset,
-  // and that is exactly why it is not used here.
+  // Lock the actual scroll owners, not only the viewport. FromTheLog is a
+  // fixed, independently scrolling ancestor; body's overflow lock leaves it
+  // scrollable in WebKit (v0.50.1). Start OUTSIDE the backdrop so the dialog
+  // and its inner lists keep scrolling. No offset writes: each screen owns
+  // its scroll position. The saved declarations live for this open effect
+  // only and are restored on close or unmount, including their priorities.
   useEffect(() => {
     if (!open) return;
-    const previous = document.body.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const owners: HTMLElement[] = [];
+    for (
+      let node = dialogRef.current?.parentElement?.parentElement;
+      node && node !== document.body;
+      node = node.parentElement
+    ) {
+      const style = getComputedStyle(node);
+      if (
+        [style.overflowX, style.overflowY].some((v) =>
+          /^(auto|scroll)$/.test(v),
+        )
+      ) {
+        owners.push(node);
+      }
+    }
+    const restore = owners.flatMap((element) =>
+      ["overflow-x", "overflow-y"].map((property) => {
+        const value = element.style.getPropertyValue(property);
+        const priority = element.style.getPropertyPriority(property);
+        element.style.setProperty(property, "hidden");
+        return () => element.style.setProperty(property, value, priority);
+      }),
+    );
     return () => {
-      document.body.style.overflow = previous;
+      restore.forEach((reset) => reset());
+      document.body.style.overflow = previousBodyOverflow;
     };
   }, [open]);
 
