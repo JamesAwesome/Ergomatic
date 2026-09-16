@@ -59,7 +59,8 @@ export const FIXED_SOURCES: Record<FixedTile, TileProvenance> = {
   avgWatts: {
     label: "AVG WATTS",
     source: "derived",
-    detail: "Concept2's published formula, from your time and distance.",
+    detail:
+      "Calculated from your time and distance using Concept2's power formula.",
   },
   calories: { label: "CALORIES", source: "measured" },
   calPerHour: {
@@ -70,7 +71,7 @@ export const FIXED_SOURCES: Record<FixedTile, TileProvenance> = {
     // matching six cells of a photographed logbook row — no publication is
     // cited anywhere in this repo. The copy says what we actually know.
     detail:
-      "Worked out from the monitor's calorie count, to match what Concept2's logbook shows.",
+      "Calculated from the monitor's calorie total and your work time, expressed per hour.",
   },
   drag: { label: "DRAG", source: "measured" },
 } satisfies Record<FixedTile, TileProvenance>;
@@ -98,6 +99,6 @@ export function heartRateProvenance(monitorSentOne: boolean): TileProvenance {
         label: "AVG HR",
         source: "derived",
         because:
-          "The monitor sent no average, so this is your belt's reading over the time you were working.",
+          "Calculated from your recorded heart-rate readings during work, excluding rest.",
       };
 }
