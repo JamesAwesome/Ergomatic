@@ -1,0 +1,68 @@
+# Bounded post-exit cleanup
+
+A workload leader can exit before its observed children finish. Local admission
+now keeps the owner active for a bounded observation period, releases only after
+those children are absent, and retains the owner when cleanup remains unknown.
+This implements the existing resource spec's admission step6; it does not add
+permission to kill processes or admit browser/container workloads.
+
+## Evidence and limits
+
+PR465 passed exact-head CI35133408702 at2badce41 and merged as7462a18f.
+Its separate main CI35134632013 failed the native mutation cancellation test:
+`cleanup` was `unresolved`, not `verified`. Earlier assertions established the
+original SIGINT reason and the native phase's exit130/signalnull. The failed
+fixture removed its temporary receipt, so the log cannot distinguish remaining
+children from an unavailable census. Its app coverage step never ran; this is
+not a passing main run or a demonstrated allocation failure.
+
+Read-only inspection found one immediate post-exit census in `runWorkload`.
+A harmless real grandchild reproduced the cleanup race: its parent was reaped,
+the child was reparented toPID1 in the owned group, and the returned receipt
+remained unresolved while the child finished naturally. Red receipt
+`6a5830ff-5540-47da-a183-006f75913685` records that actual survivor. This proves
+the race, not that it caused the missing CI receipt. The native test now prints
+its phase records, diagnostics and captured output when cleanup fails.
+
+## Contract
+
+- After a reaped leader, positively observed survivors may settle for up to
+  one second, with observations at most50ms apart plus synchronous census cost.
+  The deadline is fixed, not restarted on discovery. It is not a hard real-time
+  bound on operating-system calls, nor a claim that all children exit in1second.
+- Ownership stays active throughout; newly discovered descendants are durably
+  recorded and followed by their retained generation even after group changes.
+- No signals are sent from settlement. An already-expired cancellation is not
+  extended; unavailable census, pressure deterioration during settlement, and
+  survivors at the deadline retain unresolved ownership. Recovery remains
+  explicit. Original failure, signal and cancellation classification remain.
+- The one-second value is an internal runtime bound, not a new worker default,
+  public environment override or retry of test execution. Normal no-survivor
+  cleanup still takes one observation.
+
+## Validation
+
+Controller-owned serial receipts, all with verified outer cleanup:
+
+- Initial native cancellation diagnostic-only probe1/1: `50860451`.
+- The reproduced post-exit race failed before the implementation: `6a5830ff`.
+- The pressure-deterioration gate initially caught an incorrect upgrade of
+  settlement to verified: `6adc13d0`; the implementation now retains ownership.
+- Runtime29/29: `79250dc5` (before the added later-discovery gate).
+- Final named native/runtime gates5/5: `4497b719`.
+- Current runtime/owner/host66/66: `fcd4a983`.
+
+The final real-child regression uses positive readiness and a release handshake,
+not the initial probe's elapsed delay. It asserts that competing admission
+fails, the owner remains active, and no signals are emitted during settlement.
+Other gates cover initial/lost census, worsening pressure, deadline survival,
+discovery after leader exit, group changes and an already-expired cancellation.
+The native cancellation gate continues to require SIGINT, phase exit130,
+signalnull and verified cleanup; no assertion was weakened.
+
+OOM and signal strings printed by the runtime suite are synthetic fixture
+outputs. The tests do not allocate stress memory. No screenshot, browser,
+container or native-device run is needed for this increment. Independent review,
+postcommit deciding-source mutation and exact-head hosted CI remain merge gates.
+Browser identity source corrections are saved separately for the next increment;
+the approved whole resource spec remains incomplete.

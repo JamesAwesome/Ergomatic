@@ -968,7 +968,16 @@ test('interrupt witness',async()=>{writeFileSync(${JSON.stringify(f.sentinel)},'
   assert.equal(receipt.phases[0].exitCode, 130);
   assert.equal(receipt.phases[0].signal, null);
   assert.equal(receipt.reason, "SIGINT");
-  assert.equal(receipt.cleanup, "verified");
+  assert.equal(
+    receipt.cleanup,
+    "verified",
+    JSON.stringify({
+      reason: receipt.reason,
+      diagnosticErrors: receipt.diagnosticErrors,
+      phases: receipt.phases,
+      output,
+    }),
+  );
   assert.equal(
     fs.existsSync(path.join(f.root, ".git/ergomatic-local-work/owner")),
     false,
