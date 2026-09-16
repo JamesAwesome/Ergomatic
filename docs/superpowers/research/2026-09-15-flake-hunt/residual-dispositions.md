@@ -2,11 +2,13 @@
 
 ## Scope and result
 
-This is offline source/log/history analysis only. No test, container, download,
-source edit, ROADMAP edit, commit, or rerun was performed.
+The historical triage below was offline source/log/history analysis only.
+The subsequent [repair receipt](residual-repairs.md) records all three
+implemented repairs and their fail-first/mutation/restored runtime proofs.
+ROADMAP remains unchanged pending James's ruling.
 
 The 23 automatically unclassified events resolve into **20 deterministic or
-source-attributed repaired events and 3 unresolved timing/tool events**. A red
+source-attributed repaired events and 3 timing/tool events requiring new work**. A red
 multi-failure job is not itself evidence of a runner event:
 
 - job `103829038779` is three deterministic consumers of one export-schema
@@ -32,9 +34,9 @@ failure mechanism.
 | 2 | WorkoutDetail preferences-error test received `skipWrites=[false]` instead of `[]` | Jobs `101835494920`, `logs/101835494920.log:3927-3944`, and `101850260678`, `logs/101850260678.log:3991-4008`. Commit `a1967244248c66ecd9e19d0891c465f8565f1e7f` names the exact assertion and replaces two asynchronous `vi.doMock` registrations for one path with one parameterized registration. | **Known repaired mock-registration race** from #346. This validates the existing attribution; it does not reopen or duplicate the inventory. |
 | 1 | `isCI(undefined)` expected false but observed the ambient CI value true | Job `102321282914`, `logs/102321282914.log:4099`: the parameterized case explicitly supplies `undefined`, which activates `isCI(v = process.env.CI)`’s default. Commit `dd843d55c16cd3cb87b2170a9e83b8831b01545a` removes that invalid table row and separately controls the ambient environment. | **Deterministic JavaScript default-parameter fixture error**, repaired. |
 | 4 | Article-read isolation expected the retired `pain-scale` alias | Jobs `103563516975`, `logs/103563516975.log:4169,4192`, and `103563914895`, `logs/103563914895.log:4191,4214`: expected effort + pain, received effort only in both assertions in both jobs. Commit `13adce4ba10498cfc9b3f25cb70360aa4d6add12` removes the pain/effort compatibility layer and updates both expectations to only `effort-scale`. | **Deterministic fixture expectation lag during a compatibility removal**, repaired. |
-| 1 | NFC accepted status was never observed | Job `103672406399`, `logs/103672406399.log:1444-1490`: `getByRole('status')` never finds `✓ Monitor found` in either attempt. The status is intentionally transient: `runNfcAttempt` commits it, waits a two-`requestAnimationFrame` `paintBarrier`, then replaces the detail screen with the interstitial. The test still asserts this transient DOM node, and no later commit changes the test or barrier. | **Unresolved timing-sensitive observable.** The source explains why the window is narrow, but the log does not distinguish “never painted” from “painted between Playwright polls.” Do not call it repaired or a generic runner event. |
-| 1 | PAIRING was visible before axe, gone after axe | Job `103672406399`, `logs/103672406399.log:1536-1582`: the initial 10 s visibility assertion passed; the 1 s assertion after `sweep(page)` failed in both attempts. The fixed `INTERSTITIAL_DELAY_WRITES_MS=1200` controls the stage lifetime. | **Cause established, unrepaired.** Retained retry trace below shows a 2.54 s sweep crossing that lifetime. A shared cause with NFC or the FILTER scan is not established. |
-| 1 | Axe `page.evaluate` exhausted the whole 30 s test budget | Job `103672406399`, `logs/103672406399.log:1502-1526`: both attempts time out; retry identifies `AxeBuilder.analyze()` on the open Library FILTER sheet. This exact error occurs nowhere else in the retained logs, and history contains no repair for this test. | **Budget collision established, scan-cost cause unknown.** Retained retry trace below locates 23.439 s in a completed main-frame axe partial run after roughly 6.6 s setup. No runner-family or product-defect inference follows. |
+| 1 | NFC accepted status was never observed | Job `103672406399`, `logs/103672406399.log:1444-1490`: the old `getByRole('status')` missed `✓ Monitor found` in both attempts. The product commits it, waits two animation frames, then replaces detail with the interstitial. | **Observation race repaired** by the pre-armed receipt in `e75df133`; too-short and absent-confirmation mutants fail. The historical log still cannot prove physical paint; no generic runner attribution. |
+| 1 | PAIRING was visible before axe, gone after axe | Job `103672406399`, `logs/103672406399.log:1536-1582`: initial visibility passed; the post-sweep assertion failed in both attempts. The old 1,200 ms fixed delay expired during the retained 2.54 s sweep. | **Cause established and repaired** by explicit operation holds in `fa30af23`; producer and served-browser bypass mutants fail. No shared NFC/FILTER cause inferred. |
+| 1 | Axe `page.evaluate` exhausted the whole 30 s test budget | Job `103672406399`, `logs/103672406399.log:1502-1526`: both attempts time out on the open Library FILTER audit. The retry spends 23.439 s in an outer partial-run call after ~6.6 s setup. | **Avoidable scan cost repaired** in `e75df133`, preserving rules/full-page/iframe coverage; see measured phases and mutation proofs in the repair receipt. The original amplification remains unexplained; no host-memory or product-defect attribution. |
 | 3 | Export readers treated the new envelope as the old array | Job `103829038779`, `logs/103829038779.log:1192,1232,1272`: portrait and landscape throw `entries.some is not a function`; Just Row throws `ring.map is not a function`, all on both attempts. Commit `6718ddca555e12e87f9280e85e73a33cadc9f7d2` changes the JSON export from an array to `{meta, entries}`. Commit `b76396dd01af72a41eea50500ee26927de037406` changes these exact consumers to `parseLogExport(...).entries`; main representation is `55031f6bb4f11348b25c2777669b7abf47ec740c`. | **Deterministic schema/consumer drift**, repaired. FLAKE 5’s “four failures at once = runner event” inference is false for these three failures. The co-located Apple retry recovery has its own known navigation mechanism. |
 
 Count check: `1+1+4+4+2+1+4+1+1+1+3 = 23`.
@@ -106,13 +108,16 @@ Trace files inside the artifact are NFC
   No retained snapshot contains `✓ Monitor found`. The trace bounds when
   the status was absent, but does not prove it never painted or was absent
   when the assertion began. The one-paint observation hypothesis remains
-  unresolved, not a product verdict.
+  unproven historically, not a product verdict. The repaired pre-armed
+  observer and controlled-frame proof now distinguish a missing/too-short
+  confirmation from a locator that starts after it has disappeared.
 - **PAIRING:** the first visibility assertion ends at 703174.054 ms;
   axe begins at 703183.020 ms; the DOM is PROGRAMMING by 704442.520 ms.
   The sweep finishes at 705726.264 ms and the second PAIRING assertion starts
   at 705728.379 ms. The approximately 2.54 s sweep exceeds the fake's 1.2 s
   connection delay. **Cause established: the test's fixed state lifetime
-  expires during its own sweep. Unrepaired.** The final state assertion is
+  expires during its own sweep.** Explicit fake-operation holds now replace
+  this fixed lifetime, with producer and served-browser proofs. The final state assertion is
   valuable: removing it would silently certify the wrong screen.
 - **FILTER sheet:** retry `AxeBuilder`'s `runPartial` evaluation takes
   23.439 s (199295.764–222735.342 ms), following roughly 6.6 s of setup.
@@ -120,26 +125,26 @@ Trace files inside the artifact are NFC
   time spent to the axe scan; it does not explain why that scan was slow,
   establish an infinite hang, or attribute host memory pressure.
 
-No new tests or compose stack were launched to obtain these observations.
-The PAIRING repair needs deterministic state ownership across the sweep and
-a served-application regression proof, not a larger sleep. The existing
-`delayWrites(ms)` only supplies wall-clock delay; the separate `holdOpen`
-instrument controls disconnect, not connect. This capture/inventory increment
-does not invent a new fake transport API without its own fail-first producer
-and E2E seam tests. Local compose ownership/cleanup and resource calibration
-remain prerequisites for that next probe.
+No new tests or compose stack were needed to obtain those historical trace
+observations. Subsequent work established local compose ownership/cleanup
+before running the actual app. `delayWrites(ms)` and disconnect `holdOpen`
+retain their meanings; a separate explicit operation pause now owns the
+PAIRING/PROGRAMMING fixture lifetime. See the repair receipt for fail-first
+producer and served E2E evidence, including source mutations.
 
-## Bounded residual ownership proposal
+## Current hand-back
 
 No ROADMAP change was made. These are proposed amendments under the existing
-FLAKE 5 inventory / `Hunt the e2e flakes` rows, not new product work.
+FLAKE 5 inventory / `Hunt the e2e flakes` rows, not new product work. The
+previous proposed implementation deferrals are superseded by completed
+repair work; none of those proposed dates was filed.
 
-| Residual | Owner | Next observable (one bounded receipt) | Review date |
-| --- | --- | --- | --- |
-| NFC `✓ Monitor found` status | Hunt controller / Connected NFC tests | Retain attempt-zero trace plus accepted-commit, both rAF callbacks and handoff timing; distinguish a missed one-paint node from no committed paint. Retry snapshots cannot settle that boundary. | 2026-09-22 |
-| PAIRING after axe | Hunt controller / Connected design tests | Add a deterministic hold/release at the fake connection boundary with fail-first tests; prove the real served PAIRING screen survives an intentionally slower sweep and still transitions after release. Do not increase delays or remove the final state assertion. | 2026-09-22 |
-| FILTER-sheet axe timeout | Hunt controller / Design a11y tests | Preserve scan/rule timing and runner resource evidence on the next occurrence or one bounded named CI probe. Explain the 23.439 s scan before changing the time budget. | 2026-09-29 |
+| Shape | Repair disposition | Remaining observation |
+| --- | --- | --- |
+| NFC `✓ Monitor found` | Pre-armed persistent observation; client first-frame and served single-frame/missing-status mutants fail | Normal-CI recurrence; no claim about historical physical paint |
+| PAIRING after axe | Explicit connect/write hold and release; served stages and READY checked; bypass mutants fail | Normal-CI recurrence |
+| FILTER-sheet axe timeout | Measured avoidable scan cost removed; full-page/contrast/cross-origin/frame-lifecycle protection mutation-checked | Normal-CI recurrence; original 23-second amplification remains unassigned |
 
-The existing FLAKE 5 expiry (`2026-11-14`) remains the outer stop. These
-earlier review dates keep each residual finite; lack of another sighting by a
-date is not evidence of repair.
+The existing FLAKE 5 expiry (`2026-11-14`) remains unchanged. The approved
+20-eligible-job/seven-day observation and strict-policy decision are separate
+future gates, not evidence supplied by these scoped repair runs.

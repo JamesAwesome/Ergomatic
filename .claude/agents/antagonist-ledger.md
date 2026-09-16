@@ -11349,3 +11349,16 @@ implementation.
 **All three findings folded into revision 5 by the controller.** The
 antagonist does not run again on this plan: `/harden` caps the loop at two
 passes, this was the third, and revision 5 changes no mechanism.
+
+### 2026-09-15 — FILTER axe scan cost
+
+- **Claim:** Pruning axe results removes expensive passing-node serialization.
+  **Why plausible:** vendor performance guidance recommends `resultTypes`.
+  **Settled by:** tracing installed axe 4.13 entry points and timing audit/raw
+  serialization independently; modern partial execution still serialized
+  ~430 ms of raw results, while guarded single-frame native legacy execution
+  avoided that work with unchanged 302-row input, 60 rules and 1,545 contrast
+  candidates. Cross-origin fallback needs its own witness because the current
+  WCAG tag filter excludes `frame-tested`. Historical 23-second amplification
+  remains unassigned. Controller receipts, commands and limits are in
+  [the repair record](../../docs/superpowers/research/2026-09-15-flake-hunt/residual-repairs.md).

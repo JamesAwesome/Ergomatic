@@ -296,8 +296,10 @@ observed helper PIDs were all absent in the subsequent PID-specific check.
 This proves that observed graceful-interruption path only. The conservative
 receipt still says cleanup unverified: zero observed survivors cannot prove
 absence of descendants missed between one-second samples. Hard-kill and
-compose cleanup, trace overhead and full-suite capacity remain unproved.
-No other task's processes/stack were touched and no compose stack was booted.
+compose cleanup, trace overhead and full-suite capacity were unproved at
+that checkpoint. Later owned compose rehearsal and cleanup are recorded in
+[the residual repair receipt](2026-09-15-flake-hunt/residual-repairs.md).
+No other task's processes/stack were touched.
 
 Warning pressure returned during desk work, so no new heavy probes launched.
 This is evidence that host capacity varies, not proof that tests caused all
@@ -307,16 +309,20 @@ they do not attribute other apps, VM memory or accumulated swap to tests.
 The [residual dispositions](2026-09-15-flake-hunt/residual-dispositions.md)
 map 20 of the 23 automatically unclassified events to prior repairs or
 deterministic fixture drift. Retained retry traces establish PAIRING's fixed
-1.2 s lifetime expiring during a 2.54 s sweep (unrepaired), and localize the
+1.2 s lifetime expiring during a 2.54 s sweep, and localize the
 FILTER timeout to a 23.439 s axe scan without establishing the cause of that
-cost. NFC's transient paint remains unresolved. This branch contains no
-speculative product repair. Owner is the
-hunt controller; proposed next-review dates live with the residual cases.
+cost. NFC's historical physical paint is not established by the old trace.
+The subsequent [repair receipt](2026-09-15-flake-hunt/residual-repairs.md)
+records all three implemented test/harness repairs, ten additional deciding
+mutations, 158 restored client tests and 11 restored browser checks, plus
+independent Standards/Spec PASS. No speculative product repair was made.
 
 Final independent review, including scoped verification at `db15f3c3`, is
 **Standards PASS / Spec PASS for the inventory/evidence increment**. Both
 concrete P2 findings are resolved; this is not full-hunt or merge approval.
-Exact-head PR CI and James's merge approval remain required. The 20-job/
+Previous-base CI passed at `a11bf3e7` (run `35044855699`); it is not
+validation of the later repairs. Updated exact-head PR CI and James's
+merge approval remain required. The 20-job/
 seven-day observation, strict-flake rollout and post-merge confirmation are
 future gates; no ROADMAP row is closed. No local stress run substitutes for
 those gates, and a clean job alone does not establish absence of retries.

@@ -120,13 +120,16 @@ in the TSV.
 
 Manual source-history triage now attributes **20 of those 23 automatically
 unclassified events** to deterministic fixture drift or prior repairs.
-Three distinct cases remain unrepaired: NFC transient status, PAIRING lifetime
+Three distinct cases required this hunt's repairs: NFC transient status, PAIRING lifetime
 across an axe scan, and a FILTER-sheet axe timeout, all in job `103672406399`.
 Retained retry traces establish PAIRING's cause: its 1.2 s fake delay expires
 during a 2.54 s sweep. The FILTER timeout spends 23.439 s inside axe after
 roughly 6.6 s setup; the reason for that scan cost remains unknown. NFC's
 earliest captured assertion snapshot already shows CONNECTING, but cannot
 prove whether the accepted status painted before it.
+The [repair receipt](residual-repairs.md) now records deterministic stage
+ownership, a pre-armed NFC observation and measured axe-cost removal, with
+fail-first, mutation and restored checks. Historical trace limits remain.
 The [complete dispositions](residual-dispositions.md) preserve each title,
 raw-log reference and repair commit. Sharing a job does not establish a
 shared runner cause; two previously suspected multi-failure clusters instead
@@ -173,8 +176,8 @@ navigation the browser was on the ordinary Today/baseline screen, with no
 the retained trace is the successful retry trace, not attempt-zero trace; that
 missing observable is explicit. The three recovered missing-control sightings
 are a **post-fix verification candidate** for #453. The exhausted status-copy
-sightings are independently attributed above; the remaining three unrepaired
-shapes have their own bounded probes in the residual disposition record.
+sightings are independently attributed above; the remaining three shapes
+have subsequent repair proofs in the residual repair record.
 
 This inventory does not establish that every recurrent family is repaired.
 The narrower historical `stableBoundingBox`
@@ -203,9 +206,9 @@ That is scoped regression evidence, not a browser reproduction of the former
 Apple failure. No new auth fix is justified by the inventory.
 
 The retained PAIRING retry now proves the sweep crosses the original 1,200 ms
-stage lifetime. The next repair gate is a deterministic fake hold/release,
-then an intentionally slower sweep against the real served PAIRING screen:
-the screen must remain through the sweep and transition after release.
-No larger timeout or removed final-state assertion substitutes for that proof.
-NFC paint/observation and the FILTER scan remain separate experiments with
-the observables and proposed review dates in [the hand-back](residual-dispositions.md#bounded-residual-ownership-proposal).
+stage lifetime. The implemented fake hold survives ten seconds of advanced
+time at the producer seam; real served PAIRING/PROGRAMMING sweeps retain their
+stage and reach READY only after release. No timeout or assertion was weakened.
+NFC's pre-armed observer and FILTER's full-page guarded audit are separately
+proved in [the repair receipt](residual-repairs.md); no shared runner cause
+is inferred. Continued normal-CI observation remains distinct from repair.

@@ -20,22 +20,23 @@ Testcontainers/Postgres, GitHub Actions, macOS and Linux diagnostics.
 
 ## Execution checkpoint — 2026-09-15
 
-Hardened with two lenses; capture and inventory changes are committed on
-`codex/flake-hunt-spec`. The historical hunt is bounded, not a claim that
-the suite is flake-free. Warning pressure defers further heavy local work;
-only this hunt's earlier lint process was interrupted.
+Hardened with two lenses; capture, inventory and all three residual repairs
+are committed on `codex/flake-hunt-spec`. The historical hunt is bounded,
+not a claim that the suite is flake-free. Probes run serially at one worker
+only under normal pressure; other tasks' processes are preserved.
 
 | Task | Current disposition | Remaining gate |
 | --- | --- | --- |
-| 1 — population | 1,036 completed logs; 51 named events; extraction/cache/counting review clear; all titles triaged; retained retry traces inspected | Three unrepaired shapes: PAIRING lifetime cause established; NFC paint and axe scan cost unresolved |
-| 2 — resources | One-worker client sample (~581 MiB observed tree); graceful browser interruption (~622 MiB), owned observed PIDs gone; synthetic survivor accounting checked | Full-suite capacity, hard-kill/compose cleanup and trace overhead remain unmeasured; no compose boot |
-| 3 — evidence | Native command/report seams checked; 15 child-process tests and two inventory tests pass; 22 unique deciding mutants killed after committed fixes; final Standards/Spec review clear for this increment | Exact-head CI; full lint/format remain CI-owned |
-| 4 — investigation | Historical source/retained traces distinguish repaired causes, deterministic drift, PAIRING's fixed-lifetime race and unresolved NFC/axe shapes | Missing observables, next gates and owner/date recorded; no repeated local stress |
-| 5 — repair | Prior product/test repairs traced; this branch repairs evidence collection/classification only | No speculative product repair; original command-class CI and future recurrence observation remain distinct |
+| 1 — population | 1,036 completed logs; 51 named events; all titles triaged; retained retry traces inspected | No invented historical per-test denominator; recurrence observation remains |
+| 2 — resources | One-worker client/browser samples; owned compose cleanup rehearsed and completed after actual application probes; hosted Linux resource artifacts verified | Full local suite capacity, hard-kill completeness and tracing overhead remain unmeasured |
+| 3 — evidence | Native seams checked; 15 child-process and two inventory tests pass; 22 deciding evidence mutants killed; earlier exact-head hosted CI passed | Updated exact-head CI after residual repairs |
+| 4 — investigation | PAIRING fixed-lifetime race reproduced; late NFC observer discriminated; FILTER serialization/aggregation cost measured | Historical FILTER amplification and historical NFC physical paint remain unassigned, not reasons to defer the proven repairs |
+| 5 — repair | Deterministic fake holds, pre-armed NFC receipt and guarded full-document axe fast path; 10 additional mutants killed; restored 158 client / 11 browser checks pass; Standards/Spec PASS | Updated full CI, then recurrence observation; no product behavior change |
 | 6 — adoption | Report-first wiring implemented; strict normal-CI enforcement remains off | Exact-head CI, James's merge ruling, 20-job/seven-day observation and post-merge result |
 
 The [execution receipt](../research/2026-09-15-test-reliability.md#execution-checkpoint--not-merge-ready)
-records passed checks and limits. Unchecked items below are not completion
+records the original capture checks; the [residual repair receipt](../research/2026-09-15-flake-hunt/residual-repairs.md)
+records subsequent changes and their proof. Unchecked items below are not completion
 claims; this checkpoint is the resume point, not a new phase or closed row.
 
 ## Global constraints

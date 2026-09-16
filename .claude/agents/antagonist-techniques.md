@@ -8,6 +8,12 @@ toolkit, not a history.
 
 ## Falsified claims, and how
 
+- **Performance advice is entry-point-specific.** Trace where an option
+  takes effect relative to expensive work, then measure the phases: axe
+  `resultTypes` prunes before serialization under `run`, but after eager raw
+  serialization under `runPartial`. A native fast path may have a coverage
+  restriction; give its fallback an independent real-boundary witness.
+
 - **A native logger unit test can prove the sink while missing the bridge that selects it.** For a Console override, drive `console.*` inside the loaded production WKWebView and capture process stdout; in the same host, send a forbidden synthetic result through native `toJs` and JavaScript `fromNative`. Read the no-callback error branch too: it can call patched `console.warn` even when generic logging is disabled. A prebuilt framework’s `#if DEBUG` was evaluated when that framework was built; changing the app configuration cannot change it. Inspect the exact platform slice and built app plist before using that getter as an app-build oracle.
 
 - **"The paused derivation depends on seeing zero stroke rates."** Believed
