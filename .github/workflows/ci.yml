@@ -129,7 +129,14 @@ jobs:
             docker compose -f compose.yml -f compose.e2e.yml up -d --build --wait --wait-timeout 120
       - name: Run Playwright (flows + design)
         working-directory: app
-        run: pnpm exec playwright test --project=chromium
+        # BOTH projects, and this line is the CI half of a pair. CI does NOT
+        # go through `scripts/e2e.sh`, so naming a project there does nothing
+        # here — a project listed in only one of the two runs locally and
+        # never where it counts, which is a gate that cannot fail in the
+        # place that matters. `touch` is scoped by `testMatch` to
+        # `e2e/touch.spec.ts` and exists so that one spec has
+        # `hasTouch: true`; without it a dispatched touch is inert.
+        run: pnpm exec playwright test --project=chromium --project=touch
       # `always()`, NOT `failure()` (flake hunt, 2026-08-21). With
       # `retries: 1`, a test that fails once and passes on retry leaves the
       # JOB green — so `failure()` was false and the report was never
