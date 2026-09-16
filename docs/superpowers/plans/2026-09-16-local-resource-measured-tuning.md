@@ -18,8 +18,9 @@ especially runner tuning and measurement acceptance.
 **Parent:** cheaper-hooks `5daf579e`, PR464. Work uses the existing linked
 worktree on `codex/memory-measured-tuning`.
 
-Status: author investigation/paste-test in progress; implementation review and
-hardening not yet credited. The whole spec remains incomplete.
+Status: Tasks1–2 author implementation/paste-tests and self-mutations complete;
+independent hardening/review not yet credited. Task3 investigation remains
+partial. The whole spec remains incomplete.
 
 ## Global constraints
 
@@ -116,33 +117,33 @@ test body executed; merely calling the guard by hand is insufficient.
 
 ## Task 1: Bounded mutation request and real inner-pool gate
 
-- [ ] Add failure-first request/config tests: missing/empty/duplicate bounds,
+- [x] Add failure-first request/config tests: missing/empty/duplicate bounds,
   scope omitted, all mixed with files, unknown flags, literal separator, globs,
   traversal/symlink escape, integration witness, unsupported config and
   Unicode/space/comma literal paths. Pin expected accepted arrays independently.
-- [ ] Implement the closed parser and canonical file validation at the real
+- [x] Implement the closed parser and canonical file validation at the real
   paths above; no raw string forwarding to Stryker's CSV CLI.
-- [ ] Add a real installed-Vitest fixture that imports the actual Stryker
+- [x] Add a real installed-Vitest fixture that imports the actual Stryker
   config, changes resolved maxWorkers before start, and asserts nonzero plus
   absent body sentinel. With maxWorkers1 it must execute the sentinel.
-- [ ] Add the typed reporter and explicit inner cap to the existing Stryker
+- [x] Add the typed reporter and explicit inner cap to the existing Stryker
   config. Preserve unit membership and installed threads/isolation semantics.
-- [ ] Run pure and named native fixtures under the existing owner; reuse the
+- [x] Run pure and named native fixtures under the existing owner; reuse the
   commit hook for all compiler projects. Paste-test before hardening dispatch.
 
 ## Task 2: Public mutation ownership and artifact lifetime
 
-- [ ] Add real fixture Stryker run with one tiny source and independent tests,
+- [x] Add real fixture Stryker run with one tiny source and independent tests,
   supplied through the public pnpm/local-work boundary. Assert native mutant
   paths/status, private evidence, effective outer/inner bounds and cleanup.
-- [ ] Prove dropped payload controls refuse before a native body, inherited
+- [x] Prove dropped payload controls refuse before a native body, inherited
   evidence destinations are ignored, stale source fails and busy/pressure
   refusal starts no mutation. Keep the real plugin in the executable seam.
-- [ ] Route local mutate through the existing owner; explicit hosted workflow
+- [x] Route local mutate through the existing owner; explicit hosted workflow
   mode keeps the original configured full scope and CI concurrency.
-- [ ] Exercise interrupted real Stryker work and failing assertions. Preserve
+- [x] Exercise interrupted real Stryker work and failing assertions. Preserve
   signal status; missing cleanup keeps ownership, never a false pass.
-- [ ] Commit via real hooks; mutate the outer bound, inner guard and request
+- [x] Commit via real hooks; mutate the outer bound, inner guard and request
   comparison separately, then restore and run their named green gates.
 - [ ] Reconcile command consumers and exclusions; reuse independent task review
   for Tasks1–2, followed by final Standards/Spec review and exact-head full CI.

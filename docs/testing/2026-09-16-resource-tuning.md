@@ -110,6 +110,26 @@ All passed. Compiler-reported memory below is not process RSS.
 
 No project split, diagnostic removal or E2E-census change made.
 
+Streaming the actual listFiles output (including JSON and `.d.cts`) gives
+643/8/231/99/97 repository source inputs respectively and
+765/401/684/653/330 dependency inputs. The server project's membership also
+includes root `scripts/wod/fetch-wods.d.mts`; path counting restricted to
+`app/` would miss it. All99 production-server source inputs are also in the
+server test project: that overlap alone does not make either diagnostic
+contract redundant. No project boundary was changed on this evidence.
+
+Full typed-lint profile: `TIMING=1 pnpm lint`, receipt
+`f46e949d-84cf-4c3a-b0bc-0b1e24979132`,6a5b8e50 plus the explicit `.ts`
+config import/comment correction; fingerprint
+`a76b5cf2d964f9a9568d45de55677854138a5db358da6b2d5699f743e7dff710`.
+It passed all lint/census phases:34.179s owner,29.419s ESLint,
+3188.17MiB tree,65.55MiB wrapper,48samples,1024ms largest gap, normal pressure,
+verified cleanup. Top timed rules: no-misused-promises2846.73ms (27.2%),
+react-hooks/static-components2409.44ms (23.0%), no-floating-promises2079.11ms
+(19.9%). These relative percentages cover timed rule work, not total elapsed
+time. There was no immediate vm_stat bracket; compressor deltas unavailable.
+No rule removal, suppression addition or project-service/result cache proposed.
+
 Stryker receipt `f40e0a6f-0d96-4187-a161-da580ee1871c` used one outer
 runner, `domain/recency.ts`, and `domain/suggest.test.ts`: nine mutants
 killed, none survived/no-coverage/error/timeout.501.28MiB tree,71.30MiB
@@ -145,7 +165,30 @@ gate uses a named function and asserts native killed statuses; it does not
 establish static-mutant soundness or change the vendor's survivor policy.
 Do not turn command exit0 into a blanket claim that mutants are killed.
 
-Still owed: compiler membership analysis, typed-lint profiling, pure-client
+Committed implementation1cbc51d3/6a5b8e50 passed actual pre-commit hooks,
+receipts `e1f7febf-296d-493a-b62b-8706cafa0161` and
+`aee304b2-d4cb-4141-8d26-877d4e1c6081`: every compiler project and30/30 E2E
+membership retained. Three post-commit source mutations each failed the
+named native witness, restored afterward:
+
+| Broken authority | Named test pattern | Red receipt / failure |
+| --- | --- | --- |
+| mutation-run options.concurrency→2 | public mutation owns one | c3d60065-0743-491d-bd2c-efc874f411f3; actual2≠requested1 |
+| remove inner maxWorkers comparison | native mutation config refuses excessive | 37f5667d-4a94-4516-8f9b-7514b7d02c0f; real body ran and command exited0 |
+| remove original-intent comparison | public mutation refuses a selector | 524ffe55-abf1-4544-877c-079e6a86514d; dropped witness selector reached native work and exited0 |
+
+The named patterns ran via the ignored measured-tuning `guard-native.mjs`
+with `--test-name-pattern` before `scripts/local-work/native/mutation.test.mjs`.
+Restored parser/native/routing27tests passed receipt
+`74e130d1-b5e4-49b7-a8b9-7280549151f5`. This includes actual assertion failure,
+staleness, interruption, busy/pressure and public handoff tests.
+Public real-repository command (not a private probe):
+`pnpm mutate --concurrency 1 --mutate domain/recency.ts --test-file domain/suggest.test.ts`
+passed receipt `00bfac21-a70d-48a8-b418-ba18bfd641ef`; native JSON reports9killed
+and no other mutant outcomes, verified cleanup. This is still only that
+explicit source/witness pair, not the full mutation baseline.
+
+Still owed: pure-client
 membership audit, representative unit1/2/4 and browser1/2/3, final candidate
 hook/browser proof, worker-default decision, bounded hardening, independent
 review and exact-head CI. None is silently waived by these measurements.

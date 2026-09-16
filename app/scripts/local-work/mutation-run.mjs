@@ -60,8 +60,8 @@ export async function runMutation(request, app, directory) {
     record.status = "running";
     atomic(recordPath, record);
     // Import only after intent, source and closed configuration are validated.
-    // Native signals remain signals at this direct child boundary; the owner
-    // owns group interruption, census and unresolved-cleanup retention.
+    // The owner retains actual wait status (Stryker converts INT to 130),
+    // group interruption, census and unresolved-cleanup retention.
     const { Stryker } = await import("@stryker-mutator/core");
     await new Stryker({ configFile }).runMutationTest();
     const report = JSON.parse(

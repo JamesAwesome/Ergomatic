@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { MutationBudget } from "./scripts/local-work/mutation-budget";
+import { MutationBudget } from "./scripts/local-work/mutation-budget.ts";
 
 // Dedicated Vitest config for Stryker mutation testing.
 //
