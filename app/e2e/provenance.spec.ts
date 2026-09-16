@@ -164,7 +164,7 @@ test("a TERMINATED row says its RATE is derived, and why", async ({ page }) => {
   // said, so a version that grouped correctly and said nothing would pass a
   // weaker check while failing the rower.
   await expect(dialog).toContainText("DERIVED");
-  await expect(dialog).toContainText(/stopped this piece early/i);
+  await expect(dialog).toContainText(/this piece ended early/i);
   await expect(dialog).toContainText("MEASURED");
 });
 
@@ -192,7 +192,7 @@ test("a FINISHED row puts the same tile under MEASURED, with nothing to explain"
   // THE PAIR IS THE POINT. This row and the terminated one render an
   // IDENTICAL tile face (board 1's whole finding), so the only way to tell
   // them apart is here — and the terminated row's sentence must be absent.
-  await expect(dialog).not.toContainText(/stopped this piece early/i);
+  await expect(dialog).not.toContainText(/this piece ended early/i);
   await expect(dialog).toContainText("MEASURED");
 });
 

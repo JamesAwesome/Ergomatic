@@ -73,7 +73,7 @@ describe("tileProvenance: RATE switches on whether the piece finished", () => {
   it("is DERIVED on a piece cut short, and says why", () => {
     const p = rateProvenance(false);
     expect(p.source).toBe("derived");
-    expect(p.because).toMatch(/stopped this piece early/i);
+    expect(p.because).toMatch(/this piece ended early/i);
   });
 
   it("keeps ONE label either way, so the tile face never changes", () => {

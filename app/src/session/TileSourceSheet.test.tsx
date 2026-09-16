@@ -53,7 +53,7 @@ describe("TileSourceSheet: a row with no number claims nothing about it", () => 
     });
     expect(dialog).not.toHaveTextContent(/from the monitor's calorie total/i);
     expect(dialog).not.toHaveTextContent(/recorded heart-rate readings/i);
-    expect(dialog).toHaveTextContent(/no number here/i);
+    expect(dialog).toHaveTextContent(/not available for this piece/i);
   });
 
   it("keeps the sentence where the value is real", async () => {
@@ -63,7 +63,7 @@ describe("TileSourceSheet: a row with no number claims nothing about it", () => 
 
   it("says nothing about splits on a terminated row that has none", async () => {
     const dialog = await open({ ...NUMBERS, rate: DASH });
-    expect(dialog).not.toHaveTextContent(/average of your splits/i);
+    expect(dialog).not.toHaveTextContent(/split stroke rates/i);
   });
 });
 

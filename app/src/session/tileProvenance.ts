@@ -85,7 +85,7 @@ export function rateProvenance(finished: boolean): TileProvenance {
         label: "RATE",
         source: "derived",
         because:
-          "You stopped this piece early. The monitor's own average is not reliable when that happens, so this is the average of your splits instead.",
+          "This piece ended early, so the average is calculated from your split stroke rates.",
       };
 }
 
