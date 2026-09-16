@@ -7,15 +7,19 @@ the checks that catch real regressions. Coordinate expensive jobs across
 worktrees, stop paying for duplicate local checks, and measure runner
 tuning instead of guessing. Full CI remains the final correctness gate.
 
-Status: proposed design, not permission to implement. James requested this
-spec and hardening after #457. No hooks, runner defaults, agent policies or
-Docker settings change in this documentation work. In particular, replacing
-his earlier warning-only policy needs his approval of this design.
+Status: approved for staged implementation by James ("Implement, spec
+approved"). The spec and its hardening followed #457; implementation
+receipts belong to the corresponding incremental plans and changes.
 
-**Approval requested:** supersede the 2026-09-08 rule that the advisory
+**Approved policy:** supersede the 2026-09-08 rule that the advisory
 never blocks or fails a run, for participating heavy commands only, with
 blocking fail-closed admission. This does NOT approve a new worker default,
-automatic foreign-process cleanup, Docker settings changes or implementation.
+automatic foreign-process cleanup, Docker settings changes or merging.
+
+**Subset policy approved:** James accepted refusing failed subset selection
+instead of automatically expanding to a full run. Full verification requires
+an explicit invocation-scoped request. The subsequent whole-spec approval
+also authorizes implementing the admission policy above.
 
 Evidence baseline: `653bd5ea` (#457), Node 26.5.0, pnpm 11.17.0,
 Vitest 4.1.11, Playwright 1.63.0. The
@@ -33,6 +37,8 @@ flake policy. No rower-facing design or hardware gate applies.
   to retry. A stopped mandatory check still blocks the commit/push.
 - Each pre-push test identity is executed at most once per verification
   invocation; its selected set covers at least the current hook's union.
+- Missing or broken subset selection never promotes itself to a full run.
+  Refusal is nonzero and blocks a mandatory hook; it is not a passing check.
 - Full hosted lint, typecheck, coverage, integration, builds and both
   browser projects remain required for code changes. No reductions to
   assertions, fixtures, rules, coverage floors, isolation or timeouts.
@@ -141,13 +147,14 @@ user account.
    same explicit recovery, not an assumption that a PID cannot be reused.
 
 Recovery/release must not implement compare-then-delete against a reusable
-pathname. Explicit recovery first acquires a separate exclusive maintenance
-barrier; a second recoverer refuses. Normal entrants check that barrier
-before acquisition AND after acquiring, before launch; a contender already
-past launch remains a live owner that recovery must refuse. Under the
+pathname. All synchronous ownership mutations acquire a separate exclusive
+maintenance barrier: publication, update, release and explicit recovery.
+A contender refuses before touching an owner while that barrier is held;
+its identity is checked again after publication, before launch. A workload
+already past launch remains a live owner that recovery must refuse. Under the
 barrier, recovery re-reads the inspected generation and proves its cleanup
-preconditions before removing exactly it. It performs no work after
-releasing the barrier. A malformed/crashed maintenance barrier itself is
+preconditions before removing exactly it. No recovery decision or state
+mutation occurs after releasing the barrier. A malformed/crashed barrier is
 diagnosis-only: no automatic recursive stale-lock recovery. The plan must
 paste-test the interleavings below before implementing the public command.
 
@@ -166,7 +173,7 @@ heavy launch until diagnosed.
 | Owner directory | Atomic acquisition at common Git root | Owner generation removes it after cleanup; crash leaves it blocked |
 | Invocation identity | Fresh per top-level workload | Never reused; remains in receipt after release |
 | Active phase | Owner's single internal sequential dispatch | Completed child/adapter cleanup before advancing; no public borrowing |
-| Maintenance barrier | Exclusive explicit recovery operation | Released only after recovery finishes; abandoned barrier remains blocked |
+| Maintenance barrier | Exclusive synchronous ownership mutation, including recovery | Released only after the mutation finishes; abandoned barrier remains blocked |
 | Child/process-group identities | Spawn plus observed start identity | Reaped and checked before release; ambiguity blocks recovery |
 | Pressure samples / decision | Before launch and during each phase | Append-only receipt; missing samples are unknown, not normal |
 | Docker test-session ownership | Explicit worktree/session creation or adoption | Session end stops its containers; destructive volume teardown only for owned disposable fixtures |
@@ -265,17 +272,22 @@ related files, plus the existing independently gated filesystem census.
 Collect under the slot: Vite transforms can allocate memory even without
 running test bodies. End/dispose discovery before execution. Deduplicate
 identities, then run exact selections in sequential bounded batches without
-`--changed` filtering them a second time. Explicit full-scope fallback runs
-each scoped test once, not full plus overlapping add-ons.
+`--changed` filtering them a second time. A separately requested full mode
+runs each scoped test once, not full plus overlapping add-ons. Discovery
+never selects full mode as an automatic fallback.
 
 Requirements: no shell word-splitting of filenames; spaces, Unicode,
 renames and deletion work. CLI substring filters must not silently broaden
-or narrow the manifest: compare requested and executed identities, or use
-the installed runner's exact specification interface. Do not parse human
+or narrow the manifest: verify the runner-resolved selection against the
+requested identities BEFORE execution, then check executed membership too.
+Use the installed runner's exact specification interface where needed.
+Do not parse human
 reporter prose as a selection manifest. A legitimate empty RELATED set
 still runs the mandatory populations. Malformed/missing discovery or an
-empty mandatory census triggers the full unit/client fallback, not zero
-tests. An actual test failure does not trigger a fallback rerun.
+empty mandatory census refuses the invocation before test execution, with
+the failed selection step and the explicit full-mode recovery command in
+the diagnostic. It neither passes with zero tests nor launches the full
+unit/client suite. An actual test failure never triggers a broader rerun.
 
 Resolve the base once to an immutable object, not a moving ref between
 discovery and execution. Record source/index/config/lockfile fingerprints
@@ -283,7 +295,29 @@ before and after; mutation of selected inputs makes the receipt stale and
 the push fail. Do not claim a local hook validates arbitrary refspecs: a
 push of a tree other than the checked working tree must be detected from
 Git's pre-push input and handled explicitly, never credited with HEAD's
-tests. Missing base or history uses the safe full scoped selection.
+tests. Missing base or history likewise refuses related selection; the
+caller must repair the input or explicitly request full unit/client mode.
+
+### Explicit subsets and full-run opt-in
+
+Provide one documented targeting interface for project, exact test-file
+paths and optional test-name filters, plus related-to-change selection.
+Preserve these selectors through pnpm and every wrapper. Resolve and show
+the project/file manifest before execution; offer discovery-only inspection
+that cannot satisfy or bypass a required hook. Omitted subset targets,
+unmatched explicit targets, unknown projects and malformed filters fail
+without running test bodies. Never interpret an invalid or dropped selector
+as permission for an unfiltered suite. The valid empty RELATED case above
+is distinct from an invalid explicit target.
+
+Full mode is a deliberate request naming its project scope, not a persistent
+setting or an inherited flag that silently changes later runs. For pre-push,
+provide an explicit full-verification entry point that selects this mode
+for that hook invocation, preserves all mandatory checks, and still uses
+admission. It does not run tests separately and bypass the hook afterward.
+Full unit/client mode does not include integration or browsers implicitly;
+failure to enumerate its complete scope also refuses rather than passing.
+The implementation plan must select and test the concrete command syntax.
 
 No cross-invocation passed-test cache in the first implementation. Avoiding
 overlap within one invocation is a smaller correctness surface than
@@ -308,7 +342,8 @@ increase heap limits: the old-generation limit is neither RSS nor a machine
 budget. Test tuning candidates, in order:
 
 1. Prove exact scope before execution, including the bare-file argument
-   rule for pnpm. Avoid accidental full-suite selection.
+   rule for pnpm. Use the subset contract above; avoid accidental full-suite
+   selection rather than merely detecting it after execution.
 2. Compare one/two/four Vitest workers and one/two/three browser workers on
    representative current workloads, not every combination on the full
    suite. Begin with smaller samples; only the final candidate gets a
@@ -354,6 +389,9 @@ same admission path. Do not separately rerun a gate immediately before a
 hook that is about to run it, unless its evidence no longer applies. Full
 branch review checks evidence and targeted gaps; it does not independently
 launch a second full suite alongside the controller or hosted CI.
+Document subset and discovery commands beside full-run commands. A selector
+error calls for diagnosis or an explicit full request, never dropping the
+filter and retrying. Hosted CI's intentionally full workflows stay unchanged.
 
 Every long-running server, browser, watcher or DB probe gets an owner,
 purpose, stop condition and receipt. Completion includes checking its own
@@ -485,6 +523,14 @@ browser coverage. Hosted CI supplies full regression/coverage evidence.
   Independent witnesses cover CSS/non-imported files, config, lockfiles,
   native files, missing base and discovery failure. Removing a mandatory
   population or corrupting its real upstream input makes the gate fail.
+- Selection failures, missing history, empty mandatory populations and
+  omitted/invalid/unmatched explicit targets execute no test bodies and
+  block required hooks. A valid empty RELATED set still runs mandatory
+  populations. Exact-file/test-name selectors survive the public pnpm and
+  hook boundaries; include spaces, Unicode and the argument-separator trap.
+  An explicit full-mode request executes the complete named scope once,
+  preserves failure status and does not leak into the next normal invocation.
+  Removing a selector in a wrapper must fail the scope gate, not run broadly.
 - Docs-only commit avoids app-heavy children; a relevant staged or
   unstaged input, rename, deletion, malformed path stream or classifier
   error does not receive that exemption. A real typed-lint/typecheck defect
@@ -511,7 +557,7 @@ together within each increment, but do not couple all of them in one PR:
 | Increment | Scope and safe stopping point | Acceptance owner |
 | --- | --- | --- |
 | Admission | Foreground Node lint/typecheck/build and unit/client test pipelines; existing hook selection and worker caps unchanged | Atomic owner/maintenance, phase, pressure, exit and harmless-crash gates |
-| Cheaper hooks | Pre-push protection union and narrow docs-only pre-commit path under admission | Independent manifest parity, fail-safe selection and upstream mutations |
+| Cheaper hooks | Exact subset interface, pre-push protection union, explicit full mode and narrow docs-only pre-commit path | Independent manifest parity, refusal without scope expansion and upstream mutations |
 | Measured tuning | Only worker/import/fixture changes with demonstrated benefit; old defaults remain if no candidate wins | Paired peak/elapsed protocol and same membership, plus James's new-default decision |
 | Browser sessions | Playwright detached ownership plus its owned Compose lifecycle | Pre-registration/crash and foreign-browser/stack gates |
 | Integration resources | Testcontainers invocation ownership across every producer | Shared-Ryuk/foreign-fixture and interrupted-create gates |
@@ -537,15 +583,17 @@ ownership mechanism needs antagonist review. Native installation and merge
 still need their own authorization.
 
 Rollback is by component, not by bypassing hooks: revert a bad selection
-optimization to the existing complete scoped protection set under admission;
+optimization to complete scoped verification only when explicitly requested,
+under admission; otherwise leave the hook blocked until selection is repaired.
+Do not restore the old automatic full-suite fallback during rollback;
 restore old worker values under the same slot if tuning regresses; restore
 explicit session teardown if keep behavior fails. An admission defect
 blocks heavy launch until repaired or an explicitly approved rollback lands.
 No `--no-verify`, silent unsafe mode or passed-result cache is a recovery path.
 
-No new ROADMAP rows are filed by this draft. James reviews this design and
-its policy change before it becomes an implementation order; then the
-approved work gets a named PR/date through the normal ROADMAP hand-back.
+No new ROADMAP rows are filed by this design. James has approved the design
+and implementation; work proceeds in the increments above, with the normal
+ROADMAP hand-back for anything proposed to remain after delivery.
 The detailed implementation plan must choose concrete tested interfaces
 and paste-test them; this spec contains no proposed implementation code.
 
@@ -560,11 +608,17 @@ ownership; and an owner-specific, not vendor-wide, no-SIGKILL promise.
 
 The PM's scope conditions produced independently shippable increments,
 retained the existing worker defaults, limited paired benchmarks to tuning,
-and made the warning-only policy decision explicit. Approval of that policy
-is still owed. Neither review is retrospectively relabelled PASS.
+and made the warning-only policy decision explicit. James subsequently
+approved the spec. Neither review is retrospectively relabelled PASS.
 
 The prescribed-code lens is skipped: this is a design, with no proposed
 implementation blocks to paste-test. No repeat verification review is
 requested; that is the hardening stop rule, not proof the unbuilt mechanism
 works. The acceptance gates above remain owed by the implementation plan
 and each corresponding change. No memory saving has yet been measured.
+
+After those reviews, James approved the narrower subset-policy amendment:
+replace automatic full-suite fallback with refusal and explicit full-run
+opt-in. Selection, agent guidance, acceptance and rollback now use that
+contract. This user-directed revision was self-checked for consistency;
+it does not claim an additional adversarial review or implementation proof.
