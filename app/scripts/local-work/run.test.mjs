@@ -161,6 +161,29 @@ test("signals delivered to the real owner stop its live child and release only a
   }
 });
 
+test("a zero-exit child with a missing or contradictory private outcome cannot pass", async (t) => {
+  for (const report of ["", '{"exitCode":23,"verdict":""}']) {
+    const options = fixture(t),
+      marker = join(options.root, "executed");
+    const result = await runWorkload({
+      ...options,
+      phases: [
+        {
+          ...phase(
+            `${put(marker, "yes")}require('node:fs').writeSync(3,${JSON.stringify(report)});`,
+          ),
+          outcome: "test-run",
+        },
+      ],
+    });
+    assert.equal(readFileSync(marker, "utf8"), "yes");
+    assert.equal(result.phases[0].exitCode, 0);
+    assert.equal(result.exitCode, 75);
+    assert.equal(result.classification, "resource-aborted");
+    assert.equal(result.cleanup, "verified");
+  }
+});
+
 test("preparation runs under admission, and never at unsafe pressure", async (t) => {
   const unsafe = fixture(t);
   let prepared = false;
@@ -200,6 +223,25 @@ test("failed or empty preparation refuses and releases no-child ownership", asyn
     assert.equal(result.phases.length, 0);
     assert.equal(inspectOwner(options.root).status, "free");
   }
+});
+
+test("pressure rising after selection refuses the phase before any child launch", async (t) => {
+  const options = fixture(t),
+    marker = join(options.root, "body");
+  let state = "normal";
+  const result = await runWorkload({
+    ...options,
+    observe: () => ({ ...readHost(), pressure: { state } }),
+    phases: () => {
+      state = "warning";
+      return [phase(put(marker, "ran"))];
+    },
+  });
+  assert.equal(result.exitCode, 75);
+  assert.equal(result.classification, "resource-refused");
+  assert.equal(result.phases.length, 0);
+  assert.equal(existsSync(marker), false);
+  assert.equal(inspectOwner(options.root).status, "free");
 });
 
 test("a symlinked receipt parent cannot redirect evidence into another directory", async (t) => {

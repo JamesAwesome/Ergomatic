@@ -24,7 +24,7 @@ test("private outcomes reject missing, malformed, oversized, contradictory or im
   for (const text of [
     "",
     "{",
-    " ".repeat(1025),
+    JSON.stringify({ exitCode: 0, verdict: "", padding: "x".repeat(1025) }),
     '{"exitCode":3,"verdict":""}',
     '{"exitCode":0,"verdict":"fake"}',
     '{"exitCode":0,"verdict":"memory"}',
