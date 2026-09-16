@@ -20,18 +20,19 @@ Testcontainers/Postgres, GitHub Actions, macOS and Linux diagnostics.
 
 ## Execution checkpoint — 2026-09-15
 
-Hardened with two lenses; execution is partial and uncommitted on
-`codex/flake-hunt-spec`. Heavy local validation paused when pressure rose
-to warning during lint; only this hunt's lint process was interrupted.
+Hardened with two lenses; capture and inventory changes are committed on
+`codex/flake-hunt-spec`. The historical hunt is bounded, not a claim that
+the suite is flake-free. Warning pressure defers further heavy local work;
+only this hunt's earlier lint process was interrupted.
 
 | Task | Current disposition | Remaining gate |
 | --- | --- | --- |
-| 1 — population | 1,036 completed logs; 51 named events; extraction/cache/counting review clear | Complete causal dispositions for unresolved titles |
-| 2 — resources | Pressure meanings verified; synthetic descendant accounting checked | Useful worker-peak measurement and browser/compose cleanup proof |
-| 3 — evidence | Native reports, receipt, resource stream and CI publication changes implemented; task review clear | Remaining native failure seams, interrupted lint/format gates, commit/mutations, final review and actual CI |
-| 4 — investigation | Apple hypothesis and competing explanation recorded | Safe browser probe window and its prerequisites |
-| 5 — repair | Prior repairs traced; no new product cause asserted or fix made | A discriminating reproducer before any new repair |
-| 6 — adoption | Report-first wiring prepared; strict normal-CI enforcement remains off | Exact-head CI, observation checkpoint and later authorized merge |
+| 1 — population | 1,036 completed logs; 51 named events; extraction/cache/counting review clear; all titles triaged; retained retry traces inspected | Three unrepaired shapes: PAIRING lifetime cause established; NFC paint and axe scan cost unresolved |
+| 2 — resources | One-worker client sample (~581 MiB observed tree); graceful browser interruption (~622 MiB), owned observed PIDs gone; synthetic survivor accounting checked | Full-suite capacity, hard-kill/compose cleanup and trace overhead remain unmeasured; no compose boot |
+| 3 — evidence | Native command/report seams checked; 15 child-process tests and two inventory tests pass; 22 unique deciding mutants killed after committed fixes; final Standards/Spec review clear for this increment | Exact-head CI; full lint/format remain CI-owned |
+| 4 — investigation | Historical source/retained traces distinguish repaired causes, deterministic drift, PAIRING's fixed-lifetime race and unresolved NFC/axe shapes | Missing observables, next gates and owner/date recorded; no repeated local stress |
+| 5 — repair | Prior product/test repairs traced; this branch repairs evidence collection/classification only | No speculative product repair; original command-class CI and future recurrence observation remain distinct |
+| 6 — adoption | Report-first wiring implemented; strict normal-CI enforcement remains off | Exact-head CI, James's merge ruling, 20-job/seven-day observation and post-merge result |
 
 The [execution receipt](../research/2026-09-15-test-reliability.md#execution-checkpoint--not-merge-ready)
 records passed checks and limits. Unchecked items below are not completion
@@ -307,7 +308,9 @@ agreed recurrence policy catches its synthetic failure case.
 Current configuration, prior rulings, recent CI output and native option
 availability were inspected. This plan deliberately contains no invented
 repair implementation. Bounded native reporter checks and lightweight
-fixtures have run; useful peak-resource calibration, first-failure capture
+fixtures have run, including native coverage/unhandled command failures and
+browser interruption. The client/browser resource samples are observed
+lower bounds, not peak/full-suite capacity guarantees. First-failure trace
 overhead, stress runs and statistical confirmation remain unperformed.
 
 The two-lens hardening precedes implementation. Concrete Task 3/5 code uses

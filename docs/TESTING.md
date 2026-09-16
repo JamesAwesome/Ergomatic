@@ -641,8 +641,12 @@ defer another local probe.
 | Native JSON/HTML/test output | Invocation-scoped runner configuration | Survive child exit; absent/stale/replaced report fails evidence check |
 | Containers / detached unobserved browsers | Not owned by this wrapper | Unknown; controller must establish ownership and cleanup separately |
 
-Counts describe observed initial executions, first failures, recovered
-retries, exhausted executions and JSON-visible suite errors separately.
+Counts describe observed initial executions, first failures, interrupted
+initial/retry attempts, recovered retries, exhausted executions and
+JSON-visible suite errors separately. An interrupted initial attempt is an
+observed exposure, not a failed assertion; a genuinely failed initial attempt
+is retained even when a later retry is interrupted. Receipt-known termination
+events remain visible even when required report artifacts are missing.
 Repeated executions count initial executions; retries do not. Playwright
 1.63's native JSON omits the numeric repeat index: distinct opaque spec IDs
 preserve repeat-specific executions. The summary prints that ID/project and

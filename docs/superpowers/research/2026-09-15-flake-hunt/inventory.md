@@ -70,7 +70,7 @@ jobs with a test summary in each job class.
 | 1 | E2E read-after-write: stored baseline reset | 9 | 7 retry pass; 2 exhausted | Prior fix represented on main by `70e857b2`; exhausted sightings are retained, not independently attributed to that mechanism here. |
 | 2 | E2E Library SOURCE filter save/read | 6 | retry pass | Fixed before baseline by `70e857b2`; it replaced a URL predicate that also matched `/library/new`, so navigation did not prove the save landed. |
 | 3 | `Releases.test.tsx` synchronous render timeout | 5 | app job failed | Fixed before baseline by #452's main commit `1a2ffe41`; the quadratic DOM query was replaced by one linear walk. |
-| 4 | Apple link Google-proof continuation | 5 | 3 retry pass; 2 exhausted | #453 (`8536de99`) addresses the continuation failure; the exhausted status-copy assertions are a distinct observed shape, not evidence of that same cause. |
+| 4 | Apple link Google-proof continuation | 5 | 3 retry pass; 2 exhausted | #453 (`8536de99`) addresses the continuation failure; the two exhausted status-copy assertions are separate deterministic drift repaired by `c7addbad` in the same landing. |
 | 5 | Stats delete/read | 3 | retry pass | Fixed before baseline in the same read-after-write census represented by `70e857b2`; the failure read the exact pre-delete total. |
 
 These include **19 retry-saved E2E test failures in 18 jobs**; one job carried
@@ -118,6 +118,20 @@ include article-read isolation assertions, release-list assertions, connected/
 session flows and design checks. Every occurrence carries job/title/error/line
 in the TSV.
 
+Manual source-history triage now attributes **20 of those 23 automatically
+unclassified events** to deterministic fixture drift or prior repairs.
+Three distinct cases remain unrepaired: NFC transient status, PAIRING lifetime
+across an axe scan, and a FILTER-sheet axe timeout, all in job `103672406399`.
+Retained retry traces establish PAIRING's cause: its 1.2 s fake delay expires
+during a 2.54 s sweep. The FILTER timeout spends 23.439 s inside axe after
+roughly 6.6 s setup; the reason for that scan cost remains unknown. NFC's
+earliest captured assertion snapshot already shows CONNECTING, but cannot
+prove whether the accepted status painted before it.
+The [complete dispositions](residual-dispositions.md) preserve each title,
+raw-log reference and repair commit. Sharing a job does not establish a
+shared runner cause; two previously suspected multi-failure clusters instead
+have exact Bluetooth-fixture and export-envelope repairs.
+
 These command-level failures have no final failing-test title and do not enter
 the test-event count. They remain evidence, not clean jobs or guessed outcomes:
 
@@ -126,13 +140,15 @@ the test-event count. They remain evidence, not clean jobs or guessed outcomes:
 | `101235081560`, `101236455010`, `101236934130`, `101238595196` | Lines 2773, 2763, 2761, 2776 respectively: domain branch coverage 99.88% below 100% | Coverage failures; excluded only from named-test event count |
 | `103643332420` | Lines 4612–4613: domain statements 99.93%, branches 99.9%, below 100% | Coverage failure; no causal test classification |
 | App `101807324349`, `101861059654`; E2E `101807324375`, `101861059605` | TS2339 matcher errors in SplitInput.test.tsx, e.g. lines 3252, 3294, 6800, 6888 respectively | Compilation stopped before tests; excluded from test-summary exposure |
-| `104492060469` | Lines 4383–4395: unhandled rejection `access_denied`; Vitest names a potentially associated test, not a failed assertion | Unhandled-error command failure, unresolved; no invented failed-test identity |
+| `104492060469` | Lines 4383–4395: unhandled rejection `access_denied`; Vitest names a potentially associated test, not a failed assertion | Prior handler-attachment race repaired in `9954fb90`; no invented failed-test identity or auth behavior change |
 
 The exhausted Apple sightings (`104452620517`, `104456898945`) reached the
 post-link status assertion, expecting longer text and receiving `You can sign
 in either way.` (raw blocks 1249 and 1240). That differs from the earlier
 missing-continuation-control failures. No same-cause/fixed disposition follows
-from their shared title.
+from their shared title alone. Source history separately establishes stale
+copy: `c0d9406c` intentionally shortened it and `c7addbad` updates this exact
+E2E assertion; both land in `8536de99`.
 
 ## Retained evidence and current candidate
 
@@ -157,8 +173,8 @@ navigation the browser was on the ordinary Today/baseline screen, with no
 the retained trace is the successful retry trace, not attempt-zero trace; that
 missing observable is explicit. The three recovered missing-control sightings
 are a **post-fix verification candidate** for #453. The exhausted status-copy
-sightings and other unclassified families retain separate unresolved
-dispositions above.
+sightings are independently attributed above; the remaining three unrepaired
+shapes have their own bounded probes in the residual disposition record.
 
 This inventory does not establish that every recurrent family is repaired.
 The narrower historical `stableBoundingBox`
@@ -166,9 +182,9 @@ suspect has zero matching failure/trajectory records in these 1,036 logs.
 Historical green logs cannot prove its individual test exposure, so zero is
 not a rate and does not close that row.
 
-## Ready Task 4 hypothesis
+## Task 4 hypotheses and disposition
 
-Use the Apple continuation as the highest-value bounded verification probe:
+The initial candidate was a bounded Apple continuation verification probe:
 on pre-#453 code, the Google-proof return could lose its link-continuation
 state and fall through to ordinary signed-in routing; a competing explanation
 is merely slow rendering after a correct continuation. Run only the named
@@ -180,3 +196,16 @@ render-delay explanation predicts the correct continuation state/URL in both
 cases, only appearing late. Stop after the first discriminating trace. Current
 main's two green full E2E jobs (`35027627403` and `35034584927`) are useful
 post-fix smoke evidence but do not supply a test-specific denominator.
+
+This hunt additionally ran 20 existing App/navigation/native-attach and
+release-note regression tests with one worker; all passed with normal pressure.
+That is scoped regression evidence, not a browser reproduction of the former
+Apple failure. No new auth fix is justified by the inventory.
+
+The retained PAIRING retry now proves the sweep crosses the original 1,200 ms
+stage lifetime. The next repair gate is a deterministic fake hold/release,
+then an intentionally slower sweep against the real served PAIRING screen:
+the screen must remain through the sweep and transition after release.
+No larger timeout or removed final-state assertion substitutes for that proof.
+NFC paint/observation and the FILTER scan remain separate experiments with
+the observables and proposed review dates in [the hand-back](residual-dispositions.md#bounded-residual-ownership-proposal).

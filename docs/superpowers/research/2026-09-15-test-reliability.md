@@ -220,8 +220,9 @@ The 80 ms Vitest test phase was too short for a useful 1 s memory sample:
 three snapshots saw at most two wrapper processes and 3,472 KiB, missing
 the worker peak. All three pressure samples were normal. These observations
 do NOT calibrate Vitest peak memory or prove an observed worker count.
-Browser/compose cleanup, trace overhead and full-suite capacity remain
-unmeasured. The synthetic detached-child rehearsal only proves that an
+At that checkpoint browser/compose cleanup, trace overhead and full-suite
+capacity were unmeasured; the later bounded browser rehearsal is below.
+The synthetic detached-child rehearsal only proves that an
 observed survivor is reported and blocks the evidence check.
 
 `pnpm typecheck` passed (E2E membership 26/26). Pressure was warning at its
@@ -246,27 +247,76 @@ stderr chunk hiding an allocation signature, and inherited pipes blocking
 finalization indefinitely. Eleven lightweight child-process fixtures passed
 after those fixes (11.87 s). The inventory's two offline fixtures passed
 after first reproducing its original extraction and cache defects. These
-are task-level reviews, not a final branch/CI approval.
+were task-level reviews, not a final branch/CI approval. Subsequent final
+review and native interruption evidence found two more classification seams:
+known termination must survive missing report artifacts, and an interrupted
+attempt is not an assertion failure. Both have focused fail-first tests.
 
 Lint started in a second normal-pressure window. While it ran, host pressure
 rose to warning (2). The controller interrupted only its own lint TTY;
 the command returned exit 1/ELIFECYCLE and no matching ESLint process
 remained. This is an interrupted gate, not a lint pass, a flaky test, or
 evidence of an OOM. No other task's process or stack was stopped. Heavy local
-validation is paused for this session; a transient later normal snapshot
-does not justify repeating the same load immediately.
+validation was paused; the same full lint load was not retried locally.
 
-Current work remains uncommitted on `codex/flake-hunt-spec`. No self-mutations,
-push, PR, CI dispatch, merge, product fix, full-suite run, browser launch or
-compose boot occurred. Typecheck and the earlier scoped formatting check
-passed; the full lint/format gates are not complete. Native coverage-failure
-and unhandled-error fixtures are prepared but have not run. Browser cleanup,
-attempt-zero trace overhead and useful worker-peak calibration remain unproved.
+James subsequently asked to finish the hunt. The controller resumed bounded
+checks under normal pressure and committed the real capture/inventory changes
+(`59cbbf0a`), strengthened preservation/interrupt tests (`996ed7e5`), and
+termination/classification fixes (`48c7467e`, `db15f3c3`). Every actual commit
+ran the real pre-commit hook, including typecheck/E2E membership 26/26;
+applicable staged ESLint/Prettier and explicit scoped checks passed. Full
+lint/format/coverage/E2E are delegated to required PR CI, not claimed locally.
 
-Resume owner is the controller of this hunt, after a stable normal-pressure
-window is available without disturbing other tasks. Next: finish scoped
-gates and verify the real commit hook, commit the real change, run deciding
-mutations and restored passes, obtain final branch review, then inspect CI
-at that exact head. Browser investigation remains behind its separate
-ownership/cleanup and resource gates. The 20-job/seven-day observation and
-strict-flake rollout are still future gates; no ROADMAP row is closed.
+Fresh restored verification at `db15f3c3`: **15/15 Node child-process tests**
+(10.41 s) and **2/2 offline inventory tests** (0.035 s). Twenty-two unique
+deciding source mutations were killed after their real fixes were committed.
+The original reuse mutant initially survived; byte-preservation assertions
+were strengthened and committed before it was killed. Ordinary descendant
+signal-forwarding mutations fail bounded deadlines. Missing-artifact
+termination and both interrupted-attempt classifications also kill their
+original deciding mutations. Every source mutation was restored, with an
+empty source diff and the full small-fixture suite passing afterward.
+
+Additional actual native invocations, all sequential with one worker:
+
+| Receipt UUID | Native outcome | Evidence conclusion |
+| --- | --- | --- |
+| `21c2da5c-2148-4ca0-af3c-2323e916319b` | One assertion passed; function coverage 50% below 100%; command exit 1 | Complete; coverage failure is not erased by passing assertions |
+| `f50b1111-81bf-43d1-a179-f73474152846` | One assertion passed; one unhandled rejection; command exit 1 | Complete; no invented failing-test identity |
+| `8dd5cc4b-e285-4419-8575-6f307bfbd00c` | Four named client files, 20 assertions passed, command exit 0 | Six normal-pressure samples; one worker observed; maximum observed tree 595,184 KiB (~581 MiB) |
+| `89ab9c0b-6f87-44ad-bc05-80a51abf22f4` | Real Chromium page then deliberate owned SIGINT; command exit 130; native one interrupted, zero unexpected | Complete; initial exposure 1, failure 0, initial interruption 1, termination event 1 |
+
+The four client files were `src/App.test.tsx`,
+`src/App.authDestination.test.tsx`, `src/App.nativeAttach.test.tsx` and
+`src/news/Releases.test.tsx`; native listing confirmed the selection first.
+The browser rehearsal used only a local in-memory page, not the application
+compose stack. Its 15 samples were normal; maximum observed tree was
+636,464 KiB (~622 MiB). The runner, worker, detached Chromium group and
+observed helper PIDs were all absent in the subsequent PID-specific check.
+This proves that observed graceful-interruption path only. The conservative
+receipt still says cleanup unverified: zero observed survivors cannot prove
+absence of descendants missed between one-second samples. Hard-kill and
+compose cleanup, trace overhead and full-suite capacity remain unproved.
+No other task's processes/stack were touched and no compose stack was booted.
+
+Warning pressure returned during desk work, so no new heavy probes launched.
+This is evidence that host capacity varies, not proof that tests caused all
+memory pressure. The samples above establish incremental process footprint;
+they do not attribute other apps, VM memory or accumulated swap to tests.
+
+The [residual dispositions](2026-09-15-flake-hunt/residual-dispositions.md)
+map 20 of the 23 automatically unclassified events to prior repairs or
+deterministic fixture drift. Retained retry traces establish PAIRING's fixed
+1.2 s lifetime expiring during a 2.54 s sweep (unrepaired), and localize the
+FILTER timeout to a 23.439 s axe scan without establishing the cause of that
+cost. NFC's transient paint remains unresolved. This branch contains no
+speculative product repair. Owner is the
+hunt controller; proposed next-review dates live with the residual cases.
+
+Final independent review, including scoped verification at `db15f3c3`, is
+**Standards PASS / Spec PASS for the inventory/evidence increment**. Both
+concrete P2 findings are resolved; this is not full-hunt or merge approval.
+Exact-head PR CI and James's merge approval remain required. The 20-job/
+seven-day observation, strict-flake rollout and post-merge confirmation are
+future gates; no ROADMAP row is closed. No local stress run substitutes for
+those gates, and a clean job alone does not establish absence of retries.
