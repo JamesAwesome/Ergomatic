@@ -819,6 +819,12 @@ export interface FakeControls {
    *   dispatch of `program()` — see that file's own regression test.
    */
   delayWrites(ms: number): void;
+  /** Hold successful settlement of one operation until explicitly resumed.
+   *  Unlike delayWrites, this cannot expire during a design scan. Wire
+   *  processing and notifications remain synchronous, as with delayWrites.
+   *  The test owns release; the hold belongs only to this fake instance. */
+  pause(operation: "connect" | "write"): void;
+  resume(operation: "connect" | "write"): void;
   /**
    * The number of characteristics this fake currently has at least one
    * live `subscribe()` callback on, summed across every characteristic —
@@ -1662,16 +1668,29 @@ export function createFakeTransport(script: FakeScript): Transport &
   // takes to resolve; see that method's own doc comment for why the
   // synchronous processing inside `write()` is never itself delayed.
   let writeDelayMs = 0;
+  const pausedOperations = new Map<
+    "connect" | "write",
+    { promise: Promise<void>; resolve: () => void }
+  >();
 
   /** Resolves after `writeDelayMs` real milliseconds — `0` (the default)
    *  resolves on the microtask queue, byte-identical to every call site's
    *  behaviour before this knob existed, so no existing test's timing
    *  changes unless it opts in. */
-  function settleWrite<T>(value: T): Promise<T> {
-    if (writeDelayMs === 0) return Promise.resolve(value);
-    return new Promise((resolve) =>
-      setTimeout(() => resolve(value), writeDelayMs),
-    );
+  function settleWrite<T>(
+    value: T,
+    operation: "connect" | "write",
+  ): Promise<T> {
+    const delayed =
+      writeDelayMs === 0
+        ? Promise.resolve(value)
+        : new Promise<T>((resolve) =>
+            setTimeout(() => resolve(value), writeDelayMs),
+          );
+    const paused = pausedOperations.get(operation);
+    return paused
+      ? Promise.all([delayed, paused.promise]).then(() => value)
+      : delayed;
   }
 
   // Cached "current known state" — used by `completeReconnect()` to flush
@@ -2868,7 +2887,7 @@ export function createFakeTransport(script: FakeScript): Transport &
       // this knob exists to reproduce is specifically about `connect()`
       // resolving slower than one microtask, before `useMonitorSession.ts`
       // sets `deviceName`.
-      return settleWrite(undefined);
+      return settleWrite(undefined, "connect");
     },
     // `async` deliberately, even though `processWrite` below never awaits
     // anything: `assertProgrammingChunk`/`assertArmedChunk` THROW
@@ -2885,7 +2904,7 @@ export function createFakeTransport(script: FakeScript): Transport &
     // reproduce (both need a slow ACCEPT, neither a slow reject).
     async write(characteristicId: string, bytes: Uint8Array): Promise<void> {
       processWrite(characteristicId, bytes);
-      return settleWrite(undefined);
+      return settleWrite(undefined, "write");
     },
     // Everything `write()` used to do inline, unchanged — split out only so
     // `delayWrites`'s `settleWrite` wrapper has a single call site to sit
@@ -3060,6 +3079,19 @@ export function createFakeTransport(script: FakeScript): Transport &
     },
     delayWrites(ms: number): void {
       writeDelayMs = ms;
+    },
+    pause(operation): void {
+      if (pausedOperations.has(operation)) return;
+      let resolve!: () => void;
+      const promise = new Promise<void>((resume) => {
+        resolve = resume;
+      });
+      pausedOperations.set(operation, { promise, resolve });
+    },
+    resume(operation): void {
+      const paused = pausedOperations.get(operation);
+      pausedOperations.delete(operation);
+      paused?.resolve();
     },
     subscriptionCount(): number {
       let total = 0;

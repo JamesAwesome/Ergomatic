@@ -103,7 +103,7 @@ import type { HoldOpenControls } from "./holdOpen";
 // is reached solely through `adapters/nfcReader.ts`'s fold-away gate.
 import type { NfcScript } from "../nfc/scriptedNfcReader";
 
-/** `FakeScript` plus one field that belongs to the INJECTION SEAM, not to
+/** `FakeScript` plus controls that belong to the INJECTION SEAM, not to
  *  `fake.ts`'s own hardware-modeling contract — which is why it is declared
  *  here rather than added to `FakeScript` itself. */
 export interface InjectedFakeScript extends FakeScript {
@@ -117,6 +117,9 @@ export interface InjectedFakeScript extends FakeScript {
    *  (the default) keeps every OTHER caller's same-microtask timing exactly
    *  as `fake.ts` ships it. */
   delayWritesMs?: number;
+  /** Design sweeps release this operation themselves after checking the
+   *  stage. No clock may advance the fake past the screen being audited. */
+  pausedOperation?: "connect" | "write";
 }
 
 declare global {
@@ -316,6 +319,9 @@ export function resolveDefaultTransport():
         const fake = createFakeTransport(script);
         if (script.delayWritesMs !== undefined) {
           fake.delayWrites(script.delayWritesMs);
+        }
+        if (script.pausedOperation !== undefined) {
+          fake.pause(script.pausedOperation);
         }
         window.__pm5FakeControls__ = fake;
         return autoTicking(fake);

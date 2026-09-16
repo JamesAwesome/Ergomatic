@@ -234,6 +234,43 @@ describe("resolveDefaultTransport", () => {
     expect(settled).toBe(true);
   });
 
+  it.each(["connect", "write"] as const)(
+    "keeps injected %s paused across elapsed time until that operation is explicitly resumed",
+    async (operation) => {
+      vi.useFakeTimers();
+      try {
+        window.__pm5FakeScript__ = {
+          program: PROGRAM,
+          events: [],
+          pausedOperation: operation,
+        };
+        const transport = (await resolveDefaultTransport())!;
+        const invoke = (which: "connect" | "write") =>
+          which === "connect"
+            ? transport.connect("fake-pm5")
+            : transport.write(SAMPLE_RATE_UUID, new Uint8Array(1));
+        let settled = false;
+        const pending = invoke(operation).then(() => {
+          settled = true;
+        });
+        const other = operation === "connect" ? "write" : "connect";
+        await invoke(other);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(settled).toBe(false);
+        window.__pm5FakeControls__!.resume(other);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBe(false);
+        window.__pm5FakeControls__!.resume(operation);
+        await pending;
+        expect(settled).toBe(true);
+        await expect(invoke(operation)).resolves.toBeUndefined();
+        await transport.disconnect();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("stops ticking once disconnect() is called — no timer left running against a page that's hanging up", async () => {
     vi.useFakeTimers();
     try {
