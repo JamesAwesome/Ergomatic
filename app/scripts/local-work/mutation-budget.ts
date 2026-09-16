@@ -21,7 +21,7 @@ function isWitnessList(value: unknown): value is string[] {
 
 /** Read the same frozen options Stryker consumes, only when the owner has
  * minted this private destination. Hosted routing erases an inherited one. */
-export function mutationWitnesses(): string[] | undefined {
+function mutationOptions(): object | undefined {
   const directory = process.env.ERGOMATIC_ARTIFACT_DIR;
   if (directory === undefined) return undefined;
   const options: unknown = JSON.parse(
@@ -29,7 +29,12 @@ export function mutationWitnesses(): string[] | undefined {
   );
   if (options === null || typeof options !== "object" || Array.isArray(options))
     throw new Error("Invalid private mutation options");
-  if (!("testFiles" in options)) return undefined;
+  return options;
+}
+
+export function mutationWitnesses(): string[] | undefined {
+  const options = mutationOptions();
+  if (!options || !("testFiles" in options)) return undefined;
   if (!isWitnessList(options.testFiles))
     throw new Error("Invalid private mutation witnesses");
   return options.testFiles;
@@ -40,18 +45,25 @@ export function mutationWitnesses(): string[] | undefined {
 export class MutationBudget implements Reporter {
   onInit(ctx: Vitest): void {
     const config = ctx.config;
+    const options = mutationOptions();
+    const expectedPool =
+      options &&
+      "ergomaticFailOnWorkerFailure" in options &&
+      options.ergomaticFailOnWorkerFailure === true
+        ? "ergomatic-threads"
+        : "threads";
     if (
       config.maxWorkers !== 1 ||
       config.maxConcurrency !== 1 ||
       config.isolate !== true ||
-      config.pool !== "threads" ||
+      config.pool !== expectedPool ||
       ctx.projects.length !== 1 ||
       ctx.projects.some(
         (project) =>
           (project.config.maxWorkers ?? config.maxWorkers) !== 1 ||
           project.config.maxConcurrency !== 1 ||
           project.config.isolate !== true ||
-          project.config.pool !== "threads" ||
+          project.config.pool !== expectedPool ||
           project.config.browser.enabled,
       )
     )

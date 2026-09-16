@@ -58,6 +58,7 @@ export async function runMutation(request, app, directory) {
       ...config,
       concurrency: request.concurrency,
       ergomaticFailOnWorkerFailure: true,
+      ergomaticExactInputs: true,
       mutate: files,
       ...(testFiles.length ? { testFiles } : {}),
       tempDirName: path.join(directory, "sandbox"),
@@ -83,11 +84,17 @@ export async function runMutation(request, app, directory) {
       ergomaticWorkerFailurePolicyVersion,
     } = await import("@stryker-mutator/core");
     if (
-      ergomaticWorkerFailurePolicyVersion !== 1 ||
+      ergomaticWorkerFailurePolicyVersion !== 2 ||
       typeof ErgomaticWorkerFailure !== "function"
     )
       throw new Error(
         "Local mutation requires the version-pinned no-retry Stryker patch; install from the committed lockfile",
+      );
+    const { ergomaticInnerWorkerPolicyVersion } =
+      await import("@stryker-mutator/vitest-runner");
+    if (ergomaticInnerWorkerPolicyVersion !== 1)
+      throw new Error(
+        "Local mutation requires the version-pinned inner-worker Stryker patch; install from the committed lockfile",
       );
     try {
       await new Stryker({ configFile }).runMutationTest();

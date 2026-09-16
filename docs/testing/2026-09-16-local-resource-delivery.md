@@ -49,11 +49,11 @@ events. PR463's presentation was reconciled to that exact head and evidence.
 James authorized incremental merges on2026-09-16. PR463 landed as2594c7a7,
 after rechecking exact-head CI35098302961 and both final review passes.
 TestFlight is not needed: this is tooling/instructions plus an E2E fixture
-repair. Agent guidance/technique updates are included in that PR. Post-merge
-CI is a separate pending result; the current worktree holds unfinished tuning
-and is not eligible for teardown.
+repair. Agent guidance/technique updates are included in that PR. Its post-merge
+CI35125566075 also passed, including deploy. The current worktree holds
+unfinished tuning and is not eligible for teardown.
 
-### Cheaper hooks and exact subsets — implemented, PR464 unmerged
+### Cheaper hooks and exact subsets — merged in PR464
 
 - [x] One exact project/file selection interface for direct named tests,
   test-name filters, related discovery, discovery-only inspection and explicit
@@ -79,9 +79,14 @@ CI35113605158 passed with9167app and603browser first-attempt executions,
 zero failures/recoveries/resource events. Failure-first, mutation, coverage and
 real-hook receipts are in
 [the validation record](2026-09-16-cheaper-hooks-validation.md).
-After463's squash merge,464 auto-retargeted to main and needs ancestry
-reconciliation plus new exact-head CI before landing. No earlier-head green
-will be labelled as that merge candidate's result.
+After463's squash merge,464 was reconciled at7c12b51b with a tree identical to
+reviewed5daf579e. Fresh exact-head CI35126121543 passed:9167app and603browser
+initial executions, zero first-attempt failures, retries or resource events.
+It landed asdae29d50 on2026-09-16. Its own post-merge CI35127501979 is pending,
+not inferred from the PR's result. TestFlight is not needed; agent instructions
+and adversarial techniques were updated in the merged increment. The remaining
+approved work remains active on2026-09-16, beginning with tuning; merging these
+two increments is not whole-spec completion or a new worker-default decision.
 
 ### Measured tuning — required investigation, no approved default change
 
@@ -91,8 +96,14 @@ two-file pure-Node feasibility measurements are recorded in
 NOT READY: mechanism hardening caught vendor OOM retries recovering into a
 pass. James's continuation authorized the version-pinned local-only patch;
 its synthetic OOM, signal-only and initialization probes now pass. Root/project
-bounds and ignored-input freshness fixes also have targeted green evidence,
-but self-mutation/review/CI credit remains owed. Browser
+bounds and ignored-input freshness fixes also have green evidence. They are
+committed in85eac349 with biting postcommit probes and restored30/30 native/
+outcome/snapshot tests. The final code lens then found two additional defects:
+inner-thread failure could pass with later bodies, and native ignored files
+could silently reduce exact scope. Their repairs pass named native gates
+4d508435/d23070da and the combined82-test gate95086cc3; postcommit proofs,
+independent review and CI still gate readiness. Both hardening lenses are
+finished. Browser
 measurements still depend on the unimplemented ownership adapter.
 
 - [ ] Compare representative one/two/four-worker Vitest and

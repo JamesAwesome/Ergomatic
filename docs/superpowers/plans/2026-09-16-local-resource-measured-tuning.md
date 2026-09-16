@@ -21,12 +21,18 @@ worktree on `codex/memory-measured-tuning`.
 Status: Tasks1–2 are NOT READY. James's continuation authorized the proposed
 local-only, version-pinned Stryker patch. Its first-failure and initialization
 probes now pass; project bounds and ignored-input freshness also have targeted
-fixes. Commit/self-mutation, the remaining code lens, independent review and
-exact-head CI still gate readiness. Task3 investigation remains partial.
+fixes. Commit85eac349's earlier postcommit gates pass, but the second and final
+hardening lens falsified two further claims: an actual inner-thread exit was
+converted into a passing result with later bodies, and native ignored paths
+silently reduced a mixed exact request. Their repairs now pass the scoped
+82-test gate95086cc3, including the actual native seams. Postcommit mutation
+proofs, independent review and exact-head CI still gate readiness. Task3
+investigation remains partial.
 The whole spec remains incomplete. James clarified on2026-09-16 that ready
 increments should merge as work proceeds, not wait for an arbitrary two-PR
-total. Admission #463 has landed; cheaper-hooks #464 is being reconciled with
-that squash merge. This tuning increment stays separate.
+total. Admission #463 and cheaper-hooks #464 have landed after their exact-head
+full CI passed. This tuning increment stays separate; ff430f9c incorporates
+main without changing85eac349's tree.
 
 ## Global constraints
 
@@ -76,6 +82,10 @@ for tests, fixtures and store contracts. Named witnesses must belong to the
 unit project's server/domain scope and cannot include integration.
 Missing, escaped, unmatched or unsupported input refuses before Stryker bodies.
 No CSV split: each repeated argument retains its own filename.
+The local-only `ergomaticExactInputs` option additionally compares the native
+ProjectReader's real source/witness populations with these exact requests,
+before sandbox creation. Native ignores cannot silently shrink the population;
+a source that legitimately yields no mutants remains allowed.
 
 The owner writes original public args and sets a private artifact directory
 only for the fixed mutation phase. Inherited artifact destinations are erased.
@@ -113,6 +123,7 @@ erases inherited artifact destinations and keeps its original include scope.
 | Source/config snapshot | Git and regular files before mutation preparation | Rechecked at end; stale result fails |
 | Artifact directory | Existing owner invocation UUID | Retained after success/failure; never reused |
 | Stryker worker pool | Explicit outer concurrency, installed inner configuration | Native disposal, then owner's process/group census; uncertain cleanup blocks |
+| Inner native failure | Opt-in wrapper of Vitest's ThreadsPoolWorker, one latch per runner lifetime | Never reset for another mutant; prevents later construction and sends structured failure over owned IPC |
 | Mutation sandbox | Stryker beneath invocation-owned artifact root | Native success cleanup; failure evidence retained, no source in-place writes |
 | Reporter guard | Real Vitest onInit in every inner context | Checks before specifications/test bodies, records configured bound |
 | Exact witness includes | Same private frozen Stryker options, resolved config compared before bodies | Invocation-specific; no caller-inherited destination in hosted or ordinary phases |
@@ -145,12 +156,20 @@ disable-retry option was found. A log parser or test-only injector override
 cannot satisfy the contract. Do not run ordinary local mutation or claim this
 adapter ready while the first-failure gate remains red. A maintained dependency
 patch is now installed through pnpm's exact-version patch registration.
-The fixed local invocation requires policy version1 and opts in explicitly;
+The fixed local invocation requires policy version2 and opts in explicitly;
 omitted/false policy retains upstream hosted behavior. The native proxy exports
 the first allocation/process-exit cause, including initialization, and the
 shared invocation latch prevents recovery or another scheduled test body after
 a rejected dry/mutant run. The receipt retains the native exit tuple and bounded
 diagnostic tails separately from the wrapper's nonzero exit and cleanup result.
+The opt-in vitest-runner patch wraps the public native thread worker, latches
+its first error/exit before the inner queue can create a replacement, and
+notifies the owning proxy immediately. This closes both fulfilled-error and
+startup-handshake paths; final-result checking alone cannot. The installed
+Vitest version is checked at4.1.11 before local use. Expected teardown is marked
+before stop; no log parser or private runtime injector is used. Hosted
+omitted/false policy keeps the upstream pool. See the tuning record for the
+public API and installed-source evidence.
 Missing patch support refuses before native execution. Upgrades must re-prove
 the native contract; see the patch's maintenance record in the tuning document.
 
@@ -184,12 +203,15 @@ the native contract; see the patch's maintenance record in the tuning document.
   signal status; missing cleanup keeps ownership, never a false pass.
 - [x] Commit via real hooks; mutate the outer bound, inner guard and request
   comparison separately, then restore and run their named green gates.
-- [ ] Commit and self-mutate the local-only vendor recovery policy; native
+- [x] Commit and self-mutate the local-only vendor recovery policy; native
   synthetic-OOM, signal-only and initialization gates now pass, with retained
   causes. Hosted omitted/false compatibility, mutant-stage failure/cleanup and
   missing-patch refusal also have native green evidence (71242313).
-- [ ] Commit and self-mutate effective project-bound and ignored-input fixes;
+- [x] Commit and self-mutate effective project-bound and ignored-input fixes;
   ensure the latter covers imported/nonselected files, not just argv selectors.
+- [ ] Commit and self-mutate the code-lens repairs: native-thread error/exit
+  stops queued witnesses; missing inner patch refuses; native ignored paths
+  cannot reduce exact scope; valid zero-mutant sources remain admissible.
 - [ ] Reconcile command consumers and exclusions; reuse independent task review
   for Tasks1–2, followed by final Standards/Spec review and exact-head full CI.
 
@@ -221,7 +243,9 @@ the native contract; see the patch's maintenance record in the tuning document.
 
 Author paste-tests are the actual modules/adjacent tests, not a second copied
 implementation in this plan. Hardening follows the bounded mechanism/code
-lenses after those commands run; no pass is claimed yet. No stored product
+lenses after those commands run; both lenses have now finished, with the final
+inner-thread/native-membership postcommit proofs still owed. No third hardening pass:
+author gates and normal task/PR reviews cover those fixes. No stored product
 shape, rower number, auth or hardware interaction changes: DBA and hardware
 gates do not apply. The approved phase scope remains; no new ROADMAP row.
 Tuning is incomplete while browser comparison, public mutation safety,

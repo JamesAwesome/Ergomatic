@@ -89,7 +89,24 @@ retries, suite errors or termination/resource events. Job104853398869's
 browser evidence `c874d3c6-93bc-4e8d-848b-10fbbc8fc9f7` reports603initial
 executions, no first-attempt failures, retry recoveries, suite errors or
 termination/resource events. These figures were read from both jobs' evidence
-checks, not inferred from the green run. PR464 remains unmerged.
+checks, not inferred from the green run.
+
+## Landing after admission
+
+James authorized merging ready increments as work proceeds on2026-09-16.
+Admission #463 landed as2594c7a7. The ancestry-only reconciliation7c12b51b
+preserved exactly5daf579e's tree7ef96bf7ad9e3b3b79ff07f5977e7fcb4a50a783;
+the two independent review passes still cover that unchanged code. Real commit
+hook6dd34140 and guarded full pushd01a50d8 both passed with verified cleanup.
+Fresh [CI35126121543](https://github.com/JamesAwesome/Ergomatic/actions/runs/35126121543)
+has headSha7c12b51b3866135e0230426508af3955684ba75c and conclusion success.
+Its app evidence7f2f9608-1537-4f1e-b090-5b3c5a633e1a records9167initial
+executions,1existing skip; browser07ddc83a-f201-47be-b152-c2845f8c5290 records603.
+Both published checks show zero first-attempt failures, interruptions, retry
+recoveries, exhausted executions, suite errors and termination/resource events.
+All required jobs passed; deploy skipped for the PR. #464 merged asdae29d50.
+Post-merge CI35127501979 passed atdae29d50, including deploy. No TestFlight release is
+needed for tooling changes; agent guidance and techniques are in the PR.
 
 ## Actual full pre-push observation
 

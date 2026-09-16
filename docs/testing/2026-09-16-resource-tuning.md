@@ -262,9 +262,10 @@ five mutants were reported killed and the nested public command passed.
 No supported retry-disable option was found in the installed schema or
 [official configuration](https://stryker-mutator.io/docs/stryker-js/configuration/).
 James's continuation authorized the proposed local-only, version-pinned patch.
-The first-failure gate now passes with the installed patch, but ordinary local
-mutation is not yet ready for use: self-mutation, remaining hardening,
-independent review and exact-head CI remain owed. Earlier successful receipts
+The outer-process first-failure gate passes with the installed patch, but
+ordinary local mutation is not yet ready for use: the final code lens exposed
+two further native gaps, recorded below with their repairs. Postcommit repair
+proofs, independent review and exact-head CI remain owed. Earlier successful receipts
 prove only their normal-run cases, not this policy.
 
 Receipt `6b9f1ad9-a0a3-49fa-8425-845ad336f0c5` independently reproduced two
@@ -275,8 +276,8 @@ green, `b09a7686-35ba-456f-a8f5-09ca77eeb4dc`). The latter now streams a
 conservative app-file superset alongside the Git snapshot, including ignored
 imports/configs/witnesses and refusing aliases. Normal public mutation plus
 tracked/ignored staleness cases passed
-`062645f4-59f9-4997-b557-bfccafd31dc9`. These fixes are not yet committed,
-self-mutated, independently reviewed or credited with CI.
+`062645f4-59f9-4997-b557-bfccafd31dc9`. These fixes are now committed in85eac349
+and self-mutated below; independent review and CI remain owed.
 
 Combined receipt `3037e419-7e7b-49bd-acd6-ebf0fa5a4ff2`:37pass/1fail; the
 sole failure is the known vendor-retry witness. The attempted negative
@@ -286,8 +287,8 @@ No actual memory-pressure event occurred; all fixture cleanup was verified.
 
 ### Pinned no-retry patch and upgrade contract
 
-`app/patches/@stryker-mutator__core@10.0.0.patch` is registered under the exact
-version in pnpm-workspace.yaml and integrity-pinned by pnpm-lock.yaml.
+The core and vitest-runner patches under `app/patches/` are both registered
+at exact10.0.0 in pnpm-workspace.yaml and integrity-pinned by pnpm-lock.yaml.
 Registry inspection still reports10.0.0; no dependency upgrade was introduced.
 It was generated with [pnpm patch](https://pnpm.io/cli/patch) and
 [patch-commit](https://pnpm.io/cli/patch-commit), not by editing installed or
@@ -299,8 +300,9 @@ schema, not only the published core schema JSON. Public native fixtures assert
 that the option is recognized, not merely tolerated as an unknown option.
 
 Only the local frozen invocation sets `ergomaticFailOnWorkerFailure:true`.
-The public patch exports a version1 marker and a structured worker-failure
-error; the adapter refuses a missing/mismatched patch before starting Stryker.
+Core exports a version2 marker and a structured worker-failure error; the
+Vitest plugin exports an inner-policy version1 marker. The adapter refuses
+either missing/mismatched patch before starting Stryker.
 An invocation-wide latch prevents recovery and later scheduled executions
 after the first rejection. Native proxy close observations retain pid,
 exitCode, signal and at most8192characters per stdout/stderr tail. Allocation
@@ -347,6 +349,92 @@ refusal. A patch that applies is not evidence that its upstream call path still
 works. Do not silently remove the marker check or replace the patch with a
 log parser, private runtime injection, or an automatic resource retry.
 
-Still owed: vendor-policy self-mutation/compatibility acceptance, browser1/2/3, final candidate
-hook/browser proof, worker-default decision, remaining code lens, self-mutations,
-independent review and exact-head CI. None is silently waived by measurements.
+### Postcommit guard proofs at85eac349
+
+Real pre-commit ebb4afb0-57f1-4441-b9ca-367441f3d091 passed typed lint on the
+changed TypeScript, every compiler project and E2E30/30. Full admitted lint
+51b6be30-e663-4254-a3bd-e7672d54c749 passed, cleanup verified. Deliberate source
+mutations were applied one at a time after the real commit, then restored:
+
+| Broken authority | Red receipt prefix | Observed failure |
+| --- | --- | --- |
+| Effective project limits removed |1e0aee67|Invalid real project ran a test body|
+| Filesystem additions omitted from freshness hash |d1a13b2b|Changed ignored original publicly passed|
+| Local no-retry option false |16998be4|Six replacement bodies after simulated OOM|
+| Later stale-source error overwrites first error |f2263d5c|Ordinary failed instead of memory|
+| Missing patch check removed |4a0e5edc|Real native engine ran instead of refusing|
+| Local policy false, signal/init witnesses |981e4249|Replacement bodies; initialization cause lost|
+| Resource-aborted protocol value removed |f4620739|Structured private outcome rejected|
+| Actual vendor factory forces policy on for hosted |35b84909|Both omitted/false recovery witnesses fail|
+| Actual broadcaster disposal disabled |4d19ecd4|Progress interval keeps failed invocation alive to deadline|
+
+Each native probe used the named positive pattern in
+`scripts/local-work/native/mutation.test.mjs` through guard-native.mjs;
+the protocol probe used `outcome.test.mjs`. Vendor mutations used the prepared
+package and guarded pnpm patch-commit, not installed/shared-file edits. Final
+regeneration restored the committed patch/lock hash exactly. Initial restored
+four gates passed17e38b97; final unfiltered native20/outcome3/snapshot7 passed
+30/30 with no skips in3ef53c96-d8e3-4941-ba7a-fbe01027a758, cleanup verified.
+No deliberate mutant remains. ff430f9c is an ancestry-only merge of the landed
+foundation with exactly85eac349's tree, not a new behavioral candidate.
+
+### Prescribed-code lens: native thread and resolved-file seams
+
+Both hardening lenses are finished; no third lens or verification dispatch.
+The code lens reviewed85eac349/ff430f9c and found two substantive gaps:
+
+- Actual Vitest thread-only exit (not process.kill(process.pid)) left four
+  later bodies and public exit0, native4Killed/1RuntimeError, in8bafc6ba.
+  Expanding to two witnesses in the same inner invocation left five later
+  bodies and5Killed inbce04c94. A result-only failure check is too late: the
+  inner queue advances before the fulfilled Stryker error result arrives.
+- Mixed normal/native-ignored source and witness requests both passed while
+  silently omitting one requested path in6b25b70e. Git-ignored inputs that
+  Stryker does copy are a separate population from its unconditional ignores.
+
+The core preparation boundary now compares exact requested paths with the
+real ProjectReader mutation/witness populations before sandbox/test execution,
+under the local-only `ergomaticExactInputs` option. It does not require any
+mutants from a valid source: the type-only source witness passes. Both mixed
+ignored cases turned green inbce04c94; normal/ignored/thread gates passed
+4/4 in4d508435-1638-40b6-aebb-4dc9141e1311.
+
+The local Vitest plugin uses the public, experimental
+[PoolRunnerInitializer/PoolWorker API](https://main.vitest.dev/guide/advanced/pool)
+to wrap Vitest's own ThreadsPoolWorker, not replace its isolation or protocol.
+Its first native error/exit latches before another worker can be constructed.
+It immediately publishes the structured failure over Stryker's owned IPC;
+the parent rejects active work and enters native disposal. This also handles
+startup death while Vitest still awaits its handshake. It does not rely on
+reporter timing, parsing logs, or reaching a final Error result.
+
+This extension is pinned to the inspected Vitest4.1.11 path and refuses local
+upgrades until revalidated. Native thread error codes are retained; only
+ERR_WORKER_OUT_OF_MEMORY classifies allocation. A thread exit0 is still an
+unexpected resource failure. For thread records, pid identifies the hosting
+process while exitCode identifies the thread; signalnull is not a claim that
+the host process exited. Parent diagnostic tails remain bounded. Expected
+stop/terminate is marked before native teardown, not mistaken for a crash.
+Omitted/false policy keeps upstream hosted behavior.
+
+The named follow-up gates passed8/8 ind23070da-b703-491a-9258-2449819a8cdf:
+type-only source, missing inner patch, thread exits0/1 with queued witness,
+native startup error, synthetic allocation-code startup error, and both
+hosted compatibility modes. No actual allocation stress occurred. Every
+reported fixture run had verified cleanup. Prepared-package installs were
+0506cb2b/687aba8d/c7380b06; installed/shared node_modules were never edited.
+
+On upgrades, add these native mixed-selection, queued-witness, startup-error,
+zero-exit, type-only-source and both-marker refusal cases to the earlier
+maintenance gate list. Normal assertion/survivor/timeout semantics remain
+upstream behavior; no new worker default has been selected.
+
+Combined native/parser/snapshot/outcome/routing/runtime fixtures passed82/82,
+zero skipped, in95086cc3-5f18-4237-8ad6-d925394e3aa3 with verified cleanup.
+The run.mjs diagnostic fixtures print simulated resource banners; this was
+not an actual host resource event. Frozen installation of both patches passed
+c1f40e51-0599-4fa5-a502-14ae8ff34a6f with verified cleanup and no downloads.
+
+Still owed: postcommit repair mutations, browser1/2/3, final candidate
+hook/browser proof, worker-default decision, independent review and exact-head
+CI. None is silently waived by measurements or these scoped repairs.

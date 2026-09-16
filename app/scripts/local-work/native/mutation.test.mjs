@@ -312,6 +312,48 @@ test("public mutation pressure refusal executes no test body", (t) => {
   assert.equal(fs.existsSync(f.sentinel), false);
 });
 
+for (const [kind, file] of [
+  ["source", "domain/.next/ignored.ts"],
+  ["witness", "domain/node_modules/ignored.test.ts"],
+]) {
+  test(`public mutation refuses a native-ignored ${kind} in a mixed exact request`, (t) => {
+    const f = publicFixture(t);
+    f.put(
+      `app/${file}`,
+      kind === "source"
+        ? "export const ignored = 1;\n"
+        : "import {test,expect} from 'vitest';test('ignored witness',()=>expect(true).toBe(true));\n",
+    );
+    f.args.push(kind === "source" ? "--mutate" : "--test-file", file);
+    const result = f.run();
+    assert.equal(result.error, undefined, result.stdout + result.stderr);
+    assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    assert.equal(
+      fs.existsSync(f.sentinel),
+      false,
+      result.stdout + result.stderr,
+    );
+  });
+}
+
+test("public mutation accepts an exact source that yields no mutants", (t) => {
+  const f = publicFixture(t);
+  f.put("app/domain/types.ts", "export type Label = string;\n");
+  f.args.push("--mutate", "domain/types.ts");
+  const result = f.run();
+  assert.equal(result.error, undefined, result.stdout + result.stderr);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.ok(fs.existsSync(f.sentinel));
+  const record = JSON.parse(
+    fs.readFileSync(path.join(f.receipts()[0], "mutation.json")),
+  );
+  assert.deepEqual(record.files, [
+    "domain/space ü,comma.ts",
+    "domain/types.ts",
+  ]);
+  assert.equal(record.status, "completed");
+});
+
 test("public mutation refuses a selector dropped inside the handoff before native preparation", (t) => {
   const f = publicFixture(t);
   const file = "app/scripts/local-work/workloads.mjs";
@@ -379,6 +421,33 @@ test("public mutation refuses missing patch support before invoking the real eng
   );
   assert.equal(receipt.classification, "failed");
   assert.equal(receipt.cleanup, "verified");
+});
+
+test("public mutation refuses missing inner-worker patch before invoking the real engine", (t) => {
+  const f = publicFixture(t);
+  const scope = path.join(f.app, "node_modules/@stryker-mutator");
+  fs.unlinkSync(scope);
+  fs.mkdirSync(scope);
+  fs.symlinkSync(
+    path.join(appSource, "node_modules/@stryker-mutator/core"),
+    path.join(scope, "core"),
+  );
+  f.put(
+    "app/node_modules/@stryker-mutator/vitest-runner/package.json",
+    JSON.stringify({ type: "module", exports: "./index.mjs" }),
+  );
+  f.put(
+    "app/node_modules/@stryker-mutator/vitest-runner/index.mjs",
+    `export {strykerPlugins,strykerValidationSchema} from ${JSON.stringify(import.meta.resolve("@stryker-mutator/vitest-runner"))};`,
+  );
+  const result = f.run();
+  assert.equal(result.error, undefined, result.stdout + result.stderr);
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(
+    result.stderr,
+    /requires the version-pinned inner-worker Stryker patch/,
+  );
+  assert.equal(fs.existsSync(f.sentinel), false);
 });
 
 test("public mutation never recovers past a native resource failure", (t) => {
@@ -515,6 +584,91 @@ writeSync(2,'FATAL ERROR: JavaScript heap out of memory (simulated mutant)\\n');
   assert.match(record.sourceError, /evidence is stale/);
   assert.match(record.reason, /automatic recovery disabled/);
 });
+
+for (const exitCode of [1, 0]) {
+  test(`public mutation stops after an inner native thread exits ${exitCode}`, (t) => {
+    const f = publicFixture(t);
+    // Capture the real per-thread exit before Vitest replaces process.exit with
+    // a thrown test assertion. The preload does nothing in parent processes.
+    f.put(
+      "native-thread-exit.mjs",
+      `import {isMainThread} from 'node:worker_threads';
+if(!isMainThread)globalThis.__ergomaticNativeExit=process.exit.bind(process);`,
+    );
+    const witness = `import {test,expect,inject} from 'vitest';
+import {appendFileSync,readFileSync} from 'node:fs';import {positive} from './space ü,comma';
+test('inner thread failure',()=>{const marker=${JSON.stringify(f.sentinel)};
+if(inject('mode')==='mutant'){
+if(!readFileSync(marker,'utf8').includes('inner failure')){
+expect(typeof globalThis.__ergomaticNativeExit).toBe('function');
+appendFileSync(marker,'inner failure\\n');globalThis.__ergomaticNativeExit(${exitCode});
+}else appendFileSync(marker,'later body\\n');
+}else appendFileSync(marker,'dry body\\n');
+expect(positive(-1)).toBe(false);expect(positive(0)).toBe(false);expect(positive(1)).toBe(true)});`;
+    f.put("app/domain/witness.test.ts", witness);
+    f.put("app/domain/queued.test.ts", witness);
+    f.args.push("--test-file", "domain/queued.test.ts");
+    const result = f.run({
+      NODE_OPTIONS: `--no-experimental-webstorage --import=${path.join(f.root, "native-thread-exit.mjs")}`,
+    });
+    assert.equal(result.error, undefined, result.stdout + result.stderr);
+    assert.equal(
+      fs.readFileSync(f.sentinel, "utf8"),
+      "dry body\ndry body\ninner failure\n",
+      result.stdout + result.stderr,
+    );
+    assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    const receipt = JSON.parse(
+      fs.readFileSync(path.join(f.receipts()[0], "receipt.json")),
+    );
+    assert.equal(receipt.classification, "resource-aborted");
+    assert.equal(receipt.resourceAbort, true);
+    assert.equal(receipt.cleanup, "verified");
+    const record = JSON.parse(
+      fs.readFileSync(path.join(f.receipts()[0], "mutation.json")),
+    );
+    assert.equal(record.workerFailure.kind, "thread-exit");
+    assert.equal(record.workerFailure.exitCode, exitCode);
+    assert.equal(record.workerFailure.signal, null);
+  });
+}
+
+for (const code of [null, "ERR_WORKER_OUT_OF_MEMORY"]) {
+  test(`public mutation stops an inner startup error (${code ?? "ordinary error"})`, (t) => {
+    const f = publicFixture(t);
+    // No memory stress. A native Worker error transports this deliberate
+    // bootstrap exception; the allocation-code case is explicitly synthetic.
+    f.put(
+      "native-thread-error.mjs",
+      `import {isMainThread} from 'node:worker_threads';
+import {appendFileSync} from 'node:fs';
+if(!isMainThread){appendFileSync(${JSON.stringify(f.sentinel)},'startup failure\\n');throw Object.assign(new Error('synthetic worker bootstrap failure'),{code:${JSON.stringify(code)}});}`,
+    );
+    const result = f.run({
+      NODE_OPTIONS: `--no-experimental-webstorage --import=${path.join(f.root, "native-thread-error.mjs")}`,
+    });
+    assert.equal(result.error, undefined, result.stdout + result.stderr);
+    assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    assert.equal(fs.readFileSync(f.sentinel, "utf8"), "startup failure\n");
+    const directory = f.receipts()[0];
+    const receipt = JSON.parse(
+      fs.readFileSync(path.join(directory, "receipt.json")),
+    );
+    const record = JSON.parse(
+      fs.readFileSync(path.join(directory, "mutation.json")),
+    );
+    assert.equal(receipt.classification, code ? "memory" : "resource-aborted");
+    assert.equal(receipt.cleanup, "verified");
+    assert.equal(
+      record.workerFailure.kind,
+      code ? "allocation" : "thread-error",
+    );
+    assert.equal(record.workerFailure.errorCode, code);
+    assert.equal(record.workerFailure.exitCode, null);
+    assert.equal(record.workerFailure.signal, null);
+    assert.match(record.reason, /synthetic worker bootstrap failure/);
+  });
+}
 
 for (const policy of [undefined, false]) {
   test(`hosted mutation retains upstream recovery when local policy is ${policy}`, (t) => {
