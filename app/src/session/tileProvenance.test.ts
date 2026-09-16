@@ -39,7 +39,7 @@ describe("tileProvenance: the four that never switch", () => {
     [false, true],
     [false, false],
   ])(
-    "names Concept2 on exactly AVG WATTS and CAL/HOUR (finished=%s, monitorHr=%s)",
+    "names Concept2 only for the AVG WATTS formula (finished=%s, monitorHr=%s)",
     (finished, monitorHr) => {
       const all: MachineTileProvenance = {
         ...FIXED_SOURCES,
@@ -56,9 +56,9 @@ describe("tileProvenance: the four that never switch", () => {
           );
         })
         .sort();
-      // RATE is a weighted mean of the splits and AVG HR a time-weighted mean
-      // of the trace. Neither is the logbook formula, on either branch.
-      expect(named).toStrictEqual(["avgWatts", "calPerHour"]);
+      // Only watts needs a brand-specific formula attribution. The other
+      // explanations name their inputs directly, on either branch.
+      expect(named).toStrictEqual(["avgWatts"]);
     },
   );
 });
@@ -88,10 +88,10 @@ describe("tileProvenance: AVG HR switches on whether the monitor sent one", () =
     expect(p.because).toBeUndefined();
   });
 
-  it("is DERIVED from the belt's trace otherwise, and says so", () => {
+  it("is DERIVED from recorded heart-rate readings otherwise, and says so", () => {
     const p = heartRateProvenance(false);
     expect(p.source).toBe("derived");
-    expect(p.because).toMatch(/belt/i);
+    expect(p.because).toMatch(/recorded heart-rate readings/i);
   });
 
   it("keeps ONE label either way", () => {
