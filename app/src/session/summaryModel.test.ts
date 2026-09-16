@@ -734,7 +734,7 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
     });
     const machine = buildSummaryModel({ door: "monitor", run }).heroes.machine!;
     expect(machine.sources.rate.source).toBe("derived");
-    expect(machine.sources.rate.because).toMatch(/stopped this piece early/i);
+    expect(machine.sources.rate.because).toMatch(/this piece ended early/i);
     // and the label does NOT change, so the tile face is identical to the
     // finished row's — which is the whole finding board 1 was built on.
     expect(machine.sources.rate.label).toBe("RATE");

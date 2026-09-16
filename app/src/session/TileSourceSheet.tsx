@@ -25,7 +25,7 @@ import type { MachineTileProvenance, TileProvenance } from "./tileProvenance";
 function Row({ p, value }: { p: TileProvenance; value: string }) {
   // A row with no number gets NO source sentence. Every `detail` and
   // `because` is an unconditional positive claim — "from the monitor's
-  // calorie count", "the average of your splits" — and against a dash each
+  // calorie total", "your split stroke rates" — and against a dash each
   // one asserts a quantity that does not exist. That is the same defect as
   // `PM5 · PER INTERVAL`, one level down, and it was in the fix for it.
   const hasNumber = value !== DASH;
@@ -36,7 +36,7 @@ function Row({ p, value }: { p: TileProvenance; value: string }) {
         <span className="tile-source-value">{value}</span>
       </div>
       {!hasNumber && (
-        <p className="tile-source-because">This piece has no number here.</p>
+        <p className="tile-source-because">Not available for this piece.</p>
       )}
       {hasNumber && p.detail !== undefined && (
         <p className="tile-source-because">{p.detail}</p>
