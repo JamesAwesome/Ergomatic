@@ -7508,17 +7508,6 @@ const RESTING_STORY = [
  *  walks only pass THROUGH the interstitial, so the delay is kept low. */
 const CONNECTED_DELAY_WRITES_MS = 200;
 
-/** …and 1200 ms for the INTERSTITIAL sweeps, which have to stand still on
- *  a state rather than pass through it. `delayWrites` gates `connect()`
- *  and every individual 20-byte chunk, so this is also how long the
- *  PAIRING screen holds (one `connect()`), while PROGRAMMING holds for the
- *  whole five-interval chunk count times this. READY needs no budget at
- *  all since the dwell's removal (2026-08-08 operator ruling): it holds
- *  until the rower acts. Each test below still asserts its state is STILL
- *  on screen after its sweep — without that assertion an over-slow axe
- *  run would silently sweep the NEXT screen and report a pass. */
-const INTERSTITIAL_DELAY_WRITES_MS = 1200;
-
 async function injectConnectedFake(
   page: Page,
   events: unknown[],
@@ -7533,18 +7522,26 @@ async function injectConnectedFake(
    *  — including its omit-the-key-entirely spelling, so an undefined value
    *  never reaches the fake as an explicit `undefined`. */
   ergMachineType?: number,
+  pausedOperation?: "connect" | "write",
 ): Promise<void> {
   await page.addInitScript(
-    ({ program: p, events: e, delayWritesMs: delay, ergMachineType: erg }) => {
+    ({
+      program: p,
+      events: e,
+      delayWritesMs: delay,
+      ergMachineType: erg,
+      pause,
+    }) => {
       window.__pm5FakeScript__ = {
         program: p,
         events: e,
         deviceName: "PM5 918273645",
         delayWritesMs: delay,
         ...(erg === undefined ? {} : { ergMachineType: erg }),
+        ...(pause === undefined ? {} : { pausedOperation: pause }),
       } as typeof window.__pm5FakeScript__;
     },
-    { program, events, delayWritesMs, ergMachineType },
+    { program, events, delayWritesMs, ergMachineType, pause: pausedOperation },
   );
 }
 
@@ -7575,9 +7572,9 @@ async function openConnected(
   await page.getByRole("button", { name: "Connect" }).click();
 }
 
-/** The three sweeps this file applies everywhere else, in one call —
- *  ordered axe FIRST because it is by far the slowest of the three and the
- *  interstitial states it runs against are on a clock. */
+/** The same three design gates used for the ordinary screens. Transient
+ *  interstitial fixtures explicitly hold their transport operation until
+ *  all three finish; the scan's duration never owns the stage lifetime. */
 async function sweep(page: Page): Promise<void> {
   await assertNoA11yViolations(page);
   await assertTapTargets(page);
@@ -7758,7 +7755,14 @@ test.describe("connected screens (fake-driven)", () => {
     page,
   }) => {
     const title = "Design Connected Pairing Workout";
-    await injectConnectedFake(page, [], INTERSTITIAL_DELAY_WRITES_MS);
+    await injectConnectedFake(
+      page,
+      [],
+      0,
+      CONNECTED_PROGRAM,
+      undefined,
+      "connect",
+    );
     await openConnected(page, title, "design-connected-pairing@e2e.test");
     // Scoped to `.connected-serif-line`: the status label and the
     // checklist's current-line marker also read "CONNECTING", and
@@ -7766,9 +7770,16 @@ test.describe("connected screens (fake-driven)", () => {
     const pairing = page.locator(".connected-serif-line", {
       hasText: "Connecting",
     });
-    await expect(pairing).toBeVisible({ timeout: 10_000 });
-    await sweep(page);
-    await expect(pairing).toBeVisible({ timeout: 1000 });
+    try {
+      await expect(pairing).toBeVisible({ timeout: 10_000 });
+      await sweep(page);
+      await expect(pairing).toBeVisible({ timeout: 1000 });
+    } finally {
+      await page.evaluate(() => window.__pm5FakeControls__?.resume("connect"));
+    }
+    await expect(page.locator(".connected-serif-line")).toHaveText(
+      "Ready when you pull",
+    );
     await cleanupAllConnected(page, title);
   });
 
@@ -7776,14 +7787,28 @@ test.describe("connected screens (fake-driven)", () => {
     page,
   }) => {
     const title = "Design Connected Programming Workout";
-    await injectConnectedFake(page, [], INTERSTITIAL_DELAY_WRITES_MS);
+    await injectConnectedFake(
+      page,
+      [],
+      0,
+      CONNECTED_PROGRAM,
+      undefined,
+      "write",
+    );
     await openConnected(page, title, "design-connected-programming@e2e.test");
     const programming = page.locator(".connected-serif-line", {
       hasText: "Sending the workout",
     });
-    await expect(programming).toBeVisible({ timeout: 30_000 });
-    await sweep(page);
-    await expect(programming).toBeVisible({ timeout: 1000 });
+    try {
+      await expect(programming).toBeVisible({ timeout: 30_000 });
+      await sweep(page);
+      await expect(programming).toBeVisible({ timeout: 1000 });
+    } finally {
+      await page.evaluate(() => window.__pm5FakeControls__?.resume("write"));
+    }
+    await expect(page.locator(".connected-serif-line")).toHaveText(
+      "Ready when you pull",
+    );
     await cleanupAllConnected(page, title);
   });
 
@@ -7791,7 +7816,7 @@ test.describe("connected screens (fake-driven)", () => {
     page,
   }) => {
     const title = "Design Connected Ready Workout";
-    await injectConnectedFake(page, [], INTERSTITIAL_DELAY_WRITES_MS);
+    await injectConnectedFake(page, [], 0);
     await openConnected(page, title, "design-connected-ready@e2e.test");
     const ready = page.locator(".connected-serif-line", {
       hasText: "Ready when you pull",
@@ -8020,9 +8045,8 @@ test.describe("connected screens (fake-driven)", () => {
    *  `ERGMACHINE_TYPE_STATIC_SKI`, the fake reports it on 0x0032, and the
    *  real parser, driver and hook refuse the sitting.
    *
-   *  `INTERSTITIAL_DELAY_WRITES_MS` is deliberately NOT used. That budget
-   *  exists to hold a TRANSIENT state still long enough to sweep it; this
-   *  screen is terminal — it holds until the rower acts — so the default
+   *  No paused operation is needed: this screen is terminal and holds
+   *  until the rower acts, so the default
    *  200ms/write only reaches it sooner. */
   async function openRefused(
     page: Page,
