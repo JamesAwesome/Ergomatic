@@ -266,13 +266,17 @@ factual claim and gets a measurement or the word "untested"** (RF30) — the
 same gate a design gate's option list carries, because it is the same
 decision.
 
-**1b — rows needing Gate 0.** A DECIDE row that changes what a rower READS or
-SEES needs the rendered thing, both orientations, contrast ratios as numbers.
+**1b — rows needing Gate 0.** Apply CLAUDE.md's design gate and TESTING.md §8:
+wording-only rows present before/after TEXT for approval, without screenshots
+or rendered mockups. Layout/structure or number-meaning changes need the
+affected rendered surface, both orientations, contrast ratios as numbers.
 **Rendering a Gate 0 artifact is explicitly NOT a BUILD row and may proceed
 while the batch is out** — otherwise the one rule forbidding build-during-
-batch makes the artifact the gate requires unreachable. MT has such a row
-in-span (permission-screen copy saying "your PM5" where it means "your
-monitor", RF32).
+batch makes the artifact the gate requires unreachable. Permission-screen
+copy changing "your PM5" to "your monitor" (RF32) is a text-only decision,
+not a reason to render or capture. Notes, tags and phase close do not grant
+a full-corpus refresh; TESTING.md §8 requires James's explicit request and
+`pnpm screenshots --all`.
 
 Then STOP and wait. Do not start BUILD rows while the batch is out.
 

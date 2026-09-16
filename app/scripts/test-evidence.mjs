@@ -1,45 +1,28 @@
-import { spawn, spawnSync } from "node:child_process";
-import { randomUUID, createHash } from "node:crypto";
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   appendFileSync,
-  closeSync,
   existsSync,
   lstatSync,
   mkdirSync,
-  openSync,
   readFileSync,
   realpathSync,
-  renameSync,
   statSync,
   writeFileSync,
-  writeSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { constants, platform, release } from "node:os";
+import { constants, platform } from "node:os";
+import {
+  atomic,
+  bindNativeReport,
+  captureLogs,
+  command,
+  evidenceReceipt,
+  reportDigest,
+} from "./test-evidence-record.mjs";
 
 const now = () => new Date().toISOString();
 const json = (path) => JSON.parse(readFileSync(path, "utf8"));
-function command(bin, args) {
-  const r = spawnSync(bin, args, {
-    encoding: "utf8",
-    timeout: 2000,
-    maxBuffer: 1024 * 1024,
-  });
-  return r.status === 0
-    ? { value: r.stdout.trim() }
-    : {
-        unavailable: r.error?.message ?? r.stderr?.trim() ?? `exit ${r.status}`,
-      };
-}
-function atomic(path, data) {
-  writeFileSync(`${path}.tmp`, JSON.stringify(data, null, 2) + "\n");
-  renameSync(`${path}.tmp`, path);
-}
-function reportDigest(path) {
-  if (lstatSync(path).isSymbolicLink() || !statSync(path).isFile())
-    throw new Error("report is not a regular invocation file");
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
-}
 // /var is a platform alias on macOS; canonicalize existing ancestors, but
 // reject a user-supplied symlink component rather than following it outward.
 function safeRoot(input) {
@@ -175,61 +158,7 @@ async function run(args) {
   const directory = join(root, id);
   mkdirSync(directory); // exclusive: never adopt an existing invocation
   const receiptPath = join(directory, "receipt.json");
-  const diff = command("git", ["diff", "HEAD", "--binary"]);
-  const receipt = {
-    schema: 1,
-    id,
-    root,
-    directory,
-    runner,
-    terminal: false,
-    start: now(),
-    end: null,
-    argv: args,
-    cwd: process.cwd(),
-    sha: command("git", ["rev-parse", "HEAD"]),
-    trackedDiff:
-      diff.value === undefined
-        ? diff
-        : {
-            dirty: diff.value.length > 0,
-            sha256: createHash("sha256").update(diff.value).digest("hex"),
-          },
-    versions: { node: process.version },
-    os: { platform: platform(), release: release() },
-    ci: Object.fromEntries(
-      [
-        "CI",
-        "GITHUB_RUN_ID",
-        "GITHUB_RUN_ATTEMPT",
-        "GITHUB_JOB",
-        "GITHUB_WORKFLOW",
-        "RUNNER_NAME",
-      ].map((k) => [k, process.env[k] ?? null]),
-    ),
-    configuration: Object.fromEntries(
-      [
-        "ERGOMATIC_TEST_WORKERS",
-        "ERGOMATIC_E2E_WORKERS",
-        "ERGOMATIC_EVIDENCE_TRACE",
-        "E2E_BASE_URL",
-        "COMPOSE_PROJECT_NAME",
-        "ERGO_STACK",
-      ].map((k) => [k, process.env[k] ?? null]),
-    ),
-    exitCode: null,
-    signal: null,
-    diagnosticErrors: [],
-  };
-  for (const pkg of ["vitest", "@playwright/test"]) {
-    try {
-      receipt.versions[pkg] = json(
-        resolve("node_modules", pkg, "package.json"),
-      ).version;
-    } catch {
-      receipt.versions[pkg] = null;
-    }
-  }
+  const receipt = evidenceReceipt({ id, root, directory, runner, argv: args });
   atomic(receiptPath, receipt);
   if (process.env.GITHUB_OUTPUT)
     appendFileSync(
@@ -238,13 +167,8 @@ async function run(args) {
     );
   console.log(`Evidence: ${directory}`);
   const owned = new Map();
-  let child,
-    timer,
-    allocation = false,
-    tail = "";
-  const fds = ["stdout", "stderr"].map((name) =>
-    openSync(join(directory, `${name}.log`), "wx"),
-  );
+  let child, timer;
+  const logs = captureLogs(directory, receipt.diagnosticErrors);
   const saveSample = () => {
     try {
       appendFileSync(
@@ -281,28 +205,9 @@ async function run(args) {
     } catch (error) {
       receipt.diagnosticErrors.push(error.message);
     }
-    for (const [index, stream] of [child.stdout, child.stderr].entries()) {
-      stream.pipe(index === 0 ? process.stdout : process.stderr, {
-        end: false,
-      });
-      stream.on("data", (chunk) => {
-        try {
-          writeSync(fds[index], chunk);
-        } catch (error) {
-          receipt.diagnosticErrors.push(error.message);
-        }
-        if (index === 1) {
-          const text = tail + chunk.toString();
-          allocation ||= text.includes("Allocation failed");
-          tail = text.slice(-1024);
-        }
-      });
-    }
+    const drain = logs.attach(child);
     saveSample();
     timer = setInterval(saveSample, 1000);
-    const closed = new Promise((resolveClose) =>
-      child.once("close", resolveClose),
-    );
     const outcome = await new Promise((resolveOutcome) => {
       child.once("error", (error) => {
         receipt.launchError = error.message;
@@ -312,27 +217,11 @@ async function run(args) {
     });
     receipt.exitCode = outcome.code;
     receipt.signal = outcome.signal;
-    // Only drain after leader exit. Descendants may retain its pipes forever;
-    // two seconds allows ordinary buffered output without imposing a suite cap.
-    let drainTimer;
-    await Promise.race([
-      closed,
-      new Promise((resolveDrain) => {
-        drainTimer = setTimeout(() => {
-          receipt.diagnosticErrors.push(
-            "stdio drain exceeded 2000 ms after child exit; output may be incomplete",
-          );
-          child.stdout.destroy();
-          child.stderr.destroy();
-          resolveDrain();
-        }, 2000);
-      }),
-    ]);
-    clearTimeout(drainTimer);
+    await drain();
   } finally {
     clearInterval(timer);
     saveSample();
-    for (const fd of fds) closeSync(fd);
+    logs.close();
     process.off("SIGINT", onInt);
     process.off("SIGTERM", onTerm);
   }
@@ -341,9 +230,9 @@ async function run(args) {
   receipt.resourceAbort = Boolean(
     receipt.signal ||
     receipt.exitCode >= 128 ||
-    (receipt.exitCode !== 0 && allocation),
+    (receipt.exitCode !== 0 && logs.allocationFailure),
   );
-  receipt.allocationFailure = allocation;
+  receipt.allocationFailure = logs.allocationFailure;
   const current = processes();
   const survivors =
     current.value?.filter((p) => owned.get(p.pid)?.started === p.started) ??
@@ -355,11 +244,7 @@ async function run(args) {
     observed: [...owned.values()],
     survivors,
   };
-  try {
-    receipt.reportSha256 = reportDigest(join(directory, "report.json"));
-  } catch (error) {
-    receipt.reportError = error.message;
-  }
+  bindNativeReport(receipt);
   try {
     atomic(receiptPath, receipt);
   } catch (error) {
@@ -404,8 +289,13 @@ function inspect(directory) {
     counts.resourceAborts = receipt.resourceAbort ? 1 : 0;
     if (receipt.diagnosticErrors.length)
       issues.push(...receipt.diagnosticErrors);
-    if (receipt.cleanup?.status === "incomplete")
+    if (
+      receipt.cleanup?.status === "incomplete" ||
+      receipt.cleanup === "unresolved"
+    )
       issues.push("owned descendants survived; defer another local probe");
+    if (receipt.worktree && receipt.sourceIdentity?.status !== "recorded")
+      issues.push("local source provenance unavailable");
     const artifacts = ["stdout.log", "stderr.log", "resources.jsonl"];
     if (receipt.runner === "playwright") artifacts.push("html/index.html");
     for (const artifact of artifacts) {
@@ -487,7 +377,11 @@ function inspect(directory) {
 }
 function summary(result) {
   const { receipt: r, counts: c, issues } = result;
-  return `Test evidence ${r?.id ?? "missing"}\n\ncommand: exit ${r?.exitCode ?? "unknown"}, signal ${r?.signal ?? "none"}\nevidence: ${issues.length ? "incomplete" : "complete"}\ninitial executions: ${c.initial}\nfirst-attempt failures: ${c.firstFailures}\ninterrupted initial attempts: ${c.interruptedInitial}\ninterrupted retry attempts: ${c.interruptedRetries}\nretry recoveries: ${c.recoveries}\nexhausted executions: ${c.exhausted}\nsuite errors: ${c.suiteErrors} (native JSON; global diagnostics also in stderr)\ntermination/resource events: ${c.resourceAborts}\nexecution incidence: ${c.firstFailures}/${c.initial}\njob incidence: ${c.firstFailures ? 1 : 0}/${c.initial ? 1 : 0} (this invocation's selected population)\n\n[receipt](receipt.json) · [native report](report.json) · [stdout](stdout.log) · [stderr](stderr.log) · [resources](resources.jsonl)${r?.runner === "playwright" ? " · [HTML report](html/index.html)" : ""}\n\n${issues.map((s) => `Missing evidence: ${s}`).join("\n")}\n`;
+  // Local admission owns cleanup; hosted observer receipts retain their
+  // existing observational cleanup shape and summary contract.
+  const cleanup =
+    typeof r?.cleanup === "string" ? `\ncleanup: ${r.cleanup}` : "";
+  return `Test evidence ${r?.id ?? "missing"}\n\ncommand: exit ${r?.exitCode ?? "unknown"}, signal ${r?.signal ?? "none"}${cleanup}\nevidence: ${issues.length ? "incomplete" : "complete"}\ninitial executions: ${c.initial}\nfirst-attempt failures: ${c.firstFailures}\ninterrupted initial attempts: ${c.interruptedInitial}\ninterrupted retry attempts: ${c.interruptedRetries}\nretry recoveries: ${c.recoveries}\nexhausted executions: ${c.exhausted}\nsuite errors: ${c.suiteErrors} (native JSON; global diagnostics also in stderr)\ntermination/resource events: ${c.resourceAborts}\nexecution incidence: ${c.firstFailures}/${c.initial}\njob incidence: ${c.firstFailures ? 1 : 0}/${c.initial ? 1 : 0} (this invocation's selected population)\n\n[receipt](receipt.json) · [native report](report.json) · [stdout](stdout.log) · [stderr](stderr.log) · [resources](resources.jsonl)${r?.runner === "playwright" ? " · [HTML report](html/index.html)" : ""}\n\n${issues.map((s) => `Missing evidence: ${s}`).join("\n")}\n`;
 }
 try {
   const [action, ...args] = process.argv.slice(2);

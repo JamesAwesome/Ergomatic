@@ -8,6 +8,14 @@ toolkit, not a history.
 
 ## Falsified claims, and how
 
+- **A wrapper's lifetime is not its descendants' or its vendor session's
+  lifetime.** Trace actual spawn and cleanup call sites: Playwright detaches
+  browsers and can force-kill them during cleanup; Testcontainers can reuse
+  one Ryuk session across unrelated clients. Gate crashes before registration,
+  concurrent nested work, competing recoverers, and foreign resources sharing
+  vendor labels. A sampled PID/start pair is an observation, not an
+  identity-bound signaling handle.
+
 - **Performance advice is entry-point-specific.** Trace where an option
   takes effect relative to expensive work, then measure the phases: axe
   `resultTypes` prunes before serialization under `run`, but after eager raw

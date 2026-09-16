@@ -101,12 +101,9 @@ fi
 
 # Rules in order, first match wins. 130 is a deliberate Ctrl-C and is silent.
 #
-# 137 (SIGKILL) is memory WITHOUT a needle, because an OS memory kill leaves
-# no message at all -- the absence IS its only signature on this machine.
-# 134 (SIGABRT) is NOT: a V8 fatal OOM always prints "Allocation failed",
-# so a bare SIGABRT is some other abort (`process.abort()`, a native abort,
-# a manual `kill -6`) and saying "the suite ran out of memory" about it is
-# the RF26 over-claim. It reads as a signal death instead, which is true.
+# Signal 9 or 6 alone establishes termination, not a memory cause. A
+# manual kill, native abort and an OS memory kill can be indistinguishable
+# here. Require allocation evidence; otherwise retain an unknown cause.
 #
 # Every needle rule is gated on `rc != 0`: without that, a PASSING run whose
 # output merely CONTAINS the string is declared a memory kill. Measured
@@ -117,8 +114,6 @@ fi
 TEST_RUN_VERDICT=""
 if [ "$rc" -eq 130 ]; then
   TEST_RUN_VERDICT=""
-elif [ "$rc" -eq 137 ]; then
-  TEST_RUN_VERDICT="memory"
 elif [ "$rc" -ne 0 ] && grep -qF "Allocation failed" "$ERR"; then
   TEST_RUN_VERDICT="memory"          # 134 with the needle, and the fork
                                      # case: exit 1 WITH a summary
@@ -128,6 +123,12 @@ elif [ "$rc" -ne 0 ] && ! grep -qF "Test Files" "$OUT"; then
   TEST_RUN_VERDICT="incomplete"
 fi
 export TEST_RUN_VERDICT
+
+# The admission owner supplies this private FD; no environment-selected path
+# is opened. Preserve the waited status even if the diagnostic write fails.
+if [ "${ERGOMATIC_TEST_OUTCOME:-}" = "1" ]; then
+  printf '{"exitCode":%s,"verdict":"%s"}\n' "$rc" "$TEST_RUN_VERDICT" >&3 || true
+fi
 
 DETAIL=""
 if [ -n "$TEST_RUN_VERDICT" ] && [ -f "$HERE/test-kill-capture.sh" ]; then
@@ -140,7 +141,7 @@ case "$TEST_RUN_VERDICT" in
     echo "!! NOT a flaky test. Do not re-run it.${DETAIL:+ Details: $DETAIL}" >&2 ;;
   signal)
     echo "!! KILLED BY SIGNAL $((rc - 128)) -- the suite did not complete." >&2
-    echo "!! NOT a flaky test, and not a memory kill.${DETAIL:+ Details: $DETAIL}" >&2 ;;
+    echo "!! Cause unknown; memory is neither confirmed nor ruled out.${DETAIL:+ Details: $DETAIL}" >&2 ;;
   incomplete)
     echo "!! SUITE DID NOT COMPLETE -- no test summary was printed." >&2
     echo "!! NOT a flaky test, and not necessarily memory. Read the output above." >&2 ;;

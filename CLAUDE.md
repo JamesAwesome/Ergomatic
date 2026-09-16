@@ -64,9 +64,22 @@ requirements).
 
 ## Commands (run in `app/`)
 
+**Local resource ownership:** one controller schedules heavy validation,
+serially, across worktrees sharing the Git common directory. Use the routed
+package commands/hooks; `node scripts/local-work.mjs status` is read-only
+diagnosis. Warning/critical/unknown pressure or an occupied owner refuses
+without automatic retry. Do not borrow a parent's slot, launch raw tools to
+bypass refusal, kill census PIDs, change Docker's allocation or alter worker
+defaults. Reviewers reuse exact-head receipts and request only concrete gaps.
+Current participation and exclusions, including manual handling of browser,
+container and native lifetimes, are in `docs/TESTING.md` §16. Admission is not
+machine-wide and does not cover independent clones or old worktrees.
+
 - `pnpm dev` / `pnpm dev:server` — Vite client :5173 (proxies /api) / API :8080
-- `pnpm lint` · `pnpm format` / `pnpm format:check` · `pnpm typecheck` · `pnpm test` ·
-  `pnpm test:coverage` (90% gate) · `pnpm build`
+- `pnpm lint` · `pnpm format` / `pnpm format:check` · `pnpm typecheck` ·
+  `pnpm test --project unit <file>` · `pnpm build`. Bare local `pnpm test`
+  refuses. `pnpm test:full` / `pnpm test:coverage` explicitly include integration
+  and remain controller-managed until their lifecycle adapter lands.
 - **`--` SCOPES NEITHER `pnpm test` NOR `pnpm e2e`, and for two DIFFERENT
   reasons** — debugging the second from the first's explanation sends you to
   the wrong layer. `pnpm e2e -- <file>` does not swallow the `--`: it forwards
@@ -80,19 +93,17 @@ requirements).
   once with and once without; the counts are what they are on the day, and the
   ratio is the point.
 - Single Vitest project: `pnpm test --project unit|client|integration`.
-  `integration` needs Docker. **Two footguns:**
-  `pnpm test --project client -- <pattern>` **silently runs the full suite**
-  (pnpm swallows the scoped flag), and the obvious workaround
-  `pnpm exec vitest run --project client <file>` drops the
+  Pass a file bare, for example `pnpm test --project client src/session/reviewSelector.test.ts`.
+  `integration` needs Docker and is not yet ownership-managed. The admitted
+  wrapper rejects a literal `--`; exact manifest selection is a separate
+  increment, so current Vitest patterns are not an exact-file guarantee.
+  Do not bypass admission with `pnpm exec vitest run`: it also drops the
   `NODE_OPTIONS=--no-experimental-webstorage` that `package.json`'s `test`
   script sets — Node 26's experimental webStorage global then collides with
   jsdom's `localStorage` (measured 2026-09-02: 1582 false failures across
-  client+unit against a green HEAD; not a jsdom-vs-Node issue). Prefix the
-  bare form yourself:
-  `NODE_OPTIONS=--no-experimental-webstorage pnpm exec vitest run --project client <file>`
-  — jsdom loads and the tests pass. Note this form collapses a signal death
-  to exit 1 — see recurring failure 40. Prefer `pnpm test --project client`
-  when you do not need a file filter.
+  client+unit against a green HEAD; not a jsdom-vs-Node issue). The
+  historical raw form required that prefix and collapsed signal deaths
+  to exit 1. Use the routed `pnpm test --project client <file>` instead.
   **A THIRD footgun on the same command: `console.log` from a client test
   never reaches stdout** (jsdom owns the console; `--silent=false` does not
   help), while `process.stdout.write` does. Assertions are unaffected — only
@@ -105,8 +116,13 @@ requirements).
   right after `pnpm build`; it proves named dev-only seams are absent from
   `dist/`.
 - `pnpm e2e` — Playwright flows + structural design assertions against the real
-  compose stack. `pnpm screenshots` — captures `docs/screenshots/*.png` the
-  same way. **Both `up -d --build --wait` unconditionally** (a rebuild every
+  compose stack. `pnpm screenshots -g "<affected test names>"` — scoped
+  layout/structure captures in `docs/screenshots/`; preview the matching
+  names with Playwright `--list` first (TESTING.md §8). **No captures for
+  text-only changes, release notes, version bumps or tags.** Full refresh
+  needs James's explicit request and `pnpm screenshots --all`; bare/empty
+  selection refuses before Docker. **Both capture and e2e runs
+  `up -d --build --wait` unconditionally** (a rebuild every
   invocation, not "boots it if not running") **and leave the stack UP
   afterwards** — `E2E_KEEP` defaults to `1`.
 - `ERGOMATIC_TEST_WORKERS` / `ERGOMATIC_E2E_WORKERS` — local worker
@@ -190,7 +206,8 @@ requirements).
   (`git show --stat c2182ef5`).
   Fast-path changes still get a worktree, failing-test-first,
   self-mutation, the scoped gates, and a PR — Claude implements inline and
-  **James is the reviewer**, with the PR carrying screenshots and a
+  **James is the reviewer**, with the PR carrying scoped screenshots only
+  for layout/structure changes (never text-only work; TESTING.md §8) and a
   one-paragraph risk note ("what I'd have asked a reviewer to probe").
   **Escalate mid-change, do not finish and disclose:** the moment a
   fast-path change reaches into `domain/`, a stored shape, or a second
@@ -202,10 +219,13 @@ requirements).
   sends the next change of its kind back to the full cycle.
 - **A SPEC THAT CHANGES WHAT A ROWER READS OR SEES CARRIES A DESIGN GATE
   (James, 2026-08-27: "Make sure to gate on designs too" — asked twice,
-  so it is standing).** Any spec whose scope includes user-visible COPY
-  or LAYOUT gets a Gate 0: James approves the RENDERED thing before any
-  implementation task starts. Not a description of the copy, not a
-  sentence in the spec — the actual screen, at real proportions, in both
+  so it is standing).** Layout/structure changes get a Gate 0: James
+  approves the RENDERED thing before any implementation task starts.
+  **Wording-only changes instead present before/after text for approval,
+  without screenshots or a rendered mockup** (James, 2026-09-16); release
+  notes, version bumps and tags do not trigger capture. A changed number's
+  meaning or a changed layout is not wording-only. For the visual gate,
+  show the actual affected screen, at real proportions, in both
   orientations, against what it replaces, with every colour pairing's
   contrast ratio computed and stated as a number.
   **Why it is a hard gate and not a courtesy:** RC-24's shape was
@@ -680,9 +700,11 @@ describes.
 1. **Changing UI without running `pnpm e2e`.** If your diff touches anything
    under `app/src/`, run the named e2e specs locally against an already-booted
    stack, then read the e2e job on the PR for the full suite — and
-   `pnpm screenshots` if a screen's layout changed, **committing only the
-   captures for screens your diff touched**; `git checkout -- docs/screenshots/`
-   discards the rest (TESTING.md §8). The local half is NAMED specs because
+   scoped `pnpm screenshots -g "<affected test names>"` if a screen's
+   layout/structure changed, **committing only the relevant captures**
+   (TESTING.md §8). Text-only work, including releasing, needs no captures;
+   full refresh needs James's explicit request plus `--all`. Preserve any
+   pre-existing modified captures. The local half is NAMED specs because
    James tiered the gate (2026-09-08): CI owns the full suite, where nobody can
    skip it. **An `app/src/` change is not done until a full e2e run has passed
    somewhere you have read the result.** _Three phases
@@ -1177,11 +1199,10 @@ describes.
 40. **Reading a KILLED test run as a flaky one, and retrying it into a machine
     that just proved it has no room.** Three signatures, none of which is a test
     result: **(a) an exit code ≥ 128 is a signal death** — 137 is SIGKILL and
-    reads as memory on its own, 134 is SIGABRT and reads as memory only when
-    stderr carries `Allocation failed`, 130 is your own Ctrl-C and 143 a
+    proves termination, not its cause; 134 is SIGABRT. Memory attribution
+    requires allocation or corroborating OS evidence. 130 is Ctrl-C and 143 a
     SIGTERM; **(b) `pnpm exec` COLLAPSES all of them to exit 1** — which matters
-    because the Commands section prescribes `pnpm exec vitest` as the scoped-run
-    workaround, so the repo's own advice hides this signal; **(c) a fork-worker
+    because the former raw scoped-run workaround hid this signal; **(c) a fork-worker
     OOM exits 1 AND prints a full `Test Files` summary**, so the summary proves
     nothing and the tell is `Allocation failed` on stderr. **Never re-run a suite
     showing any of the three** — a retry is what turns one kill into a lost

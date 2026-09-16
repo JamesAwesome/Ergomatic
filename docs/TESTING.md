@@ -322,8 +322,8 @@ entry here is a screen the a11y/tap-target/token rules aren't actually
 checking. This is the hard half of the requirement, and `design.spec.ts` runs
 in CI.
 
-`app/e2e/screenshots.spec.ts` is the soft half, and **two James rulings scope
-it more narrowly than this section used to imply:**
+`app/e2e/screenshots.spec.ts` is the soft half. **Screenshot policy (James,
+2026-09-16): capture only what a visual change needs, not on a schedule.**
 
 - **Captures are documentation, not a CI gate** (2026-08-27: *"We honestly
   don't need to run these in ci. It can be part of the release skill and maybe
@@ -345,51 +345,55 @@ it more narrowly than this section used to imply:**
   both engines. See `docs/testing/2026-09-15-sheet-scroll.md` for the repro.
 - **Captures are for LAYOUT or STRUCTURE changes, never wording-only ones**
   (2026-08-23). A copy diff gets no screenshot.
-- **Regenerate broadly; commit narrowly** (antagonist verdict adopted by
-  James, 2026-09-12 — and it is the "scheduled reup" ruling above, finally
-  implemented rather than engineered around). `pnpm screenshots` writes all
-  ~200 captures and always will: a browser does not render
-  deterministically, and the floor was measured at 7 changed pixels on a
-  single-test run with every clock frozen and a fresh database
-  (2026-09-11). Two sessions were spent trying to make the corpus
-  byte-stable before anyone asked who consumed the bytes; the answer is
-  nobody automated, so the corpus is kept honest by what you COMMIT, not
-  by what the browser produces:
+- **No captures for text-only work**, including release notes, version
+  bumps, tags, docs and wording-only UI changes. A release is not an
+  exception. Review text and run the relevant correctness tests; do not
+  boot Docker or a browser merely to refresh the date or wording in a PNG.
+- **Scope before launching.** For an actual layout/structure change, name
+  the affected views and the visual question the captures will answer.
+  Reuse applicable existing captures. List test names without booting the
+  stack, then preview the chosen pattern:
 
   ```sh
-  pnpm screenshots                     # from app/; or scoped, below
-  git add docs/screenshots/<the files for screens your diff touched>
-  git checkout -- docs/screenshots/    # discard everything else
+  # From app/. Listing loads test definitions, not browsers or Docker.
+  pnpm exec playwright test --project=screenshots --list
+  pnpm exec playwright test --project=screenshots --list -g "<affected test names>"
+  pnpm screenshots -g "<affected test names>"
   ```
 
-  **A PNG in your commit means a screen you changed.** That is the property
-  RF7 needs and the only one a reviewer can use. `git status` noise is the
-  run's byproduct, discarded rather than committed. Never commit a capture
-  "so the set is not internally inconsistent across dates" — that reasoning
-  put 65 files of noise into `a6dfd813`, and the frozen fixture clocks
-  (`MONITOR_FIXED_NOW`, `DIAGNOSTICS_FIXED_NOW`) exist so a scoped recapture
-  cannot go inconsistent that way.
+  `-g` is Playwright's regex filter, **not an exact-file or narrowness
+  guarantee**. Check the listed names/count before capture; do not use a
+  catch-all pattern to evade the full-refresh rule. A named test may write
+  multiple views/orientations: inspect that test's outputs when choosing it.
+  Do not derive the test name from the PNG filename alone — helpers and
+  template literals generate many filenames. The wrapper accepts one
+  nonblank `-g`/`--grep` selection or `--all`; bare, empty and extra-argument
+  invocations refuse before stack discovery/reaping/boot. Pass arguments
+  directly, without a literal `--`. `pnpm screenshots --help` is safe and
+  shows the listing command; the wrapper itself does not accept `--list`.
+- **Full corpus only on James's explicit request**, using
+  `pnpm screenshots --all`. The flag records deliberate command scope; it
+  does not supply that permission. There is no per-release refresh, no
+  automatic second run and no full refresh to make dates consistent.
+  This supersedes the 2026-09-12 "regenerate broadly" / scheduled-reup rule.
+  Capture-spec assertions are not CI gates; a release does not claim they
+  were exercised. Correctness assertions belong in CI's test projects.
+- **Commit narrowly.** Open each image you intend to commit (RF7), and
+  retain only relevant, explained changes. A full-refresh request does not
+  authorize committing unexplained churn. Check for pre-existing modified
+  captures before running; never blanket-revert another session's work.
+  Do not run twice just to distinguish rasterizer noise.
 
-  **Scoped, which is faster:** `pnpm screenshots -g "<test name>"` runs only
-  the named captures and leaves the rest untouched on disk
-  (`screenshots.sh` forwards `"$@"`; before 2026-09-12 it silently dropped
-  the filter, which is why four filings believed no filter existed). Names
-  come from `pnpm exec playwright test --project=screenshots --list`. Do
-  NOT derive a test name by grepping the PNG filename: 71 of 202 captures
-  are written by helpers and template literals, and the first textual hit
-  is often a comment inside an unrelated test.
-
-  **The scheduled reup.** Once per release tag, one PR runs a full
-  `pnpm screenshots` and commits EVERYTHING with no per-file triage — by
-  construction that diff is churn plus whatever drift a PR author missed.
-  It is also the only thing that runs `screenshots.spec.ts`'s ~130
-  assertions, which CI excludes; `a6dfd813` found one rotted that way. A
-  capture nobody has regenerated in a release cycle is a record nobody has
-  checked.
+Screenshots remain heavy, manually coordinated browser/Compose work (§16).
+The guard is not a memory-pressure or lifecycle adapter: use the controller's
+serial validation slot, require normal pressure, and stop on a resource
+event without automatic retry. Capture on the build Mac, not Linux, whose
+font rendering differs. The existing fresh-database boot and `E2E_KEEP`
+cleanup behavior are unchanged.
 
 So: registering in `design.spec.ts` is part of a UI change's definition of
-done. Capturing is part of it when the change moves pixels — and committing
-only the captures you changed is part of capturing.
+done. Capturing is part of layout/structure work, not wording-only work;
+selecting and committing only relevant captures is part of capturing.
 
 ## 9. Fixture realism
 
@@ -601,12 +605,19 @@ inspect before sharing or committing; traces can contain tokens and cookies.
 From `app/`, the explicit capture entry point is:
 
 ```sh
-node scripts/test-evidence.mjs run vitest -- bash scripts/test-run.sh --project unit
+pnpm test:capture --project unit domain/pace.test.ts
 node scripts/test-evidence.mjs summary <printed-invocation-directory>
 node scripts/test-evidence.mjs check <printed-invocation-directory>
 ```
 
-An omitted `--root` uses ignored `.test-evidence` relative to cwd; an
+Local capture is internal to the admitted owner: one ownership lifetime,
+one resource sampler, and the same native report/summary/check authority as
+CI. Its printed directory is under the Git-common-directory admission
+receipts, not a second outer `.test-evidence` tree. Do not wrap this command
+in `test-evidence run`. No public token borrows an existing owner.
+
+For the hosted CI observer, an omitted `--root` uses ignored
+`.test-evidence` relative to cwd; an
 explicitly empty root fails. Custom roots should be outside tracked source
 or git-ignored. Invocation IDs are UUIDs and existing directories are refused.
 Symlink path components are refused except the operating system's
@@ -621,8 +632,10 @@ the two-test `webkit-sheet` project, which always retains failed traces.
 Capture mode takes failed screenshots. Benchmark a named selection with
 and without tracing before adopting it across CI.
 
-This is a **passive evidence observer**, not a local resource admission
-controller. It does not enforce the hunt's pressure or time budgets.
+The hosted `test-evidence run` CLI remains a **passive evidence observer**,
+not a local resource admission controller. Its extracted recording helper
+has no sampler or signal handlers; locally the admitted owner supplies
+those lifetimes. The standalone observer does not enforce hunt budgets.
 The hunt controller must defer under warning/critical/unknown pressure,
 stop its owned command on rising pressure, and stop after a resource event.
 Local browser probes remain deferred until detached browser ownership and
@@ -671,6 +684,89 @@ historical per-test rate. Raw JSON retains per-test/project/repeat/retry
 details where the runner supplies them. Historical exposure remains unknown
 unless execution is independently evidenced.
 
-The lightweight gate is `node --test scripts/test-evidence.test.mjs`.
+Ordinary admission receipts also carry source SHA, a tracked index/worktree
+diff fingerprint, exact invocation and per-phase argv/scope, installed tool
+versions, times/status/pressure/cleanup, wrapper RSS and streamed stdout/stderr.
+The fingerprint excludes untracked files and is not a complete tree identity.
+Missing Git or version observations are explicitly unavailable, never invented;
+the native evidence check refuses unavailable local source provenance.
+Git/version subprocess probes are bounded. Configured worker limits record
+CLI/env/config provenance separately from the actual concurrent worker count,
+which remains unknown unless independently observed. Stream write/close errors
+make local evidence incomplete/nonzero while preserving each phase's actual
+wait status. Native assertions never override command failure or unresolved
+cleanup, and a resource event is not an assertion failure or an OOM diagnosis.
+
+The lightweight gates are `node --test scripts/test-evidence.test.mjs` and
+`node --test scripts/test-evidence-record.test.mjs scripts/local-work/*.test.mjs`
+(run serially with `--test-concurrency=1`).
 It launches harmless fixture children; it does not run Vitest, a browser,
 containers, or allocate artificial memory pressure.
+
+## 16. Local resource ownership
+
+This is the admission increment of the approved local resource design, not
+the complete lifecycle or exact-subset implementation. One controller owns
+serial heavy validation. Reviewers use exact-head receipts and request named
+gaps; they do not duplicate full-suite runs. CI retains full correctness and
+coverage gates. The existing four Vitest/three browser worker defaults have
+not changed; no memory-savings figure has yet been measured.
+
+Run these from `app/`:
+
+```sh
+node scripts/local-work.mjs status
+pnpm test --project unit domain/pace.test.ts
+pnpm test --project client src/session/reviewSelector.test.ts
+node scripts/local-work.mjs recover <generation-from-status>
+```
+
+Replace example files with existing intended tests. For now Vitest patterns
+retain native matching semantics: this does not yet promise an exact file
+manifest. Bare local `pnpm test` and literal `--` refuse. Explicit
+`pnpm test:full` / `pnpm test:coverage` include integration; they print their
+excluded-lifecycle status and need controller coordination. Exact selector
+listing, empty/miss refusal, deduplicated pre-push unions and cheaper hooks
+are the next increment. Pre-push currently retains its three populations
+and legacy fallback, visibly labelled as an exclusion.
+
+| Entry point                                                                                | Current ownership                                                    |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `lint`, `lint:prune`, `typecheck`, `build`                                                 | Fixed sequential foreground pipeline                                 |
+| `test`, `test:capture` with only explicit unit/client projects                             | Owner spans child wait and cleanup census; capture uses the same sampler |
+| Pre-commit                                                                                 | Owner before staged mutation, through typecheck                      |
+| Pre-push                                                                                   | Owner spans legacy related + whole-tree checks                       |
+| Integration/full coverage, browser/Compose, native, watch/dev, install/bootstrap, mutation | Not lifecycle-managed yet; controller coordination required          |
+| Hosted CI                                                                                  | Explicit workflow mode; not a local memory guard                     |
+| Dockerfile build                                                                           | Fixed internal container build; host Docker lifecycle is not covered |
+
+Cooperating worktrees share a private owner directory under their canonical
+Git common directory. This is same-user cooperation, not a security boundary
+or universal machine lock; independent clones and older revisions do not
+participate. `CI=1` alone cannot disable admission. Hosted mode requires the
+explicit workflow setting and GitHub-hosted runner context. Unsupported local
+platforms and unavailable pressure/census observations fail closed.
+
+Normal macOS pressure is required before heavy launch and checked during
+owned work. Refusal is exit 75 (outer pnpm/Git may map it to another nonzero
+status), not a test failure or pass. No automatic retries. Do not bypass the
+guard with raw tools, hook suppression or an inherited-owner token. A rising
+pressure event remains nonzero even if the child handles interruption with
+exit zero. Status stays lightweight and reports exclusions while busy.
+
+Cancellation targets only the current live owned child process group: INT,
+five seconds, TERM, five seconds, then unresolved. It never sends SIGKILL or
+kills old PIDs from a census. Missing cleanup observations or surviving
+descendants retain ownership. Recovery requires the exact generation and an
+exclusive maintenance barrier; this increment recovers only proven-stale
+idle owners. Active/launching, malformed or partial metadata is diagnostic-only.
+Do not delete owner directories or steal a lease by age. Report blocked
+evidence to the controller; unrelated processes/stacks are never cleanup targets.
+
+Each run streams resource observations and writes a terminal receipt under
+`<common-dir>/ergomatic-local-work/receipts/<generation>/`. Wrapper RSS is
+separate from observed child-tree RSS (KiB); this is not whole-host attribution
+and must not be added to Docker VM/container totals. Receipts preserve phase
+exit/signal and cleanup outcome; they do not replace Vitest's native result
+reporter. Exit 137 alone proves termination, not OOM: memory causality needs
+allocation or corroborating OS evidence.

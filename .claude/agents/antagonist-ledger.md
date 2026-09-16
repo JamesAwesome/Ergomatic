@@ -11362,3 +11362,31 @@ passes, this was the third, and revision 5 changes no mechanism.
   WCAG tag filter excludes `frame-tested`. Historical 23-second amplification
   remains unassigned. Controller receipts, commands and limits are in
   [the repair record](../../docs/superpowers/research/2026-09-15-flake-hunt/residual-repairs.md).
+
+## 2026-09-15 — Local resource budget hardening
+
+Mechanism pass against baseline `653bd5ea`; installed-source inspection,
+no test suites, container launches, process termination or stress allocation.
+
+- **Polling can recover ownership.** Plausible because the observer follows
+  descendants and start identities. Playwright detaches; parent exit before
+  a poll leaves a gap. Traced `_launchProcess` through `launchProcess`;
+  required durable pre-launch identity and a crash-ordering gate.
+- **Atomic acquisition makes borrowing and recovery atomic.** Interleaving
+  two valid borrowers or two recoverers disproves that implication. The
+  controller removed public borrowing and specified an exclusive maintenance
+  barrier; those interleavings remain implementation proof obligations.
+- **A vendor session belongs to one task.** Traced Ryuk reuse and producer
+  labels: unrelated clients can share the session. Required application-owned
+  pre-creation labels and a foreign-fixture witness sharing the vendor label.
+- **Command completion ends native resources; no SIGKILL means no force
+  kill.** Source inspection found name-selected simulators without lifecycle
+  ownership, and Playwright's own force-kill fallback. Required UDID/prior-state
+  gates and distinguished the new owner's signals from vendor cleanup.
+
+Vetted ground: cooperative atomic admission, explicit recovery, honest
+common-Git-directory scope, pressure as a host condition rather than culprit
+attribution, and separate peak/overlap/turnaround measurements. Findings
+folded by the controller, not re-reviewed as PASS. Prescribed-code lens
+skipped because the spec has no implementation blocks. No measured savings
+or implemented guarantees claimed; warning-only supersession awaits James.
