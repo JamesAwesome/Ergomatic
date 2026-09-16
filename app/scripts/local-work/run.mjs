@@ -343,7 +343,12 @@ export async function runWorkload({
         } catch (error) {
           clean = false;
           entry.stagingRestoration = "unresolved";
-          reason = `staging restoration unverified: ${error.message}; inspect the working tree/index and retained lint-staged backup before explicit owner recovery`;
+          reason = [
+            reason ?? interrupted,
+            `staging restoration unverified: ${error.message}; inspect the working tree/index and retained lint-staged backup before explicit owner recovery`,
+          ]
+            .filter(Boolean)
+            .join("; ");
         }
       }
       mayRelease = Boolean(clean);

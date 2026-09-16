@@ -284,10 +284,13 @@ rename endpoints; it returns `docsOnly:false` on any uncertainty.
 - [ ] Update the whole-spec delivery checklist with evidence and proceed to
   the remaining increments. This PR never closes the whole spec by itself.
 
-## Preflight status
+## Implementation status
 
-This plan remains preflight work until failure-path/real-hook paste-tests and
-the two bounded hardening lenses finish. Native exact execution, discovery
+Failure-path/real-hook paste-tests and both bounded hardening lenses finished;
+their findings were folded with real producer witnesses. Task-scoped and final
+branch review plus exact-head hosted CI remain open. The [validation record](../../testing/2026-09-16-cheaper-hooks-validation.md)
+names the source trees, commands, receipts, mutations and coverage limits.
+Native exact execution, discovery
 disposal, unmatched-name refusal, real public capture, one-shot Git/Husky
 propagation and empty-related mandatory union have executable proofs in the
 task ledger. Installed-source reads also show that file-only discovery may
