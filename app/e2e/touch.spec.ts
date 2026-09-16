@@ -33,6 +33,26 @@ test("the page behind an open sheet does not scroll", async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeVisible();
 
   const before = await page.evaluate(() => window.scrollY);
+
+  // THE DRAG MUST START ON THE BACKDROP, and that is an ASSERTION rather than
+  // the comment it used to be (RF38: when a test's conclusion rests on a
+  // property of HOW it got there, that property is an assertion). The sheet's
+  // top edge sits at y=166 at this size and the drag starts at y=120 — 46px
+  // of margin. A taller sheet (a fifth filter group, a longer label, Linux CI
+  // font metrics) puts the sheet under the drag, and then the gesture scrolls
+  // the SHEET instead of the page and this test passes no matter what the
+  // lock does. Measured, with the lock deleted: starting at y=120 the page
+  // moves ~142-148px and the gate is RED; starting at y=300 it moves 0 and
+  // the gate is silently GREEN. The exact figure varies run to run because
+  // fling momentum carries past the last touchMove, so it is stated as a
+  // range — an earlier write-up quoted a single number as if measured once.
+  const atDragPoint = await page.evaluate(
+    () => document.elementFromPoint(195, 120)?.className ?? "",
+  );
+  expect(
+    atDragPoint,
+    "the drag must begin on the backdrop, not on the sheet, or this gate cannot fail",
+  ).toContain("filter-sheet-backdrop");
   // Drag upward over the backdrop, clear of the sheet itself. NO tap first:
   // the backdrop's own onClick dismisses the sheet, so a "wake up touch" tap
   // closed the modal and the drag then scrolled a page with nothing open —

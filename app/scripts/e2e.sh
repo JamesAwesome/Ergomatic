@@ -42,7 +42,10 @@ cd app
 # `testMatch` so it adds exactly the specs under `e2e/touch.spec.ts` and
 # changes no existing one. Naming it here is not optional: this line is the
 # only way either project runs, locally or in CI, so a project omitted here
-# is a gate that never executes. AND THIS IS ONE OF TWO PLACES: CI does not
-# use this script (`.github/workflows/ci.yml` invokes playwright directly), so
-# a project added here must be added there in the same commit.
+# is a gate that never executes LOCALLY.
+#
+# AND THIS IS ONE OF THREE PLACES. CI does NOT use this script
+# (`.github/workflows/ci.yml` invokes playwright directly), and
+# `docs/TESTING.md` describes the list in prose. A project added here must be
+# added to both, in the same commit.
 pnpm exec playwright test --project=chromium --project=touch "$@"
