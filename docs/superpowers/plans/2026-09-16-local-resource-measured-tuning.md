@@ -85,6 +85,14 @@ native JSON and the resolved scope live in the unique private receipt. No
 counts are inferred from human output, and native assertions cannot override
 command failure. Stryker's existing survivor/threshold policy is unchanged.
 
+Installed Stryker forwards explicit testFiles to Vitest's substring-filter
+API. The real `witness.test.ts.extra.test.ts` producer failed the initial
+public fixture, so the dedicated config reads the same private frozen options
+and uses their exact witnesses as its include list. The onInit guard compares
+the resolved project include membership before bodies. Mutant-specific test
+name narrowing remains native, within that file population. Hosted routing
+erases inherited artifact destinations and keeps its original include scope.
+
 ## State lifetime
 
 | State | Authority/mint | Clear/failure |
@@ -95,6 +103,7 @@ command failure. Stryker's existing survivor/threshold policy is unchanged.
 | Stryker worker pool | Explicit outer concurrency, installed inner configuration | Native disposal, then owner's process/group census; uncertain cleanup blocks |
 | Mutation sandbox | Stryker beneath invocation-owned artifact root | Native success cleanup; failure evidence retained, no source in-place writes |
 | Reporter guard | Real Vitest onInit in every inner context | Checks before specifications/test bodies, records configured bound |
+| Exact witness includes | Same private frozen Stryker options, resolved config compared before bodies | Invocation-specific; no caller-inherited destination in hosted or ordinary phases |
 | Measurement pairs | Same tree/scope/versions and declared warm state | Append results; interrupted/refused pairs are inconclusive |
 
 ## Primary-source findings

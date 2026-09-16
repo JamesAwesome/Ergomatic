@@ -108,6 +108,8 @@ test("missing or malformed mutation controls never expand to implicit full scope
       "domain/*.ts",
       "domain/[a].ts",
       "domain/{a,b}.ts",
+      "domain/+(a).ts",
+      "domain/@(a).ts",
       "../domain/a.ts",
       "/domain/a.ts",
       "domain/../domain/a.ts",

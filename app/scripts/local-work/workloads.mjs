@@ -103,6 +103,7 @@ export function workloadPhases({
   const childEnv = { ...env };
   if (!hosted) delete childEnv.CI;
   delete childEnv.ERGOMATIC_FULL_PUSH_FD;
+  delete childEnv.ERGOMATIC_ARTIFACT_DIR;
   const node = (file, rest = []) => ({
     command: process.execPath,
     args: [file, ...rest],

@@ -1,5 +1,8 @@
 import { defineConfig } from "vitest/config";
-import { MutationBudget } from "./scripts/local-work/mutation-budget.ts";
+import {
+  MutationBudget,
+  mutationWitnesses,
+} from "./scripts/local-work/mutation-budget.ts";
 
 // Dedicated Vitest config for Stryker mutation testing.
 //
@@ -22,7 +25,12 @@ export default defineConfig({
     reporters: ["default", new MutationBudget()],
     name: "unit",
     environment: "node",
-    include: ["server/**/*.test.ts", "domain/**/*.test.ts"],
+    // Stryker's Vitest plugin forwards testFiles as substring filters. Exact
+    // include membership prevents witness.test.ts.extra.test.ts from running.
+    include: mutationWitnesses() ?? [
+      "server/**/*.test.ts",
+      "domain/**/*.test.ts",
+    ],
     exclude: ["server/**/*.integration.test.ts"],
   },
 });

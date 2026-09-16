@@ -28,7 +28,7 @@ test('body witness',()=>writeFileSync(${JSON.stringify(sentinel)},'executed'));`
   return { app, sentinel };
 }
 
-function runInner(f, overrides = {}) {
+function runInner(f, overrides = {}, extraEnv = {}) {
   return spawnSync(
     process.execPath,
     [
@@ -49,7 +49,11 @@ try { await ctx.start(); } finally { await ctx.close(); }
       cwd: f.app,
       encoding: "utf8",
       timeout: 15000,
-      env: { ...process.env, NODE_OPTIONS: "--no-experimental-webstorage" },
+      env: {
+        ...process.env,
+        NODE_OPTIONS: "--no-experimental-webstorage",
+        ...extraEnv,
+      },
     },
   );
 }
@@ -83,6 +87,24 @@ test("native mutation config rejects changed isolation, pool and inner concurren
     assert.match(result.stderr + result.stdout, /Mutation inner budget/);
     assert.equal(fs.existsSync(f.sentinel), false);
   }
+});
+
+test("native mutation witness guard refuses a widened include before bodies", (t) => {
+  const f = fixture(t),
+    directory = path.join(f.app, "receipt");
+  fs.mkdirSync(directory, { mode: 0o700 });
+  fs.writeFileSync(
+    path.join(directory, "stryker.config.json"),
+    JSON.stringify({ testFiles: ["domain/witness.test.ts"] }),
+  );
+  const result = runInner(
+    f,
+    { include: ["domain/**/*.test.ts"] },
+    { ERGOMATIC_ARTIFACT_DIR: directory },
+  );
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /witness membership/);
+  assert.equal(fs.existsSync(f.sentinel), false);
 });
 
 function publicFixture(t) {
@@ -136,6 +158,11 @@ expect(positive(-1)).toBe(false);expect(positive(0)).toBe(false);expect(positive
   put(
     "app/domain/unselected.test.ts",
     `import {positive} from './space ü,comma';throw new Error('unselected body '+positive(1));`,
+  );
+  put(
+    "app/domain/witness.test.ts.extra.test.ts",
+    `import {test} from 'vitest';import {positive} from './space ü,comma';
+test('substring sibling must stay unselected',()=>{throw new Error('unexpected sibling '+positive(1))});`,
   );
   // Stryker enumerates real node_modules directories before linking a sandbox;
   // a symlink at that directory itself is skipped by its installed finder.
@@ -260,13 +287,20 @@ test("public mutation refuses a selector dropped inside the handoff before nativ
     "const request = parseMutation(args);",
     "const request = parseMutation(args); request.testFiles = [];",
   );
-  assert.notEqual(broken, original, "fixture must actually corrupt the handoff");
+  assert.notEqual(
+    broken,
+    original,
+    "fixture must actually corrupt the handoff",
+  );
   f.put(file, broken);
   const result = f.run();
   assert.notEqual(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stderr, /original request/);
   assert.equal(fs.existsSync(f.sentinel), false);
-  assert.equal(fs.existsSync(path.join(f.receipts()[0], "mutation.json")), false);
+  assert.equal(
+    fs.existsSync(path.join(f.receipts()[0], "mutation.json")),
+    false,
+  );
 });
 
 test("public mutation busy refusal cannot borrow an existing owner", (t) => {

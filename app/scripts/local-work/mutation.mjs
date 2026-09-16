@@ -22,7 +22,7 @@ function exactPath(value) {
   if (
     typeof value !== "string" ||
     !value ||
-    /[?*\[\]{}!\\:\x00-\x1f\x7f]/.test(value) ||
+    /[?*\[\]{}!()\\:\x00-\x1f\x7f]/.test(value) ||
     path.isAbsolute(value) ||
     value.split("/").some((part) => !part || part === "." || part === "..")
   )

@@ -188,6 +188,18 @@ passed receipt `00bfac21-a70d-48a8-b418-ba18bfd641ef`; native JSON reports9kille
 and no other mutant outcomes, verified cleanup. This is still only that
 explicit source/witness pair, not the full mutation baseline.
 
+Follow-up scope probe `156ed814-953b-4713-a64a-86c459922848` exposed a real
+vendor-boundary widening: requested `witness.test.ts` also executed
+`witness.test.ts.extra.test.ts`. Stryker resolves its testFiles glob exactly,
+then its Vitest plugin forwards paths to a substring-filter API. Fix: the
+dedicated config reads exact includes from the same frozen private options;
+onInit independently checks the resolved includes before bodies. Public
+parser/native/routing27tests passed
+`1f427336-d59f-4bf5-8ba4-ed6f3c4a4eb6`; the native widened-include refusal
+passed `57089caa-1668-40b6-9421-02c4383bed9b`. Extglob refusal and inherited
+hosted artifact clearing failed first in
+`a76a0a63-606f-4b50-a23e-b55de78a0d4a`, then passed in1f427336.
+
 Still owed: pure-client
 membership audit, representative unit1/2/4 and browser1/2/3, final candidate
 hook/browser proof, worker-default decision, bounded hardening, independent

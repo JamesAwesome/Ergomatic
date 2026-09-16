@@ -38,13 +38,14 @@ test("mutation bounds survive routing while hosted scope keeps its original CLI"
     app,
     name: "mutate",
     hosted: true,
-    env: { CI: "true" },
+    env: { CI: "true", ERGOMATIC_ARTIFACT_DIR: "/foreign" },
   });
   assert.deepEqual(hosted[0].args, [
     "/checkout/app/node_modules/@stryker-mutator/core/bin/stryker.js",
     "run",
   ]);
   assert.equal(hosted[0].env.CI, "true");
+  assert.equal(hosted[0].env.ERGOMATIC_ARTIFACT_DIR, undefined);
   assert.equal(hosted[0].artifacts, undefined);
 });
 
