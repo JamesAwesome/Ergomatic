@@ -122,7 +122,7 @@ standing rules live here so they cannot drift between dispatches.
 
 | Your diff touches                   | You must run                                                                                                                                                                                           |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| any product code under `app/src/`   | `pnpm lint` · `typecheck` · `format:check` · `test --project unit --project client` · **the named e2e specs locally against an already-booted stack, then read the e2e job on the PR for the full suite** (James tiered the gate on 2026-09-08: CI owns the full suite, you run what your change touches — not a wall-clock argument, though a full local run does cost ~1.5x under the worker cap; CLAUDE.md RF1/RF40) — and `pnpm screenshots` if a screen's layout changed (open the images and describe what you see) |
+| any product code under `app/src/`   | `pnpm lint` · `typecheck` · `format:check` · `test --project unit --project client` · **the named e2e specs locally against an already-booted stack, then read the e2e job on the PR for the full suite** (James tiered the gate on 2026-09-08: CI owns the full suite, you run what your change touches — not a wall-clock argument, though a full local run does cost ~1.5x under the worker cap; CLAUDE.md RF1/RF40) — scoped captures only for layout/structure changes, per TESTING.md §8 |
 | `app/domain/` or `app/server/` only | lint · typecheck · format:check · `test --project unit` (+ integration if Docker is available)                                                                                                         |
 | tests only                          | lint · typecheck · format:check · the covering project(s)                                                                                                                                              |
 | comments/docs only                  | lint · typecheck · format:check                                                                                                                                                                        |
@@ -131,6 +131,18 @@ The controller owns serial heavy validation; reviewers consume exact-head
 evidence and request named missing checks, not duplicate full-suite runs.
 CI still owns full correctness/coverage and full browser validation. Leaving
 e2e red after an `app/src/` change is not acceptable; read that CI result.
+
+**No screenshots for text-only work**, including release notes, version
+bumps and tags (James, 2026-09-16). For actual layout/structure changes,
+name the visual question and affected views; reuse applicable captures,
+preview matching test names with Playwright `--list`, then use
+`pnpm screenshots -g "<affected test names>"`. A regex is not a narrowness
+guarantee: inspect its listed selection before capture. Full refresh needs
+James's explicit request AND `pnpm screenshots --all`; bare/empty commands
+refuse before Docker. Never refresh just for a release or run twice to
+classify noise. Open only the images needed for the review and commit only
+explained changes. This does not weaken correctness/browser test gates or
+the manual resource coordination below. See TESTING.md §8.
 
 Use the admitted package commands/hooks, and name the project plus intended
 test files. Bare local `pnpm test` refuses. Status is

@@ -107,8 +107,11 @@ WCAG AA contrast, token usage, safe-area insets) against the real compose
 stack. The gate is tiered deliberately: **CI owns the full suite; locally
 you run what your change touches** (a full local run also costs ~1.5x its
 old wall-clock under the worker cap, but the tiering is the reason, not the
-cost — CLAUDE.md RF1). `pnpm screenshots` refreshes `docs/screenshots/`,
-which the phase PR body embeds. Coverage is gated at 90% repo-wide with
+cost — CLAUDE.md RF1). Layout/structure changes capture only affected views
+with `pnpm screenshots -g "<affected test names>"`, after previewing the
+selection (TESTING.md §8). **Text-only changes and releases need no
+screenshots.** Full refresh requires James's explicit request plus `--all`;
+bare invocations refuse before Docker. Coverage is gated at 90% repo-wide with
 `app/domain/**` pinned at 100.
 
 Local lint, typecheck, build, unit/client tests and Git hooks share one

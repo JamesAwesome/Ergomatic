@@ -35,7 +35,9 @@ test("receipt worker limits agree with the real config and distinguish overrides
     [{}, 4, "vitest.config.ts default"],
     [{ ERGOMATIC_TEST_WORKERS: "5" }, 5, "environment"],
   ]) {
-    const configured = evaluate(() => isCI(env.CI), workerCap, { env });
+    // Undefined triggers isCI's ambient process.env.CI default. An empty
+    // string explicitly represents this fixture's absent local CI flag.
+    const configured = evaluate(() => isCI(env.CI ?? ""), workerCap, { env });
     const recorded = workerSettings([], env);
     assert.equal(configured, expected);
     assert.equal(recorded.max, configured);

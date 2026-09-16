@@ -322,8 +322,8 @@ entry here is a screen the a11y/tap-target/token rules aren't actually
 checking. This is the hard half of the requirement, and `design.spec.ts` runs
 in CI.
 
-`app/e2e/screenshots.spec.ts` is the soft half, and **two James rulings scope
-it more narrowly than this section used to imply:**
+`app/e2e/screenshots.spec.ts` is the soft half. **Screenshot policy (James,
+2026-09-16): capture only what a visual change needs, not on a schedule.**
 
 - **Captures are documentation, not a CI gate** (2026-08-27: *"We honestly
   don't need to run these in ci. It can be part of the release skill and maybe
@@ -345,51 +345,55 @@ it more narrowly than this section used to imply:**
   both engines. See `docs/testing/2026-09-15-sheet-scroll.md` for the repro.
 - **Captures are for LAYOUT or STRUCTURE changes, never wording-only ones**
   (2026-08-23). A copy diff gets no screenshot.
-- **Regenerate broadly; commit narrowly** (antagonist verdict adopted by
-  James, 2026-09-12 — and it is the "scheduled reup" ruling above, finally
-  implemented rather than engineered around). `pnpm screenshots` writes all
-  ~200 captures and always will: a browser does not render
-  deterministically, and the floor was measured at 7 changed pixels on a
-  single-test run with every clock frozen and a fresh database
-  (2026-09-11). Two sessions were spent trying to make the corpus
-  byte-stable before anyone asked who consumed the bytes; the answer is
-  nobody automated, so the corpus is kept honest by what you COMMIT, not
-  by what the browser produces:
+- **No captures for text-only work**, including release notes, version
+  bumps, tags, docs and wording-only UI changes. A release is not an
+  exception. Review text and run the relevant correctness tests; do not
+  boot Docker or a browser merely to refresh the date or wording in a PNG.
+- **Scope before launching.** For an actual layout/structure change, name
+  the affected views and the visual question the captures will answer.
+  Reuse applicable existing captures. List test names without booting the
+  stack, then preview the chosen pattern:
 
   ```sh
-  pnpm screenshots                     # from app/; or scoped, below
-  git add docs/screenshots/<the files for screens your diff touched>
-  git checkout -- docs/screenshots/    # discard everything else
+  # From app/. Listing loads test definitions, not browsers or Docker.
+  pnpm exec playwright test --project=screenshots --list
+  pnpm exec playwright test --project=screenshots --list -g "<affected test names>"
+  pnpm screenshots -g "<affected test names>"
   ```
 
-  **A PNG in your commit means a screen you changed.** That is the property
-  RF7 needs and the only one a reviewer can use. `git status` noise is the
-  run's byproduct, discarded rather than committed. Never commit a capture
-  "so the set is not internally inconsistent across dates" — that reasoning
-  put 65 files of noise into `a6dfd813`, and the frozen fixture clocks
-  (`MONITOR_FIXED_NOW`, `DIAGNOSTICS_FIXED_NOW`) exist so a scoped recapture
-  cannot go inconsistent that way.
+  `-g` is Playwright's regex filter, **not an exact-file or narrowness
+  guarantee**. Check the listed names/count before capture; do not use a
+  catch-all pattern to evade the full-refresh rule. A named test may write
+  multiple views/orientations: inspect that test's outputs when choosing it.
+  Do not derive the test name from the PNG filename alone — helpers and
+  template literals generate many filenames. The wrapper accepts one
+  nonblank `-g`/`--grep` selection or `--all`; bare, empty and extra-argument
+  invocations refuse before stack discovery/reaping/boot. Pass arguments
+  directly, without a literal `--`. `pnpm screenshots --help` is safe and
+  shows the listing command; the wrapper itself does not accept `--list`.
+- **Full corpus only on James's explicit request**, using
+  `pnpm screenshots --all`. The flag records deliberate command scope; it
+  does not supply that permission. There is no per-release refresh, no
+  automatic second run and no full refresh to make dates consistent.
+  This supersedes the 2026-09-12 "regenerate broadly" / scheduled-reup rule.
+  Capture-spec assertions are not CI gates; a release does not claim they
+  were exercised. Correctness assertions belong in CI's test projects.
+- **Commit narrowly.** Open each image you intend to commit (RF7), and
+  retain only relevant, explained changes. A full-refresh request does not
+  authorize committing unexplained churn. Check for pre-existing modified
+  captures before running; never blanket-revert another session's work.
+  Do not run twice just to distinguish rasterizer noise.
 
-  **Scoped, which is faster:** `pnpm screenshots -g "<test name>"` runs only
-  the named captures and leaves the rest untouched on disk
-  (`screenshots.sh` forwards `"$@"`; before 2026-09-12 it silently dropped
-  the filter, which is why four filings believed no filter existed). Names
-  come from `pnpm exec playwright test --project=screenshots --list`. Do
-  NOT derive a test name by grepping the PNG filename: 71 of 202 captures
-  are written by helpers and template literals, and the first textual hit
-  is often a comment inside an unrelated test.
-
-  **The scheduled reup.** Once per release tag, one PR runs a full
-  `pnpm screenshots` and commits EVERYTHING with no per-file triage — by
-  construction that diff is churn plus whatever drift a PR author missed.
-  It is also the only thing that runs `screenshots.spec.ts`'s ~130
-  assertions, which CI excludes; `a6dfd813` found one rotted that way. A
-  capture nobody has regenerated in a release cycle is a record nobody has
-  checked.
+Screenshots remain heavy, manually coordinated browser/Compose work (§16).
+The guard is not a memory-pressure or lifecycle adapter: use the controller's
+serial validation slot, require normal pressure, and stop on a resource
+event without automatic retry. Capture on the build Mac, not Linux, whose
+font rendering differs. The existing fresh-database boot and `E2E_KEEP`
+cleanup behavior are unchanged.
 
 So: registering in `design.spec.ts` is part of a UI change's definition of
-done. Capturing is part of it when the change moves pixels — and committing
-only the captures you changed is part of capturing.
+done. Capturing is part of layout/structure work, not wording-only work;
+selecting and committing only relevant captures is part of capturing.
 
 ## 9. Fixture realism
 

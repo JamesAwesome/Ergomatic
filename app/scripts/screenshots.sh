@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Boots (or reuses) the same compose stack as scripts/e2e.sh, then runs only
+# Rebuilds the same compose stack as scripts/e2e.sh, then runs only
 # screenshots.spec.ts (project-filtered) to (re)capture docs/screenshots/.
-# Invoked as `pnpm screenshots` from app/. Not diff-asserted — a human
+# Invoked as `pnpm screenshots -g "<affected test names>"` from app/.
+# Full refresh requires James's explicit request and `--all`.
+# Not diff-asserted — a human
 # judges the output; see docs/superpowers/specs/2026-07-28-testing-
 # validation-design.md.
 #
@@ -18,6 +20,28 @@
 # test phase is ~85s. See
 # docs/superpowers/specs/2026-09-10-screenshot-churn-design.md.
 set -Eeuo pipefail
+
+# Refuse before sourcing either stack helper: even stack-reap touches Docker.
+# This is an explicit-selection guard, not proof that a regex is narrow.
+# Preview matching names with Playwright --list before an approved capture.
+usage() {
+  printf '%s\n' \
+    'Usage: pnpm screenshots -g "<affected test names>" | --all' \
+    'No captures for text-only changes, release notes, version bumps or tags.' \
+    "Full refresh: only on James's explicit request, with --all." \
+    'Preview names without Docker: pnpm exec playwright test --project=screenshots --list -g "<pattern>"'
+}
+case "$#:${1:-}" in
+  1:--help|1:-h) usage; exit 0 ;;
+  1:--all) shift ;;
+  2:-g|2:--grep)
+    if [[ ! "$2" =~ [^[:space:]] ]]; then usage >&2; exit 64; fi
+    ;;
+  1:--grep=*)
+    if [[ ! "${1#--grep=}" =~ [^[:space:]] ]]; then usage >&2; exit 64; fi
+    ;;
+  *) usage >&2; exit 64 ;;
+esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" # compose.yml lives here
 
@@ -55,10 +79,5 @@ cd app
 # suffix to avoid colliding with a previous run's — and that suffix was the
 # single largest source of screenshot churn, because it carries `Date.now()`
 # and every capture of an account screen renders it. See helpers.ts's RUN_ID.
-# `"$@"` forwards a filter, exactly as e2e.sh:39 does: `pnpm screenshots -g
-# "today-freestyle"` runs only the named captures and leaves the other files
-# untouched on disk. Its absence here was the whole "pnpm screenshots has no
-# filter" premise that four filings carried (antagonist, 2026-09-11) — pnpm
-# forwards fine; this script dropped the args. List names with
-# `pnpm exec playwright test --project=screenshots --list`.
+# `"$@"` preserves the approved grep; only explicit --all removes it.
 ERGOMATIC_STABLE_RUN_ID=1 pnpm exec playwright test --project=screenshots "$@"

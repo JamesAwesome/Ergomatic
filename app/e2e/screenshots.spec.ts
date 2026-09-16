@@ -34,7 +34,9 @@ import { JUDGE_COLORS_KEY, type JudgeColors } from "../src/you/judgeColors";
 // Committed into docs/screenshots/ for PR bodies. NOT diff-asserted — a
 // human judges these, this spec only judges "did it render" (see
 // docs/superpowers/specs/2026-07-28-testing-validation-design.md). Run via
-// `pnpm screenshots` (scripts/screenshots.sh), never as part of `pnpm e2e`.
+// `pnpm screenshots -g "<affected test names>"` (scripts/screenshots.sh),
+// only for layout/structure changes; TESTING.md §8 governs full refreshes.
+// Never part of `pnpm e2e` or a text-only release step.
 const SCREENSHOTS_DIR = path.resolve(process.cwd(), "../docs/screenshots");
 
 // The handoff's own reference values, so captured targets/durations match

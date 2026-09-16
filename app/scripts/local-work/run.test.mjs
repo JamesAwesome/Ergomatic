@@ -737,21 +737,61 @@ test("a child refusing both signals remains blocked, without owner SIGKILL", asy
 test("unavailable cleanup observations retain blocked ownership even after exit zero", async (t) => {
   const options = fixture(t),
     finished = join(options.root, "finished");
+  const unavailableAt = [];
   const result = await runWorkload({
     ...options,
-    observe: () =>
-      existsSync(finished)
-        ? {
-            pressure: { state: "normal" },
-            processes: { unavailable: "census failed" },
-          }
-        : options.observe(),
+    observe: ({ phase: boundary }) => {
+      // The marker proves child work happened, not that its process exited.
+      // Only the owner's post-wait boundary may lose cleanup evidence here.
+      if (boundary === "cleanup") {
+        unavailableAt.push(boundary);
+        return {
+          pressure: { state: "normal" },
+          processes: { unavailable: "census failed" },
+        };
+      }
+      return options.observe();
+    },
     phases: [phase(put(finished, "done"))],
   });
+  assert.deepEqual(unavailableAt, ["cleanup"]);
+  assert.equal(result.phases[0].exitCode, 0);
+  assert.equal(result.phases[0].signal, null);
   assert.equal(result.exitCode, 75);
   assert.equal(result.cleanup, "unresolved");
   assert.equal(readFileSync(finished, "utf8"), "done");
   assert.notEqual(inspectOwner(options.root).status, "free");
+});
+
+test("unavailable running census interrupts a ready live child before cleanup", async (t) => {
+  const options = fixture(t),
+    ready = join(options.root, "ready");
+  const unavailableAt = [];
+  const result = await runWorkload({
+    ...options,
+    observe: ({ phase: boundary }) => {
+      // The ready marker is written while the event loop stays alive. The
+      // phase helper's natural failsafe still bounds a broken cancellation.
+      if (boundary === "running" && existsSync(ready)) {
+        unavailableAt.push(boundary);
+        return {
+          pressure: { state: "normal" },
+          processes: { unavailable: "running census failed" },
+        };
+      }
+      return options.observe();
+    },
+    phases: [phase(`${put(ready, "ready")}setInterval(()=>{},1000)`)],
+  });
+  assert.ok(unavailableAt.length > 0);
+  assert.ok(unavailableAt.every((boundary) => boundary === "running"));
+  assert.equal(result.phases[0].exitCode, null);
+  assert.equal(result.phases[0].signal, "SIGINT");
+  assert.equal(result.exitCode, 130);
+  assert.equal(result.signal, "SIGINT");
+  assert.equal(result.classification, "resource-aborted");
+  assert.equal(result.cleanup, "verified");
+  assert.equal(inspectOwner(options.root).status, "free");
 });
 
 test("a non-normal final sample cannot turn a resource event into a pass", async (t) => {

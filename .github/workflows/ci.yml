@@ -220,6 +220,10 @@ jobs:
         run: |
           bash -n app/scripts/stack-env.sh
           bash app/scripts/stack-env.test.sh
+      - name: Test screenshot admission without containers or browsers
+        run: |
+          bash -n app/scripts/screenshots.sh
+          node --test app/scripts/screenshots.test.mjs
       - name: Test the Concept2 compose env passthrough
         run: |
           bash -n scripts/compose-env.test.sh

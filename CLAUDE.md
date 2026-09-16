@@ -116,8 +116,13 @@ machine-wide and does not cover independent clones or old worktrees.
   right after `pnpm build`; it proves named dev-only seams are absent from
   `dist/`.
 - `pnpm e2e` — Playwright flows + structural design assertions against the real
-  compose stack. `pnpm screenshots` — captures `docs/screenshots/*.png` the
-  same way. **Both `up -d --build --wait` unconditionally** (a rebuild every
+  compose stack. `pnpm screenshots -g "<affected test names>"` — scoped
+  layout/structure captures in `docs/screenshots/`; preview the matching
+  names with Playwright `--list` first (TESTING.md §8). **No captures for
+  text-only changes, release notes, version bumps or tags.** Full refresh
+  needs James's explicit request and `pnpm screenshots --all`; bare/empty
+  selection refuses before Docker. **Both capture and e2e runs
+  `up -d --build --wait` unconditionally** (a rebuild every
   invocation, not "boots it if not running") **and leave the stack UP
   afterwards** — `E2E_KEEP` defaults to `1`.
 - `ERGOMATIC_TEST_WORKERS` / `ERGOMATIC_E2E_WORKERS` — local worker
@@ -201,7 +206,8 @@ machine-wide and does not cover independent clones or old worktrees.
   (`git show --stat c2182ef5`).
   Fast-path changes still get a worktree, failing-test-first,
   self-mutation, the scoped gates, and a PR — Claude implements inline and
-  **James is the reviewer**, with the PR carrying screenshots and a
+  **James is the reviewer**, with the PR carrying scoped screenshots only
+  for layout/structure changes (never text-only work; TESTING.md §8) and a
   one-paragraph risk note ("what I'd have asked a reviewer to probe").
   **Escalate mid-change, do not finish and disclose:** the moment a
   fast-path change reaches into `domain/`, a stored shape, or a second
@@ -213,10 +219,13 @@ machine-wide and does not cover independent clones or old worktrees.
   sends the next change of its kind back to the full cycle.
 - **A SPEC THAT CHANGES WHAT A ROWER READS OR SEES CARRIES A DESIGN GATE
   (James, 2026-08-27: "Make sure to gate on designs too" — asked twice,
-  so it is standing).** Any spec whose scope includes user-visible COPY
-  or LAYOUT gets a Gate 0: James approves the RENDERED thing before any
-  implementation task starts. Not a description of the copy, not a
-  sentence in the spec — the actual screen, at real proportions, in both
+  so it is standing).** Layout/structure changes get a Gate 0: James
+  approves the RENDERED thing before any implementation task starts.
+  **Wording-only changes instead present before/after text for approval,
+  without screenshots or a rendered mockup** (James, 2026-09-16); release
+  notes, version bumps and tags do not trigger capture. A changed number's
+  meaning or a changed layout is not wording-only. For the visual gate,
+  show the actual affected screen, at real proportions, in both
   orientations, against what it replaces, with every colour pairing's
   contrast ratio computed and stated as a number.
   **Why it is a hard gate and not a courtesy:** RC-24's shape was
@@ -691,9 +700,11 @@ describes.
 1. **Changing UI without running `pnpm e2e`.** If your diff touches anything
    under `app/src/`, run the named e2e specs locally against an already-booted
    stack, then read the e2e job on the PR for the full suite — and
-   `pnpm screenshots` if a screen's layout changed, **committing only the
-   captures for screens your diff touched**; `git checkout -- docs/screenshots/`
-   discards the rest (TESTING.md §8). The local half is NAMED specs because
+   scoped `pnpm screenshots -g "<affected test names>"` if a screen's
+   layout/structure changed, **committing only the relevant captures**
+   (TESTING.md §8). Text-only work, including releasing, needs no captures;
+   full refresh needs James's explicit request plus `--all`. Preserve any
+   pre-existing modified captures. The local half is NAMED specs because
    James tiered the gate (2026-09-08): CI owns the full suite, where nobody can
    skip it. **An `app/src/` change is not done until a full e2e run has passed
    somewhere you have read the result.** _Three phases
