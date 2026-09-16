@@ -72,6 +72,9 @@ export default defineConfig({
         ...devices["Desktop Safari"],
         // Linux WebKit rejects Chromium's --disable-blink-features flag.
         launchOptions: { args: [] },
+        // Keep the failing attempt, not just a successful retry: one Linux
+        // run never rendered the log, before any scroll assertion ran.
+        trace: "retain-on-failure",
       },
       testMatch: "**/sheetScroll.spec.ts",
     },

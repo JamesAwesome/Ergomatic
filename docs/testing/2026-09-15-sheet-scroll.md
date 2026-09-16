@@ -119,3 +119,12 @@ awaits the wheel's full 300px delta before capturing the pre-open position.
 Sheet scrolling and post-close scrolling likewise await their observed
 movement. The backdrop's negative assertion retains its settling pause.
 The product lock is unchanged; this corrects when the test calls setup done.
+
+Run `35050394314` (d74ce8c2) passed 597 cases first try and one on retry.
+The landscape first attempt could not find the saved log's heading within
+5 seconds, before any scrolling. Its error context contains no page
+snapshot; the default tracing retained only the successful retry. That
+does not establish why loading failed. The two-test WebKit project now
+retains traces of failed attempts, so a recurrence preserves the evidence
+needed to diagnose it. No speculative application fix or timeout increase
+was made for this isolated loading failure.
