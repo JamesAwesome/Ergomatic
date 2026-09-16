@@ -177,6 +177,14 @@ toolkit, not a history.
 
 ## Techniques that keep paying
 
+- **A native test report is not the whole-command verdict; an invocation
+  is not one worker lifetime.** Trace reporter finalization through later
+  coverage/global-error producers, repeat hashes and detached browser
+  launches. Pin passing assertions plus command failure, and a detached
+  descendant beside an unrelated sentinel. Trace one fresh evidence root
+  through producer/checker/summary/upload; exercise stale or missing output
+  and ensure publication runs even when command or evidence fails.
+
 - **Transcribe a wire field's enum from the document that DEFINES the field,
   not from a sibling vendor document that also contains it.** Concept2 ships
   two: PM5 BLE Interface Definition rev 1.30 (revision history: "Added Erg

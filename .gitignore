@@ -27,3 +27,4 @@ app/ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 # the SDLC teardown gate checks `git status` on the main checkout, so an
 # un-ignored capture directory would trip it on the first real memory kill.
 app/.test-kills/
+app/.test-evidence/

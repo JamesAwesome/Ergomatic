@@ -19,7 +19,25 @@ export default defineConfig({
   workers: isCI() ? undefined : workerCap(process.env.ERGOMATIC_E2E_WORKERS, 3),
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: "html",
+  reporter: process.env.ERGOMATIC_EVIDENCE_DIR
+    ? [
+        ["list"],
+        [
+          "html",
+          {
+            outputFolder: `${process.env.ERGOMATIC_EVIDENCE_DIR}/html`,
+            open: "never",
+          },
+        ],
+        [
+          "json",
+          { outputFile: `${process.env.ERGOMATIC_EVIDENCE_DIR}/report.json` },
+        ],
+      ]
+    : "html",
+  ...(process.env.ERGOMATIC_EVIDENCE_DIR
+    ? { outputDir: `${process.env.ERGOMATIC_EVIDENCE_DIR}/test-output` }
+    : {}),
   use: {
     // Web Bluetooth is exposed by macOS Chromium but absent in Linux CI.
     // Start unsupported everywhere; connected scenarios explicitly inject
@@ -29,7 +47,12 @@ export default defineConfig({
     // the fallback keeps a bare `playwright test` against a hand-started
     // legacy stack working.
     baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:8081",
-    trace: "on-first-retry",
+    trace:
+      process.env.ERGOMATIC_EVIDENCE_DIR &&
+      process.env.ERGOMATIC_EVIDENCE_TRACE === "1"
+        ? "retain-on-failure"
+        : "on-first-retry",
+    screenshot: process.env.ERGOMATIC_EVIDENCE_DIR ? "only-on-failure" : "off",
   },
   projects: [
     {

@@ -558,3 +558,101 @@ whole ledger files that leave the lint population, but cannot detect one
 same-rule violation replacing another in the same file while the count stays
 equal. That same-count replacement is the sole accepted blind spot;
 `CLAUDE.md` owns the no-growth and campsite policy for it.
+
+## 15. First-failure evidence
+
+CI captures each test command in a fresh `app/.test-evidence/<UUID>/`
+directory. Vitest retains its default human reporter plus native JSON;
+Playwright retains HTML plus human and JSON reports. Ordinary commands
+keep their existing reporting. Recovered Playwright retries remain
+report-only; ordinary command failures still block. Strict flake gating
+is a separate policy decision.
+
+The observer records exact argv, cwd, Git SHA and tracked-diff fingerprint,
+installed runner/Node versions, CI run/attempt/job context, timestamps and
+the real child wait status. A nonterminal receipt is written before launch,
+then atomically replaced after wait. The terminal receipt fingerprints the
+native report. Native JSON never supplies or overrides command status:
+passing assertions followed by failed coverage remain a failed command.
+Vitest's native JSON omits project identity and global unhandled errors;
+those identities are unknown unless the invocation scopes a project, and
+global diagnostics remain in the durable stderr log.
+
+The workflow publishes a summary and uploads the invocation directory
+under `always()`, then checks required evidence and the upload URL. The
+final check adds the actual archive link to the job summary. Archives last
+14 days. Within the downloaded directory, `summary.md` links the receipt,
+raw streams, resources and native report. Treat raw traces/logs as sensitive:
+inspect before sharing or committing; traces can contain tokens and cookies.
+
+From `app/`, the explicit capture entry point is:
+
+```sh
+node scripts/test-evidence.mjs run vitest -- bash scripts/test-run.sh --project unit
+node scripts/test-evidence.mjs summary <printed-invocation-directory>
+node scripts/test-evidence.mjs check <printed-invocation-directory>
+```
+
+An omitted `--root` uses ignored `.test-evidence` relative to cwd; an
+explicitly empty root fails. Custom roots should be outside tracked source
+or git-ignored. Invocation IDs are UUIDs and existing directories are refused.
+Symlink path components are refused except the operating system's
+`/var` and `/tmp` aliases on macOS; the resolved directory is minted once
+and passed to the runner. Never point native reporting at an old invocation.
+
+For an already-booted, owned stack, the Playwright command is
+`node scripts/test-evidence.mjs run playwright -- node_modules/.bin/playwright test --project=chromium <named-file>`.
+The opt-in environment variable `ERGOMATIC_EVIDENCE_TRACE=1` selects
+`retain-on-failure`; otherwise tracing stays `on-first-retry`.
+Capture mode takes failed screenshots. Benchmark a named selection with
+and without tracing before adopting it across CI.
+
+This is a **passive evidence observer**, not a local resource admission
+controller. It does not enforce the hunt's pressure or time budgets.
+The hunt controller must defer under warning/critical/unknown pressure,
+stop its owned command on rising pressure, and stop after a resource event.
+Local browser probes remain deferred until detached browser ownership and
+cleanup are separately demonstrated. Sending SIGINT/SIGTERM to the observer
+forwards it only to its own child process group. It never kills by name or
+deletes Docker resources. A signal proves termination, not an OOM cause.
+After the command leader exits, the observer allows two seconds for stdout
+and stderr to drain. A descendant retaining either pipe beyond that budget
+leaves capture explicitly incomplete; the observer closes its read ends and
+preserves the leader's actual exit. This bounds pipe draining, not test runtime.
+
+Resources are appended once per second and at boundaries, separately from
+reporter finalization. macOS records pressure (1 normal, 2 warning,
+4 critical) and swap; Linux records meminfo, PSI and cgroup v2 events.
+Process samples attribute PID/start-time identities observed in the child
+tree, including observed detached descendants. Missing diagnostics are
+explicit. Container and Docker VM measurements are unavailable without
+attributable ownership; do not add their memory to host/process totals.
+Short-lived descendants can escape polling, so cleanup is never certified
+from a missing leader. Observed survivors make evidence incomplete and
+defer another local probe.
+
+| State | Minted | Cleared / survives |
+| --- | --- | --- |
+| Observer and signal handlers | One capture invocation, outside child group | Exit after child wait; SIGKILL can leave a nonterminal receipt |
+| Child PID/PGID | Spawn with a new process group | Wait status preserved; disappearance does not certify descendants |
+| Observed descendant identities | PID plus start time while visible in ancestry | Retained in terminal receipt; survivors recorded, never broadly killed |
+| Sample timer and stream descriptors | Before/at spawn | After leader wait and bounded pipe drain, timer cleared and descriptors closed; files survive |
+| Invocation directory and receipt | Fresh UUID before spawn | Never reused or automatically deleted; CI retention 14 days |
+| Native JSON/HTML/test output | Invocation-scoped runner configuration | Survive child exit; absent/stale/replaced report fails evidence check |
+| Containers / detached unobserved browsers | Not owned by this wrapper | Unknown; controller must establish ownership and cleanup separately |
+
+Counts describe observed initial executions, first failures, recovered
+retries, exhausted executions and JSON-visible suite errors separately.
+Repeated executions count initial executions; retries do not. Playwright
+1.63's native JSON omits the numeric repeat index: distinct opaque spec IDs
+preserve repeat-specific executions. The summary prints that ID/project and
+marks the numeric index unknown. Experiments needing a numeric repeat index
+or fixture RUN_ID must explicitly record or attach it. The summary's
+job incidence is for that invocation's entire selected population, not a
+historical per-test rate. Raw JSON retains per-test/project/repeat/retry
+details where the runner supplies them. Historical exposure remains unknown
+unless execution is independently evidenced.
+
+The lightweight gate is `node --test scripts/test-evidence.test.mjs`.
+It launches harmless fixture children; it does not run Vitest, a browser,
+containers, or allocate artificial memory pressure.

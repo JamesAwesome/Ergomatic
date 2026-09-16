@@ -1,5 +1,36 @@
 # Antagonist ledger
 
+## Test reliability hunt — hardening, 2026-09-15
+
+Two read-only lenses against the design/hunt plan based at `5fc01cce`.
+No tests or containers were run by reviewers. Controller folded findings.
+
+- **Native JSON success was narrower than command success.** Reporter fields
+  appeared sufficient; Vitest 4.1.11 emits JSON before coverage checking and
+  handles global unhandled errors separately. **Technique:** trace actual
+  finalization call sites and later failures; separate test, command and
+  evidence outcomes.
+- **One group does not contain an E2E experiment.** Ordinary child rehearsal
+  appeared sufficient; Playwright 1.63.0 detaches browser groups and compose
+  outlives its CLI. **Technique:** inspect spawn options and require a
+  detached-descendant/sentinel rehearsal with external ownership receipts.
+- **One invocation does not preserve fixture identity.** Repeats change
+  worker hashes and retries replace workers; module-minted RUN_ID changes.
+  **Technique:** trace repeat assignment to worker selection to fixture mint
+  site; establish actual account/worker reuse before testing leakage.
+- **Event counts are not job incidence.** Repeated initial executions can
+  fail twice in one job. **Technique:** use two repeats as a counterexample;
+  preserve repeat identity and name each denominator's unit.
+- **Named evidence consumers do not establish one reliable path.** A unique
+  directory and missing-report check appeared sufficient. **Technique:**
+  trace one minted root/identity through writer, checker, summary and upload;
+  reject reuse, empty paths, symlink escape and nonterminal receipts. Keep
+  publication under always() before the independent evidence gate.
+
+Vetted ground: retain-on-failure preserves a normally finalized original
+failure, not a killed worker's trace; retries reveal outcomes, not causes.
+Runtime tracing cost, capacity and actual defect causes remain unmeasured.
+
 The dated per-engagement record for the `antagonist` agent, one section per
 engagement. **Not read up front** — the bounded, always-read half is
 `antagonist-techniques.md`, and an entry is proposed to both. Grep this file
