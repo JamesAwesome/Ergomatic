@@ -6,6 +6,13 @@ const app = "/checkout/app";
 const plan = (name, args = [], env = {}) =>
   workloadPhases({ app, name, args, env });
 
+test("every test entry requests the private runner outcome protocol, while other phases do not", () => {
+  for (const name of ["test", "test-full", "test-coverage"]) {
+    assert.equal(plan(name, ["--project", "unit"])[0].outcome, "test-run");
+  }
+  assert.equal(plan("typecheck").at(-1).outcome, undefined);
+});
+
 test("pre-commit holds lint-staged and every typecheck in one internal pipeline", () => {
   const phases = plan("pre-commit");
   assert.deepEqual(
@@ -70,6 +77,7 @@ test("test selectors reach the signal-preserving runner byte for byte", () => {
     CI: "1",
   });
   assert.deepEqual(phases[0].args, ["scripts/test-run.sh", ...args]);
+  assert.equal(phases[0].outcome, "test-run");
   assert.equal(phases[0].env.NODE_OPTIONS, "--max-old-space-size=1024");
   assert.equal(Object.hasOwn(phases[0].env, "CI"), false);
 });

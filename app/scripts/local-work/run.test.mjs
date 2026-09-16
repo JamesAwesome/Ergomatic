@@ -50,6 +50,66 @@ const phase = (code) => ({
 const put = (path, text) =>
   `require('node:fs').writeFileSync(${JSON.stringify(path)}, ${JSON.stringify(text)});`;
 
+test("test-run resource outcomes survive the shell boundary into the owner receipt", async (t) => {
+  for (const [code, stderr, classification, signal] of [
+    [1, "FATAL ERROR: Allocation failed", "memory", null],
+    [137, "", "signal", "SIGKILL"],
+    [23, "", "failed", null],
+  ]) {
+    const options = fixture(t);
+    const result = await runWorkload({
+      ...options,
+      phases: [
+        {
+          command: "bash",
+          args: [resolve("app/scripts/test-run.sh"), "--self-test"],
+          cwd: options.root,
+          outcome: "test-run",
+          env: {
+            ...process.env,
+            FAKE_RC: String(code),
+            FAKE_ERR: stderr,
+            FAKE_OUT: "Test Files 1 failed (1)",
+            ERGOMATIC_TEST_KILLDIR: join(options.root, "kills"),
+          },
+        },
+      ],
+    });
+    assert.equal(result.exitCode, code);
+    assert.equal(result.classification, classification);
+    assert.equal(result.signal, signal);
+    assert.equal(result.cleanup, "verified");
+  }
+});
+
+test("signals delivered to the real owner stop its live child and release only after cleanup", async (t) => {
+  for (const signal of ["SIGINT", "SIGTERM"]) {
+    const options = fixture(t),
+      ready = join(options.root, "ready"),
+      stopped = join(options.root, "stopped"),
+      resultFile = join(options.root, "result");
+    const body = phase(
+      `process.on('SIGINT',()=>{${put(stopped, "SIGINT")}process.exit(0)});${put(ready, "yes")}setInterval(()=>{},1000)`,
+    );
+    const script = `import {runWorkload} from ${JSON.stringify(new URL("./run.mjs", import.meta.url).href)};import {readHost} from ${JSON.stringify(new URL("./host.mjs", import.meta.url).href)};import{writeFileSync,existsSync}from'node:fs';const metadata=${JSON.stringify(options.metadata)};metadata.pid=process.pid;metadata.start=readHost().processes.value.find(p=>p.pid===process.pid).started;const ready=setInterval(()=>{if(existsSync(${JSON.stringify(ready)})){clearInterval(ready);process.send('ready');}},5);const result=await runWorkload({root:${JSON.stringify(options.root)},metadata,phases:[${JSON.stringify(body)}],observe:()=>({...readHost(),pressure:{state:'normal'}}),sampleMs:10});writeFileSync(${JSON.stringify(resultFile)},JSON.stringify(result));process.disconnect();process.exitCode=result.exitCode;`;
+    const owner = spawn(
+      process.execPath,
+      ["--input-type=module", "-e", script],
+      { stdio: ["ignore", "inherit", "inherit", "ipc"] },
+    );
+    const exit = once(owner, "exit");
+    await once(owner, "message");
+    owner.kill(signal);
+    const [code] = await exit;
+    const result = JSON.parse(readFileSync(resultFile, "utf8"));
+    assert.equal(code, 75);
+    assert.equal(result.classification, "resource-aborted");
+    assert.equal(result.cleanup, "verified");
+    assert.equal(readFileSync(stopped, "utf8"), "SIGINT");
+    assert.equal(inspectOwner(options.root).status, "free");
+  }
+});
+
 test("preparation runs under admission, and never at unsafe pressure", async (t) => {
   const unsafe = fixture(t);
   let prepared = false;

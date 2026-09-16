@@ -93,7 +93,7 @@ machine-wide and does not cover independent clones or old worktrees.
   once with and once without; the counts are what they are on the day, and the
   ratio is the point.
 - Single Vitest project: `pnpm test --project unit|client|integration`.
-  Pass a file bare, for example `pnpm test --project client src/lib/foo.test.ts`.
+  Pass a file bare, for example `pnpm test --project client src/session/reviewSelector.test.ts`.
   `integration` needs Docker and is not yet ownership-managed. The admitted
   wrapper rejects a literal `--`; exact manifest selection is a separate
   increment, so current Vitest patterns are not an exact-file guarantee.
@@ -394,27 +394,27 @@ machine-wide and does not cover independent clones or old worktrees.
       and automatic log collection. Any unavoidable console setup is one
       pretested batch declared up front, not repeated commands or manual
       receipt copying during the walk.
-      **Validate that each action is possible, not just that its control
-      exists (James, 2026-09-04).** For every gesture, button and transition,
-      record the exact platform/build, starting UI state, modal-sheet state,
-      and evidence that the operator can actually perform it. Source/API
-      documentation establishes a candidate, not on-device reachability.
-      Reuse compatible recorded demonstrations; no hidden rehearsal walk
-      may bypass this gate. Unknown action feasibility is NOT READY and
-      cannot be an assumed prerequisite. A bounded feasibility experiment
-      can itself be proposed to PM, explicitly labelled as the uncertainty
-      being tested, never as a known-working step. Unknown test outcomes
-      are legitimate; silently impossible instructions are not.
-      Finish builds, code review, desk debugging and capture preparation
-      before inviting James. Give complete short action blocks between
-      pieces; never ask for typing mid-piece. Start and record the agreed
-      wall-clock deadline when James begins setup or waiting for the walk.
-      At the cap, an unplanned failure, or an exhausted retry budget, STOP,
-      preserve the evidence and release James. No live repair/rebuild loop,
-      surprise case, or "one more scan". Revised scope, build, steps, timing,
-      retry or typing budgets require a new PM PASS and James's agreement
-      before another session. The hardware-walk skill's rowing budget is
-      additional to this total-time gate, not a substitute for it.
+    **Validate that each action is possible, not just that its control
+    exists (James, 2026-09-04).** For every gesture, button and transition,
+    record the exact platform/build, starting UI state, modal-sheet state,
+    and evidence that the operator can actually perform it. Source/API
+    documentation establishes a candidate, not on-device reachability.
+    Reuse compatible recorded demonstrations; no hidden rehearsal walk
+    may bypass this gate. Unknown action feasibility is NOT READY and
+    cannot be an assumed prerequisite. A bounded feasibility experiment
+    can itself be proposed to PM, explicitly labelled as the uncertainty
+    being tested, never as a known-working step. Unknown test outcomes
+    are legitimate; silently impossible instructions are not.
+    Finish builds, code review, desk debugging and capture preparation
+    before inviting James. Give complete short action blocks between
+    pieces; never ask for typing mid-piece. Start and record the agreed
+    wall-clock deadline when James begins setup or waiting for the walk.
+    At the cap, an unplanned failure, or an exhausted retry budget, STOP,
+    preserve the evidence and release James. No live repair/rebuild loop,
+    surprise case, or "one more scan". Revised scope, build, steps, timing,
+    retry or typing budgets require a new PM PASS and James's agreement
+    before another session. The hardware-walk skill's rowing budget is
+    additional to this total-time gate, not a substitute for it.
   - **They PROPOSE ledger entries; the controller lands them.** No
     agent writes to the repo — its own ledger, a spec, or a plan — in ANY
     checkout. The worktree is not an exception: the rule is about who owns
@@ -510,7 +510,6 @@ machine-wide and does not cover independent clones or old worktrees.
     **This is not `/close-phase`'s business** — that skill closes a phase, and
     most work that files rows never runs it. It fires when a PR is opened,
     which is also what makes it reach fast-path and one-off changes.
-
   - _What this deliberately is NOT: a script, a marker on every heading, a CI
     check, or anything that strikes a row on its own. Phase RR built that and
     it was abandoned — `docs/history/phase-rr.md`._
@@ -790,7 +789,7 @@ describes.
     written down** — a diagnostic hidden behind a build flag is disarmed by
     anyone who edits the build command for unrelated reasons. _Phase CS's spec,
     its plan and two walk cards all said `VITE_ENABLE_FAKE_MONITOR=1
-pnpm ios:build` puts a fake PM5 on the phone; `adapters/monitorTransport.ts`
+    pnpm ios:build` puts a fake PM5 on the phone; `adapters/monitorTransport.ts`
     takes the Capacitor BLE arm whenever `isNative()`, so only the web arm ever
     reaches the fake seam. He built, tapped Connect, and found nothing._
 
@@ -852,7 +851,7 @@ pnpm ios:build` puts a fake PM5 on the phone; `adapters/monitorTransport.ts`
     revision history; the conclusion was right and the method was not — the same
     pass found three GATT-versus-multiplexed divergences carrying no revision
     row at all. What rescued it was `length floor − (highest byte offset of a
-field that has a consumer)` over our own parsers: exactly two had slack._
+    field that has a consumer)` over our own parsers: exactly two had slack._
 
 17. **Opening a phase without writing it into the ROADMAP.** **The brainstorm
     that names a phase adds its ROADMAP section in the same commit as its spec.**

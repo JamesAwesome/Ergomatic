@@ -58,9 +58,11 @@ function context(cwd) {
 export async function runUnmanaged(phases, write = console.error) {
   for (const phase of typeof phases === "function" ? await phases() : phases) {
     const outcome = await new Promise((resolve) => {
+      const env = { ...phase.env };
+      delete env.ERGOMATIC_TEST_OUTCOME;
       const child = spawn(phase.command, phase.args, {
         cwd: phase.cwd,
-        env: phase.env,
+        env,
         stdio: "inherit",
         detached: true,
       });

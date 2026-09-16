@@ -124,6 +124,12 @@ elif [ "$rc" -ne 0 ] && ! grep -qF "Test Files" "$OUT"; then
 fi
 export TEST_RUN_VERDICT
 
+# The admission owner supplies this private FD; no environment-selected path
+# is opened. Preserve the waited status even if the diagnostic write fails.
+if [ "${ERGOMATIC_TEST_OUTCOME:-}" = "1" ]; then
+  printf '{"exitCode":%s,"verdict":"%s"}\n' "$rc" "$TEST_RUN_VERDICT" >&3 || true
+fi
+
 DETAIL=""
 if [ -n "$TEST_RUN_VERDICT" ] && [ -f "$HERE/test-kill-capture.sh" ]; then
   . "$HERE/test-kill-capture.sh"     # sets DETAIL to the capture path

@@ -89,6 +89,7 @@ export function workloadPhases({
     args: [file, ...rest],
     cwd: app,
     env: childEnv,
+    ...(file === "scripts/test-run.sh" ? { outcome: "test-run" } : {}),
   });
   const tsc = (...rest) =>
     node(join(app, "node_modules/typescript/bin/tsc"), rest);

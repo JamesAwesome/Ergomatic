@@ -38,7 +38,7 @@ function fixture(t) {
     path.join(source, "scripts/local-work.mjs"),
     "app/scripts/local-work.mjs",
   );
-  for (const name of ["host", "owner", "run", "workloads"])
+  for (const name of ["host", "owner", "run", "outcome", "workloads"])
     copy(
       path.join(source, `scripts/local-work/${name}.mjs`),
       `app/scripts/local-work/${name}.mjs`,
@@ -54,7 +54,7 @@ function fixture(t) {
   const recorder = `import fs from 'node:fs';import path from 'node:path';
 const root=${JSON.stringify(root)};const kind=process.argv[1].includes('typescript')?'tsc':process.argv[1].includes('vite.js')?'vite':process.argv[1].includes('vitest')?'vitest':'other';
 let owner=null;try{owner=JSON.parse(fs.readFileSync(path.join(root,'.git/ergomatic-local-work/owner/owner.json'),'utf8')).id;}catch{}
-fs.appendFileSync(path.join(root,'calls.jsonl'),JSON.stringify({kind,args:process.argv.slice(2),cwd:process.cwd(),owner,nodeOptions:process.env.NODE_OPTIONS,ci:process.env.CI})+'\\n');
+fs.appendFileSync(path.join(root,'calls.jsonl'),JSON.stringify({kind,args:process.argv.slice(2),cwd:process.cwd(),owner,nodeOptions:process.env.NODE_OPTIONS,ci:process.env.CI,outcome:process.env.ERGOMATIC_TEST_OUTCOME})+'\\n');
 if(process.env.FIXTURE_SIGNAL) process.kill(process.pid,process.env.FIXTURE_SIGNAL);
 else {console.log('Test Files  1 passed (1)');process.exitCode=kind===process.env.FIXTURE_FAIL_KIND?Number(process.env.FIXTURE_FAIL_CODE):0;}
 `;
@@ -174,6 +174,29 @@ test("pre-push executes all three legacy populations despite ambient dry-run fla
   );
   assert.ok(calls[0].owner);
   assert.equal(new Set(calls.map((c) => c.owner)).size, 1);
+  assert.deepEqual(
+    calls.map((c) => c.outcome),
+    ["1", "1", "1"],
+  );
+  const receipt = JSON.parse(
+    fs.readFileSync(
+      path.join(
+        f.root,
+        ".git/ergomatic-local-work/receipts",
+        calls[0].owner,
+        "receipt.json",
+      ),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(
+    receipt.phases.map((phase) => phase.reportedOutcome),
+    [
+      { classification: "passed", signal: null },
+      { classification: "passed", signal: null },
+      { classification: "passed", signal: null },
+    ],
+  );
 });
 test("pre-push legacy missing-base fallback stays Docker-free and fails fast on runner failure", (t) => {
   const f = fixture(t);
@@ -227,6 +250,7 @@ test("package test preserves selectors and Node flags through the real pnpm boun
   );
   assert.ok(f.calls()[0].owner);
   assert.equal(f.calls()[0].ci, undefined);
+  assert.equal(f.calls()[0].outcome, "1");
 });
 test("build package executes three serial internal phases and propagates child signal", (t) => {
   const f = fixture(t);
@@ -296,13 +320,14 @@ test("package full and integration are explicit exclusions, while missing and ma
   }
   const full = spawnSync(pnpm, ["--dir", "app", "test:full"], {
     cwd: f.root,
-    env: f.env,
+    env: { ...f.env, ERGOMATIC_TEST_OUTCOME: "1" },
     encoding: "utf8",
     timeout: 15000,
   });
   assert.equal(full.status, 0, full.stdout + full.stderr);
   assert.match(full.stderr, /EXCLUDED.*unit, client, integration/);
   assert.equal(f.calls()[0].owner, null);
+  assert.equal(f.calls()[0].outcome, undefined);
   const refused = spawnSync(
     pnpm,
     ["--dir", "app", "test", "--project", "integration"],

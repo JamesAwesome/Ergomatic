@@ -28,13 +28,13 @@ don't re-verify Erg Book math through an e2e click, don't mock your way
 around a real Postgres constraint in a "unit" test that's secretly testing
 SQL).
 
-| Layer  | Lives in                                     | Runs in                                                                                                                                                                       | Speed                                      | What it may assert                                                                                                                                                                                         |
-| ------ | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Domain | `app/domain/**`                              | Vitest `unit` project                                                                                                                                                         | milliseconds                               | Exact values. This is the product's math contract (pace, pain, splits, plan expansion) — no framework, no I/O, so there's no excuse for anything less than precise. Pinned to 100% coverage.               |
-| Stores | `app/server/stores/**`                       | Vitest `integration` project (Testcontainers Postgres, started through `app/server/testing/postgres.ts`, which retries testcontainers' hardcoded 10 s port-bind timeout once) | seconds                                    | The only place SQL behavior is truth: constraints, error codes, transactions, real UUID/type coercion. If a store test passes here, it passes against real Postgres — not an approximation of it.          |
-| Routes | `app/server/routes/**`, `app/server/auth/**` | Vitest `unit` project (in-memory fakes)                                                                                                                                       | milliseconds                               | Request handling, validation, auth gating, status codes — fast, because it runs against fakes. The store **contract suites** (§5) are what keep those fakes honest so "fast" doesn't mean "fictional."     |
-| Client | `app/src/**`                                 | Vitest `client` project (jsdom)                                                                                                                                               | milliseconds                               | Rendered output and behavior, queried **by role and accessible name** (React Testing Library) — never by snapshot, never by implementation detail.                                                         |
-| E2E    | `app/e2e/**`                                 | Playwright, Chromium, against the real `docker compose` stack                                                                                                                 | ~1–2s per test, minutes for the stack boot | A few golden flows through the fully wired app (real server, real DB, real static-file serving) — the layer that catches boundary bugs no layer below it can see by construction (see the incident above). |
+| Layer | Lives in | Runs in | Speed | What it may assert |
+|---|---|---|---|---|
+| Domain | `app/domain/**` | Vitest `unit` project | milliseconds | Exact values. This is the product's math contract (pace, pain, splits, plan expansion) — no framework, no I/O, so there's no excuse for anything less than precise. Pinned to 100% coverage. |
+| Stores | `app/server/stores/**` | Vitest `integration` project (Testcontainers Postgres, started through `app/server/testing/postgres.ts`, which retries testcontainers' hardcoded 10 s port-bind timeout once) | seconds | The only place SQL behavior is truth: constraints, error codes, transactions, real UUID/type coercion. If a store test passes here, it passes against real Postgres — not an approximation of it. |
+| Routes | `app/server/routes/**`, `app/server/auth/**` | Vitest `unit` project (in-memory fakes) | milliseconds | Request handling, validation, auth gating, status codes — fast, because it runs against fakes. The store **contract suites** (§5) are what keep those fakes honest so "fast" doesn't mean "fictional." |
+| Client | `app/src/**` | Vitest `client` project (jsdom) | milliseconds | Rendered output and behavior, queried **by role and accessible name** (React Testing Library) — never by snapshot, never by implementation detail. |
+| E2E | `app/e2e/**` | Playwright, Chromium, against the real `docker compose` stack | ~1–2s per test, minutes for the stack boot | A few golden flows through the fully wired app (real server, real DB, real static-file serving) — the layer that catches boundary bugs no layer below it can see by construction (see the incident above). |
 
 ## 2. Test naming
 
@@ -62,7 +62,7 @@ the assertions to find out.
   Nothing under test is exercised.
 - **Mock-echo assertions** — asserting that a spy was called with exactly
   the arguments the test itself constructed and passed in, with no
-  independent check that the _result_ was correct. This proves the plumbing
+  independent check that the *result* was correct. This proves the plumbing
   exists, not that it works.
 
 **Mechanical subset enforced by lint** (`@vitest/eslint-plugin`, wired into
@@ -78,7 +78,7 @@ the assertions to find out.
   `undefined` property or a wrong prototype doesn't pass silently.
 
 Lint catches the mechanical failures above. It cannot tell you whether a
-passing suite would notice a _wrong_ line of code — that's a semantic
+passing suite would notice a *wrong* line of code — that's a semantic
 question, and mutation testing is the deep check for it.
 
 **React 19 + jsdom: a synchronous throw inside an event handler does NOT
@@ -122,20 +122,20 @@ is either a real gap (write the killing test) or genuinely equivalent code
 > current.** The original full run was written under `.superpowers/`, which is
 > git-excluded and unreachable — this table is all that survives of it.
 
-| Scope                             | Mutation score | Killed | Timeout | Survived | No coverage |
-| --------------------------------- | -------------- | ------ | ------- | -------- | ----------- |
-| **All files**                     | **74.99%**     | 1297   | 1       | 287      | 146         |
-| domain (all)                      | **88.96%**     | 797    | 1       | 99       | 0           |
-| &nbsp;&nbsp;domain/bulk.ts        | 91.23%         | 208    | 0       | 20       | 0           |
-| &nbsp;&nbsp;domain/expand.ts      | 88.35%         | 90     | 1       | 12       | 0           |
-| &nbsp;&nbsp;domain/format.ts      | 100.00%        | 8      | 0       | 0        | 0           |
-| &nbsp;&nbsp;domain/pace.ts        | 91.89%         | 34     | 0       | 3        | 0           |
-| &nbsp;&nbsp;domain/plans.ts       | 95.07%         | 193    | 0       | 10       | 0           |
-| &nbsp;&nbsp;domain/suggest.ts     | 87.01%         | 67     | 0       | 10       | 0           |
-| &nbsp;&nbsp;domain/validate.ts    | 81.74%         | 197    | 0       | 44       | 0           |
-| server (all)                      | 59.95%         | 500    | 0       | 188      | 146         |
-| &nbsp;&nbsp;server/routes/data.ts | 70.34%         | 498    | 0       | 180      | 30          |
-| &nbsp;&nbsp;server/stores (all)   | **1.59%**      | 2      | 0       | 8        | 116         |
+| Scope | Mutation score | Killed | Timeout | Survived | No coverage |
+|---|---|---|---|---|---|
+| **All files** | **74.99%** | 1297 | 1 | 287 | 146 |
+| domain (all) | **88.96%** | 797 | 1 | 99 | 0 |
+| &nbsp;&nbsp;domain/bulk.ts | 91.23% | 208 | 0 | 20 | 0 |
+| &nbsp;&nbsp;domain/expand.ts | 88.35% | 90 | 1 | 12 | 0 |
+| &nbsp;&nbsp;domain/format.ts | 100.00% | 8 | 0 | 0 | 0 |
+| &nbsp;&nbsp;domain/pace.ts | 91.89% | 34 | 0 | 3 | 0 |
+| &nbsp;&nbsp;domain/plans.ts | 95.07% | 193 | 0 | 10 | 0 |
+| &nbsp;&nbsp;domain/suggest.ts | 87.01% | 67 | 0 | 10 | 0 |
+| &nbsp;&nbsp;domain/validate.ts | 81.74% | 197 | 0 | 44 | 0 |
+| server (all) | 59.95% | 500 | 0 | 188 | 146 |
+| &nbsp;&nbsp;server/routes/data.ts | 70.34% | 498 | 0 | 180 | 30 |
+| &nbsp;&nbsp;server/stores (all) | **1.59%** | 2 | 0 | 8 | 116 |
 
 **`server/stores` reads near-zero BY DESIGN — this is not a real gap, don't
 panic at this number later.** `vitest.stryker.config.ts` scopes mutation to
@@ -146,21 +146,21 @@ Unit
 tests only exercise the in-memory fakes, never the real Drizzle-backed store
 files — so mutating the real store implementations against unit-only
 coverage produces almost entirely `[NoCoverage]` mutants: the mutated line
-is real production code, but no _unit_ test path reaches it. The real
+is real production code, but no *unit* test path reaches it. The real
 stores ARE tested — thoroughly — by
 `server/stores/contracts/contracts.real.integration.test.ts` against actual
 Postgres; that suite is just outside this scope for cost reasons. The store
 **contract suites** (§5) are the parity mechanism that keeps the fakes (what
-mutation _can_ see) honest against the real stores (what mutation
-_can't_ afford to see per-run). Read `server/stores`'s mutation score as
+mutation *can* see) honest against the real stores (what mutation
+*can't* afford to see per-run). Read `server/stores`'s mutation score as
 "N/A — see contracts," not as "untested."
 
 **Accepted-equivalent survivors** — four examples of mutants that survived
-and were _correctly_ left surviving, because no test can kill a mutant that
+and were *correctly* left surviving, because no test can kill a mutant that
 produces no observable difference in behavior:
 
 1. `domain/validate.ts:18:3` (`ConditionalExpression`): `typeof n ===
-"number" && Number.isInteger(n)` → `true && Number.isInteger(n)`.
+   "number" && Number.isInteger(n)` → `true && Number.isInteger(n)`.
    `Number.isInteger(x)` already returns `false` for every non-number `x`
    per spec, so the `typeof` check is redundant with it — no input can
    distinguish the mutant from the original.
@@ -170,7 +170,7 @@ produces no observable difference in behavior:
    the branch is only reachable when `fellBack` is already `false` by
    construction — the `true` mutant can never be observed at that point.
 3. `domain/expand.ts:99:16` (`LogicalOperator`): `p.meters !== undefined &&
-p.targetSplit !== undefined` → `||`. Every `Phase` built for a `'w'` step
+   p.targetSplit !== undefined` → `||`. Every `Phase` built for a `'w'` step
    unconditionally sets `targetSplit` whenever it might set `meters`, so the
    two undefined-checks can never disagree in practice.
 4. `domain/validate.test.ts`'s `"rejects num given as a numeric string"`
@@ -184,7 +184,7 @@ p.targetSplit !== undefined` → `||`. Every `Phase` built for a `'w'` step
 Forcing an assertion to "kill" any of these would mean asserting on a
 provably-dead code path — a mutant-shaped test with no behavior behind it,
 which is exactly the kind of filler this document tells you not to write.
-Documenting _why_ a survivor is safe to leave is the correct response, not
+Documenting *why* a survivor is safe to leave is the correct response, not
 chasing 100%.
 
 **An optional field that is ABSENT is not the same as one that is
@@ -202,7 +202,7 @@ and failed only the key-absence assertion.
 ## 4. Coverage stance
 
 Coverage is a **floor detector, not a goal**. It tells you code nothing
-runs; it says nothing about whether what runs is _correct_ (that's what §3
+runs; it says nothing about whether what runs is *correct* (that's what §3
 is for). Treat a coverage gap as a prompt to ask why, not a number to chase.
 
 - Global ratchet: 90% statements/branches/functions/lines
@@ -244,7 +244,7 @@ two historical regressions are pinned permanently as named contract cases,
 not just fixed and forgotten:
 
 - `preferences`: `"empty patch throws — the 2026-07-28 empty-update
-regression"`
+  regression"`
 - `workouts`: `"non-UUID input throws — the 2026-07-28 22P02 regression"`
 
 **Rule: a new store method ships with a new contract case in the same PR.**
@@ -257,12 +257,12 @@ also adding the case.
 - **Prettier is law.** `app/.prettierrc.json` is `{}` — the defaults, on
   purpose, as the anti-bikeshed stance made literal: there is no house style
   to argue about because there is no house style, only Prettier's. `pnpm
-format` / `pnpm format:check` are the only formatting authority; CI runs
+  format` / `pnpm format:check` are the only formatting authority; CI runs
   `format:check` and fails the build on drift.
 - Comments explain **constraints**, not mechanics — why a bound, a guard, or
   a workaround exists, not a restatement of the line below it in English.
   (See `nativeVerify.ts`'s ignore comment above, or `data.ts`'s comment on
-  why `requireUser` is scoped to `/api` — both explain a _why_ a reader
+  why `requireUser` is scoped to `/api` — both explain a *why* a reader
   can't get from the code alone.)
 - Test files should read as executable specs: a maintainer should be able to
   skim the `it()` names in a file and come away knowing the module's
@@ -325,9 +325,9 @@ in CI.
 `app/e2e/screenshots.spec.ts` is the soft half, and **two James rulings scope
 it more narrowly than this section used to imply:**
 
-- **Captures are documentation, not a CI gate** (2026-08-27: _"We honestly
+- **Captures are documentation, not a CI gate** (2026-08-27: *"We honestly
   don't need to run these in ci. It can be part of the release skill and maybe
-  a scheduled reup."_). The `chromium` project carries
+  a scheduled reup."*). The `chromium` project carries
   `testIgnore: ["**/screenshots.spec.ts", "**/touch.spec.ts"]`, and CI runs
   `--project=chromium --project=touch` — **captures are in neither**, so a
   missing capture does not turn CI red and is not supposed to.
@@ -391,7 +391,7 @@ is wrong, the test passes and the bug ships. Both of the worst defects this
 codebase has shipped were fixture failures, not logic failures:
 
 - **The name generator returned the same name on every press.** Its tests
-  seeded an _empty_ library, so four consecutive seeds produced four different
+  seeded an *empty* library, so four consecutive seeds produced four different
   names. Against the real 35-workout library — whose titles occupy the front
   of the generator's own word list — every seed collapsed onto the same
   first-free slot. The fix's regression test imports `LIBRARY_WORKOUTS` and
@@ -407,7 +407,7 @@ codebase has shipped were fixture failures, not logic failures:
 steps, or a fully populated form — not a
 hand-built minimum. When a code path is reachable only by data you don't
 normally author (a warm-up row, a bulk-imported shape, an unset baseline),
-that path is _more_ likely to be wrong, not less, because nothing else
+that path is *more* likely to be wrong, not less, because nothing else
 exercises it.
 
 Corollary for `design.spec.ts`: a sweep that only ever builds one variant only
@@ -479,7 +479,7 @@ Three habits, each learned the same way:
   `waitForTimeout` in these specs is a one-sided settling wait, which is
   safe; a two-sided one is not. **Pump instead:** offer the input on an
   interval for as long as the precondition holds (`while
-(page.url().endsWith("/justrow") && Date.now() < stopAt)`), and let the
+  (page.url().endsWith("/justrow") && Date.now() < stopAt)`), and let the
   consequence itself end the loop. That also makes every offer satisfy the
   precondition by construction rather than by a separate assertion. TD-5's
   capture is the worked example.
@@ -525,8 +525,8 @@ fix round at all, with ~30 self-mutations run before any reviewer looked.
 Two rules of craft:
 
 - **Target the mutant at the logic, not the vicinity.** A rounding predicate
-  gets a value where round and floor _disagree_ (31 s: `31/60*60 ===
-31.000000000000004`), not a clean value that passes either way. A pinned
+  gets a value where round and floor *disagree* (31 s: `31/60*60 ===
+  31.000000000000004`), not a clean value that passes either way. A pinned
   table gets a gross corruption (+1000) that must fail on real value diffs.
 - **The reviewer no longer re-runs your documented mutations** — it spends
   its effort on the seams you didn't look at. That only works if your report
@@ -640,15 +640,15 @@ Short-lived descendants can escape polling, so cleanup is never certified
 from a missing leader. Observed survivors make evidence incomplete and
 defer another local probe.
 
-| State                                     | Minted                                        | Cleared / survives                                                                            |
-| ----------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Observer and signal handlers              | One capture invocation, outside child group   | Exit after child wait; SIGKILL can leave a nonterminal receipt                                |
-| Child PID/PGID                            | Spawn with a new process group                | Wait status preserved; disappearance does not certify descendants                             |
-| Observed descendant identities            | PID plus start time while visible in ancestry | Retained in terminal receipt; survivors recorded, never broadly killed                        |
-| Sample timer and stream descriptors       | Before/at spawn                               | After leader wait and bounded pipe drain, timer cleared and descriptors closed; files survive |
-| Invocation directory and receipt          | Fresh UUID before spawn                       | Never reused or automatically deleted; CI retention 14 days                                   |
-| Native JSON/HTML/test output              | Invocation-scoped runner configuration        | Survive child exit; absent/stale/replaced report fails evidence check                         |
-| Containers / detached unobserved browsers | Not owned by this wrapper                     | Unknown; controller must establish ownership and cleanup separately                           |
+| State | Minted | Cleared / survives |
+| --- | --- | --- |
+| Observer and signal handlers | One capture invocation, outside child group | Exit after child wait; SIGKILL can leave a nonterminal receipt |
+| Child PID/PGID | Spawn with a new process group | Wait status preserved; disappearance does not certify descendants |
+| Observed descendant identities | PID plus start time while visible in ancestry | Retained in terminal receipt; survivors recorded, never broadly killed |
+| Sample timer and stream descriptors | Before/at spawn | After leader wait and bounded pipe drain, timer cleared and descriptors closed; files survive |
+| Invocation directory and receipt | Fresh UUID before spawn | Never reused or automatically deleted; CI retention 14 days |
+| Native JSON/HTML/test output | Invocation-scoped runner configuration | Survive child exit; absent/stale/replaced report fails evidence check |
+| Containers / detached unobserved browsers | Not owned by this wrapper | Unknown; controller must establish ownership and cleanup separately |
 
 Counts describe observed initial executions, first failures, interrupted
 initial/retry attempts, recovered retries, exhausted executions and
@@ -684,7 +684,7 @@ Run these from `app/`:
 ```sh
 node scripts/local-work.mjs status
 pnpm test --project unit domain/pace.test.ts
-pnpm test --project client src/lib/foo.test.ts
+pnpm test --project client src/session/reviewSelector.test.ts
 node scripts/local-work.mjs recover <generation-from-status>
 ```
 

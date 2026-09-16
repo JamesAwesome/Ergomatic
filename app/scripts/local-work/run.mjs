@@ -10,6 +10,7 @@ import { constants } from "node:os";
 import { join } from "node:path";
 import { acquireOwner } from "./owner.mjs";
 import { readHost } from "./host.mjs";
+import { outcomeChannel } from "./outcome.mjs";
 
 function atomic(path, value) {
   writeFileSync(`${path}.tmp`, JSON.stringify(value, null, 2) + "\n", {
@@ -74,6 +75,7 @@ export async function runWorkload({
   process.on("SIGINT", onInterrupt);
   process.on("SIGTERM", onTerminate);
   let mayRelease = true;
+  let channel = null;
   const sample = (phase, childPid, observed) => {
     let host;
     try {
@@ -195,12 +197,23 @@ export async function runWorkload({
         observed: [],
       });
       atomic(path, receipt);
+      channel =
+        phase.outcome === "test-run"
+          ? outcomeChannel(
+              join(directory, `phase-${receipt.phases.length}.outcome.json`),
+            )
+          : null;
       mayRelease = false;
+      const childEnv = { ...(phase.env ?? process.env) };
+      delete childEnv.ERGOMATIC_TEST_OUTCOME;
+      if (channel) childEnv.ERGOMATIC_TEST_OUTCOME = "1";
       const child = spawn(phase.command, phase.args, {
         cwd: phase.cwd,
-        env: phase.env ?? process.env,
+        env: childEnv,
         detached: true,
-        stdio: "inherit",
+        stdio: channel
+          ? ["inherit", "inherit", "inherit", channel.fd]
+          : "inherit",
       });
       entry.pid = child.pid ?? null;
       let reason = null,
@@ -293,6 +306,20 @@ export async function runWorkload({
           : receipt.exitCode
             ? "failed"
             : "passed";
+      if (channel && !outcome.signal && !entry.launchError && !unresolved) {
+        try {
+          const reported = channel.read(outcome.code);
+          receipt.classification = reported.classification;
+          receipt.signal = reported.signal;
+          entry.reportedOutcome = reported;
+        } catch (error) {
+          receipt.exitCode ||= 75;
+          receipt.classification = "resource-aborted";
+          receipt.reason = error.message;
+        }
+      }
+      channel?.close();
+      channel = null;
       if (reason || interrupted || !clean) {
         receipt.exitCode = receipt.exitCode || 75;
         receipt.classification = "resource-aborted";
@@ -316,6 +343,7 @@ export async function runWorkload({
     // A failed owner/receipt write is not proof that release is safe.
     receipt.cleanup = "unresolved";
   } finally {
+    channel?.close();
     process.removeListener("SIGINT", onInterrupt);
     process.removeListener("SIGTERM", onTerminate);
     receipt.terminal = true;

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { acquireOwner, inspectOwner } from "./owner.mjs";
 import { readHost } from "./host.mjs";
@@ -38,6 +39,54 @@ test("public status lists exclusions and shares one canonical common-directory o
     /integration.*browser.*native.*watch.*install/,
   );
   assert.equal(state.commonDir, path.join(root, ".git"));
+});
+test("linked-worktree status resolves the same occupied owner as its primary checkout", async (t) => {
+  const { root, app } = fixture(t);
+  const source = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../..",
+  );
+  const git = (cwd, args) => {
+    const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  // Reuse a read-only object store in an isolated temporary repository. No
+  // authored commit, project worktree registration, or hook bypass is needed.
+  const common = path.resolve(
+    source,
+    git(source, ["rev-parse", "--git-common-dir"]),
+  );
+  fs.writeFileSync(
+    path.join(root, ".git/objects/info/alternates"),
+    path.join(common, "objects") + "\n",
+  );
+  const head = git(source, ["rev-parse", "HEAD"]);
+  git(root, ["update-ref", "refs/heads/fixture", head]);
+  const linked = path.join(root, "linked");
+  git(root, ["worktree", "add", "--no-checkout", "--detach", linked, head]);
+  const output = [];
+  const options = { observe: normal, write: (s) => output.push(JSON.parse(s)) };
+  assert.equal(await main(["status"], { ...options, cwd: app }), 0);
+  const state = output.at(-1);
+  const self = normal().processes.value.find((p) => p.pid === process.pid);
+  const owner = acquireOwner(state.root, {
+    id: randomUUID(),
+    uid: process.getuid(),
+    commonDir: state.commonDir,
+    worktree: root,
+    pid: process.pid,
+    start: self.started,
+    phase: "idle",
+  });
+  assert.equal(await main(["status"], { ...options, cwd: linked }), 0);
+  const sibling = output.at(-1);
+  assert.equal(sibling.status, "occupied");
+  assert.equal(sibling.metadata.id, owner.id);
+  assert.equal(sibling.root, state.root);
+  assert.equal(sibling.commonDir, path.join(root, ".git"));
+  assert.equal(sibling.worktree, linked);
+  owner.release();
 });
 test("warning preflight prevents build artifacts and explicit excluded full runs", async (t) => {
   const { app } = fixture(t);
