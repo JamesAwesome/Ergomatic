@@ -56,3 +56,15 @@ test("outcome channel cannot overwrite an existing file or follow a symlink", (t
   assert.throws(() => outcomeChannel(link), /EEXIST/);
   assert.equal(readFileSync(target, "utf8"), "sentinel");
 });
+
+test("a native worker abort stays a resource event without claiming an allocation failure", (t) => {
+  const value = channel(t);
+  writeSync(
+    value.fd,
+    JSON.stringify({ exitCode: 2, verdict: "resource-aborted" }),
+  );
+  assert.deepEqual(value.read(2), {
+    classification: "resource-aborted",
+    signal: null,
+  });
+});

@@ -18,9 +18,15 @@ especially runner tuning and measurement acceptance.
 **Parent:** cheaper-hooks `5daf579e`, PR464. Work uses the existing linked
 worktree on `codex/memory-measured-tuning`.
 
-Status: Tasks1–2 author implementation/paste-tests and self-mutations complete;
-independent hardening/review not yet credited. Task3 investigation remains
-partial. The whole spec remains incomplete.
+Status: Tasks1–2 are NOT READY. James's continuation authorized the proposed
+local-only, version-pinned Stryker patch. Its first-failure and initialization
+probes now pass; project bounds and ignored-input freshness also have targeted
+fixes. Commit/self-mutation, the remaining code lens, independent review and
+exact-head CI still gate readiness. Task3 investigation remains partial.
+The whole spec remains incomplete. James clarified on2026-09-16 that ready
+increments should merge as work proceeds, not wait for an arbitrary two-PR
+total. Admission #463 has landed; cheaper-hooks #464 is being reconciled with
+that squash merge. This tuning increment stays separate.
 
 ## Global constraints
 
@@ -78,7 +84,13 @@ payload before importing Stryker. A wrapper dropping a selector or concurrency
 must fail, not mutate a broader set.
 
 The child snapshots source/index/config/lock inputs before preparation and
-again after completion. It freezes supported JSON config for the invocation;
+again after completion. Stryker does not use Git's ignore population: the
+mutation snapshot additionally streams all regular app files, including ignored
+sources, witnesses, configs and imported fixtures. Only unconditional
+`.git`/`node_modules` exclusions are omitted; other vendor exclusions remain
+conservatively included. Aliases/special entries refuse. This is copied-input
+freshness, not a hash of installed dependency bytes or an atomic filesystem
+snapshot. It freezes supported JSON config for the invocation;
 the fixed installed Vitest runner/config, no added checkers/build command and
 no in-place mutation are prerequisites. Existing human/HTML reports remain,
 native JSON and the resolved scope live in the unique private receipt. No
@@ -123,6 +135,24 @@ Installed Vitest start calls awaited reporter onInit before relevant-spec
 discovery and before test-run scheduling. The native fixture must reach this
 call site with an excessive resolved maxWorkers and independently prove no
 test body executed; merely calling the guard by hand is insufficient.
+Check each project's effective maxWorkers and maxConcurrency too: one inline
+project can override the root while preserving the project-count/pool checks.
+
+Installed Stryker always decorates runners with RetryRejectedDecorator, whose
+catch calls recover before repeating work. The harmless one-time synthetic OOM
+fixture executed six replacement bodies and passed publicly. No supported
+disable-retry option was found. A log parser or test-only injector override
+cannot satisfy the contract. Do not run ordinary local mutation or claim this
+adapter ready while the first-failure gate remains red. A maintained dependency
+patch is now installed through pnpm's exact-version patch registration.
+The fixed local invocation requires policy version1 and opts in explicitly;
+omitted/false policy retains upstream hosted behavior. The native proxy exports
+the first allocation/process-exit cause, including initialization, and the
+shared invocation latch prevents recovery or another scheduled test body after
+a rejected dry/mutant run. The receipt retains the native exit tuple and bounded
+diagnostic tails separately from the wrapper's nonzero exit and cleanup result.
+Missing patch support refuses before native execution. Upgrades must re-prove
+the native contract; see the patch's maintenance record in the tuning document.
 
 ## Task 1: Bounded mutation request and real inner-pool gate
 
@@ -154,6 +184,12 @@ test body executed; merely calling the guard by hand is insufficient.
   signal status; missing cleanup keeps ownership, never a false pass.
 - [x] Commit via real hooks; mutate the outer bound, inner guard and request
   comparison separately, then restore and run their named green gates.
+- [ ] Commit and self-mutate the local-only vendor recovery policy; native
+  synthetic-OOM, signal-only and initialization gates now pass, with retained
+  causes. Hosted omitted/false compatibility, mutant-stage failure/cleanup and
+  missing-patch refusal also have native green evidence (71242313).
+- [ ] Commit and self-mutate effective project-bound and ignored-input fixes;
+  ensure the latter covers imported/nonselected files, not just argv selectors.
 - [ ] Reconcile command consumers and exclusions; reuse independent task review
   for Tasks1–2, followed by final Standards/Spec review and exact-head full CI.
 
@@ -167,9 +203,12 @@ test body executed; merely calling the guard by hand is insufficient.
   heap observations, without treating heap growth as retained leakage.
 - [x] Profile each real tsc project's file membership and extended diagnostics;
   retain all projects and the E2E census.
-- [ ] Profile representative typed lint and candidate pure-client/Node
-  membership; move nothing without measured benefit and unchanged witnesses.
-- [ ] Compare representative unit1/2/4 and browser1/2/3; browser work waits for
+- [x] Profile representative typed lint and candidate pure-client/Node
+  membership. Two pure files retain49 native identities in Node; this is
+  feasibility only, not an accepted optimization or completed paired protocol.
+- [x] Compare representative unit1/2/4;562 tests pass at each bound. Runs are
+  shorter than the sampling interval, so the RSS peaks cannot select a default.
+- [ ] Compare browser1/2/3; browser work waits for
   its ownership adapter, not a raw launch around that missing protection.
 - [ ] Decide candidate from measured benefit and cost; any new default remains
   James's separate decision. Final candidate needs three complete alternating

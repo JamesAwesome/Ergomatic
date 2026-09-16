@@ -67,6 +67,29 @@ Host-wide VM deltas for the pair order above (MiB,16KiB pages):
 | 3/4 | -16.03 | -36.25 | 0 | 20.11 |
 | 3/2 | -3.81 | -9.72 | 0 | 9.25 |
 
+## Unit pilots
+
+Clean16e340b4, fingerprint
+`d5b9358ee0593aa1fbcef0956109327a69a5639e50847d04315f4f048641b283`:
+`pnpm test:capture --project unit domain/bulk.test.ts domain/suggest.test.ts domain/generation/archetype.test.ts server/routes/data.test.ts --maxWorkers=N`.
+Each run passed562 tests (45/81/49/387 by file), no first failures or retries.
+Fresh contexts, warm filesystem caches, background load not frozen.
+
+| Workers | Owner seconds | Native seconds | Sampled tree MiB | Wrapper MiB | Receipt |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 1 | 1.584 | 0.888 | 516.11 | 63.50 | 470d8d33-6ad7-482c-91ec-a5375790ee08 |
+| 2 | 1.309 | 0.652 | 530.61 | 63.63 | 47805d7a-fee5-4dae-958a-79e3e2556245 |
+| 4 | 1.372 | 0.716 | 528.95 | 63.61 | c3d76838-61bc-4dd6-b192-b82850200772 |
+
+Five samples each, maximum gaps1024/1023/1024ms. These subsecond native
+runs are under-resolved: neither similar peaks nor a default choice follows
+from this table. Normal pressure and verified cleanup throughout. Swap used
+4609.38MiB before/after; immediate vm_stat brackets show zero swapin/out deltas.
+Host compressor-occupied deltas were−2.53/−1.03/−3.83MiB; stored-page
+deltas−3.34/−1.38/−4.78MiB, compressions0, decompressions3.38/1.42/4.81MiB.
+These are host observations, not attributable test savings. Raw brackets:
+ignored measured-tuning workspace `tuning-unit-pilots.json`.
+
 ## Diagnostics, not timing comparisons
 
 These fixed probes used5daf plus documentation edits, fingerprint
@@ -129,6 +152,35 @@ react-hooks/static-components2409.44ms (23.0%), no-floating-promises2079.11ms
 (19.9%). These relative percentages cover timed rule work, not total elapsed
 time. There was no immediate vm_stat bracket; compressor deltas unavailable.
 No rule removal, suppression addition or project-service/result cache proposed.
+
+Pure-client feasibility used exactly `src/library/filters.test.ts` and
+`src/session/reviewSelector.test.ts`, retaining all49 native test IDs/names
+and the real300-entry library. Jsdom receipt
+`45972fd0-a543-4c90-a911-d4508f2e8227` passed at clean16e340b4; Node receipt
+`d9cc0fd9-2212-4c3c-9a10-a0e4f8fa15bd` passed at16e plus the hardening fixes,
+fingerprint `8b27f36f29f0bb7b10d6d4ec43827d650b57fdbe0d5408aca2ca7a69c1e24c67`.
+Sorted native identities share SHA256
+`2e09e7e3e993fbaa9b90ff573f08922a85ec57daf57d083815693979e7e844fa`.
+The diagnostic alone changed the resolved client environment; one isolated
+fork, existing jest-dom setup and source tests were retained. A worker setup
+asserted absent window/document for Node. No production membership changed.
+
+Jsdom native820ms, Node255ms; reported per-file heap67.3/53.6 versus23.0/15.6MiB.
+These are NOT paired acceptance or an RSS reduction: differing dirty trees,
+background state and diagnostic setup, no immediate VM-counter brackets, and
+one-second sampling missed the workers (tree observations below1MiB).
+Wrapper peaks71.09/71.02MiB, four samples each, maximum gaps987/424ms.
+Normal pressure/verified cleanup; swap-used4609.38 and4585.38MiB respectively
+stayed unchanged within each run, not a test-attributed reduction.
+
+The first Node attempt `a8460eb1-dbdd-4c88-a953-6e929e266d12` refused before
+bodies: root CLI environment did not override the project's environment.
+A symmetric worker-setup attempt under jsdom then failed module resolution
+for an outside-root setup file (`79e804a8-c298-44e0-9a69-fc8a23a4ce34` and
+`090905b1-9ffe-451f-9861-51eb0c3608af`, zero test bodies). These diagnostic
+failures are retained, not silently retried into an acceptance claim. Node
+membership is feasible; a production move and its mutation witnesses remain
+unproven and unimplemented.
 
 Stryker receipt `f40e0a6f-0d96-4187-a161-da580ee1871c` used one outer
 runner, `domain/recency.ts`, and `domain/suggest.test.ts`: nine mutants
@@ -200,7 +252,101 @@ passed `57089caa-1668-40b6-9421-02c4383bed9b`. Extglob refusal and inherited
 hosted artifact clearing failed first in
 `a76a0a63-606f-4b50-a23e-b55de78a0d4a`, then passed in1f427336.
 
-Still owed: pure-client
-membership audit, representative unit1/2/4 and browser1/2/3, final candidate
-hook/browser proof, worker-default decision, bounded hardening, independent
-review and exact-head CI. None is silently waived by these measurements.
+### Mechanism hardening: not ready
+
+At16e340b4 the installed Stryker RetryRejectedDecorator always recreated a
+failed worker before retrying. The public fixture in
+`c511ea6a-146c-4eac-a333-1a72adbc3dda` writes a synthetic OOM diagnostic and
+self-terminates once, without memory stress. Six replacement bodies ran;
+five mutants were reported killed and the nested public command passed.
+No supported retry-disable option was found in the installed schema or
+[official configuration](https://stryker-mutator.io/docs/stryker-js/configuration/).
+James's continuation authorized the proposed local-only, version-pinned patch.
+The first-failure gate now passes with the installed patch, but ordinary local
+mutation is not yet ready for use: self-mutation, remaining hardening,
+independent review and exact-head CI remain owed. Earlier successful receipts
+prove only their normal-run cases, not this policy.
+
+Receipt `6b9f1ad9-a0a3-49fa-8425-845ad336f0c5` independently reproduced two
+more holes: a single project's worker override ran a body despite the root
+cap; an ignored selected original changed while public mutation passed.
+The former now checks effective per-project bounds (four native config gates
+green, `b09a7686-35ba-456f-a8f5-09ca77eeb4dc`). The latter now streams a
+conservative app-file superset alongside the Git snapshot, including ignored
+imports/configs/witnesses and refusing aliases. Normal public mutation plus
+tracked/ignored staleness cases passed
+`062645f4-59f9-4997-b557-bfccafd31dc9`. These fixes are not yet committed,
+self-mutated, independently reviewed or credited with CI.
+
+Combined receipt `3037e419-7e7b-49bd-acd6-ebf0fa5a4ff2`:37pass/1fail; the
+sole failure is the known vendor-retry witness. The attempted negative
+Node name pattern also matched the file-level parent, so it did NOT exclude
+that case. This is a red run, never38pass or a completed mutation adapter.
+No actual memory-pressure event occurred; all fixture cleanup was verified.
+
+### Pinned no-retry patch and upgrade contract
+
+`app/patches/@stryker-mutator__core@10.0.0.patch` is registered under the exact
+version in pnpm-workspace.yaml and integrity-pinned by pnpm-lock.yaml.
+Registry inspection still reports10.0.0; no dependency upgrade was introduced.
+It was generated with [pnpm patch](https://pnpm.io/cli/patch) and
+[patch-commit](https://pnpm.io/cli/patch-commit), not by editing installed or
+shared node_modules. Guarded install52be2cc4 passed with verified cleanup,
+zero package downloads. Final guarded patch install25d1f860 and frozen-lockfile
+install94895195-e171-4ac2-8668-c53810844b0e both passed, cleanup verified.
+The patch changes the runtime schema too: Stryker validates the API package's
+schema, not only the published core schema JSON. Public native fixtures assert
+that the option is recognized, not merely tolerated as an unknown option.
+
+Only the local frozen invocation sets `ergomaticFailOnWorkerFailure:true`.
+The public patch exports a version1 marker and a structured worker-failure
+error; the adapter refuses a missing/mismatched patch before starting Stryker.
+An invocation-wide latch prevents recovery and later scheduled executions
+after the first rejection. Native proxy close observations retain pid,
+exitCode, signal and at most8192characters per stdout/stderr tail. Allocation
+diagnostics classify memory; a signal-only native exit is resource-aborted,
+not invented OOM. The vendor TERM handler actually exits143 with signalnull;
+the receipt retains that tuple, not a fabricated SIGTERM wait result. Native
+disposal and ordinary survivor/timeout semantics remain unchanged.
+
+The synthetic OOM and signal-only probes failed before the patch; the latter
+ran six replacement bodies (8bc0115a). Initialization initially escaped the
+outer retry decorator and lost classification (09d4b573); moving the public
+structured failure boundary into the native proxy fixed that path. All three
+native gates passed together inff9cf3da-2c01-4c21-8389-ca32bdd8f039, no
+replacement body, verified cleanup. These fixtures self-terminate an owned
+worker and print synthetic diagnostics; they do not stress host memory.
+The outcome-channel new resource-aborted case was separately red inb81a05dc;
+its unfiltered combined green is recorded below, not inferred from an earlier
+file-level filtered-test credit.
+
+Combined named native/parser/snapshot/outcome/routing/runtime fixtures passed
+74/74, zero skipped, in receipt12269819-6921-4259-a792-5e3a2bb1bdff with verified
+cleanup. This includes the unfiltered resource-aborted protocol case. The
+runtime fixture suite deliberately prints simulated allocation/signal banners;
+the enclosing owner recorded a pass, not an actual host resource event.
+
+Mutant-stage failure initially exposed a live progress interval: b8a88825
+timed out after30seconds, despite the native failure reaching the adapter.
+Giving the reporter a dispose method alone did not fix it (de81f4ca):
+typed-inject's injectClass creates an unregistered instance. The registered
+broadcaster now owns local-only reporter disposal during root-injector cleanup;
+the progress reporter clears its interval. No process.exit workaround or
+fabricated report-ready success is used. Guarded71242313-d044-4198-884c-8e82864c82a1
+passed all five gates: ordinary native run; missing public patch marker refuses
+before real-engine bodies; mutant-stage crash remains memory even when original
+source also becomes stale; omitted and false policy both retain actual upstream
+hosted recovery. The latter are compatibility fixtures, not permission for
+local resource retries. SourceError and first native reason remain separate.
+
+On any Stryker upgrade, regenerate the patch against the new exact published
+version and run the public normal/assertion/interruption, dry-run OOM,
+signal-only, initialization, mutant-stage/stale-source, and omitted/false
+hosted compatibility gates. Also prove a frozen install and a missing-patch
+refusal. A patch that applies is not evidence that its upstream call path still
+works. Do not silently remove the marker check or replace the patch with a
+log parser, private runtime injection, or an automatic resource retry.
+
+Still owed: vendor-policy self-mutation/compatibility acceptance, browser1/2/3, final candidate
+hook/browser proof, worker-default decision, remaining code lens, self-mutations,
+independent review and exact-head CI. None is silently waived by measurements.

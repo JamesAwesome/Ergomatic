@@ -14,8 +14,10 @@ required implementation, failure-first and mutation evidence, independent
 Standards/Spec review, and exact-head CI. Conditional tuning work must still
 be measured and reported: retaining existing defaults is valid only with an
 explicit outcome, not because profiling was omitted. A new worker default,
-merging, publishing or installing on a phone retains its separate approval
-gate. No outcome is inferred from a checkbox or from another increment's CI.
+publishing or installing on a phone retains its separate approval gate.
+James authorized merging ready increments as work proceeds on2026-09-16;
+this does not waive review or exact-head CI. No outcome is inferred from a
+checkbox or from another increment's CI.
 
 The existing admission implementation plan covers only admission. Detailed
 plans for the remaining increments must name concrete interfaces and their
@@ -24,7 +26,7 @@ substitute for those implementation plans or their hardening.
 
 ## Delivery checklist
 
-### Admission — implemented, PR handoff still open
+### Admission — merged in PR463
 
 - [x] Shared atomic ownership, maintenance barrier, pressure cancellation,
   foreground pipelines and receipt provenance implemented in PR #463.
@@ -44,7 +46,12 @@ The repaired candidate `d61100b7728130ef295230a4cf75d5e993c0e23c` passed
 run35098302961: browser603 first-attempt passes, no recovered retries;
 app361files/9167initial executions, no first-attempt failures or resource
 events. PR463's presentation was reconciled to that exact head and evidence.
-It remains unmerged; cheaper hooks are a stacked implementation increment.
+James authorized incremental merges on2026-09-16. PR463 landed as2594c7a7,
+after rechecking exact-head CI35098302961 and both final review passes.
+TestFlight is not needed: this is tooling/instructions plus an E2E fixture
+repair. Agent guidance/technique updates are included in that PR. Post-merge
+CI is a separate pending result; the current worktree holds unfinished tuning
+and is not eligible for teardown.
 
 ### Cheaper hooks and exact subsets — implemented, PR464 unmerged
 
@@ -72,8 +79,21 @@ CI35113605158 passed with9167app and603browser first-attempt executions,
 zero failures/recoveries/resource events. Failure-first, mutation, coverage and
 real-hook receipts are in
 [the validation record](2026-09-16-cheaper-hooks-validation.md).
+After463's squash merge,464 auto-retargeted to main and needs ancestry
+reconciliation plus new exact-head CI before landing. No earlier-head green
+will be labelled as that merge candidate's result.
 
 ### Measured tuning — required investigation, no approved default change
+
+Client1/2/4 and three4/2 pairs, unit1/2/4, import/heap, typed-lint/tsc and
+two-file pure-Node feasibility measurements are recorded in
+[the tuning record](2026-09-16-resource-tuning.md). Mutation admission is
+NOT READY: mechanism hardening caught vendor OOM retries recovering into a
+pass. James's continuation authorized the version-pinned local-only patch;
+its synthetic OOM, signal-only and initialization probes now pass. Root/project
+bounds and ignored-input freshness fixes also have targeted green evidence,
+but self-mutation/review/CI credit remains owed. Browser
+measurements still depend on the unimplemented ownership adapter.
 
 - [ ] Compare representative one/two/four-worker Vitest and
   one/two/three-worker browser runs under normal pressure; no full-suite

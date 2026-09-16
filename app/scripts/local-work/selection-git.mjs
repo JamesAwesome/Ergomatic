@@ -72,12 +72,12 @@ export function requireRelatedInputs(paths) {
     );
 }
 
-export function snapshotSource(root) {
+export function snapshotSource(root, additionalFiles = []) {
   const head = git(root, ["rev-parse", "--verify", "HEAD"]).trim();
   const index = git(root, ["ls-files", "--stage", "-z"]);
   const files = [
-    ...new Set(
-      nulPaths(
+    ...new Set([
+      ...nulPaths(
         git(root, [
           "ls-files",
           "--cached",
@@ -86,7 +86,8 @@ export function snapshotSource(root) {
           "-z",
         ]),
       ),
-    ),
+      ...additionalFiles,
+    ]),
   ].sort();
   const hash = createHash("sha256");
   const buffer = Buffer.allocUnsafe(64 * 1024);

@@ -48,6 +48,8 @@ export class MutationBudget implements Reporter {
       ctx.projects.length !== 1 ||
       ctx.projects.some(
         (project) =>
+          (project.config.maxWorkers ?? config.maxWorkers) !== 1 ||
+          project.config.maxConcurrency !== 1 ||
           project.config.isolate !== true ||
           project.config.pool !== "threads" ||
           project.config.browser.enabled,

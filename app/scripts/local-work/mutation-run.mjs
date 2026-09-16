@@ -3,8 +3,21 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { atomic } from "../test-evidence-record.mjs";
-import { parseMutation, mutationFiles } from "./mutation.mjs";
-import { snapshotSource, requireSameSource } from "./selection-git.mjs";
+import {
+  parseMutation,
+  mutationFiles,
+  snapshotMutationSource,
+} from "./mutation.mjs";
+import { requireSameSource } from "./selection-git.mjs";
+
+class MutationWorkerFailure extends Error {
+  constructor(error) {
+    super(error.message);
+    this.classification =
+      error.failure.kind === "allocation" ? "memory" : "resource-aborted";
+    this.failure = error.failure;
+  }
+}
 
 export async function runMutation(request, app, directory) {
   const stat = fs.lstatSync(directory);
@@ -29,9 +42,10 @@ export async function runMutation(request, app, directory) {
     schema: 1,
     request,
     status: "preparing",
-    source: snapshotSource(path.dirname(app)),
+    source: snapshotMutationSource(app),
   };
   const recordPath = path.join(directory, "mutation.json");
+  let failure;
   fs.writeFileSync(recordPath, JSON.stringify(record), {
     flag: "wx",
     mode: 0o600,
@@ -43,6 +57,7 @@ export async function runMutation(request, app, directory) {
     const options = {
       ...config,
       concurrency: request.concurrency,
+      ergomaticFailOnWorkerFailure: true,
       mutate: files,
       ...(testFiles.length ? { testFiles } : {}),
       tempDirName: path.join(directory, "sandbox"),
@@ -56,14 +71,31 @@ export async function runMutation(request, app, directory) {
       flag: "wx",
       mode: 0o600,
     });
-    requireSameSource(record.source, snapshotSource(path.dirname(app)));
+    requireSameSource(record.source, snapshotMutationSource(app));
     record.status = "running";
     atomic(recordPath, record);
     // Import only after intent, source and closed configuration are validated.
     // The owner retains actual wait status (Stryker converts INT to 130),
     // group interruption, census and unresolved-cleanup retention.
-    const { Stryker } = await import("@stryker-mutator/core");
-    await new Stryker({ configFile }).runMutationTest();
+    const {
+      Stryker,
+      ErgomaticWorkerFailure,
+      ergomaticWorkerFailurePolicyVersion,
+    } = await import("@stryker-mutator/core");
+    if (
+      ergomaticWorkerFailurePolicyVersion !== 1 ||
+      typeof ErgomaticWorkerFailure !== "function"
+    )
+      throw new Error(
+        "Local mutation requires the version-pinned no-retry Stryker patch; install from the committed lockfile",
+      );
+    try {
+      await new Stryker({ configFile }).runMutationTest();
+    } catch (error) {
+      if (error instanceof ErgomaticWorkerFailure)
+        throw new MutationWorkerFailure(error);
+      throw error;
+    }
     const report = JSON.parse(
       fs.readFileSync(options.jsonReporter.fileName, "utf8"),
     );
@@ -74,17 +106,21 @@ export async function runMutation(request, app, directory) {
       throw new Error("Native mutation report escaped requested files");
     record.status = "completed";
   } catch (error) {
+    failure = error;
     record.status = "failed";
     record.reason = error.message;
+    if (error instanceof MutationWorkerFailure)
+      record.workerFailure = error.failure;
     throw error;
   } finally {
     try {
-      record.sourceAfter = snapshotSource(path.dirname(app));
+      record.sourceAfter = snapshotMutationSource(app);
       requireSameSource(record.source, record.sourceAfter);
     } catch (error) {
       record.status = "failed";
-      record.reason = error.message;
-      throw error;
+      record.sourceError = error.message;
+      record.reason ??= error.message;
+      if (!failure) throw error;
     } finally {
       record.endedAt = new Date().toISOString();
       atomic(recordPath, record);
@@ -96,6 +132,7 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
+  let verdict = "";
   try {
     await runMutation(
       JSON.parse(process.argv[2]),
@@ -104,6 +141,12 @@ if (
     );
   } catch (error) {
     console.error(`mutation: ${error.message}`);
+    if (error instanceof MutationWorkerFailure) verdict = error.classification;
     process.exitCode = 2;
   }
+  if (process.env.ERGOMATIC_TEST_OUTCOME === "1")
+    fs.writeSync(
+      3,
+      JSON.stringify({ exitCode: process.exitCode ?? 0, verdict }),
+    );
 }

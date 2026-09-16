@@ -2,7 +2,7 @@ import { openSync, closeSync, fstatSync, readSync, constants } from "node:fs";
 import { constants as osConstants } from "node:os";
 
 // A private inherited file descriptor, not a caller-selected output path.
-// The shell emits only its own bounded verdict after waiting for its pipeline.
+// The shell/native adapter emits its bounded verdict after awaiting its work.
 export function outcomeChannel(path) {
   const fd = openSync(
     path,
@@ -24,7 +24,9 @@ export function outcomeChannel(path) {
       const result = JSON.parse(buffer.toString("utf8"));
       if (
         result.exitCode !== exitCode ||
-        !["", "memory", "signal", "incomplete"].includes(result.verdict) ||
+        !["", "memory", "signal", "incomplete", "resource-aborted"].includes(
+          result.verdict,
+        ) ||
         (exitCode === 0 && result.verdict !== "")
       )
         throw new Error("Test-run outcome disagrees with child wait status");

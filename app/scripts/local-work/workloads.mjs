@@ -198,6 +198,7 @@ export function workloadPhases({
           JSON.stringify(request),
         ]),
         artifacts: true,
+        outcome: "test-run",
         workers: {
           applicability: "stryker",
           max: request.concurrency,

@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { workloadPhases } from "../workloads.mjs";
 
 const appSource = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -73,6 +74,32 @@ test("native mutation config preserves one isolated thread and executes bodies",
     result = runInner(f);
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(fs.readFileSync(f.sentinel, "utf8"), "executed");
+});
+
+test("native mutation config refuses a project worker override before bodies", (t) => {
+  for (const bounds of [{ maxWorkers: 2 }, { maxConcurrency: 2 }]) {
+    const f = fixture(t);
+    const result = runInner(f, {
+      projects: [
+        {
+          test: {
+            name: "unit",
+            root: f.app,
+            environment: "node",
+            include: ["domain/**/*.test.ts"],
+            pool: "threads",
+            isolate: true,
+            maxWorkers: 1,
+            maxConcurrency: 1,
+            ...bounds,
+          },
+        },
+      ],
+    });
+    assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout + result.stderr, /Mutation inner budget/);
+    assert.equal(fs.existsSync(f.sentinel), false);
+  }
 });
 
 test("native mutation config rejects changed isolation, pool and inner concurrency", (t) => {
@@ -232,7 +259,12 @@ test("public mutation owns one bounded real Stryker run and keeps native evidenc
   fs.mkdirSync(inherited);
   fs.writeFileSync(path.join(inherited, "sentinel"), "preserve");
   const result = f.run({ ERGOMATIC_ARTIFACT_DIR: inherited });
+  assert.equal(result.error, undefined, result.stdout + result.stderr);
   assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(
+    result.stdout + result.stderr,
+    /Unknown stryker config option/,
+  );
   const dirs = f.receipts();
   assert.equal(dirs.length, 1);
   const receipt = JSON.parse(
@@ -246,6 +278,7 @@ test("public mutation owns one bounded real Stryker run and keeps native evidenc
     fs.readFileSync(path.join(dirs[0], "stryker.config.json")),
   );
   assert.equal(options.concurrency, 1);
+  assert.equal(options.ergomaticFailOnWorkerFailure, true);
   assert.equal(options.inPlace, false);
   assert.equal(options.tempDirName, path.join(dirs[0], "sandbox"));
   const record = JSON.parse(
@@ -314,6 +347,240 @@ test("public mutation busy refusal cannot borrow an existing owner", (t) => {
   assert.deepEqual(fs.readdirSync(owner), []);
 });
 
+test("public mutation refuses missing patch support before invoking the real engine", (t) => {
+  const f = publicFixture(t);
+  const scope = path.join(f.app, "node_modules/@stryker-mutator");
+  // Replace this fixture's scope link, never the installed dependency. Expose
+  // the actual engine with the public surface of an unpatched installation.
+  fs.unlinkSync(scope);
+  fs.mkdirSync(scope);
+  f.put(
+    "app/node_modules/@stryker-mutator/core/package.json",
+    JSON.stringify({ type: "module", exports: "./index.mjs" }),
+  );
+  f.put(
+    "app/node_modules/@stryker-mutator/core/index.mjs",
+    `export {Stryker} from ${JSON.stringify(import.meta.resolve("@stryker-mutator/core"))};`,
+  );
+  fs.symlinkSync(
+    path.join(appSource, "node_modules/@stryker-mutator/vitest-runner"),
+    path.join(scope, "vitest-runner"),
+  );
+  const result = f.run();
+  assert.equal(result.error, undefined, result.stdout + result.stderr);
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(
+    result.stderr,
+    /requires the version-pinned no-retry Stryker patch/,
+  );
+  assert.equal(fs.existsSync(f.sentinel), false);
+  const receipt = JSON.parse(
+    fs.readFileSync(path.join(f.receipts()[0], "receipt.json")),
+  );
+  assert.equal(receipt.classification, "failed");
+  assert.equal(receipt.cleanup, "verified");
+});
+
+test("public mutation never recovers past a native resource failure", (t) => {
+  const f = publicFixture(t);
+  // Synthetic worker failure only: no heap allocation or host-pressure stress.
+  // The marker lives outside Stryker's sandbox and names positive readiness.
+  f.put(
+    "app/domain/witness.test.ts",
+    `import {test,expect} from 'vitest';
+import {existsSync,writeFileSync,appendFileSync,writeSync} from 'node:fs';import {positive} from './space ü,comma';
+test('first native worker fails',()=>{const marker=${JSON.stringify(f.sentinel)};
+if(!existsSync(marker)){writeFileSync(marker,'first failure\\n');writeSync(2,'FATAL ERROR: JavaScript heap out of memory (simulated fixture)\\n');process.kill(process.pid,'SIGTERM');}
+else{appendFileSync(marker,'replacement body\\n');expect(positive(-1)).toBe(false);expect(positive(0)).toBe(false);expect(positive(1)).toBe(true)}});`,
+  );
+  const result = f.run();
+  const observed = fs.readFileSync(f.sentinel, "utf8");
+  assert.equal(observed, "first failure\n", result.stdout + result.stderr);
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  const directory = f.receipts()[0];
+  const receipt = JSON.parse(
+    fs.readFileSync(path.join(directory, "receipt.json")),
+  );
+  const record = JSON.parse(
+    fs.readFileSync(path.join(directory, "mutation.json")),
+  );
+  assert.equal(receipt.classification, "memory");
+  assert.equal(receipt.resourceAbort, true);
+  assert.equal(receipt.cleanup, "verified");
+  assert.equal(record.workerFailure.kind, "allocation");
+  // The vendor's native TERM handler exits 143 rather than dying by signal.
+  assert.equal(record.workerFailure.signal, null);
+  assert.equal(record.workerFailure.exitCode, 143);
+  assert.match(record.workerFailure.stderrTail, /simulated fixture/);
+});
+
+test("public mutation stops a signal-only crash without inventing OOM", (t) => {
+  const f = publicFixture(t);
+  f.put(
+    "app/domain/witness.test.ts",
+    `import {test,expect} from 'vitest';
+import {existsSync,writeFileSync,appendFileSync} from 'node:fs';import {positive} from './space ü,comma';
+test('first native worker stops',()=>{const marker=${JSON.stringify(f.sentinel)};
+if(!existsSync(marker)){writeFileSync(marker,'first failure\\n');process.kill(process.pid,'SIGTERM');}
+else{appendFileSync(marker,'replacement body\\n');expect(positive(-1)).toBe(false);expect(positive(0)).toBe(false);expect(positive(1)).toBe(true)}});`,
+  );
+  const result = f.run();
+  assert.equal(
+    fs.readFileSync(f.sentinel, "utf8"),
+    "first failure\n",
+    result.stdout + result.stderr,
+  );
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  const directory = f.receipts()[0];
+  const receipt = JSON.parse(
+    fs.readFileSync(path.join(directory, "receipt.json")),
+  );
+  const record = JSON.parse(
+    fs.readFileSync(path.join(directory, "mutation.json")),
+  );
+  assert.equal(receipt.classification, "resource-aborted");
+  assert.equal(receipt.resourceAbort, true);
+  assert.equal(receipt.cleanup, "verified");
+  assert.equal(record.workerFailure.kind, "process-exit");
+  assert.equal(record.workerFailure.signal, null);
+  assert.equal(record.workerFailure.exitCode, 143);
+});
+
+test("public mutation retains a native crash during runner initialization", (t) => {
+  const f = publicFixture(t);
+  const original = fs.readFileSync(
+    path.join(f.app, "vitest.stryker.config.ts"),
+    "utf8",
+  );
+  f.put(
+    "app/vitest.stryker.config.ts",
+    `import {writeFileSync,writeSync} from 'node:fs';
+writeFileSync(${JSON.stringify(f.sentinel)},'initialization failure');
+writeSync(2,'FATAL ERROR: JavaScript heap out of memory (simulated initialization)\\n');
+process.kill(process.pid,'SIGTERM');\n${original}`,
+  );
+  const result = f.run();
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.equal(fs.readFileSync(f.sentinel, "utf8"), "initialization failure");
+  const directory = f.receipts()[0];
+  const receipt = JSON.parse(
+    fs.readFileSync(path.join(directory, "receipt.json")),
+  );
+  const record = JSON.parse(
+    fs.readFileSync(path.join(directory, "mutation.json")),
+  );
+  assert.equal(receipt.classification, "memory");
+  assert.equal(receipt.resourceAbort, true);
+  assert.equal(receipt.cleanup, "verified");
+  assert.equal(record.workerFailure.kind, "allocation");
+  assert.equal(record.workerFailure.exitCode, 143);
+  assert.equal(record.workerFailure.signal, null);
+  assert.match(record.workerFailure.stderrTail, /simulated initialization/);
+});
+
+test("public mutation preserves a mutant-stage crash alongside stale-source evidence", (t) => {
+  const f = publicFixture(t);
+  f.put(
+    "app/domain/witness.test.ts",
+    `import {test,expect,inject} from 'vitest';
+import {appendFileSync,writeFileSync,writeSync} from 'node:fs';import {positive} from './space ü,comma';
+test('mutant worker fails',()=>{const marker=${JSON.stringify(f.sentinel)};
+if(inject('mode')==='mutant'){
+appendFileSync(marker,'mutant failure\\n');
+writeFileSync(${JSON.stringify(path.join(f.app, "domain/space ü,comma.ts"))},'export function positive(n:number){return n>=0;}');
+writeSync(2,'FATAL ERROR: JavaScript heap out of memory (simulated mutant)\\n');process.kill(process.pid,'SIGTERM');
+}else{appendFileSync(marker,'dry body\\n');expect(positive(-1)).toBe(false);expect(positive(0)).toBe(false);expect(positive(1)).toBe(true)}});`,
+  );
+  const result = f.run();
+  assert.equal(result.error, undefined, result.stdout + result.stderr);
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.equal(
+    fs.readFileSync(f.sentinel, "utf8"),
+    "dry body\nmutant failure\n",
+    result.stdout + result.stderr,
+  );
+  const directory = f.receipts()[0];
+  const receipt = JSON.parse(
+    fs.readFileSync(path.join(directory, "receipt.json")),
+  );
+  const record = JSON.parse(
+    fs.readFileSync(path.join(directory, "mutation.json")),
+  );
+  assert.equal(receipt.classification, "memory");
+  assert.equal(receipt.resourceAbort, true);
+  assert.equal(receipt.cleanup, "verified");
+  assert.equal(record.workerFailure.kind, "allocation");
+  assert.equal(record.workerFailure.exitCode, 143);
+  assert.equal(record.workerFailure.signal, null);
+  assert.match(record.sourceError, /evidence is stale/);
+  assert.match(record.reason, /automatic recovery disabled/);
+});
+
+for (const policy of [undefined, false]) {
+  test(`hosted mutation retains upstream recovery when local policy is ${policy}`, (t) => {
+    const f = publicFixture(t);
+    for (const name of ["unselected.test.ts", "witness.test.ts.extra.test.ts"])
+      fs.rmSync(path.join(f.app, "domain", name));
+    const config = JSON.parse(
+      fs.readFileSync(path.join(f.app, "stryker.config.json")),
+    );
+    const reportPath = path.join(f.root, "native-report.json");
+    f.put(
+      "app/stryker.config.json",
+      JSON.stringify({
+        ...config,
+        ...(policy === undefined
+          ? {}
+          : { ergomaticFailOnWorkerFailure: policy }),
+        reporters: ["json"],
+        jsonReporter: { fileName: reportPath },
+      }),
+    );
+    f.put(
+      "app/domain/witness.test.ts",
+      `import {test,expect} from 'vitest';
+import {existsSync,writeFileSync,appendFileSync,writeSync} from 'node:fs';import {positive} from './space ü,comma';
+test('upstream recovery witness',()=>{const marker=${JSON.stringify(f.sentinel)};
+if(!existsSync(marker)){writeFileSync(marker,'first failure\\n');writeSync(2,'FATAL ERROR: JavaScript heap out of memory (simulated hosted fixture)\\n');process.kill(process.pid,'SIGTERM');}
+else{appendFileSync(marker,'replacement body\\n');expect(positive(-1)).toBe(false);expect(positive(0)).toBe(false);expect(positive(1)).toBe(true)}});`,
+    );
+    const [phase] = workloadPhases({
+      app: f.app,
+      name: "mutate",
+      hosted: true,
+      args: ["--concurrency", "1"],
+      env: { ...f.env, ERGOMATIC_ARTIFACT_DIR: path.join(f.root, "foreign") },
+    });
+    assert.equal(phase.env.ERGOMATIC_ARTIFACT_DIR, undefined);
+    const result = spawnSync(phase.command, phase.args, {
+      cwd: phase.cwd,
+      env: phase.env,
+      encoding: "utf8",
+      timeout: 30000,
+      maxBuffer: 2 ** 20,
+    });
+    assert.equal(result.error, undefined, result.stdout + result.stderr);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.doesNotMatch(
+      result.stdout + result.stderr,
+      /Unknown stryker config option/,
+    );
+    assert.match(
+      fs.readFileSync(f.sentinel, "utf8"),
+      /^first failure\n(?:replacement body\n)+$/,
+    );
+    const report = JSON.parse(fs.readFileSync(reportPath));
+    assert.deepEqual(Object.keys(report.files), ["domain/space ü,comma.ts"]);
+    assert.ok(report.files["domain/space ü,comma.ts"].mutants.length > 0);
+    assert.ok(
+      report.files["domain/space ü,comma.ts"].mutants.every(
+        (mutant) => mutant.status === "Killed",
+      ),
+    );
+    assert.deepEqual(f.receipts(), []);
+  });
+}
+
 test("public mutation keeps initial assertion failure nonzero with verified cleanup", (t) => {
   const f = publicFixture(t);
   f.put(
@@ -351,6 +618,26 @@ test('changes original source',()=>{writeFileSync(${JSON.stringify(path.join(f.a
   );
   assert.equal(record.status, "failed");
   assert.notEqual(record.source.fingerprint, record.sourceAfter.fingerprint);
+});
+
+test("public mutation cannot pass after an ignored admitted source changes", (t) => {
+  const f = publicFixture(t);
+  f.git("rm", "--cached", "app/domain/space ü,comma.ts");
+  fs.appendFileSync(
+    path.join(f.root, ".gitignore"),
+    "app/domain/space ü,comma.ts\n",
+  );
+  f.put(
+    "app/domain/witness.test.ts",
+    `import {test,expect} from 'vitest';import {writeFileSync} from 'node:fs';import {positive} from './space ü,comma';
+test('changes ignored original',()=>{writeFileSync(${JSON.stringify(path.join(f.app, "domain/space ü,comma.ts"))},'export function positive(n:number){return n>=0;}');expect(positive(-1)).toBe(false);expect(positive(0)).toBe(false);expect(positive(1)).toBe(true)});`,
+  );
+  const result = f.run();
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(
+    result.stderr,
+    /evidence is stale|unfingerprinted mutation input/i,
+  );
 });
 
 test("interrupted native mutation retains the signal and closes its owned group", async (t) => {

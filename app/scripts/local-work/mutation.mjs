@@ -1,6 +1,27 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
+import { snapshotSource } from "./selection-git.mjs";
+
+// Stryker crawls the filesystem, not Git's non-ignored population. Hash a
+// conservative superset of everything it can copy, including ignored inputs.
+// Only its unconditional .git/node_modules exclusions are omitted here;
+// retain build/output files rather than inventing a second input allowlist.
+export function snapshotMutationSource(app) {
+  const root = path.dirname(app);
+  const walk = (directory) =>
+    fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      if ([".git", "node_modules"].includes(entry.name.toLowerCase()))
+        return [];
+      const file = path.join(directory, entry.name);
+      if (entry.isSymbolicLink() || (!entry.isFile() && !entry.isDirectory()))
+        throw new Error(
+          `Unsupported mutation input alias or special file: ${file}`,
+        );
+      return entry.isDirectory() ? walk(file) : [path.relative(root, file)];
+    });
+  return snapshotSource(root, walk(app));
+}
 
 const supportedConfig = {
   testRunner: "vitest",
