@@ -36,4 +36,11 @@ cd "$REPO_ROOT"
 docker compose -f compose.yml -f compose.e2e.yml up -d --build --wait --wait-timeout 120
 
 cd app
-pnpm exec playwright test --project=chromium "$@"
+# BOTH projects. `touch` exists only so one spec can have `hasTouch: true`,
+# which Playwright requires before a dispatched touch does anything — without
+# it a gesture assertion passes whatever the code does. It is scoped by
+# `testMatch` so it adds exactly the specs under `e2e/touch.spec.ts` and
+# changes no existing one. Naming it here is not optional: this line is the
+# only way either project runs, locally or in CI, so a project omitted here
+# is a gate that never executes.
+pnpm exec playwright test --project=chromium --project=touch "$@"
