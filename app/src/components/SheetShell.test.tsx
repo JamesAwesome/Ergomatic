@@ -330,11 +330,9 @@ describe("SheetShell: focus never leaves the modal", () => {
 });
 
 describe("SheetShell: the page behind a modal does not scroll", () => {
-  // James, 2026-09-15, reading the provenance sheet on his phone: "the screen
-  // behind it can still scroll". The backdrop covers the viewport and eats
-  // taps, but nothing stopped the DOCUMENT moving under a wheel, a trackpad
-  // swipe, or a drag begun on the scrim — so his own log slid around behind
-  // the sheet he was reading. Every sheet in the app had it.
+  // Library and Today scroll the document, so their sheets retain the
+  // original body lock. FromTheLog owns a separate fixed scroller; the
+  // ancestor cases below and WebKit e2e cover that distinct scroll owner.
   it("locks body scroll while open and restores exactly what was there", async () => {
     document.body.style.overflow = "scroll";
     const opener = createRef<HTMLElement | null>();

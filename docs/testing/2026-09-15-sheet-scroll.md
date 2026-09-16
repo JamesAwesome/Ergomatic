@@ -96,3 +96,10 @@ The reviewer's exact opening-jump mutant (`node.scrollTop = 0` during
 ancestor collection) built successfully and failed BOTH strengthened cases
 at the post-open assertion: expected 300, received 0. The committed source
 was restored after the probe.
+
+Independent specification review: PASS after the pre-open-offset correction
+and its exact mutant. Independent code review: no blockers or important
+findings; its one minor stale test comment was corrected to distinguish
+body scrolling from the log's separate scroll owner. The final restored
+WebKit run passed both strengthened cases. No implementation changes arose
+from either review.
