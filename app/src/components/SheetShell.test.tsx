@@ -330,11 +330,9 @@ describe("SheetShell: focus never leaves the modal", () => {
 });
 
 describe("SheetShell: the page behind a modal does not scroll", () => {
-  // James, 2026-09-15, reading the provenance sheet on his phone: "the screen
-  // behind it can still scroll". The backdrop covers the viewport and eats
-  // taps, but nothing stopped the DOCUMENT moving under a wheel, a trackpad
-  // swipe, or a drag begun on the scrim — so his own log slid around behind
-  // the sheet he was reading. Every sheet in the app had it.
+  // Library and Today scroll the document, so their sheets retain the
+  // original body lock. FromTheLog owns a separate fixed scroller; the
+  // ancestor cases below and WebKit e2e cover that distinct scroll owner.
   it("locks body scroll while open and restores exactly what was there", async () => {
     document.body.style.overflow = "scroll";
     const opener = createRef<HTMLElement | null>();
@@ -379,4 +377,55 @@ describe("SheetShell: the page behind a modal does not scroll", () => {
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
+});
+
+describe("SheetShell: nested screen scroll locks", () => {
+  for (const close of ["close", "unmount"] as const) {
+    it(`locks scrollable ancestors, leaves the sheet scrollable, and restores styles on ${close}`, () => {
+      const opener = createRef<HTMLElement | null>();
+      const tree = (open: boolean) => (
+        <main style={{ overflowY: "auto" }} data-testid="screen-scroll">
+          <section
+            style={{ overflowX: "scroll", overflowY: "hidden" }}
+            data-testid="outer-scroll"
+          >
+            <div style={{ overflow: "visible" }} data-testid="plain-wrapper">
+              <SheetShell
+                open={open}
+                titleId="nested-title"
+                onDismiss={vi.fn()}
+                opener={opener}
+              >
+                <h2 id="nested-title">Nested sheet</h2>
+                <div style={{ overflowY: "auto" }} data-testid="sheet-scroll">
+                  Long content
+                </div>
+                <button type="button">Close</button>
+              </SheetShell>
+            </div>
+          </section>
+        </main>
+      );
+      const { rerender, unmount } = render(tree(false));
+      const screenScroll = screen.getByTestId("screen-scroll");
+      const outer = screen.getByTestId("outer-scroll");
+      // Preserve a caller's mixed longhands, including priority. Restoring
+      // only the overflow shorthand would lose this declaration.
+      outer.style.setProperty("overflow-x", "scroll", "important");
+      const before = [screenScroll.style.cssText, outer.style.cssText];
+      rerender(tree(true));
+      expect(screenScroll.style.overflowY).toBe("hidden");
+      expect(outer.style.overflowX).toBe("hidden");
+      expect(screen.getByTestId("plain-wrapper").style.overflow).toBe(
+        "visible",
+      );
+      expect(screen.getByTestId("sheet-scroll").style.overflowY).toBe("auto");
+      if (close === "close") rerender(tree(false));
+      else unmount();
+      expect([screenScroll.style.cssText, outer.style.cssText]).toStrictEqual(
+        before,
+      );
+      expect(document.body.style.overflow).toBe("");
+    });
+  }
 });

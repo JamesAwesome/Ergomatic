@@ -61,10 +61,14 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         viewport: { width: 390, height: 844 },
       },
-      testIgnore: ["**/screenshots.spec.ts", "**/touch.spec.ts"],
+      testIgnore: [
+        "**/screenshots.spec.ts",
+        "**/touch.spec.ts",
+        "**/sheetScroll.spec.ts",
+      ],
     },
     {
-      // A THIRD project purely so one spec can have touch. `hasTouch` is what
+      // A separate project so one spec can have touch. `hasTouch` is what
       // Playwright needs before a dispatched touch does anything, and without
       // it a CDP `Input.dispatchTouchEvent` drag is inert — which is why the
       // modal scroll lock had no gate that could fail.
@@ -82,6 +86,20 @@ export default defineConfig({
         hasTouch: true,
       },
       testMatch: "**/touch.spec.ts",
+    },
+    {
+      // This ancestor-scroll leak reproduces in WebKit, while Chromium's
+      // backdrop gesture does not reach the log behind it.
+      name: "webkit-sheet",
+      use: {
+        ...devices["Desktop Safari"],
+        // Linux WebKit rejects Chromium's --disable-blink-features flag.
+        launchOptions: { args: [] },
+        // Keep the failing attempt, not just a successful retry: one Linux
+        // run never rendered the log, before any scroll assertion ran.
+        trace: "retain-on-failure",
+      },
+      testMatch: "**/sheetScroll.spec.ts",
     },
     {
       name: "screenshots",
