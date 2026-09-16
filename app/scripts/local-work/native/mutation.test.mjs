@@ -812,8 +812,9 @@ test("public mutation preserves native timeout recovery without worker failure",
     "app/domain/witness.test.ts",
     `import {test,expect} from 'vitest';import {appendFileSync} from 'node:fs';import {positive} from './space ü,comma';
 test('mutated zero never resolves',async()=>{
+expect(positive(-1)).toBe(false);
 if(positive(0)){appendFileSync(${JSON.stringify(f.sentinel)},'waiting\\n');await new Promise(()=>{});}
-expect(positive(-1)).toBe(false);expect(positive(1)).toBe(true);
+expect(positive(1)).toBe(true);
 },20000);`,
   );
   // Native Stryker timeout/recovery repeats for each hanging mutant; leave
@@ -841,7 +842,11 @@ expect(positive(-1)).toBe(false);expect(positive(1)).toBe(true);
     mutants.every((mutant) => ["Killed", "Timeout"].includes(mutant.status)),
     JSON.stringify(mutants),
   );
-  assert.match(fs.readFileSync(f.sentinel, "utf8"), /^waiting\n/);
+  assert.equal(
+    mutants.filter((mutant) => mutant.status === "Timeout").length,
+    1,
+  );
+  assert.equal(fs.readFileSync(f.sentinel, "utf8"), "waiting\n");
   assert.equal(report.thresholds.break, null);
   assert.equal(record.status, "completed");
   assert.equal(Object.hasOwn(record, "workerFailure"), false);

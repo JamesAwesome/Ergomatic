@@ -493,4 +493,9 @@ no workerFailure, verified cleanup and no remaining owner. The never-resolving
 promise allocates no stress memory. Native timeout/disposal took24seconds;
 that fixture alone allows60seconds at the outer harness, leaving Stryker's
 own timeout unchanged. This does not admit threshold controls: the local
-config remains closed. Postcommit fault proofs and review closure are pending.
+config remains closed. The tightened timeout witness kills the constant-true
+and nonpositive mutants before waiting, leaving only `n >= 0`: exactly one
+native Timeout and exactly one waiting-body marker passed in007d4b12-fa81-40dc-
+b9f6-7aaee520c56e (both cases2/2, timeout9.3seconds, verified cleanup). This
+guards against replaying that same mutant and makes the former24second cost
+unnecessary. Postcommit fault proofs and review closure are pending.
