@@ -113,5 +113,11 @@ promise contention-free explicit recovery or misuse of stale owner handles.
 Focused incumbent and runtime gates passed2/2 (`2c957ae8`); complete named
 owner/runtime/host gates passed70/70 (`cda94346`), all enclosing cleanup verified.
 The runtime assertion now prints its full result if the incumbent fails again.
-Postcommit deciding-source fault proof, final review, real push and new-head CI
-remain required for this correction; the earlier head's results do not certify it.
+Real code commit921e1e64 passed its normal compiler/E2E-membership hook
+(`8eab6279`). Postcommit restoration of maintenance-first ordering failed both
+incumbent and delayed-acquirer gates (`8c3a8693`). Adding only a busy precheck
+made the incumbent gate pass but still failed the delayed-acquirer gate
+(`84f378f8`), proving that precheck alone is insufficient. Restored focused
+gates passed6/6 (`09cc95a7`) with a clean source diff. All outer cleanup was
+verified. Final review, real push and new-head CI remain required for this
+correction; the earlier head's results do not certify it.
