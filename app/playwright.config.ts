@@ -68,7 +68,11 @@ export default defineConfig({
       // This ancestor-scroll leak reproduces in WebKit, while Chromium's
       // backdrop gesture does not reach the log behind it.
       name: "webkit-sheet",
-      use: { ...devices["Desktop Safari"] },
+      use: {
+        ...devices["Desktop Safari"],
+        // Linux WebKit rejects Chromium's --disable-blink-features flag.
+        launchOptions: { args: [] },
+      },
       testMatch: "**/sheetScroll.spec.ts",
     },
     {

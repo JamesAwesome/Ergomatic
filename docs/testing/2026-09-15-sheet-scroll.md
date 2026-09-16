@@ -103,3 +103,10 @@ findings; its one minor stale test comment was corrected to distinguish
 body scrolling from the log's separate scroll owner. The final restored
 WebKit run passed both strengthened cases. No implementation changes arose
 from either review.
+
+The first full CI run (`35048629284`, e80bbc7e) passed all 596 existing
+browser tests, but Linux WebKit rejected the inherited Chromium-only
+`--disable-blink-features=WebBluetooth` launch flag before either new test
+could run (including their retries). The WebKit project now explicitly
+supplies an empty argument list. macOS WebKit had accepted that flag, so
+local green did not establish cross-platform browser startup.
