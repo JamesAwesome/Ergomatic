@@ -4,6 +4,12 @@ import { isCI, workerCap } from "./scripts/testEnv.js";
 
 export default defineConfig({
   test: {
+    ...(process.env.ERGOMATIC_EVIDENCE_DIR
+      ? {
+          reporters: ["default", "json"],
+          outputFile: `${process.env.ERGOMATIC_EVIDENCE_DIR}/report.json`,
+        }
+      : {}),
     // Phase MEM: caps how many workers a local run can spawn, so a laptop
     // never spins up as many as vitest's CPU-derived default (measured 9 on
     // the machine this exists to protect). Inert in CI, overridable with

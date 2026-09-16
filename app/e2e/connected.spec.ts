@@ -2263,12 +2263,51 @@ test.describe("Phase NF: Scan NFC, fake-driven (390×844)", () => {
 
     const scanNfc = page.getByRole("button", { name: "Scan NFC" });
     await expect(scanNfc).toBeVisible();
+    // Arm before the click: a Node-side locator poll can start after the
+    // one-paint confirmation is already gone. Observe the actual DOM in
+    // consecutive rendering opportunities, and keep a receipt for the
+    // assertion after READY. This does not delay the product's handoff.
+    await page.evaluate(() => {
+      let visibleFrames = 0;
+      const root = document.documentElement;
+      root.dataset.nfcAcceptedPaint = "waiting";
+      const sample = () => {
+        const status = document.querySelector<HTMLElement>(
+          '.button-nfc-accepted[role="status"]',
+        );
+        const bounds = status?.getBoundingClientRect();
+        const style = status ? getComputedStyle(status) : null;
+        const text = status?.textContent?.trim();
+        const visible =
+          text === "✓ Monitor found" &&
+          bounds !== undefined &&
+          bounds.width > 0 &&
+          bounds.height > 0 &&
+          style?.display !== "none" &&
+          style?.visibility === "visible" &&
+          Number(style.opacity) > 0;
+        visibleFrames = visible ? visibleFrames + 1 : 0;
+        if (visibleFrames === 2) {
+          root.dataset.nfcAcceptedPaint = text!;
+          return;
+        }
+        if (document.querySelector(".connected-interstitial")) {
+          root.dataset.nfcAcceptedPaint = "handoff-before-confirmation";
+          return;
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
     await scanNfc.click();
-    await expect(page.getByRole("status")).toHaveText("✓ Monitor found");
     await expect(page.getByText("Choose your monitor")).toHaveCount(0);
     await expect(
       page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
     ).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-nfc-accepted-paint",
+      "✓ Monitor found",
+    );
     await expect(page.locator(".connected-status-label")).toContainText(NAME);
   });
 

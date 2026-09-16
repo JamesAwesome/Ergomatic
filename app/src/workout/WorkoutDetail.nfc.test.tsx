@@ -6,7 +6,13 @@
 // the real bridge/parser/detail/handoff/interstitial/session, and the fake
 // radio behind the production-composed transport, through to `armed`.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
@@ -137,13 +143,19 @@ function mockHooks() {
 
 async function renderDetail(id = "w1") {
   const { default: WorkoutDetail } = await import("./WorkoutDetail");
-  return render(
-    <MemoryRouter initialEntries={[`/library/${id}`]}>
-      <Routes>
-        <Route path="/library/:id" element={<WorkoutDetail />} />
-      </Routes>
-    </MemoryRouter>,
-  );
+  let view!: ReturnType<typeof render>;
+  // The mount probes NFC capability asynchronously. Keep that initial
+  // update inside act, before any click/frame-boundary assertions.
+  await act(async () => {
+    view = render(
+      <MemoryRouter initialEntries={[`/library/${id}`]}>
+        <Routes>
+          <Route path="/library/:id" element={<WorkoutDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  });
+  return view;
 }
 
 function setNfcScript(script: NfcScript | null): void {
@@ -154,17 +166,6 @@ function setNfcScript(script: NfcScript | null): void {
 function setFakeScript(script: InjectedFakeScript | null): void {
   if (script === null) delete window.__pm5FakeScript__;
   else window.__pm5FakeScript__ = script;
-}
-
-/** Two animation frames, the paint barrier's whole contract. jsdom's rAF
- *  runs on a ~16 ms timer; awaiting two real frames keeps the barrier real
- *  rather than stubbed. */
-async function twoFrames(): Promise<void> {
-  await act(async () => {
-    await new Promise<void>((r) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => r())),
-    );
-  });
 }
 
 // The api hooks are mocked ONCE, before the first dynamic import of
@@ -385,16 +386,44 @@ describe("THE ROUTED PROOF: Scan NFC click → native-shaped event → real pars
       deviceName: FIXTURE_PM5_NAME,
     });
     await renderDetail();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Scan NFC" }),
-    );
-
-    // The accepted state is committed and painted BEFORE the interstitial.
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "✓ Monitor found",
-    );
-    expect(screen.queryByText(/Connecting/)).toBeNull();
-    await twoFrames();
+    const frames = new Map<number, FrameRequestCallback>();
+    let nextFrame = 0;
+    const requestFrame = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((cb) => {
+        frames.set(++nextFrame, cb);
+        return nextFrame;
+      });
+    const cancelFrame = vi
+      .spyOn(window, "cancelAnimationFrame")
+      .mockImplementation((id) => {
+        frames.delete(id);
+      });
+    const advanceFrame = () =>
+      act(async () => {
+        expect(frames.size).toBe(1);
+        const pending = [...frames.values()];
+        frames.clear();
+        for (const frame of pending) frame(performance.now());
+      });
+    try {
+      const scanNfc = await screen.findByRole("button", { name: "Scan NFC" });
+      await act(async () => {
+        fireEvent.click(scanNfc);
+      });
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "✓ Monitor found",
+      );
+      expect(document.querySelector(".connected-interstitial")).toBeNull();
+      await advanceFrame();
+      // A one-frame barrier hands off here and must fail this assertion.
+      expect(screen.getByRole("status")).toHaveTextContent("✓ Monitor found");
+      expect(document.querySelector(".connected-interstitial")).toBeNull();
+      await advanceFrame();
+    } finally {
+      requestFrame.mockRestore();
+      cancelFrame.mockRestore();
+    }
 
     // The interstitial took over and the session reached READY through the
     // fake's targeted scan — never its picker scan.

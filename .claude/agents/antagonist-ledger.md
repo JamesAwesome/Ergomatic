@@ -1,5 +1,36 @@
 # Antagonist ledger
 
+## Test reliability hunt — hardening, 2026-09-15
+
+Two read-only lenses against the design/hunt plan based at `5fc01cce`.
+No tests or containers were run by reviewers. Controller folded findings.
+
+- **Native JSON success was narrower than command success.** Reporter fields
+  appeared sufficient; Vitest 4.1.11 emits JSON before coverage checking and
+  handles global unhandled errors separately. **Technique:** trace actual
+  finalization call sites and later failures; separate test, command and
+  evidence outcomes.
+- **One group does not contain an E2E experiment.** Ordinary child rehearsal
+  appeared sufficient; Playwright 1.63.0 detaches browser groups and compose
+  outlives its CLI. **Technique:** inspect spawn options and require a
+  detached-descendant/sentinel rehearsal with external ownership receipts.
+- **One invocation does not preserve fixture identity.** Repeats change
+  worker hashes and retries replace workers; module-minted RUN_ID changes.
+  **Technique:** trace repeat assignment to worker selection to fixture mint
+  site; establish actual account/worker reuse before testing leakage.
+- **Event counts are not job incidence.** Repeated initial executions can
+  fail twice in one job. **Technique:** use two repeats as a counterexample;
+  preserve repeat identity and name each denominator's unit.
+- **Named evidence consumers do not establish one reliable path.** A unique
+  directory and missing-report check appeared sufficient. **Technique:**
+  trace one minted root/identity through writer, checker, summary and upload;
+  reject reuse, empty paths, symlink escape and nonterminal receipts. Keep
+  publication under always() before the independent evidence gate.
+
+Vetted ground: retain-on-failure preserves a normally finalized original
+failure, not a killed worker's trace; retries reveal outcomes, not causes.
+Runtime tracing cost, capacity and actual defect causes remain unmeasured.
+
 The dated per-engagement record for the `antagonist` agent, one section per
 engagement. **Not read up front** — the bounded, always-read half is
 `antagonist-techniques.md`, and an entry is proposed to both. Grep this file
@@ -11318,3 +11349,16 @@ implementation.
 **All three findings folded into revision 5 by the controller.** The
 antagonist does not run again on this plan: `/harden` caps the loop at two
 passes, this was the third, and revision 5 changes no mechanism.
+
+### 2026-09-15 — FILTER axe scan cost
+
+- **Claim:** Pruning axe results removes expensive passing-node serialization.
+  **Why plausible:** vendor performance guidance recommends `resultTypes`.
+  **Settled by:** tracing installed axe 4.13 entry points and timing audit/raw
+  serialization independently; modern partial execution still serialized
+  ~430 ms of raw results, while guarded single-frame native legacy execution
+  avoided that work with unchanged 302-row input, 60 rules and 1,545 contrast
+  candidates. Cross-origin fallback needs its own witness because the current
+  WCAG tag filter excludes `frame-tested`. Historical 23-second amplification
+  remains unassigned. Controller receipts, commands and limits are in
+  [the repair record](../../docs/superpowers/research/2026-09-15-flake-hunt/residual-repairs.md).

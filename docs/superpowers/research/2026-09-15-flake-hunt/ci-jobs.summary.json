@@ -1,0 +1,28 @@
+{
+  "window": {
+    "repository": "JamesAwesome/Ergomatic",
+    "workflow": "ci.yml",
+    "window_start": "2026-09-01T23:59:49Z",
+    "window_end": "2026-09-15T23:59:49Z",
+    "job_names": [
+      "app",
+      "e2e"
+    ],
+    "download_concurrency": 2,
+    "parse_concurrency": 1
+  },
+  "runs": 639,
+  "workflow_attempts": 645,
+  "jobs": 1290,
+  "job_conclusions": {
+    "app:failure": 18,
+    "app:skipped": 127,
+    "app:success": 500,
+    "e2e:failure": 15,
+    "e2e:skipped": 127,
+    "e2e:success": 503
+  },
+  "logs_fetched": 1036,
+  "skipped_job_log_errors": 254,
+  "other_log_or_metadata_errors": 0
+}
