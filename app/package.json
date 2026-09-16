@@ -25,7 +25,7 @@
     "test:full": "node scripts/local-work.mjs run test-full",
     "test:watch": "NODE_OPTIONS=--no-experimental-webstorage vitest",
     "test:coverage": "node scripts/local-work.mjs run test-coverage",
-    "mutate": "stryker run",
+    "mutate": "node scripts/local-work.mjs run mutate",
     "db:generate": "drizzle-kit generate",
     "start": "node dist/server/server/index.js",
     "e2e": "bash scripts/e2e.sh",

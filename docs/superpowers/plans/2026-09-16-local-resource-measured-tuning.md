@@ -1,0 +1,179 @@
+# Measured local workloads implementation plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans task-by-task.
+
+**Goal:** Reduce measured local overhead without changing test meaning or
+silently choosing a new worker default.
+
+**Architecture:** Reuse the shared foreground owner and streamed receipts.
+Measure fixed native populations, retain runner isolation, and route Stryker
+through one bounded invocation. Its installed inner pool is already one worker;
+guard that actual resolved configuration instead of assuming it is unbounded.
+
+**Tech stack:** Node26.5, Vitest4.1.11, Stryker10.0.0, TypeScript6.0.3;
+no new dependencies.
+
+**Spec:** [Approved resource design](../specs/2026-09-15-local-resource-budget-design.md),
+especially runner tuning and measurement acceptance.
+**Parent:** cheaper-hooks `5daf579e`, PR464. Work uses the existing linked
+worktree on `codex/memory-measured-tuning`.
+
+Status: author investigation/paste-test in progress; implementation review and
+hardening not yet credited. The whole spec remains incomplete.
+
+## Global constraints
+
+- Current four-Vitest/three-browser defaults remain until James approves a
+  measured replacement. Stryker's new local interface requires an explicit
+  outer concurrency; there is no new silent default.
+- Normal pressure, one owner, no automatic resource retry, no census-directed
+  signals, no SIGKILL initiated by our owner, no foreign cleanup.
+- Keep ordinary fork/file isolation and jsdom. The installed Stryker plugin
+  already uses one isolated thread per runner; do not misdescribe that as a
+  pool switch introduced by this work.
+- Keep assertion, fixture, mutation, typed-diagnostic and CI coverage contracts.
+  Measurement does not authorize shared mutable fixture caches or blanket
+  teardown. No screenshots for this tooling/text work.
+- Browser measurements depend on demonstrated detached-browser ownership;
+  finish that adapter before the browser part of this investigation. This
+  dependency does not remove browser comparison from this increment.
+- All production work stays in this linked worktree. The controller runs
+  heavy gates serially; independent reviewers consume receipts.
+
+## Files and interfaces
+
+| File | Responsibility |
+| --- | --- |
+| `app/scripts/local-work/mutation.mjs` | Closed local request grammar; exact source/test paths and supported config |
+| `app/scripts/local-work/mutation-run.mjs` | Internal Stryker invocation, original-intent check, source and native artifacts |
+| `app/scripts/local-work/mutation-budget.ts` | Reporter checks resolved inner worker/isolation contract before test execution |
+| Adjacent `mutation.test.mjs` and `native/mutation.test.mjs` | Pure refusal and real installed-runner/public-boundary witnesses |
+| `workloads.mjs`, `run.mjs`, `local-work.mjs`, `app/package.json` | One admitted mutation phase and private artifact directory |
+| `vitest.stryker.config.ts`, `mutation.yml` | Inner bound and unchanged explicit hosted mutation scope |
+| Canonical instructions, README, TESTING | Public scope/concurrency syntax and revised exclusions |
+| `docs/testing/2026-09-16-resource-tuning.md` | Measurements, limits, decisions and remaining acceptance |
+
+`parseMutation(args)` returns `{all, files, testFiles, concurrency}`.
+Local syntax is `pnpm mutate --concurrency 1 --mutate domain/recency.ts`;
+repeat `--mutate` for additional exact files, optionally repeat
+`--test-file` to name an explicitly narrower witness population.
+`--all` deliberately selects the configured full mutation scope and cannot
+mix with `--mutate`. No literal `--`, globs, bare scope, percentages,
+implicit CPU count, in-place mutation or arbitrary passthrough controls.
+The explicit integer range1–16 matches the existing local worker override
+policy, not a memory guarantee. Higher values still use admission/pressure stop.
+
+`mutationFiles(app, request)` resolves regular canonical paths within the
+configured domain/server-store/server-route scope, retaining its exclusions
+for tests, fixtures and store contracts. Named witnesses must belong to the
+unit project's server/domain scope and cannot include integration.
+Missing, escaped, unmatched or unsupported input refuses before Stryker bodies.
+No CSV split: each repeated argument retains its own filename.
+
+The owner writes original public args and sets a private artifact directory
+only for the fixed mutation phase. Inherited artifact destinations are erased.
+The child reparses original receipt args and compares them to its private
+payload before importing Stryker. A wrapper dropping a selector or concurrency
+must fail, not mutate a broader set.
+
+The child snapshots source/index/config/lock inputs before preparation and
+again after completion. It freezes supported JSON config for the invocation;
+the fixed installed Vitest runner/config, no added checkers/build command and
+no in-place mutation are prerequisites. Existing human/HTML reports remain,
+native JSON and the resolved scope live in the unique private receipt. No
+counts are inferred from human output, and native assertions cannot override
+command failure. Stryker's existing survivor/threshold policy is unchanged.
+
+## State lifetime
+
+| State | Authority/mint | Clear/failure |
+| --- | --- | --- |
+| Public request | Closed argv parser | No inherited default or next-run cache |
+| Source/config snapshot | Git and regular files before mutation preparation | Rechecked at end; stale result fails |
+| Artifact directory | Existing owner invocation UUID | Retained after success/failure; never reused |
+| Stryker worker pool | Explicit outer concurrency, installed inner configuration | Native disposal, then owner's process/group census; uncertain cleanup blocks |
+| Mutation sandbox | Stryker beneath invocation-owned artifact root | Native success cleanup; failure evidence retained, no source in-place writes |
+| Reporter guard | Real Vitest onInit in every inner context | Checks before specifications/test bodies, records configured bound |
+| Measurement pairs | Same tree/scope/versions and declared warm state | Append results; interrupted/refused pairs are inconclusive |
+
+## Primary-source findings
+
+Installed `@stryker-mutator/vitest-runner@10.0.0`
+`vitest-test-runner.js#getVitestPoolConfig` returns threads/maxWorkers1
+for Vitest≥4.1.0, passed directly to createVitest by init. Guarded receipt
+`f40e0a6f-0d96-4187-a161-da580ee1871c` observed the resolved config
+maxWorkers1, maxConcurrency1, isolate true, and nine killed recency mutants.
+This corrects an untested inference that a separate config meant an uncapped
+inner pool. Outer ConcurrencyTokenProvider remains CPU-derived when omitted:
+the host reports availableParallelism10; no unbounded nine-process run was
+performed. See [Stryker configuration](https://stryker-mutator.io/docs/stryker-js/configuration/)
+and [Vitest runner](https://stryker-mutator.io/docs/stryker-js/vitest-runner/).
+
+Installed Vitest start calls awaited reporter onInit before relevant-spec
+discovery and before test-run scheduling. The native fixture must reach this
+call site with an excessive resolved maxWorkers and independently prove no
+test body executed; merely calling the guard by hand is insufficient.
+
+## Task 1: Bounded mutation request and real inner-pool gate
+
+- [ ] Add failure-first request/config tests: missing/empty/duplicate bounds,
+  scope omitted, all mixed with files, unknown flags, literal separator, globs,
+  traversal/symlink escape, integration witness, unsupported config and
+  Unicode/space/comma literal paths. Pin expected accepted arrays independently.
+- [ ] Implement the closed parser and canonical file validation at the real
+  paths above; no raw string forwarding to Stryker's CSV CLI.
+- [ ] Add a real installed-Vitest fixture that imports the actual Stryker
+  config, changes resolved maxWorkers before start, and asserts nonzero plus
+  absent body sentinel. With maxWorkers1 it must execute the sentinel.
+- [ ] Add the typed reporter and explicit inner cap to the existing Stryker
+  config. Preserve unit membership and installed threads/isolation semantics.
+- [ ] Run pure and named native fixtures under the existing owner; reuse the
+  commit hook for all compiler projects. Paste-test before hardening dispatch.
+
+## Task 2: Public mutation ownership and artifact lifetime
+
+- [ ] Add real fixture Stryker run with one tiny source and independent tests,
+  supplied through the public pnpm/local-work boundary. Assert native mutant
+  paths/status, private evidence, effective outer/inner bounds and cleanup.
+- [ ] Prove dropped payload controls refuse before a native body, inherited
+  evidence destinations are ignored, stale source fails and busy/pressure
+  refusal starts no mutation. Keep the real plugin in the executable seam.
+- [ ] Route local mutate through the existing owner; explicit hosted workflow
+  mode keeps the original configured full scope and CI concurrency.
+- [ ] Exercise interrupted real Stryker work and failing assertions. Preserve
+  signal status; missing cleanup keeps ownership, never a false pass.
+- [ ] Commit via real hooks; mutate the outer bound, inner guard and request
+  comparison separately, then restore and run their named green gates.
+- [ ] Reconcile command consumers and exclusions; reuse independent task review
+  for Tasks1–2, followed by final Standards/Spec review and exact-head full CI.
+
+## Task 3: Current-tree measurements and decisions
+
+- [x] Client pilot1/2/4 on Today, Library, Builder and WorkoutDetail: each
+ 372tests passed at clean5daf579e through public test:capture.
+- [x] Three serial alternate-order4/2 pairs on that identical population,
+  immediate vm_stat brackets and streamed receipt peaks; defaults unchanged.
+- [x] Profile those files with native module diagnostics/import timing and
+  heap observations, without treating heap growth as retained leakage.
+- [x] Profile each real tsc project's file membership and extended diagnostics;
+  retain all projects and the E2E census.
+- [ ] Profile representative typed lint and candidate pure-client/Node
+  membership; move nothing without measured benefit and unchanged witnesses.
+- [ ] Compare representative unit1/2/4 and browser1/2/3; browser work waits for
+  its ownership adapter, not a raw launch around that missing protection.
+- [ ] Decide candidate from measured benefit and cost; any new default remains
+  James's separate decision. Final candidate needs three complete alternating
+  pairs, required hook/named browser proof, independent review and hosted CI.
+- [ ] Publish exact scope, source, cold/warm state, separate wrapper/tree RSS,
+  elapsed, host pressure/compression/swap deltas and sample gaps. Never sum
+  host/VM/container/process domains or imply a guaranteed maximum.
+
+## Hardening and exit
+
+Author paste-tests are the actual modules/adjacent tests, not a second copied
+implementation in this plan. Hardening follows the bounded mechanism/code
+lenses after those commands run; no pass is claimed yet. No stored product
+shape, rower number, auth or hardware interaction changes: DBA and hardware
+gates do not apply. The approved phase scope remains; no new ROADMAP row.
+Tuning is incomplete while browser comparison, public mutation safety,
+independent review or exact-head CI is missing, even when client pairs pass.

@@ -129,6 +129,12 @@ avoid app-heavy checks. Browser, integration/container and native lifetimes
 still require controller coordination. See [local resource ownership](docs/TESTING.md#16-local-resource-ownership)
 for status, recovery and the staged boundary. Worker defaults are unchanged.
 
+On-demand mutation also uses that owner: `pnpm mutate --concurrency 1 --mutate
+domain/recency.ts`. Repeat exact `--mutate` paths, optionally narrow unit
+witnesses with `--test-file`; full mutation scope requires `--all` and an
+explicit concurrency. No bare/glob/literal-`--` fallback. JSON and HTML results
+are retained with the invocation receipt.
+
 Before writing tests, read `docs/TESTING.md`. Before starting any work, read the
 **Recurring failures** section of `CLAUDE.md` — it is a list of mistakes this
 project has actually made, most of them more than once.

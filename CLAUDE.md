@@ -135,8 +135,14 @@ machine-wide and does not cover independent clones or old worktrees.
   ceilings, defaulting to 4 and 3. Tuned for a 16 GB / 4-performance-core
   Mac running several agent sessions; **raise or unset them on a bigger
   machine**. Both are inert under CI.
-- `pnpm mutate` — Stryker mutation testing, on-demand (see docs/TESTING.md §3);
-  minutes, not part of the push/CI gate.
+- `pnpm mutate --concurrency 1 --mutate domain/recency.ts` — admitted,
+  on-demand Stryker mutation testing. Repeat `--mutate` for exact files;
+  optional repeated `--test-file <unit-file>` explicitly narrows witnesses.
+  Full configured scope requires `--all` instead of `--mutate`. Bare mutation,
+  omitted concurrency, globs and literal `--` refuse. The inner runner is
+  checked at one isolated thread; outer concurrency is explicit, not CPU-derived.
+  Reports live in the private receipt. Hosted mutation retains its existing
+  full configuration. See docs/TESTING.md §3; not part of the push gate.
 - Local dev DB: `docker run --rm -d --name erg-dev-pg -p 5433:5432 -e POSTGRES_PASSWORD=dev postgres:18.4`
   then `DATABASE_URL=postgres://postgres:dev@localhost:5433/postgres pnpm dev:server`.
   The server refuses to start without `DATABASE_URL` (no dotenv — real env only).

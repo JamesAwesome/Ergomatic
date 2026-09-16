@@ -4,8 +4,9 @@ Scope: the cheaper-hooks increment stacked on admission `d61100b7`, not the
 whole resource spec. Implementation: `cfa8b6f3`; mechanism repairs: `c22909c8`.
 The plan author implemented inline with failing producer witnesses, real hooks,
 commits before mutations, and independent review. Tasks1–3 passed independent
-spec/quality review at `b15da9a0`. Exact-head hosted CI and the final branch
-review are still outstanding. Worker defaults are unchanged.
+spec/quality review at `b15da9a0`. Final Standards/Spec review passed at
+`5daf579e99774a95e39b96c1af907b639177a7ec`, with no blocking findings.
+Full hosted CI35113605158 passed at that exact head. Worker defaults are unchanged.
 No screenshots, Docker settings changes, broad cleanup or memory-savings claim.
 
 ## Reproducible gates
@@ -70,6 +71,25 @@ hosted CI. Its fixture-only driver uses the existing observation-injection
 seam on Linux and real pressure on macOS; this adds no production bypass or
 Linux admission claim. Ambient hosted-CI regression RED `6c352005`, repaired
 five-case real-hook fixture GREEN `743986a4`.
+
+The fixture correction is committed at `5daf579e`: removing its ambient-CI
+normalization made the post-commit mutant fail (`981d4f5b`); restoration passed
+(`1f01ab29`). Real pre-commit `7402459e` and full pre-push `e9533144` passed
+with verified cleanup. No earlier head's telemetry is relabelled as this head.
+
+## Exact-head hosted gate
+
+[CI35113605158](https://github.com/JamesAwesome/Ergomatic/actions/runs/35113605158)
+has head `5daf579e99774a95e39b96c1af907b639177a7ec` and conclusion success.
+Root hooks, scripts, app, Docker and browser jobs passed; deployment was skipped
+for this pull request. Job104853398659's native coverage evidence
+`104fa7fb-fd8b-4af5-a722-e1704c032f4d` reports361files,
+9167initial executions,1existing skipped test, no first-attempt failures,
+retries, suite errors or termination/resource events. Job104853398869's
+browser evidence `c874d3c6-93bc-4e8d-848b-10fbbc8fc9f7` reports603initial
+executions, no first-attempt failures, retry recoveries, suite errors or
+termination/resource events. These figures were read from both jobs' evidence
+checks, not inferred from the green run. PR464 remains unmerged.
 
 ## Actual full pre-push observation
 

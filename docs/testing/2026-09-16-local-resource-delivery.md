@@ -46,26 +46,32 @@ app361files/9167initial executions, no first-attempt failures or resource
 events. PR463's presentation was reconciled to that exact head and evidence.
 It remains unmerged; cheaper hooks are a stacked implementation increment.
 
-### Cheaper hooks and exact subsets — next implementation increment
+### Cheaper hooks and exact subsets — implemented, PR464 unmerged
 
-- [ ] One exact project/file selection interface for direct named tests,
+- [x] One exact project/file selection interface for direct named tests,
   test-name filters, related discovery, discovery-only inspection and explicit
   full mode; validate before execution and compare executed membership.
-- [ ] Pre-push executes related unit/client UNION script unit UNION
+- [x] Pre-push executes related unit/client UNION script unit UNION
   filesystem-reading client identities once, in bounded sequential batches.
   End discovery before execution and do not reapply `--changed` to the union.
-- [ ] Selection errors, missing base/history, empty mandatory populations,
+- [x] Selection errors, missing base/history, empty mandatory populations,
   unmatched targets and dropped selectors refuse before test bodies. No
   implicit full-suite fallback; legitimate empty related sets still run the
   mandatory populations. Preserve spaces, Unicode, renames and deletions.
-- [ ] Pin the base and source/index/config/lockfile identity; reject stale
+- [x] Pin the base and source/index/config/lockfile identity; reject stale
   evidence and unsupported pushed trees using the actual pre-push input.
-- [ ] Conservative documentation-only staged classification avoids app-heavy
+- [x] Conservative documentation-only staged classification avoids app-heavy
   checks; relevant staged/unstaged inputs and classification errors retain
   typed lint/typecheck. Preserve lint-staged restoration and deliberately
   bound its task-group concurrency.
-- [ ] Prove public command/hook boundaries and real upstream mandatory-input
+- [x] Prove public command/hook boundaries and real upstream mandatory-input
   mutations; preserve full CI and the old hook's protection union.
+
+Final Standards/Spec review passed at `5daf579e`; full exact-head
+CI35113605158 passed with9167app and603browser first-attempt executions,
+zero failures/recoveries/resource events. Failure-first, mutation, coverage and
+real-hook receipts are in
+[the validation record](2026-09-16-cheaper-hooks-validation.md).
 
 ### Measured tuning — required investigation, no approved default change
 
@@ -148,13 +154,13 @@ It remains unmerged; cheaper hooks are a stacked implementation increment.
 
 ## Current resource boundary
 
-After the WebKit repair's two-case pass, pre-commit stopped at warning pressure
-during staged typed lint. No typecheck, mutation, commit or new CI is credited.
-Only this task's three test containers, network and disposable fixture volume
-were removed. The retained owner was marked active, so the public idle-only
-recovery command could not recover it. James explicitly approved this exact
-record's manual recovery. At 2026-09-16T12:44:28.352Z, normal pressure and a
-fresh census under the maintenance/generation barrier established that no
-recorded owner, child, observed identity or process group remained. Recovery
-freed the slot without killing anything or altering the original receipt.
-Guarded validation may resume; another resource event stops the heavy loop.
+The earlier WebKit pre-commit abort `c6017c87` remains preserved. James approved
+that exact recovery; the maintenance-barrier census at12:44:28.352Z proved its
+recorded identities absent and freed the slot without signals or receipt edits.
+The subsequent `e4dd90ee` native-teardown record was separately recovered under
+James's resumption authority at14:21:48.732Z, again with a fresh complete census,
+normal pressure and no signals. Its Vitest premature-exit cause was repaired
+and gated in the cheaper-hooks increment. Neither interrupted invocation is
+credited as a pass. Later guarded hook/fixture/client-pilot runs have verified
+cleanup and normal sampled pressure. Another actual resource event stops the
+heavy loop; no stale-owner recovery or foreign cleanup is implied.

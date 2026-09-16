@@ -165,6 +165,13 @@ integration, native, watch/dev and install lifetimes are still excluded from
 automatic ownership: coordinate them manually and report that exclusion.
 See `docs/TESTING.md` §16 for commands and the implemented boundary.
 
+Mutation now participates: `pnpm mutate --concurrency 1 --mutate <exact-file>`.
+Repeat `--mutate`; optional `--test-file <unit-file>` deliberately narrows
+witnesses. Use `--all` only for the configured full scope. Scope and outer
+concurrency are required; the actual inner Vitest context is checked at one
+isolated thread before tests. No raw Stryker bypass, CSV/glob selectors or
+implicit CPU-derived local pool. Native JSON/HTML reports stay in its receipt.
+
 ## Definition of done includes self-mutation
 
 For **every behavioural test you add**: break the code path it guards, run

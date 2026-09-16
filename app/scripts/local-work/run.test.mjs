@@ -73,6 +73,33 @@ const phase = (code) => ({
 const put = (path, text) =>
   `require('node:fs').writeFileSync(${JSON.stringify(path)}, ${JSON.stringify(text)});`;
 
+test("private phase artifacts replace inherited destinations and never leak to ordinary phases", async (t) => {
+  const options = fixture(t),
+    observed = join(options.root, "observed");
+  const command = phase(
+    `require('node:fs').appendFileSync(${JSON.stringify(observed)},JSON.stringify(process.env.ERGOMATIC_ARTIFACT_DIR??null)+'\\n')`,
+  );
+  const result = await runWorkload({
+    ...options,
+    phases: [
+      {
+        ...command,
+        artifacts: true,
+        env: { ...process.env, ERGOMATIC_ARTIFACT_DIR: "/foreign" },
+      },
+      {
+        ...command,
+        env: { ...process.env, ERGOMATIC_ARTIFACT_DIR: "/foreign" },
+      },
+    ],
+  });
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(
+    readFileSync(observed, "utf8").trim().split("\n").map(JSON.parse),
+    [result.directory, null],
+  );
+});
+
 async function until(predicate, timeout = 5000) {
   const deadline = Date.now() + timeout;
   while (!predicate()) {

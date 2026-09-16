@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { MutationBudget } from "./scripts/local-work/mutation-budget";
 
 // Dedicated Vitest config for Stryker mutation testing.
 //
@@ -16,6 +17,9 @@ import { defineConfig } from "vitest/config";
 // provider).
 export default defineConfig({
   test: {
+    maxWorkers: 1,
+    maxConcurrency: 1,
+    reporters: ["default", new MutationBudget()],
     name: "unit",
     environment: "node",
     include: ["server/**/*.test.ts", "domain/**/*.test.ts"],

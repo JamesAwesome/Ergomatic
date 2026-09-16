@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path";
 import { parseSelection } from "./selection.mjs";
 import { classifyStagedDocs } from "./docs-only.mjs";
+import { parseMutation } from "./mutation.mjs";
 
 const positiveWorker = (value) => /^(?:[1-9]|1[0-6])$/.test(value);
 
@@ -178,6 +179,33 @@ export function workloadPhases({
       {
         ...shell("scripts/test-run.sh", args),
         ...(name === "test-capture" ? { capture: "vitest" } : {}),
+      },
+    ];
+  }
+  if (name === "mutate") {
+    if (hosted)
+      return [
+        node(join(app, "node_modules/@stryker-mutator/core/bin/stryker.js"), [
+          "run",
+          ...args,
+        ]),
+      ];
+    const request = parseMutation(args);
+    return [
+      {
+        ...node("scripts/local-work/mutation-run.mjs", [
+          JSON.stringify(request),
+        ]),
+        artifacts: true,
+        workers: {
+          applicability: "stryker",
+          max: request.concurrency,
+          min: null,
+          actual: null,
+          source: "explicit request",
+          reason:
+            "Outer configured bound; each native inner context is guarded at one isolated thread",
+        },
       },
     ];
   }
