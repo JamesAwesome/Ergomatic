@@ -6,6 +6,8 @@ on:
 jobs:
   mutate:
     runs-on: ubuntu-latest
+    env:
+      ERGOMATIC_HOSTED_CI: "1"
     defaults:
       run:
         working-directory: app

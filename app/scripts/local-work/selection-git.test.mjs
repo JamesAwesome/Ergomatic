@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { snapshotMutationSource } from "./mutation.mjs";
 import {
   resolveBase,
   snapshotSource,
@@ -104,6 +105,39 @@ test("source identity changes on staged, unstaged, renamed, deleted and untracke
   const renamed = snapshotSource(root);
   fs.unlinkSync(path.join(root, "renamed.txt"));
   assert.throws(() => requireSameSource(renamed, snapshotSource(root)));
+});
+
+test("mutation freshness includes ignored imported inputs, additions and removals", (t) => {
+  const f = fixture(t),
+    app = path.join(f.root, "app");
+  f.write(".gitignore", "app/scratch/\nnode_modules/\n");
+  f.write("app/scratch/config.json", '{"value":1}');
+  f.write("app/scratch/witness.test.ts", "original");
+  f.write("app/node_modules/dependency/index.js", "installed");
+  const before = snapshotMutationSource(app);
+  f.write("app/scratch/config.json", '{"value":2}');
+  assert.throws(
+    () => requireSameSource(before, snapshotMutationSource(app)),
+    /stale/,
+  );
+  f.write("app/scratch/config.json", '{"value":1}');
+  requireSameSource(before, snapshotMutationSource(app));
+  f.write("app/scratch/new.ts", "new");
+  assert.throws(
+    () => requireSameSource(before, snapshotMutationSource(app)),
+    /stale/,
+  );
+  fs.unlinkSync(path.join(app, "scratch/new.ts"));
+  fs.unlinkSync(path.join(app, "scratch/witness.test.ts"));
+  assert.throws(
+    () => requireSameSource(before, snapshotMutationSource(app)),
+    /stale/,
+  );
+  f.write("app/scratch/witness.test.ts", "original");
+  f.write("app/node_modules/dependency/index.js", "not a copied input");
+  requireSameSource(before, snapshotMutationSource(app));
+  fs.symlinkSync(path.join(app, "scratch"), path.join(app, "alias"));
+  assert.throws(() => snapshotMutationSource(app), /input alias/);
 });
 
 test("actual push input validates commit trees, annotated tags and deletion-only pushes", (t) => {

@@ -22,7 +22,6 @@ export const exclusions = [
   "native",
   "watch/dev",
   "install/bootstrap",
-  "mutation",
   "independent clones and older worktrees",
 ];
 const refuse = (message) =>

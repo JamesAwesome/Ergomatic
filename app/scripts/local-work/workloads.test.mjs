@@ -8,6 +8,47 @@ const app = "/checkout/app";
 const plan = (name, args = [], env = {}) =>
   workloadPhases({ app, name, args, env, write: () => {} });
 
+test("mutation bounds survive routing while hosted scope keeps its original CLI", () => {
+  const phases = plan(
+    "mutate",
+    [
+      "--concurrency=2",
+      "--mutate",
+      "domain/a.ts",
+      "--test-file",
+      "domain/a.test.ts",
+    ],
+    { CI: "true" },
+  );
+  assert.equal(phases.length, 1);
+  assert.equal(phases[0].command, process.execPath);
+  assert.equal(phases[0].args[0], "scripts/local-work/mutation-run.mjs");
+  assert.deepEqual(JSON.parse(phases[0].args[1]), {
+    all: false,
+    files: ["domain/a.ts"],
+    testFiles: ["domain/a.test.ts"],
+    concurrency: 2,
+  });
+  assert.equal(phases[0].workers.max, 2);
+  assert.equal(phases[0].workers.actual, null);
+  assert.equal(phases[0].artifacts, true);
+  assert.equal(phases[0].env.CI, undefined);
+  assert.throws(() => plan("mutate", [], { CI: "true" }));
+  const hosted = workloadPhases({
+    app,
+    name: "mutate",
+    hosted: true,
+    env: { CI: "true", ERGOMATIC_ARTIFACT_DIR: "/foreign" },
+  });
+  assert.deepEqual(hosted[0].args, [
+    "/checkout/app/node_modules/@stryker-mutator/core/bin/stryker.js",
+    "run",
+  ]);
+  assert.equal(hosted[0].env.CI, "true");
+  assert.equal(hosted[0].env.ERGOMATIC_ARTIFACT_DIR, undefined);
+  assert.equal(hosted[0].artifacts, undefined);
+});
+
 test("every test entry requests the private runner outcome protocol, while other phases do not", () => {
   for (const name of ["test", "test-capture", "test-full", "test-coverage"]) {
     assert.equal(

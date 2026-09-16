@@ -14,8 +14,10 @@ required implementation, failure-first and mutation evidence, independent
 Standards/Spec review, and exact-head CI. Conditional tuning work must still
 be measured and reported: retaining existing defaults is valid only with an
 explicit outcome, not because profiling was omitted. A new worker default,
-merging, publishing or installing on a phone retains its separate approval
-gate. No outcome is inferred from a checkbox or from another increment's CI.
+publishing or installing on a phone retains its separate approval gate.
+James authorized merging ready increments as work proceeds on2026-09-16;
+this does not waive review or exact-head CI. No outcome is inferred from a
+checkbox or from another increment's CI.
 
 The existing admission implementation plan covers only admission. Detailed
 plans for the remaining increments must name concrete interfaces and their
@@ -24,7 +26,7 @@ substitute for those implementation plans or their hardening.
 
 ## Delivery checklist
 
-### Admission — implemented, PR handoff still open
+### Admission — merged in PR463
 
 - [x] Shared atomic ownership, maintenance barrier, pressure cancellation,
   foreground pipelines and receipt provenance implemented in PR #463.
@@ -44,30 +46,68 @@ The repaired candidate `d61100b7728130ef295230a4cf75d5e993c0e23c` passed
 run35098302961: browser603 first-attempt passes, no recovered retries;
 app361files/9167initial executions, no first-attempt failures or resource
 events. PR463's presentation was reconciled to that exact head and evidence.
-It remains unmerged; cheaper hooks are a stacked implementation increment.
+James authorized incremental merges on2026-09-16. PR463 landed as2594c7a7,
+after rechecking exact-head CI35098302961 and both final review passes.
+TestFlight is not needed: this is tooling/instructions plus an E2E fixture
+repair. Agent guidance/technique updates are included in that PR. Its post-merge
+CI35125566075 also passed, including deploy. The current worktree holds
+unfinished tuning and is not eligible for teardown.
 
-### Cheaper hooks and exact subsets — next implementation increment
+### Cheaper hooks and exact subsets — merged in PR464
 
-- [ ] One exact project/file selection interface for direct named tests,
+- [x] One exact project/file selection interface for direct named tests,
   test-name filters, related discovery, discovery-only inspection and explicit
   full mode; validate before execution and compare executed membership.
-- [ ] Pre-push executes related unit/client UNION script unit UNION
+- [x] Pre-push executes related unit/client UNION script unit UNION
   filesystem-reading client identities once, in bounded sequential batches.
   End discovery before execution and do not reapply `--changed` to the union.
-- [ ] Selection errors, missing base/history, empty mandatory populations,
+- [x] Selection errors, missing base/history, empty mandatory populations,
   unmatched targets and dropped selectors refuse before test bodies. No
   implicit full-suite fallback; legitimate empty related sets still run the
   mandatory populations. Preserve spaces, Unicode, renames and deletions.
-- [ ] Pin the base and source/index/config/lockfile identity; reject stale
+- [x] Pin the base and source/index/config/lockfile identity; reject stale
   evidence and unsupported pushed trees using the actual pre-push input.
-- [ ] Conservative documentation-only staged classification avoids app-heavy
+- [x] Conservative documentation-only staged classification avoids app-heavy
   checks; relevant staged/unstaged inputs and classification errors retain
   typed lint/typecheck. Preserve lint-staged restoration and deliberately
   bound its task-group concurrency.
-- [ ] Prove public command/hook boundaries and real upstream mandatory-input
+- [x] Prove public command/hook boundaries and real upstream mandatory-input
   mutations; preserve full CI and the old hook's protection union.
 
+Final Standards/Spec review passed at `5daf579e`; full exact-head
+CI35113605158 passed with9167app and603browser first-attempt executions,
+zero failures/recoveries/resource events. Failure-first, mutation, coverage and
+real-hook receipts are in
+[the validation record](2026-09-16-cheaper-hooks-validation.md).
+After463's squash merge,464 was reconciled at7c12b51b with a tree identical to
+reviewed5daf579e. Fresh exact-head CI35126121543 passed:9167app and603browser
+initial executions, zero first-attempt failures, retries or resource events.
+It landed asdae29d50 on2026-09-16. Its own post-merge CI35127501979 passed,
+not inferred from the PR's result. TestFlight is not needed; agent instructions
+and adversarial techniques were updated in the merged increment. The remaining
+approved work remains active on2026-09-16, beginning with tuning; merging these
+two increments is not whole-spec completion or a new worker-default decision.
+
 ### Measured tuning — required investigation, no approved default change
+
+Client1/2/4 and three4/2 pairs, unit1/2/4, import/heap, typed-lint/tsc and
+two-file pure-Node feasibility measurements are recorded in
+[the tuning record](2026-09-16-resource-tuning.md). Mutation admission is
+implemented in PR465: mechanism hardening caught vendor OOM retries recovering into a
+pass. James's continuation authorized the version-pinned local-only patch;
+its synthetic OOM, signal-only and initialization probes now pass. Root/project
+bounds and ignored-input freshness fixes also have green evidence. They are
+committed in85eac349 with biting postcommit probes and restored30/30 native/
+outcome/snapshot tests. The final code lens then found two additional defects:
+inner-thread failure could pass with later bodies, and native ignored files
+could silently reduce exact scope. Their repairs pass named native gates
+4d508435/d23070da and the combined82-test gate95086cc3. Five postcommit
+mutations bit; restored native/outcome/snapshot39/39 passed4d916d47.
+Task-review compatibility fixtures additionally prove native survivor/timeout
+semantics; three source faults bit and restored2/2 passed2f9bb8d2. Both
+hardening lenses are finished. PR465's independent final review and exact-head
+CI are its merge gates; it is not whole-spec completion. Browser
+measurements still depend on the unimplemented ownership adapter.
 
 - [ ] Compare representative one/two/four-worker Vitest and
   one/two/three-worker browser runs under normal pressure; no full-suite
@@ -148,13 +188,13 @@ It remains unmerged; cheaper hooks are a stacked implementation increment.
 
 ## Current resource boundary
 
-After the WebKit repair's two-case pass, pre-commit stopped at warning pressure
-during staged typed lint. No typecheck, mutation, commit or new CI is credited.
-Only this task's three test containers, network and disposable fixture volume
-were removed. The retained owner was marked active, so the public idle-only
-recovery command could not recover it. James explicitly approved this exact
-record's manual recovery. At 2026-09-16T12:44:28.352Z, normal pressure and a
-fresh census under the maintenance/generation barrier established that no
-recorded owner, child, observed identity or process group remained. Recovery
-freed the slot without killing anything or altering the original receipt.
-Guarded validation may resume; another resource event stops the heavy loop.
+The earlier WebKit pre-commit abort `c6017c87` remains preserved. James approved
+that exact recovery; the maintenance-barrier census at12:44:28.352Z proved its
+recorded identities absent and freed the slot without signals or receipt edits.
+The subsequent `e4dd90ee` native-teardown record was separately recovered under
+James's resumption authority at14:21:48.732Z, again with a fresh complete census,
+normal pressure and no signals. Its Vitest premature-exit cause was repaired
+and gated in the cheaper-hooks increment. Neither interrupted invocation is
+credited as a pass. Later guarded hook/fixture/client-pilot runs have verified
+cleanup and normal sampled pressure. Another actual resource event stops the
+heavy loop; no stale-owner recovery or foreign cleanup is implied.

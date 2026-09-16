@@ -1,0 +1,146 @@
+diff --git a/dist/src/ergomatic-pool.js b/dist/src/ergomatic-pool.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..74eb1d168a4fe0e262428757953f1e22d989986f
+--- /dev/null
++++ b/dist/src/ergomatic-pool.js
+@@ -0,0 +1,55 @@
++import { ErgomaticWorkerFailure, reportErgomaticWorkerFailure } from '@stryker-mutator/core';
++
++// Keep Vitest's own isolated thread implementation and messaging. Only native
++// error/exit events latch a failure; ordinary assertion and mutant results
++// retain their upstream meaning. The latch lives for this runner's lifetime.
++export function ergomaticPool(ThreadsPoolWorker) {
++    let firstFailure;
++    class FailFastThreads extends ThreadsPoolWorker {
++        name = 'ergomatic-threads';
++        stopping = false;
++        async start() {
++            try {
++                await super.start();
++            } catch (error) {
++                this.fail(error, 'thread-error', null);
++                throw firstFailure;
++            }
++            this.on('error', error => this.fail(error, 'thread-error', null));
++            this.on('exit', code => this.fail(new Error(`Vitest thread exited unexpectedly (${code})`), 'thread-exit', code));
++        }
++        fail(error, kind, exitCode) {
++            if (this.stopping || firstFailure) return;
++            firstFailure = new ErgomaticWorkerFailure({
++                message: error.message,
++                ergomaticNativeFailure: {
++                    kind: error.code === 'ERR_WORKER_OUT_OF_MEMORY' ? 'allocation' : kind,
++                    // This PID hosts the thread; exitCode belongs to the
++                    // thread, not a claim that this process has exited.
++                    pid: process.pid, exitCode, signal: null,
++                    errorCode: typeof error.code === 'string' ? error.code : null,
++                    stdoutTail: '', stderrTail: '',
++                },
++            });
++            reportErgomaticWorkerFailure(firstFailure);
++        }
++        send(message) {
++            if (message.type === 'stop') this.stopping = true;
++            if (firstFailure && (message.type === 'run' || message.type === 'collect')) throw firstFailure;
++            super.send(message);
++        }
++        async stop() {
++            this.stopping = true;
++            await super.stop();
++        }
++    }
++    return {
++        name: 'ergomatic-threads',
++        createPoolWorker(options) {
++            // Vitest schedules again after a worker error. Refuse before
++            // construction, including another witness in this same run.
++            if (firstFailure) throw firstFailure;
++            return new FailFastThreads(options);
++        },
++    };
++}
+diff --git a/dist/src/index.d.ts b/dist/src/index.d.ts
+index 6b54af2d864af5869538237503a9650a8757ba21..781146407aa901cc1e830d3ede8501f4b9f9a249 100644
+--- a/dist/src/index.d.ts
++++ b/dist/src/index.d.ts
+@@ -1,4 +1,5 @@
+ import { PluginKind } from '@stryker-mutator/api/plugin';
++export declare const ergomaticInnerWorkerPolicyVersion = 1;
+ export declare const strykerPlugins: import("@stryker-mutator/api/plugin").FactoryPlugin<PluginKind.TestRunner, ["$injector"]>[];
+ export declare const strykerValidationSchema: typeof import('../schema/vitest-runner-options.json');
+ //# sourceMappingURL=index.d.ts.map
+diff --git a/dist/src/index.js b/dist/src/index.js
+index 61a24e123b64650c50e785313698046cd463f5af..0db79b7840830cffbd7092f83a06271c2d442d12 100644
+--- a/dist/src/index.js
++++ b/dist/src/index.js
+@@ -1,4 +1,5 @@
+ import fs from 'fs';
++export const ergomaticInnerWorkerPolicyVersion = 1;
+ import { declareFactoryPlugin, PluginKind } from '@stryker-mutator/api/plugin';
+ import { vitestTestRunnerFactory } from './vitest-test-runner.js';
+ export const strykerPlugins = [
+diff --git a/dist/src/vitest-test-runner.js b/dist/src/vitest-test-runner.js
+index 84f1ca026503b8e92b7adc952ec6c6a401943656..a896c35938410eb965ab7cef6a78b236569720c9 100644
+--- a/dist/src/vitest-test-runner.js
++++ b/dist/src/vitest-test-runner.js
+@@ -7,6 +7,7 @@ import { commonTokens, tokens, } from '@stryker-mutator/api/plugin';
+ import { DryRunStatus, toMutantRunResult, determineHitLimitReached, TestStatus, } from '@stryker-mutator/api/test-runner';
+ import { errorToString, escapeRegExp, normalizeFileName, notEmpty, testFilesProvided, } from '@stryker-mutator/util';
+ import { vitestWrapper } from './vitest-wrapper.js';
++import { ergomaticPool } from './ergomatic-pool.js';
+ import { convertTestToTestResult, fromTestId, collectTestsFromSuite, normalizeCoverage, isErrorCodeError, VITEST_ERROR_CODES, } from './vitest-helpers.js';
+ const STRYKER_SETUP = fileURLToPath(new URL('./stryker-setup.js', import.meta.url));
+ export class VitestTestRunner {
+@@ -29,6 +30,10 @@ export class VitestTestRunner {
+         return { reloadEnvironment: true };
+     }
+     #getVitestPoolConfig(version) {
++        if (this.options.ergomaticFailOnWorkerFailure === true) {
++            if (version !== '4.1.11') throw new Error('Revalidate the local native-worker policy before upgrading Vitest');
++            return { pool: ergomaticPool(vitestWrapper.ThreadsPoolWorker), maxWorkers: 1 };
++        }
+         if (semver.satisfies(version, '<1.0.0')) {
+             return {
+                 threads: true,
+diff --git a/dist/src/vitest-wrapper.d.ts b/dist/src/vitest-wrapper.d.ts
+index 35519bc90dc1cfc276414ae5c79480b0278459f5..780cf8fc4e635ba7d021e4a710229affff35b8ba 100644
+--- a/dist/src/vitest-wrapper.d.ts
++++ b/dist/src/vitest-wrapper.d.ts
+@@ -2,6 +2,7 @@ import { createVitest as createVitestOriginal } from 'vitest/node';
+ export declare const vitestWrapper: {
+     createVitest: typeof createVitestOriginal;
+     version: string;
++    ThreadsPoolWorker: typeof import('vitest/node').ThreadsPoolWorker;
+ };
+ export type * from 'vitest/node';
+ //# sourceMappingURL=vitest-wrapper.d.ts.map
+diff --git a/dist/src/vitest-wrapper.js b/dist/src/vitest-wrapper.js
+index 5282ad49d45c0e7fb69f488f8ca0bf7a1ab9bf6f..ad569a10f1e92685db32afc298d834fe8eb0ae8b 100644
+--- a/dist/src/vitest-wrapper.js
++++ b/dist/src/vitest-wrapper.js
+@@ -1,15 +1,17 @@
+ import { createRequire } from 'module';
+ import { pathToFileURL } from 'node:url';
+ import path from 'path';
+-import { createVitest as createVitestOriginal } from 'vitest/node';
++import { createVitest as createVitestOriginal, ThreadsPoolWorker as ThreadsPoolWorkerOriginal } from 'vitest/node';
+ // Try to load the project's local Vitest installation
+ let createVitest = createVitestOriginal;
++let ThreadsPoolWorker = ThreadsPoolWorkerOriginal;
+ let version;
+ try {
+     const require = createRequire(path.join(process.cwd(), 'package.json'));
+     const vitestNodePath = require.resolve('vitest/node');
+     const vitestNode = await import(pathToFileURL(vitestNodePath).href);
+     createVitest = vitestNode.createVitest ?? createVitestOriginal;
++    ThreadsPoolWorker = vitestNode.ThreadsPoolWorker ?? ThreadsPoolWorkerOriginal;
+     version = require(require.resolve('vitest/package.json')).version;
+ }
+ catch {
+@@ -19,5 +21,6 @@ catch {
+ export const vitestWrapper = {
+     createVitest,
+     version,
++    ThreadsPoolWorker,
+ };
+ //# sourceMappingURL=vitest-wrapper.js.map

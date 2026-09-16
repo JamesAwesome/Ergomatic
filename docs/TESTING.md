@@ -93,7 +93,7 @@ macrotask tick (`await new Promise((r) => setTimeout(r, 0))`) before
 asserting on the captured error. Prove the probe bites: temporarily break
 the guard and confirm the listener test goes red before trusting it.
 
-**Mutation testing** (`pnpm mutate`, Stryker, scoped to `domain/**`,
+**Mutation testing** (Stryker, scoped to `domain/**`,
 `server/stores/**`, `server/routes/**`): flips small pieces of source
 (a `<` to `<=`, a `&&` to `||`, a boolean literal) and reruns the suite. A
 mutant that **survives** — the suite stayed green despite the code changing
@@ -103,12 +103,35 @@ mutants survive in the files this PR changed?"** A survivor in a changed file
 is either a real gap (write the killing test) or genuinely equivalent code
 (document why, per the examples in §3.1) — never silently ignored.
 
+Local invocation is explicit and admitted:
+`pnpm mutate --concurrency 1 --mutate domain/recency.ts`.
+Repeat `--mutate <exact-path>` to select several source files. Optional repeated
+`--test-file <exact-unit-test>` deliberately narrows witnesses and is recorded
+as such; without it, the existing native related-test policy applies. Full
+configured mutation scope requires `pnpm mutate --all --concurrency 1`.
+Concurrency must be an explicit integer 1–16, not a guarantee of available
+memory. Missing scope/bound, globs, literal `--`, unsupported producer/config
+controls, escaped paths and non-unit witnesses refuse rather than widen scope.
+Commas, spaces and Unicode in a filename remain literal, never CLI CSV.
+
+One shared owner covers Stryker. Installed Stryker10/Vitest4.1 uses one
+isolated thread per outer runner; a reporter checks the actual resolved inner
+pool before test bodies. The requested outer bound is preserved independently
+of the private child payload. Source/index/configuration changes invalidate
+the result. Native `mutation-report.json`, `mutation.html`, frozen options and
+scope record live in the unique receipt directory (§16); failed sandboxes
+remain there too. Command success is not an all-mutants-killed claim: the
+existing survivor/threshold policy is unchanged. Stryker's native interrupt
+handler returns 130 for INT; receipts retain that actual status and the
+owner's cancellation cause. Hosted manual mutation keeps its original full
+scope, CPU-derived concurrency and `app/reports/mutation/` artifact path.
+
 > **This document used to call mutation testing "a phase close-out gate". It is
 > not one, and calling it one was worse than saying nothing** — a gate nobody
 > runs retires the suspicion that would have found the bug. There is no evidence
-> of a run since the 2026-07-29 baseline below, across roughly fifteen phases:
-> Stryker appears only in this file, CLAUDE.md and two 2026-07-28 planning docs,
-> and `app/reports/` (the workflow's artifact path) does not exist. **Running a
+> of a new full baseline since 2026-07-29. The bounded September16 probes in
+> `docs/testing/2026-09-16-resource-tuning.md` are targeted evidence, not a
+> refreshed full score. **Running a
 > mutation probe on the specific assertion you are adding is still the standing
 > rule** (see §3 and CLAUDE.md's recurring failure 21) — that is a per-change
 > discipline, not a phase gate. Making the full run a real gate again, or
@@ -768,7 +791,8 @@ your edits.
 | Exact/list/related/full/coverage unit/client tests | Owner spans discovery, execution and cleanup; capture uses the same sampler |
 | Pre-commit | Owner before classification/staged mutation, through all required checks |
 | Pre-push | Owner spans native discovery and exact deduplicated batches |
-| Integration, browser/Compose, native, watch/dev, install/bootstrap, mutation | Not lifecycle-managed yet; controller coordination required |
+| Mutation | Owner spans explicitly bounded Stryker; guarded inner pool and private native reports |
+| Integration, browser/Compose, native, watch/dev, install/bootstrap | Not lifecycle-managed yet; controller coordination required |
 | Hosted CI                                                                                  | Explicit workflow mode; not a local memory guard                     |
 | Dockerfile build                                                                           | Fixed internal container build; host Docker lifecycle is not covered |
 

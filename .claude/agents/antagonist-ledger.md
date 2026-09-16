@@ -11418,3 +11418,36 @@ attribution, and separate peak/overlap/turnaround measurements. Findings
 folded by the controller, not re-reviewed as PASS. Prescribed-code lens
 skipped because the spec has no implementation blocks. No measured savings
 or implemented guarantees claimed; warning-only supersession awaits James.
+
+## 2026-09-16 — Measured local workloads, bounded hardening
+
+Mechanism and prescribed-code lenses covered the tuning plan's mutation
+adapter. Both finished; repair verification belongs to author gates and the
+normal task/PR review, not another hardening dispatch.
+
+- **Claim: resource failure cannot recover into a pass.** Plausible because
+  the foreground owner preserves process failure. Installed Stryker's native
+  retry decorator replaced the failed child before that owner saw a result;
+  synthetic OOM receiptc511ea6a proved six replacement bodies and public exit0.
+  Technique: inject the failure inside the vendor-owned execution unit and
+  inspect recovery, not just the wrapper's final exit.
+- **Claim: the patched rejection latch closes that invariant.** A real
+  Vitest thread-only exit followed the fulfilled Error/RuntimeError channel,
+  leaving four later bodies and public exit0 (8bafc6ba). With a second queued
+  witness it left five later bodies and five Killed results (bce04c94).
+  Technique78: trace producer events through queue scheduling and the
+  status-returning consumer; parent-process death is a different seam.
+- **Claim: validated exact paths cannot silently shrink.** Native Stryker
+  ignored populations omitted one source/witness while the normal file ran
+  (6b25b70e). Technique79: mixed valid/excluded membership before bodies,
+  separate from Git-ignored inputs that do enter the sandbox and therefore
+  need freshness hashes.
+
+Held evidence: closed public grammar, original-intent handoff, inherited
+artifact clearing, independent project bounds, native cause retained alongside
+source staleness, and reachable local-only broadcaster disposal. The code lens
+recalculated client pairs: sampled386.609/487.734/493.219MiB reductions at
+1.087/1.656/1.665s cost on the same fixed372-test population. These are bounded
+candidate measurements, not a worker-default decision or whole-spec completion.
+Controller evidence and repair status live in
+[the tuning record](../../docs/testing/2026-09-16-resource-tuning.md).
