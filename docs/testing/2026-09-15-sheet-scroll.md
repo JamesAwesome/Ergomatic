@@ -69,3 +69,19 @@ sheet content. The scoped coverage run reports SheetShell 97.1% statements,
 91.89% branches, 100% functions and lines. Its aggregate coverage command
 exits nonzero because only one file's tests ran; that is not a full coverage
 pass. Existing guards account for the remaining uncovered branches.
+
+## Verification and self-mutations
+
+On commit `0581c30b`, full unit/client checks passed: 332 files, 8628 tests
+passed and one existing skip. Lint, typecheck and format checks passed.
+The root pre-commit hook was verified with a temporary explicit-any lint
+violation; it blocked the attempt, and the probe file was removed.
+
+After committing the fix, replaced `owners.push(node)` with
+`owners.push(document.body)` and rebuilt the compose stack successfully.
+Both new component cases failed (ancestor remained `auto`); both WebKit
+cases failed (expected 300, received 600). Restored the committed file.
+Then changed ancestor cleanup from restoring `value` to `value || "hidden"`:
+both close and unmount cases failed because an originally absent axis stayed
+locked. Restored again: 21 component tests passed. Rebuilt the restored
+stack: all seven sheet/provenance/touch browser tests passed again.
