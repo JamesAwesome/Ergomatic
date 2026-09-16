@@ -51,6 +51,14 @@ Controller-owned serial receipts, all with verified outer cleanup:
 - Runtime29/29: `79250dc5` (before the added later-discovery gate).
 - Final named native/runtime gates5/5: `4497b719`.
 - Current runtime/owner/host66/66: `fcd4a983`.
+- Real code commit hook (compiler projects and E2E30/30): `ac43c9e0`.
+- Postcommit zero-settlement mutation failed the real-child cleanup assertion:
+  `58766464`; removing the pressure veto failed its negative gate: `61ff852e`.
+- Restored native/runtime5/5: `f77e562a`; no deliberate mutation remains.
+
+Independent Standards and spec admission-step6 review passed the complete
+four-file range7462a18f..5de40679, with no concrete blockers. The reviewer
+checked the passing and failing receipts without launching duplicate workloads.
 
 The final real-child regression uses positive readiness and a release handshake,
 not the initial probe's elapsed delay. It asserts that competing admission
@@ -62,7 +70,10 @@ signalnull and verified cleanup; no assertion was weakened.
 
 OOM and signal strings printed by the runtime suite are synthetic fixture
 outputs. The tests do not allocate stress memory. No screenshot, browser,
-container or native-device run is needed for this increment. Independent review,
-postcommit deciding-source mutation and exact-head hosted CI remain merge gates.
+container or native-device run is needed for this increment. Actual guarded push
+and exact-head hosted CI remain merge gates; prior native and scoped evidence
+does not replace either. Main35134632013's separate browser job passed603initial
+executions, zero first-attempt failures/recoveries/resource events; the full run
+still failed and deployment was skipped.
 Browser identity source corrections are saved separately for the next increment;
 the approved whole resource spec remains incomplete.
