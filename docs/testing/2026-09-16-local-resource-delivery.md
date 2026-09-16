@@ -93,7 +93,7 @@ two increments is not whole-spec completion or a new worker-default decision.
 Client1/2/4 and three4/2 pairs, unit1/2/4, import/heap, typed-lint/tsc and
 two-file pure-Node feasibility measurements are recorded in
 [the tuning record](2026-09-16-resource-tuning.md). Mutation admission is
-NOT READY: mechanism hardening caught vendor OOM retries recovering into a
+implemented in PR465: mechanism hardening caught vendor OOM retries recovering into a
 pass. James's continuation authorized the version-pinned local-only patch;
 its synthetic OOM, signal-only and initialization probes now pass. Root/project
 bounds and ignored-input freshness fixes also have green evidence. They are
@@ -103,8 +103,10 @@ inner-thread failure could pass with later bodies, and native ignored files
 could silently reduce exact scope. Their repairs pass named native gates
 4d508435/d23070da and the combined82-test gate95086cc3. Five postcommit
 mutations bit; restored native/outcome/snapshot39/39 passed4d916d47.
-Independent review and CI still gate readiness. Both hardening lenses are
-finished. Browser
+Task-review compatibility fixtures additionally prove native survivor/timeout
+semantics; three source faults bit and restored2/2 passed2f9bb8d2. Both
+hardening lenses are finished. PR465's independent final review and exact-head
+CI are its merge gates; it is not whole-spec completion. Browser
 measurements still depend on the unimplemented ownership adapter.
 
 - [ ] Compare representative one/two/four-worker Vitest and

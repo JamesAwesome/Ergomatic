@@ -18,7 +18,8 @@ especially runner tuning and measurement acceptance.
 **Parent:** cheaper-hooks `5daf579e`, PR464. Work uses the existing linked
 worktree on `codex/memory-measured-tuning`.
 
-Status: Tasks1–2 are NOT READY. James's continuation authorized the proposed
+Status: Tasks1–2 are implemented in PR465, with final review and exact-head CI
+as its merge gates. James's continuation authorized the proposed
 local-only, version-pinned Stryker patch. Its first-failure and initialization
 probes now pass; project bounds and ignored-input freshness also have targeted
 fixes. Commit85eac349's earlier postcommit gates pass, but the second and final
@@ -27,8 +28,9 @@ converted into a passing result with later bodies, and native ignored paths
 silently reduced a mixed exact request. Their repairs now pass the scoped
 82-test gate95086cc3, including the actual native seams. Five postcommit
 mutations bit at57026156; restored native/outcome/snapshot39/39 passed4d916d47.
-Independent review and exact-head CI still gate readiness. Task3
-investigation remains partial.
+The task-review compatibility gap now has native survivor/timeout fixtures,
+three biting source faults and restored2/2 in2f9bb8d2. Production is unchanged
+since57026156. Task3 investigation remains partial.
 The whole spec remains incomplete. James clarified on2026-09-16 that ready
 increments should merge as work proceeds, not wait for an arbitrary two-PR
 total. Admission #463 and cheaper-hooks #464 have landed after their exact-head
@@ -213,6 +215,10 @@ the native contract; see the patch's maintenance record in the tuning document.
 - [x] Commit and self-mutate the code-lens repairs: native-thread error/exit
   stops queued witnesses; missing inner patch refuses; native ignored paths
   cannot reduce exact scope; valid zero-mutant sources remain admissible.
+- [x] Prove native Survived and Timeout retain the null threshold, public
+  success, absent workerFailure and verified cleanup; a timeout runs its
+  waiting body exactly once. Mutate expected teardown and timeout status,
+  restore, and pass the public boundary again.
 - [ ] Reconcile command consumers and exclusions; reuse independent task review
   for Tasks1–2, followed by final Standards/Spec review and exact-head full CI.
 

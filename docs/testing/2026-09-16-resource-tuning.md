@@ -252,7 +252,7 @@ passed `57089caa-1668-40b6-9421-02c4383bed9b`. Extglob refusal and inherited
 hosted artifact clearing failed first in
 `a76a0a63-606f-4b50-a23e-b55de78a0d4a`, then passed in1f427336.
 
-### Mechanism hardening: not ready
+### Mechanism hardening findings and repairs
 
 At16e340b4 the installed Stryker RetryRejectedDecorator always recreated a
 failed worker before retrying. The public fixture in
@@ -262,11 +262,11 @@ five mutants were reported killed and the nested public command passed.
 No supported retry-disable option was found in the installed schema or
 [official configuration](https://stryker-mutator.io/docs/stryker-js/configuration/).
 James's continuation authorized the proposed local-only, version-pinned patch.
-The outer-process first-failure gate passes with the installed patch, but
-ordinary local mutation is not yet ready for use: the final code lens exposed
-two further native gaps, recorded below with their repairs. Postcommit repair
-proofs, independent review and exact-head CI remain owed. Earlier successful receipts
-prove only their normal-run cases, not this policy.
+The outer-process first-failure gate passed with the installed patch; the
+final code lens then exposed two further native gaps, recorded below with
+their repairs and postcommit proofs. Earlier successful receipts prove only
+their normal-run cases, not this policy. PR465 carries the independent final
+review and exact-head CI gate for this mutation increment.
 
 Receipt `6b9f1ad9-a0a3-49fa-8425-845ad336f0c5` independently reproduced two
 more holes: a single project's worker override ran a body despite the root
@@ -277,7 +277,8 @@ conservative app-file superset alongside the Git snapshot, including ignored
 imports/configs/witnesses and refusing aliases. Normal public mutation plus
 tracked/ignored staleness cases passed
 `062645f4-59f9-4997-b557-bfccafd31dc9`. These fixes are now committed in85eac349
-and self-mutated below; independent review and CI remain owed.
+and self-mutated below; the later task-review compatibility gate is recorded
+at the end of this document.
 
 Combined receipt `3037e419-7e7b-49bd-acd6-ebf0fa5a4ff2`:37pass/1fail; the
 sole failure is the known vendor-retry witness. The attempted negative
@@ -498,4 +499,32 @@ and nonpositive mutants before waiting, leaving only `n >= 0`: exactly one
 native Timeout and exactly one waiting-body marker passed in007d4b12-fa81-40dc-
 b9f6-7aaee520c56e (both cases2/2, timeout9.3seconds, verified cleanup). This
 guards against replaying that same mutant and makes the former24second cost
-unnecessary. Postcommit fault proofs and review closure are pending.
+unnecessary.
+
+At committed24e06de0, three deciding-source faults went red:
+
+- 052a5d1d: the adapter rejected native Survived results; public exit2
+  violated the expected0 despite a valid native survivor report.
+- b8785646: removing `this.stopping` from the pool's failure predicate
+  misclassified normal dry-run shutdown as a thread-exit resource abort.
+  This reaches expected teardown, not the later timeout branch.
+- 6557bf3b: the native TimeoutDecorator returned Error after an actual timeout;
+  the boundary mutant became RuntimeError instead of the asserted Timeout.
+
+Both prepared-package patches, lock hashes and the adapter were restored
+exactly; final dependency restoration afd73b8d passed. Restored public cases
+passed2/2 in2f9bb8d2-3e55-4cee-abff-57c9c728e4aa, including exactly one Timeout
+and exactly one waiting marker. All enclosing fault/restoration receipts
+had verified cleanup; no real resource event occurred. Commit hooks49628dd2
+andc9a21c25 passed every compiler project and E2E30/30.
+
+Before these test-only additions, exact-head CI35131666492 passed atdb762588:
+9167app and603browser initial executions, zero first-attempt failures,
+interrupted attempts, recovered retries, exhausted executions, suite errors
+or resource events. Downloaded native summaries were read independently.
+That is evidence for db762588, not the later candidate's required CI.
+
+Independent task review returned PASS for Tasks1–2 at24e06de0 after reading
+the compatibility fixtures, three source faults and restored evidence. It
+reported no remaining concrete findings. Final Standards/Spec review and
+exact-head full CI remain PR465's merge gates; Task3 is still partial.
