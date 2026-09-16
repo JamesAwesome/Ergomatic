@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { analyzeAccessibility } from "./a11y";
 import {
   forceAppSettingsDoor,
   signInViaBackdoor,
@@ -544,9 +545,7 @@ async function assertTapTargets(page: Page): Promise<void> {
 }
 
 async function assertNoA11yViolations(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa"])
-    .analyze();
+  const results = await analyzeAccessibility(page);
   expect(results.violations).toEqual([]);
 }
 
