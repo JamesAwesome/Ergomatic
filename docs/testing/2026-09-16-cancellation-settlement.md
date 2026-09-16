@@ -50,7 +50,7 @@ Controller-owned serial receipts, all with verified outer cleanup:
   settlement to verified: `6adc13d0`; the implementation now retains ownership.
 - Runtime29/29: `79250dc5` (before the added later-discovery gate).
 - Final named native/runtime gates5/5: `4497b719`.
-- Current runtime/owner/host66/66: `fcd4a983`.
+- Initial runtime/owner/host66/66: `fcd4a983`.
 - Real code commit hook (compiler projects and E2E30/30): `ac43c9e0`.
 - Postcommit zero-settlement mutation failed the real-child cleanup assertion:
   `58766464`; removing the pressure veto failed its negative gate: `61ff852e`.
@@ -77,3 +77,41 @@ executions, zero first-attempt failures/recoveries/resource events; the full run
 still failed and deployment was skipped.
 Browser identity source corrections are saved separately for the next increment;
 the approved whole resource spec remains incomplete.
+
+## Refused-contender correction
+
+Exact-head CI35136929554 at44660ac4 failed the scripts job's independent-child
+ownership test: the incumbent returned75 instead of0. Scripts passed124/125;
+app, e2e and Docker passed, including native mutation cancellation. The failed
+outer receipt was not logged, so this does not establish its historical cause.
+
+A separate deterministic independent-process test reproduced a sufficient
+cause: the contender acquired maintenance before discovering the occupied
+owner, and the incumbent's concurrent update failed with `EEXIST`. Receipt
+`78200ba7` is the failure-first proof, with verified enclosing cleanup. The
+test pauses immediately after real barrier creation, then invokes the actual
+incumbent update; its deadline is only a failure bound, not a passing oracle.
+
+Acquisition now validates root/metadata, refuses an already-visible barrier,
+then atomically reserves the empty owner directory before taking maintenance.
+Only the reservation winner publishes. A check for an occupied owner alone
+would be insufficient: another process can publish after that check. An
+independent-process interleaving gate covers that delayed-acquirer case.
+Publication, update, release and recovery retain their existing barrier and
+identity checks. Settlement and worker defaults are unchanged.
+
+If a barrier appears after the initial check, acquisition refuses and preserves
+the unpublished reservation for diagnosis. In particular, a release/recovery
+may have removed its previous directory but not yet dropped maintenance. It
+has no subsequent owner deletion, so cannot remove the new reservation. This
+rare overlap remains fail-closed, not automatically retried or recovered.
+Gates cover late and abandoned barriers, incomplete publication, and recovery
+refusing before stale proof; existing substituted-node and recovery tests stay.
+This correction excludes acquisition losers from maintenance; it does not
+promise contention-free explicit recovery or misuse of stale owner handles.
+
+Focused incumbent and runtime gates passed2/2 (`2c957ae8`); complete named
+owner/runtime/host gates passed70/70 (`cda94346`), all enclosing cleanup verified.
+The runtime assertion now prints its full result if the incumbent fails again.
+Postcommit deciding-source fault proof, final review, real push and new-head CI
+remain required for this correction; the earlier head's results do not certify it.

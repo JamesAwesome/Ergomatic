@@ -1048,6 +1048,6 @@ test("an independent child invocation cannot borrow its parent's owner", async (
       },
     ],
   });
-  assert.equal(result.exitCode, 0);
+  assert.equal(result.exitCode, 0, JSON.stringify(result));
   assert.equal(readFileSync(refused, "utf8"), "75");
 });

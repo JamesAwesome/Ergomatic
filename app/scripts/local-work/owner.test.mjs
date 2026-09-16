@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -92,6 +93,62 @@ test("a released handle cannot update or release its successor", (t) => {
   refused(() => previous.release());
   refused(() => previous.update({ phase: "wrong" }));
   assert.equal(inspectOwner(root).metadata.id, current.id);
+});
+
+test("a refused independent contender cannot block the incumbent's update", async (t) => {
+  const root = fixture(t);
+  const owner = acquireOwner(root, metadata(root));
+  const ready = path.join(root, "ready");
+  const release = path.join(root, "release");
+  const moduleUrl = new URL("./owner.mjs", import.meta.url).href;
+  const contender = spawn(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `
+    import fs from 'node:fs';
+    import { acquireOwner } from ${JSON.stringify(moduleUrl)};
+    const mkdir = fs.mkdirSync;
+    fs.mkdirSync = (name, options) => {
+      const result = mkdir(name, options);
+      if (name === ${JSON.stringify(path.join(root, "maintenance"))}) {
+        fs.writeFileSync(${JSON.stringify(ready)}, 'holding');
+        const deadline = Date.now() + 5000;
+        while (!fs.existsSync(${JSON.stringify(release)})) {
+          if (Date.now() >= deadline) process.exit(86);
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+        }
+      }
+      return result;
+    };
+    try {
+      acquireOwner(${JSON.stringify(root)}, ${JSON.stringify(metadata(root))});
+      process.exit(99);
+    } catch (error) {
+      if (error.exitCode !== 75) throw error;
+      fs.writeFileSync(${JSON.stringify(ready)}, 'refused');
+    }
+  `,
+    ],
+    { stdio: "inherit" },
+  );
+  const exited = once(contender, "exit");
+  try {
+    const deadline = Date.now() + 5000;
+    while (!fs.existsSync(ready)) {
+      assert.ok(Date.now() < deadline, "contender must reach acquisition");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    owner.update({ phase: "still-running" });
+    assert.equal(inspectOwner(root).metadata.phase, "still-running");
+    owner.release();
+  } finally {
+    fs.writeFileSync(release, "release");
+    assert.deepEqual(await exited, [0, null]);
+  }
+  assert.equal(fs.readFileSync(ready, "utf8"), "refused");
+  assert.deepEqual(inspectOwner(root), { status: "free" });
 });
 
 for (const contents of [null, "", "{", "null", "{}", "[]"]) {
@@ -191,6 +248,67 @@ test("maintenance blocks acquisition, updates, release and a second recovery", (
   refused(() => recoverOwner(root, owner.id, () => true));
   assert.equal(fs.existsSync(ownerFile(root)), true);
   assert.equal(fs.existsSync(path.join(root, "maintenance")), true);
+});
+
+test("an abandoned maintenance barrier with no owner cannot create a reservation", (t) => {
+  const root = fixture(t);
+  fs.mkdirSync(path.join(root, "maintenance"), { mode: 0o700 });
+  refused(() => acquireOwner(root, metadata(root)));
+  assert.deepEqual(fs.readdirSync(root), ["maintenance"]);
+  assert.equal(inspectOwner(root).status, "unknown");
+});
+
+test("a barrier appearing during reservation leaves unpublished ownership blocked", (t) => {
+  const root = fixture(t);
+  const mkdir = fs.mkdirSync;
+  t.mock.method(fs, "mkdirSync", (filename, options) => {
+    if (filename === path.join(root, "owner"))
+      mkdir(path.join(root, "maintenance"), { mode: 0o700 });
+    return mkdir(filename, options);
+  });
+  refused(() => acquireOwner(root, metadata(root)));
+  assert.deepEqual(fs.readdirSync(path.join(root, "owner")), []);
+  assert.equal(fs.existsSync(path.join(root, "maintenance")), true);
+  fs.rmdirSync(path.join(root, "maintenance"));
+  assert.equal(inspectOwner(root).status, "unknown");
+  let proofCalled = false;
+  refused(() =>
+    recoverOwner(root, randomUUID(), () => {
+      proofCalled = true;
+      return true;
+    }),
+  );
+  assert.equal(proofCalled, false);
+  assert.deepEqual(fs.readdirSync(path.join(root, "owner")), []);
+});
+
+test("a delayed acquirer loses to a generation published before its reservation", (t) => {
+  const root = fixture(t);
+  const winner = metadata(root);
+  const moduleUrl = new URL("./owner.mjs", import.meta.url).href;
+  const mkdir = fs.mkdirSync;
+  let intervened = false;
+  t.mock.method(fs, "mkdirSync", (filename, options) => {
+    if (filename === path.join(root, "owner")) {
+      intervened = true;
+      const result = child(
+        `
+        import { acquireOwner } from ${JSON.stringify(moduleUrl)};
+        const owner = acquireOwner(process.argv[1], JSON.parse(process.argv[2]));
+        owner.update({ phase: 'winner-running' });
+      `,
+        root,
+        JSON.stringify(winner),
+      );
+      assert.equal(result.status, 0, result.stderr);
+    }
+    return mkdir(filename, options);
+  });
+  refused(() => acquireOwner(root, metadata(root)));
+  assert.equal(intervened, true);
+  assert.equal(inspectOwner(root).metadata.id, winner.id);
+  assert.equal(inspectOwner(root).metadata.phase, "winner-running");
+  assert.equal(fs.existsSync(path.join(root, "maintenance")), false);
 });
 
 test("recovery refuses the wrong generation and an unproven live owner", (t) => {
@@ -355,11 +473,19 @@ test("a contender at owner directory creation is refused before metadata publica
       reached = true;
       const contender = child(
         `
-        import { acquireOwner, inspectOwner } from ${JSON.stringify(moduleUrl)};
+        import { acquireOwner, inspectOwner, recoverOwner } from ${JSON.stringify(moduleUrl)};
+        import assert from 'node:assert/strict';
         const root = process.argv[1];
         if (inspectOwner(root).status !== 'unknown') process.exit(2);
-        try { acquireOwner(root, JSON.parse(process.argv[2])); process.exit(3); }
-        catch (error) { if (error.exitCode !== 75) throw error; }
+        let proofCalled = false;
+        for (const action of [
+          () => acquireOwner(root, JSON.parse(process.argv[2])),
+          () => recoverOwner(root, JSON.parse(process.argv[2]).id, () => { proofCalled = true; return true; }),
+        ]) {
+          try { action(); process.exit(3); }
+          catch (error) { if (error.exitCode !== 75) throw error; }
+        }
+        assert.equal(proofCalled, false);
       `,
         root,
         JSON.stringify(metadata(root)),
