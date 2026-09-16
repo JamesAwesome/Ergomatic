@@ -5,6 +5,14 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.50.3: #461 is the only merge since v0.50.2, covered below.
+    version: "v0.50.3",
+    date: "2026-09-16",
+    items: [
+      "Where these numbers come from now explains each calculation more directly. Heart rate describes your recorded readings during work, and pieces that ended early explain how their stroke rate is calculated. Missing values simply say they are not available for the piece.",
+    ],
+  },
+  {
     // v0.50.2: both merges since v0.50.1 are accounted for.
     // #459 locks the saved log's own scroll container — the item below.
     // #457 changes test fixtures, accessibility scans and evidence capture;
