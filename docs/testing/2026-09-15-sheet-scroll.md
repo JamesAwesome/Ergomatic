@@ -91,3 +91,8 @@ AFTER opening, leaving an opening jump unguarded. The test now saves the
 pre-open offset and compares it after opening, after the backdrop gesture,
 and after Close. Both orientations pass this stronger assertion. The
 connected diagnostics sheet's two portrait/landscape design tests also pass.
+
+The reviewer's exact opening-jump mutant (`node.scrollTop = 0` during
+ancestor collection) built successfully and failed BOTH strengthened cases
+at the post-open assertion: expected 300, received 0. The committed source
+was restored after the probe.
