@@ -2,7 +2,7 @@
 // Chromium does not chain this backdrop gesture to that ancestor, so its
 // passing body-lock test cannot establish the iOS behavior.
 import { test, expect } from "@playwright/test";
-import { signInViaBackdoor } from "./helpers";
+import { RUN_ID, TEST_AUTH_SECRET } from "./helpers";
 
 for (const viewport of [
   { width: 390, height: 844 },
@@ -11,11 +11,26 @@ for (const viewport of [
   test(`the log stays put behind its source sheet and scrolls again after close (${viewport.width}x${viewport.height})`, async ({
     page,
   }) => {
-    await page.setViewportSize(viewport);
-    await signInViaBackdoor(page, {
-      email: `touch-log-${viewport.width}@e2e.test`,
-      name: "Scroll",
+    const documents: string[] = [];
+    page.on("request", (request) => {
+      if (
+        request.isNavigationRequest() &&
+        request.frame() === page.mainFrame()
+      ) {
+        documents.push(new URL(request.url()).pathname);
+      }
     });
+    await page.setViewportSize(viewport);
+    // Prepare the real session and log without loading Today. Its in-flight
+    // startup requests need not be interrupted by another document navigation.
+    const signIn = await page.request.post("/api/auth/test-signin", {
+      data: {
+        secret: TEST_AUTH_SECRET,
+        email: `touch-log-${viewport.width}-${RUN_ID}@e2e.test`,
+        name: "Scroll",
+      },
+    });
+    await expect(signIn).toBeOK();
     {
       // WebKit rejects Secure cookies on this HTTP loopback harness. Keep
       // the real backdoor session, changing only its browser transport flag.
@@ -23,62 +38,61 @@ for (const viewport of [
       await page
         .context()
         .addCookies(cookies.map((cookie) => ({ ...cookie, secure: false })));
-      await page.goto("/");
     }
     // A real saved machine workout with enough intervals to overflow in BOTH
     // orientations. The former two-interval fixture hid the scroll owner.
-    const id = await page.evaluate(async () => {
-      const response = await fetch("/api/logs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workoutId: null,
-          workoutTitle: "Ten 500m intervals",
-          workoutType: "AT",
-          source: "pm5",
-          deviceName: "PM5 432331249",
-          endedBy: "finished",
-          held: "under",
-          effort: 3,
-          notes: null,
-          advancesPlan: false,
-          avgSplitSeconds: 120,
-          timeSeconds: 1200,
-          distanceMeters: 5000,
-          machineWorkSeconds: 1200,
-          machineWorkMeters: 5000,
-          machineSummary: {
-            avgPaceSecondsPer500m: 120,
-            avgStrokeRate: 26,
-            dragFactorAverage: 124,
-            totalCalories: 330,
-            avgWatts: 203,
-            avgCalPerHour: 990,
-          },
-          steps: Array.from({ length: 10 }, () => ({
-            label: "500m @ 2:00.0",
-            targetSplit: 120,
-            actualSplit: 120,
-            actualSeconds: 120,
-            actualSource: "pm5",
-            meters: 500,
-            actualMeters: 500,
-            actualSpm: 26,
-            spm: 26,
-            machineCalories: 33,
-            machineWatts: 203,
-            machineCalPerHour: 990,
-            machineDragFactor: 124,
-          })),
-        }),
-      });
-      if (!response.ok) throw new Error(await response.text());
-      return ((await response.json()) as { id: string }).id;
+    const response = await page.request.post("/api/logs", {
+      data: {
+        workoutId: null,
+        workoutTitle: "Ten 500m intervals",
+        workoutType: "AT",
+        source: "pm5",
+        deviceName: "PM5 432331249",
+        endedBy: "finished",
+        held: "under",
+        effort: 3,
+        notes: null,
+        advancesPlan: false,
+        avgSplitSeconds: 120,
+        timeSeconds: 1200,
+        distanceMeters: 5000,
+        machineWorkSeconds: 1200,
+        machineWorkMeters: 5000,
+        machineSummary: {
+          avgPaceSecondsPer500m: 120,
+          avgStrokeRate: 26,
+          dragFactorAverage: 124,
+          totalCalories: 330,
+          avgWatts: 203,
+          avgCalPerHour: 990,
+        },
+        steps: Array.from({ length: 10 }, () => ({
+          label: "500m @ 2:00.0",
+          targetSplit: 120,
+          actualSplit: 120,
+          actualSeconds: 120,
+          actualSource: "pm5",
+          meters: 500,
+          actualMeters: 500,
+          actualSpm: 26,
+          spm: 26,
+          machineCalories: 33,
+          machineWatts: 203,
+          machineCalPerHour: 990,
+          machineDragFactor: 124,
+        })),
+      },
     });
+    await expect(response).toBeOK();
+    const { id } = (await response.json()) as { id: string };
+    expect(documents, "fixture setup must not load the app").toEqual([]);
     await page.goto(`/today/log/${id}`);
     await expect(
       page.getByRole("heading", { name: "Ten 500m intervals" }),
     ).toBeVisible();
+    expect(documents, "open the saved log in one document load").toEqual([
+      `/today/log/${id}`,
+    ]);
     const log = page.getByRole("main");
     const scrimX = (await log.boundingBox())!.x + 10;
     expect(
