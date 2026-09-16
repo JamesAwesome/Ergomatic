@@ -5,6 +5,26 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.50.1: git log v0.50.0..main --oneline — ONE merge besides this notes
+    // PR itself, and it reaches a rower (RF15; no --merges, which returns
+    // empty on this squash-merged repo).
+    //   #456 the sheet fixes — both items. James found both on his phone
+    //     reading the sheet v0.50.0 shipped: the page behind it still
+    //     scrolled, and it sat oddly low. Both lived in the shared
+    //     `SheetShell`, so both were in ALL FOUR sheets — Today's filter,
+    //     Library's filter, the connection log and the provenance sheet —
+    //     which is why the note says "any sheet" rather than naming one.
+    //     Two items rather than one because a rower notices them
+    //     separately: one is the page moving under them, the other is where
+    //     the panel sits.
+    version: "v0.50.1",
+    date: "2026-09-16",
+    items: [
+      "The screen behind a sheet stays put. Opening any sheet — a filter, the connection log, or Where these numbers come from — used to leave the page underneath free to scroll, so the log you were reading slid around behind the panel.",
+      "Sheets now sit centred rather than hanging off the bottom of the screen, where they left a wide empty gap above and cut through the page content along their top edge.",
+    ],
+  },
+  {
     // v0.50.0: git log v0.49.0..main --oneline — SIX merges besides this
     // notes PR itself, each accounted for (RF15; no --merges, which returns
     // empty on this squash-merged repo). THREE reach a rower:
