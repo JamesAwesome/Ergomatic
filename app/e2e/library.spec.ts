@@ -782,9 +782,23 @@ test("the page behind an open sheet does not scroll", async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeVisible();
 
   const before = await page.evaluate(() => window.scrollY);
-  await page.locator(".filter-sheet-backdrop").hover();
-  await page.mouse.wheel(0, 600);
-  await page.waitForTimeout(150);
+
+  // A TOUCH DRAG, not `mouse.wheel`. A wheel over the backdrop does not move
+  // this document at all — measured, with the lock DELETED, and the test
+  // still passed — so a wheel-based version of this leg was decoration. The
+  // gesture has to be the one a rower actually makes.
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type: "touchStart" | "touchEnd" | "touchMove", y: number) =>
+    cdp.send("Input.dispatchTouchEvent", {
+      type,
+      touchPoints:
+        type === "touchEnd" ? [] : [{ x: 195, y, radiusX: 5, radiusY: 5 }],
+    });
+  await touch("touchStart", 600);
+  for (let y = 560; y >= 200; y -= 40) await touch("touchMove", y);
+  await touch("touchEnd", 200);
+  await page.waitForTimeout(250);
+
   expect(await page.evaluate(() => window.scrollY)).toBe(before);
   await expect(page.getByRole("dialog")).toBeVisible();
 });
