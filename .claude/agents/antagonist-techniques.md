@@ -8,6 +8,17 @@ toolkit, not a history.
 
 ## Falsified claims, and how
 
+- **An exact-selection API can inherit a lossy changed-path producer.** Trace
+  Git bytes through the vendor VCS adapter into dependency matching; commit
+  Unicode/newline filenames and assert selected identities. NUL-safe source
+  fingerprints cannot repair a separate producer that splits quoted Git output
+  on newlines. Exercise both rename endpoints and global config inputs too.
+
+- **Process cleanup is not staged-edit restoration.** Hold the actual vendor
+  restore operation across the owner's escalation deadline, then inspect the
+  index/worktree and backup. A disappeared process can leave edits hidden;
+  preserve the first cancellation cause alongside the restoration diagnostic.
+
 - **A wrapper's lifetime is not its descendants' or its vendor session's
   lifetime.** Trace actual spawn and cleanup call sites: Playwright detaches
   browsers and can force-kill them during cleanup; Testcontainers can reuse

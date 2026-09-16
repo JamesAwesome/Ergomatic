@@ -1,4 +1,4 @@
 . "$(dirname "$0")/common.sh"
-# One owner runs the existing three populations serially. The selection
-# increment will replace their overlap/fallback; there is no dry-run bypass.
+# One owner discovers and executes the exact protection union. Git's real
+# ref stream stays on stdin; inspection never substitutes for this gate.
 exec node app/scripts/local-work.mjs run pre-push

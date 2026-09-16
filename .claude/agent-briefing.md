@@ -122,10 +122,10 @@ standing rules live here so they cannot drift between dispatches.
 
 | Your diff touches                   | You must run                                                                                                                                                                                           |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| any product code under `app/src/`   | `pnpm lint` · `typecheck` · `format:check` · `test --project unit --project client` · **the named e2e specs locally against an already-booted stack, then read the e2e job on the PR for the full suite** (James tiered the gate on 2026-09-08: CI owns the full suite, you run what your change touches — not a wall-clock argument, though a full local run does cost ~1.5x under the worker cap; CLAUDE.md RF1/RF40) — scoped captures only for layout/structure changes, per TESTING.md §8 |
-| `app/domain/` or `app/server/` only | lint · typecheck · format:check · `test --project unit` (+ integration if Docker is available)                                                                                                         |
-| tests only                          | lint · typecheck · format:check · the covering project(s)                                                                                                                                              |
-| comments/docs only                  | lint · typecheck · format:check                                                                                                                                                                        |
+| any product code under `app/src/` | Required lint/typecheck/format checks; exact affected unit/client files and the pre-push protection union; **named e2e specs locally, then read full hosted browser CI**. Reuse applicable hook receipts; scoped captures only for layout/structure changes (TESTING.md §8). |
+| `app/domain/` or `app/server/` only | Required lint/typecheck/format checks; exact affected unit files and pre-push protection union (+ explicitly coordinated integration where relevant). |
+| tests only | Required lint/typecheck/format checks and exact covering files; pre-push retains its full protection union. |
+| plain docs only | Real pre-commit's staged conflict/parity checks; app-heavy exemption only when its conservative classifier proves it. Uncertain/code/config/native inputs retain full checks. |
 
 The controller owns serial heavy validation; reviewers consume exact-head
 evidence and request named missing checks, not duplicate full-suite runs.
@@ -145,7 +145,16 @@ explained changes. This does not weaken correctness/browser test gates or
 the manual resource coordination below. See TESTING.md §8.
 
 Use the admitted package commands/hooks, and name the project plus intended
-test files. Bare local `pnpm test` refuses. Status is
+test files. Bare and project-only local `pnpm test` refuse. Use `pnpm test:list
+--project unit <file...>` to inspect; `pnpm test --project unit <file...> -t
+'<test-name regex>'` executes exact matches. Related discovery is `pnpm
+test:related --project unit --base origin/main` (add `--list` for inspection).
+Changed package manifests, lockfiles and global test config refuse related
+mode; use explicit full verification, never an inferred empty pass.
+Full verification requires named projects: `pnpm test:full --project unit
+--project client`, or `pnpm push:full <git push arguments>` for that actual
+push hook. Never drop a failed selector to widen scope, and never repeat the
+same heavy check immediately before the hook that owns it. Status is
 `node scripts/local-work.mjs status` from `app/`; refusal or resource abort
 is not a test pass and never authorizes an automatic retry or a raw-tool
 bypass. Do not run heavy work while pressure is warning, critical or unknown.

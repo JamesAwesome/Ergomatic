@@ -92,11 +92,18 @@ test("warning preflight prevents build artifacts and explicit excluded full runs
   const { app } = fixture(t);
   const output = [];
   for (const command of ["build", "test-full"]) {
-    const code = await main(["run", command], {
-      cwd: app,
-      observe: () => ({ ...normal(), pressure: { state: "warning" } }),
-      write: (s) => output.push(s),
-    });
+    const code = await main(
+      [
+        "run",
+        command,
+        ...(command === "test-full" ? ["--project", "integration"] : []),
+      ],
+      {
+        cwd: app,
+        observe: () => ({ ...normal(), pressure: { state: "warning" } }),
+        write: (s) => output.push(s),
+      },
+    );
     assert.equal(code, 75);
   }
   assert.match(output.join("\n"), /resource-refused/);

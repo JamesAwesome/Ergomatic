@@ -8,7 +8,13 @@ import { fileURLToPath } from "node:url";
 import { hostedMode, readHost } from "./local-work/host.mjs";
 import { inspectOwner, recoverOwner } from "./local-work/owner.mjs";
 import { runWorkload } from "./local-work/run.mjs";
-import { workloadPhases, testScope } from "./local-work/workloads.mjs";
+import {
+  workloadPhases,
+  testScope,
+  selectionMode,
+} from "./local-work/workloads.mjs";
+import { parseSelection } from "./local-work/selection.mjs";
+import { readPushRequest } from "./local-work/push-input.mjs";
 
 export const exclusions = [
   "integration/full tests containing integration",
@@ -18,7 +24,6 @@ export const exclusions = [
   "install/bootstrap",
   "mutation",
   "independent clones and older worktrees",
-  "pre-push exact union/dedup (legacy three populations retained)",
 ];
 const refuse = (message) =>
   Object.assign(new Error(message), { exitCode: 75, code: "RESOURCE_REFUSED" });
@@ -185,15 +190,31 @@ export async function main(
       "test-capture",
       "test-full",
       "test-coverage",
+      "test-list",
+      "test-related",
     ].includes(name);
     const projects = test
-      ? testScope(args, env, ["test-full", "test-coverage"].includes(name))
+      ? (testScope(args, env, ["test-full", "test-coverage"].includes(name)),
+        parseSelection(args, selectionMode(name)).projects)
       : [];
     if (name === "test-capture" && projects.includes("integration"))
       throw new Error(
         "Local capture admits unit/client only; integration ownership is not installed",
       );
     const excluded = projects.includes("integration");
+    const push =
+      name === "pre-push"
+        ? {
+            ...(await readPushRequest(ctx.worktree, env)),
+            base: env.PREPUSH_BASE ?? "refs/remotes/origin/main",
+          }
+        : undefined;
+    let selection;
+    if (test && !excluded) {
+      const request = parseSelection(args, selectionMode(name));
+      if (name === "test-list") request.inspect = true;
+      selection = { request, coverage: name === "test-coverage" };
+    } else if (push) selection = { prePush: push };
     const phases = workloadPhases({
       app: ctx.app,
       name,
@@ -201,6 +222,7 @@ export async function main(
       env,
       allowExcluded: excluded,
       write,
+      push,
     });
     const host = observe();
     const self = host.processes?.value?.find(
@@ -238,7 +260,7 @@ export async function main(
         argv: [process.execPath, fileURLToPath(import.meta.url), ...argv],
         cwd: ctx.app,
         env,
-        scope: { workload: name, args, projects },
+        scope: { workload: name, args, projects, selection },
       },
     });
     write(

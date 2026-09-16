@@ -811,6 +811,54 @@ test("a non-normal final sample cannot turn a resource event into a pass", async
   assert.equal(result.classification, "resource-aborted");
 });
 
+test("failed staging restoration retains the initiating pressure diagnostic", async (t) => {
+  const options = fixture(t),
+    work = join(options.root, "work"),
+    ready = join(options.root, "ready");
+  mkdirSync(work);
+  const git = (...args) => {
+    const result = spawnSync(
+      "git",
+      [
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.invalid",
+        ...args,
+      ],
+      { cwd: work, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+  };
+  git("init");
+  writeFileSync(join(work, "source.txt"), "original");
+  git("add", ".");
+  git("commit", "-m", "fixture");
+  const result = await runWorkload({
+    ...options,
+    phases: [
+      {
+        ...phase(
+          `${put(join(work, "source.txt"), "changed")}${put(ready, "yes")}setInterval(()=>{},1000)`,
+        ),
+        cwd: work,
+        verifySourceOnFailure: true,
+      },
+    ],
+    observe: ({ phase: boundary }) => ({
+      ...options.observe(),
+      ...(boundary === "running" && existsSync(ready)
+        ? { pressure: { state: "warning" } }
+        : {}),
+    }),
+  });
+  assert.equal(result.cleanup, "unresolved");
+  assert.equal(result.phases[0].stagingRestoration, "unresolved");
+  assert.match(result.reason, /pressure\/census: warning/);
+  assert.match(result.reason, /staging restoration/);
+  assert.notEqual(inspectOwner(options.root).status, "free");
+});
+
 test("an independent child invocation cannot borrow its parent's owner", async (t) => {
   const options = fixture(t),
     refused = join(options.root, "refused");

@@ -116,8 +116,16 @@ bare invocations refuse before Docker. Coverage is gated at 90% repo-wide with
 
 Local lint, typecheck, build, unit/client tests and Git hooks share one
 resource owner across cooperating worktrees and refuse unsafe host pressure.
-Bare `pnpm test` refuses: use `pnpm test --project unit <file>` (from `app/`).
-Full runs are explicit; browser, integration/container and native lifetimes
+Use `pnpm test --project unit <exact-file>` (from `app/`), with optional
+`-t '<test-name regex>'`; `test:list` previews the same exact selection.
+Bare/project-only tests and unmatched targets refuse. `test:related --project
+unit --base origin/main` selects related files; `test:full --project unit
+--project client` is explicit full scope. Changed global config/manifests or
+lockfiles require explicit full verification, never an automatic broad run.
+Pre-push runs the deduplicated
+protection union once; `pnpm push:full <git push arguments>` explicitly runs
+full unit/client checks inside that push's hook. Verified plain-docs commits
+avoid app-heavy checks. Browser, integration/container and native lifetimes
 still require controller coordination. See [local resource ownership](docs/TESTING.md#16-local-resource-ownership)
 for status, recovery and the staged boundary. Worker defaults are unchanged.
 

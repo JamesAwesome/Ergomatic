@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { acquireOwner } from "./owner.mjs";
 import { readHost } from "./host.mjs";
 import { outcomeChannel } from "./outcome.mjs";
+import { snapshotSource, requireSameSource } from "./selection-git.mjs";
 import {
   atomic,
   bindNativeReport,
@@ -205,6 +206,8 @@ export async function runWorkload({
         signal: null,
       };
       receipt.phases.push(entry);
+      if (phase.verifySourceOnFailure)
+        entry.sourceBefore = snapshotSource(phase.cwd);
       owner.update({
         phase: "launching",
         phaseIndex: receipt.phases.length - 1,
@@ -222,6 +225,8 @@ export async function runWorkload({
       const childEnv = { ...(phase.env ?? process.env) };
       delete childEnv.ERGOMATIC_TEST_OUTCOME;
       delete childEnv.ERGOMATIC_EVIDENCE_DIR;
+      delete childEnv.ERGOMATIC_SELECTION_DIR;
+      if (phase.selection) childEnv.ERGOMATIC_SELECTION_DIR = directory;
       if (phase.capture) childEnv.ERGOMATIC_EVIDENCE_DIR = directory;
       if (channel) childEnv.ERGOMATIC_TEST_OUTCOME = "1";
       const child = spawn(phase.command, phase.args, {
@@ -318,9 +323,34 @@ export async function runWorkload({
           p.pgid === child.pid || observed.get(p.pid)?.started === p.started,
       );
       entry.survivors = survivors ?? null;
-      const clean =
+      let clean =
         !unresolved &&
         (entry.launchError || (survivors && survivors.length === 0));
+      if (
+        phase.verifySourceOnFailure &&
+        !entry.launchError &&
+        (reason ||
+          interrupted ||
+          outcome.signal ||
+          outcome.code !== 0 ||
+          unresolved)
+      ) {
+        try {
+          if (!clean) throw new Error("process cleanup is unresolved");
+          entry.sourceAfter = snapshotSource(phase.cwd);
+          requireSameSource(entry.sourceBefore, entry.sourceAfter);
+          entry.stagingRestoration = "verified";
+        } catch (error) {
+          clean = false;
+          entry.stagingRestoration = "unresolved";
+          reason = [
+            reason ?? interrupted,
+            `staging restoration unverified: ${error.message}; inspect the working tree/index and retained lint-staged backup before explicit owner recovery`,
+          ]
+            .filter(Boolean)
+            .join("; ");
+        }
+      }
       mayRelease = Boolean(clean);
       receipt.signal = outcome.signal;
       receipt.exitCode = outcome.signal

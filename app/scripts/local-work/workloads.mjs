@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
-import { readFileSync, readdirSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { parseSelection } from "./selection.mjs";
+import { classifyStagedDocs } from "./docs-only.mjs";
 
 const positiveWorker = (value) => /^(?:[1-9]|1[0-6])$/.test(value);
 
@@ -81,22 +81,12 @@ export function testScope(args, env, allowFull = false) {
   return projects.length ? projects : ["unit", "client", "integration"];
 }
 
-function treeTests(directory, prefix = "src") {
-  return readdirSync(directory, { withFileTypes: true })
-    .flatMap((entry) => {
-      const relative = `${prefix}/${entry.name}`;
-      if (entry.isDirectory())
-        return treeTests(join(directory, entry.name), relative);
-      return entry.isFile() &&
-        /\.test\.tsx?$/.test(entry.name) &&
-        /"node:fs|from "fs"|test\/captures"/.test(
-          readFileSync(join(directory, entry.name), "utf8"),
-        )
-        ? [relative]
-        : [];
-    })
-    .sort();
-}
+export const selectionMode = (name) =>
+  ["test-full", "test-coverage"].includes(name)
+    ? "full"
+    : name === "test-related"
+      ? "related"
+      : "files";
 
 /** Fixed internal phases; never call a public admission wrapper recursively. */
 export function workloadPhases({
@@ -106,10 +96,12 @@ export function workloadPhases({
   env = process.env,
   hosted = false,
   allowExcluded = false,
+  push,
   write = console.error,
 }) {
   const childEnv = { ...env };
   if (!hosted) delete childEnv.CI;
+  delete childEnv.ERGOMATIC_FULL_PUSH_FD;
   const node = (file, rest = []) => ({
     command: process.execPath,
     args: [file, ...rest],
@@ -136,7 +128,21 @@ export function workloadPhases({
   ];
   const eslint = (...rest) =>
     node(join(app, "node_modules/eslint/bin/eslint.js"), [".", ...rest]);
-  if (["test", "test-capture", "test-full", "test-coverage"].includes(name)) {
+  const selectionPhase = (payload) => ({
+    ...shell("scripts/test-run.sh", ["--selection", JSON.stringify(payload)]),
+    selection: true,
+    workers: workerSettings(args, childEnv, hosted),
+  });
+  if (
+    [
+      "test",
+      "test-capture",
+      "test-full",
+      "test-coverage",
+      "test-list",
+      "test-related",
+    ].includes(name)
+  ) {
     const projects = testScope(
       args,
       env,
@@ -146,6 +152,27 @@ export function workloadPhases({
       throw new Error(
         "integration lifecycle adapter is not installed; this foreground entry point refuses it",
       );
+    if (!hosted) {
+      const request = parseSelection(args, selectionMode(name));
+      if (name === "test-list") request.inspect = true;
+      const workers = workerSettings(args, childEnv);
+      if (workers.min !== null && workers.min > workers.max)
+        throw new Error("Minimum workers exceeds configured maximum");
+      if (!projects.includes("integration")) {
+        if (name === "test-capture" && request.inspect)
+          throw new Error("Native capture requires execution, not inspection");
+        return [
+          {
+            ...selectionPhase({ request, coverage: name === "test-coverage" }),
+            ...(name === "test-capture" ? { capture: "vitest" } : {}),
+          },
+        ];
+      }
+      if (request.inspect || name === "test-related")
+        throw new Error(
+          "Integration exact discovery awaits its lifecycle adapter",
+        );
+    }
     if (name === "test-coverage") args = ["--coverage", ...args];
     return [
       {
@@ -156,41 +183,18 @@ export function workloadPhases({
   }
   if (args.length) throw new Error(`${name} does not accept extra arguments`);
   switch (name) {
-    case "pre-push":
-      return () => {
-        testScope(["--project", "unit"], env);
-        const base = env.PREPUSH_BASE ?? "refs/remotes/origin/main";
-        if (!base || base.startsWith("-") || /[\0\r\n]/.test(base))
-          throw new Error("Invalid pre-push base selector");
-        const resolved = spawnSync(
-          "git",
-          ["rev-parse", "--verify", "--quiet", base],
-          { cwd: dirname(app), encoding: "utf8", timeout: 2000 },
-        );
-        const scope = ["--project", "unit", "--project", "client"];
-        if (resolved.status !== 0)
-          write(
-            `pre-push: FALLBACK -- '${base}' does not resolve, running the full scoped suite.`,
-          );
-        let client = [];
-        try {
-          client = treeTests(join(app, "src"));
-        } catch {
-          /* Legacy fallback retained until the selection increment. */
-        }
-        if (!client.length)
-          write(
-            "pre-push: FALLBACK -- no client whole-tree suites enumerated, running the whole client project.",
-          );
-        return [
-          shell("scripts/test-run.sh", [
-            ...(resolved.status === 0 ? ["--changed", base] : []),
-            ...scope,
-          ]),
-          shell("scripts/test-run.sh", ["--project", "unit", "scripts/"]),
-          shell("scripts/test-run.sh", ["--project", "client", ...client]),
-        ];
-      };
+    case "pre-push": {
+      testScope(["--project", "unit"], env);
+      if (!push) throw new Error("Pre-push requires actual Git ref input");
+      return [
+        selectionPhase({
+          prePush: {
+            ...push,
+            base: env.PREPUSH_BASE ?? "refs/remotes/origin/main",
+          },
+        }),
+      ];
+    }
     case "typecheck":
       return typecheck();
     case "build":
@@ -213,15 +217,30 @@ export function workloadPhases({
         node("scripts/eslint-suppression-census.mjs", ["--prune"]),
       ];
     case "pre-commit":
-      return [
-        {
-          command: "pnpm",
-          args: ["exec", "lint-staged"],
-          cwd: dirname(app),
-          env: childEnv,
-        },
-        ...typecheck(),
-      ];
+      return () => {
+        const docs = classifyStagedDocs(dirname(app));
+        write(`pre-commit: ${docs.reason}`);
+        const check = node(
+          "scripts/local-work/docs-check.mjs",
+          docs.docsOnly ? ["--require-docs"] : [],
+        );
+        if (docs.docsOnly) return [check];
+        return [
+          check,
+          {
+            command: process.execPath,
+            args: [
+              join(dirname(app), "node_modules/lint-staged/bin/lint-staged.js"),
+              "--concurrent",
+              "false",
+            ],
+            verifySourceOnFailure: true,
+            cwd: dirname(app),
+            env: childEnv,
+          },
+          ...typecheck(),
+        ];
+      };
     default:
       throw new Error(`Unsupported workload: ${name}`);
   }

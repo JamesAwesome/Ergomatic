@@ -1,5 +1,33 @@
 # Antagonist ledger
 
+## Cheaper-hooks hardening — 2026-09-16
+
+Mechanism delta against the admission ground, then the prescribed-code lens;
+controller paste-tests and read-only reviewers. The bounded hardening ends here.
+
+- **Related discovery preserves valid Git paths:** falsified by installed
+  Vitest's LF-split, non-NUL Git adapter. Receipt `d37c3da5` returned empty
+  selections for committed Unicode/newline test paths. Technique: exercise the
+  actual upstream producer, not just exact-file inputs and fingerprints.
+  A NUL-safe supported VCS provider preserves rename endpoints. Actual global
+  config/package/lock inputs now refuse uncertain related selection; no implicit
+  full run or credit for a false empty set.
+- **A late source baseline can certify the wrong push:** the held status-to-mint
+  boundary accepted a concurrent source edit in `eaf233f5`. Pin before validating
+  pushed trees/cleanliness and recheck afterward. The full selected pipeline
+  now refuses that interleaving before bodies (`82092d11`).
+- **Gone processes imply restored staging:** a real lint-staged restore held
+  across SIGTERM left its backup unapplied while cleanup said verified
+  (`2e6380da`). The failed phase now proves source/index restoration separately
+  or retains ownership and backup (`cb6245f1`). No automatic repair is added.
+- **Cleanup diagnostics preserve the initiating failure:** the code lens found
+  an overwritten cancellation reason. Controlled pressure plus failed staging
+  restoration was RED `9d296fe3`, then GREEN `eaae33c1` with both causes retained.
+- Exact native membership, mandatory union, before-body checks and held native
+  teardown survived source review and the repair-tree `c328d184` gate (87/87).
+  Logger compatibility is bounded to installed Vitest4.1.11's synchronous
+  registration. No whole-spec completion or measured memory saving is claimed.
+
 ## Test reliability hunt — hardening, 2026-09-15
 
 Two read-only lenses against the design/hunt plan based at `5fc01cce`.
