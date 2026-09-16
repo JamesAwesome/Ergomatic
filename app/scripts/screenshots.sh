@@ -35,7 +35,9 @@ case "$#:${1:-}" in
   1:--help|1:-h) usage; exit 0 ;;
   1:--all) shift ;;
   2:-g|2:--grep)
-    if [[ ! "$2" =~ [^[:space:]] ]]; then usage >&2; exit 64; fi
+    # Split operands cannot be runner options. Use --grep=<pattern> when
+    # the literal pattern starts with a dash.
+    if [[ "$2" == -* || ! "$2" =~ [^[:space:]] ]]; then usage >&2; exit 64; fi
     ;;
   1:--grep=*)
     if [[ ! "${1#--grep=}" =~ [^[:space:]] ]]; then usage >&2; exit 64; fi

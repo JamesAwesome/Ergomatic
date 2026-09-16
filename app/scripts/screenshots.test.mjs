@@ -92,6 +92,19 @@ test("missing, empty and ambiguous screenshot selectors cannot launch external w
   }
 });
 
+for (const args of [
+  ["-g", "--all"],
+  ["--grep", "--help"],
+  ["-g", "--list"],
+  ["-g", "--project=chromium"],
+]) {
+  test(`option-looking split selector ${args.join(" ")} refuses before external work`, (t) => {
+    const result = fixture(t)(args);
+    assert.equal(result.status, 64);
+    assert.deepEqual(result.calls, []);
+  });
+}
+
 test("screenshot help is safe without Docker or Playwright", (t) => {
   const run = fixture(t);
   for (const option of ["--help", "-h"]) {
@@ -109,6 +122,7 @@ test("scoped capture preserves the selector as one argument and retains the scre
     ["-g", selector],
     ["--grep", selector],
     [`--grep=${selector}`],
+    ["--grep=--all"],
   ]) {
     const result = run(args);
     assert.equal(result.status, 0, result.stderr);
