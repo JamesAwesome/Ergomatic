@@ -3,6 +3,11 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 const mode = process.argv[2];
 const file = join(process.env.ERGOMATIC_EVIDENCE_DIR, "report.json");
+if (mode === "signal-before-reporters") process.kill(process.pid, "SIGTERM");
+if (mode === "allocation-before-reporters") {
+  writeFileSync(2, "FATAL ERROR: Allocation failed\n");
+  process.exit(1);
+}
 mkdirSync(join(process.env.ERGOMATIC_EVIDENCE_DIR, "html"));
 writeFileSync(
   join(process.env.ERGOMATIC_EVIDENCE_DIR, "html/index.html"),

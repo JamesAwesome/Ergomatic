@@ -399,6 +399,7 @@ function inspect(directory) {
       (receipt.exitCode === null && !receipt.signal)
     )
       throw new Error("nonterminal receipt");
+    counts.resourceAborts = receipt.resourceAbort ? 1 : 0;
     if (receipt.diagnosticErrors.length)
       issues.push(...receipt.diagnosticErrors);
     if (receipt.cleanup?.status === "incomplete")
@@ -412,7 +413,6 @@ function inspect(directory) {
       if (artifact === "resources.jsonl" && statSync(path).size === 0)
         throw new Error("empty resources");
     }
-    counts.resourceAborts = receipt.resourceAbort ? 1 : 0;
     const path = join(directory, "report.json");
     if (!receipt.reportSha256 || reportDigest(path) !== receipt.reportSha256)
       throw new Error("missing or replaced report binding");

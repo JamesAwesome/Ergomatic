@@ -52,6 +52,29 @@ function capture(mode, runner = "playwright", rootName = mode) {
   return { run, dir, receipt, summary, check };
 }
 
+for (const [mode, code, signal] of [
+  ["signal-before-reporters", 143, "SIGTERM"],
+  ["allocation-before-reporters", 1, null],
+]) {
+  test(`receipt termination count survives missing HTML and raw output: ${mode}`, () => {
+    const r = capture(mode);
+    assert.equal(r.run.status, code);
+    assert.equal(r.receipt.terminal, true);
+    assert.equal(r.receipt.signal, signal);
+    assert.equal(r.receipt.resourceAbort, true);
+    assert.equal(existsSync(join(r.dir, "html/index.html")), false);
+    assert.equal(existsSync(join(r.dir, "report.json")), false);
+    assert.equal(r.check.status, 1);
+    assert.match(r.summary.stdout, /evidence: incomplete/);
+    assert.match(r.summary.stdout, /termination\/resource events: 1/);
+    unlinkSync(join(r.dir, "stdout.log"));
+    assert.match(
+      invoke(["summary", r.dir]).stdout,
+      /termination\/resource events: 1/,
+    );
+  });
+}
+
 test("native attempts, observer status and evidence remain independent through the CLI", () => {
   for (const [mode, code, evidence, expected] of [
     ["pass", 0, 0, "initial executions: 1"],
