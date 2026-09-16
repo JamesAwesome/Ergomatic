@@ -222,6 +222,8 @@ export async function runWorkload({
       const childEnv = { ...(phase.env ?? process.env) };
       delete childEnv.ERGOMATIC_TEST_OUTCOME;
       delete childEnv.ERGOMATIC_EVIDENCE_DIR;
+      delete childEnv.ERGOMATIC_SELECTION_DIR;
+      if (phase.selection) childEnv.ERGOMATIC_SELECTION_DIR = directory;
       if (phase.capture) childEnv.ERGOMATIC_EVIDENCE_DIR = directory;
       if (channel) childEnv.ERGOMATIC_TEST_OUTCOME = "1";
       const child = spawn(phase.command, phase.args, {

@@ -31,15 +31,20 @@ substitute for those implementation plans or their hardening.
 - [x] Independent admission reviews and full hosted CI passed at `59a94e98`.
 - [x] Commit the separately approved WebKit fixture repair through real
   hooks, mutate the navigation/setup guards, restore and pass both cases.
-- [ ] Read full exact-head CI for the repaired candidate without treating a
+- [x] Read full exact-head CI for the repaired candidate without treating a
   recovered retry as a flake-free run.
-- [ ] Reconcile the PR's head, evidence and review status after that change.
+- [x] Reconcile the PR's head, evidence and review status after that change.
 
 The baseline CI run `35094020059` passed but recovered one WebKit retry.
 The local repair is committed as `252a482f`: both orientations first failed
 its new guard, then passed; four post-commit mutations failed at their intended
 checks and the restored two-case run passed. The pre-commit abort receipt
 `c6017c87-7237-43f9-ab8a-800efabb7842` remains preserved, not credited as a pass.
+The repaired candidate `d61100b7728130ef295230a4cf75d5e993c0e23c` passed
+run35098302961: browser603 first-attempt passes, no recovered retries;
+app361files/9167initial executions, no first-attempt failures or resource
+events. PR463's presentation was reconciled to that exact head and evidence.
+It remains unmerged; cheaper hooks are a stacked implementation increment.
 
 ### Cheaper hooks and exact subsets — next implementation increment
 

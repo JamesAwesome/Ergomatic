@@ -6,11 +6,18 @@ import { isCI, workerCap } from "../testEnv.ts";
 
 const app = "/checkout/app";
 const plan = (name, args = [], env = {}) =>
-  workloadPhases({ app, name, args, env });
+  workloadPhases({ app, name, args, env, write: () => {} });
 
 test("every test entry requests the private runner outcome protocol, while other phases do not", () => {
   for (const name of ["test", "test-capture", "test-full", "test-coverage"]) {
-    assert.equal(plan(name, ["--project", "unit"])[0].outcome, "test-run");
+    assert.equal(
+      plan(name, [
+        "--project",
+        "unit",
+        ...(["test", "test-capture"].includes(name) ? ["a.test.ts"] : []),
+      ])[0].outcome,
+      "test-run",
+    );
   }
   assert.equal(plan("typecheck").at(-1).outcome, undefined);
 });
@@ -62,11 +69,16 @@ test("receipt worker limits agree with the real config and distinguish overrides
 });
 
 test("pre-commit holds lint-staged and every typecheck in one internal pipeline", () => {
-  const phases = plan("pre-commit");
+  const phases = plan("pre-commit")();
   assert.deepEqual(
     phases.map((p) => p.args),
     [
-      ["exec", "lint-staged"],
+      ["scripts/local-work/docs-check.mjs"],
+      [
+        "/checkout/node_modules/lint-staged/bin/lint-staged.js",
+        "--concurrent",
+        "false",
+      ],
       ["/checkout/app/node_modules/typescript/bin/tsc", "-b"],
       [
         "/checkout/app/node_modules/typescript/bin/tsc",
@@ -89,8 +101,8 @@ test("pre-commit holds lint-staged and every typecheck in one internal pipeline"
       ["scripts/e2e-typecheck-census.sh"],
     ],
   );
-  assert.equal(phases[0].cwd, "/checkout");
-  assert.equal(phases[1].cwd, app);
+  assert.equal(phases[1].cwd, "/checkout");
+  assert.equal(phases[2].cwd, app);
   assert.equal(
     phases.some((p) => p.args.includes("local-work.mjs")),
     false,
@@ -124,7 +136,20 @@ test("test selectors reach the signal-preserving runner byte for byte", () => {
     NODE_OPTIONS: "--max-old-space-size=1024",
     CI: "1",
   });
-  assert.deepEqual(phases[0].args, ["scripts/test-run.sh", ...args]);
+  assert.deepEqual(phases[0].args.slice(0, 2), [
+    "scripts/test-run.sh",
+    "--selection",
+  ]);
+  assert.deepEqual(JSON.parse(phases[0].args[2]).request, {
+    mode: "files",
+    projects: ["client"],
+    files: ["src/space ü.test.tsx"],
+    testNamePattern: "specific behavior",
+    maxWorkers: null,
+    minWorkers: null,
+    inspect: false,
+    base: null,
+  });
   assert.equal(phases[0].outcome, "test-run");
   assert.equal(phases[0].env.NODE_OPTIONS, "--max-old-space-size=1024");
   assert.equal(Object.hasOwn(phases[0].env, "CI"), false);
@@ -161,8 +186,9 @@ test("foreground test admission does not silently include integration fixtures",
     /integration/,
   );
   assert.equal(
-    plan("test", ["--project=unit", "scripts/a.test.ts"])[0].args[1],
-    "--project=unit",
+    JSON.parse(plan("test", ["--project=unit", "scripts/a.test.ts"])[0].args[2])
+      .request.projects[0],
+    "unit",
   );
 });
 

@@ -91,8 +91,14 @@ else
   # still 137, because the `set -uo pipefail` at the top of this file saves
   # it -- the mutation that turns that case red is dropping `-o pipefail`
   # AND substituting `rc=$?`, which then reports exit 0 and no banner.
+  if [ "${1:-}" = "--selection" ]; then
+    shift
+    _test_command=(node "$HERE/local-work/selection-run.mjs" "$@")
+  else
+    _test_command=("${ERGOMATIC_TEST_RUN_BIN:-$APP_ROOT/node_modules/.bin/vitest}" run "$@")
+  fi
   (
-    "${ERGOMATIC_TEST_RUN_BIN:-$APP_ROOT/node_modules/.bin/vitest}" run "$@" \
+    "${_test_command[@]}" \
       2>&1 1>&3 3>&- | tee "$ERR" >&2
     exit "${PIPESTATUS[0]}"
   ) 3>&1 | tee "$OUT"

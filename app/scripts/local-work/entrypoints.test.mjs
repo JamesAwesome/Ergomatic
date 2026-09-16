@@ -46,10 +46,12 @@ function fixture(t) {
     path.join(source, "scripts/local-work.mjs"),
     "app/scripts/local-work.mjs",
   );
-  for (const name of ["host", "owner", "run", "outcome", "workloads"])
+  for (const name of fs
+    .readdirSync(path.join(source, "scripts/local-work"))
+    .filter((name) => name.endsWith(".mjs") && !name.endsWith(".test.mjs")))
     copy(
-      path.join(source, `scripts/local-work/${name}.mjs`),
-      `app/scripts/local-work/${name}.mjs`,
+      path.join(source, `scripts/local-work/${name}`),
+      `app/scripts/local-work/${name}`,
     );
   for (const name of [
     "test-run.sh",
@@ -78,6 +80,23 @@ else {console.log('Test Files  1 passed (1)');process.exitCode=kind===process.en
     `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, "app/node_modules/vitest/runner.mjs"))} "$@"\n`,
   );
   fs.chmodSync(vitest, 0o755);
+  put(
+    "app/node_modules/vitest/package.json",
+    JSON.stringify({ type: "module", exports: { "./node": "./node.mjs" } }),
+  );
+  copy(
+    path.join(source, "scripts/local-work/fixtures/vitest-api.mjs"),
+    "app/node_modules/vitest/node.mjs",
+  );
+  put("app/fixture.test.ts", "// native boundary fixture\n");
+  put("app/scripts/a.test.ts", "// mandatory script fixture\n");
+  put("app/src/space ü.test.tsx", "// exact path fixture\n");
+  put(".claude/skills/example/SKILL.md", "fixture instruction\n");
+  put(".agents/skills/example/SKILL.md", "fixture adapter\n");
+  put(
+    ".gitignore",
+    "node_modules/\n*.jsonl\n*.log\napp/.test-evidence/\napp/.test-kills/\n",
+  );
   put("app/scripts/e2e-typecheck-census.sh", "#!/bin/sh\nexit 0\n");
   const driver = put(
     "driver.mjs",
@@ -89,11 +108,13 @@ process.exitCode=await main(process.argv.slice(2),{observe:()=>({...readHost(),p
     `#!/bin/sh\nif [ "$1" = -v ]; then echo "v\${FIXTURE_NODE_MAJOR:-26}.0.0";exit 0;fi\ncase "$1" in *local-work.mjs) shift;exec ${quote(process.execPath)} ${quote(driver)} "$@";; esac\nexec ${quote(process.execPath)} "$@"\n`,
   );
   fs.chmodSync(node, 0o755);
-  const lint = put(
-    "bin/pnpm",
-    `#!/bin/sh\nif [ "$*" != 'exec lint-staged' ];then exit 96;fi\nprintf 'lint-staged\\n' >> ${quote(path.join(root, "lint.log"))}\nexit "\${FIXTURE_LINT_CODE:-0}"\n`,
+  put(
+    "node_modules/lint-staged/bin/lint-staged.js",
+    `import fs from 'node:fs';
+if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['--concurrent','false'])) process.exit(96);
+fs.appendFileSync(${JSON.stringify(path.join(root, "lint.log"))},'lint-staged\\n');
+process.exitCode=Number(process.env.FIXTURE_LINT_CODE??0);`,
   );
-  fs.chmodSync(lint, 0o755);
   put(
     "app/src/theme/customPropertyCensus.test.ts",
     'import {readFileSync} from "node:fs";',
@@ -107,31 +128,30 @@ process.exitCode=await main(process.argv.slice(2),{observe:()=>({...readHost(),p
   };
   delete env.ERGOMATIC_HOSTED_CI;
   delete env.ERGOMATIC_TEST_RUN_BIN;
-  // Seed a ref without running commit hooks, writing commits, or shared state.
-  // An empty tree + hash-object/commit-tree would be a commit; use the existing
-  // repository's HEAD object through Git alternates instead.
-  const common = spawnSync("git", ["rev-parse", "--git-common-dir"], {
-    cwd: repo,
-    encoding: "utf8",
-  }).stdout.trim();
-  put(
-    ".git/objects/info/alternates",
-    path.resolve(repo, common, "objects") + "\n",
-  );
-  const head = spawnSync("git", ["rev-parse", "HEAD"], {
-    cwd: repo,
-    encoding: "utf8",
-  }).stdout.trim();
-  spawnSync("git", ["update-ref", "refs/heads/fixture", head], { cwd: root });
-  spawnSync("git", ["symbolic-ref", "HEAD", "refs/heads/fixture"], {
-    cwd: root,
-  });
-  spawnSync("git", ["read-tree", "HEAD"], { cwd: root });
-  const tracked = spawnSync("git", ["ls-files", "-z"], { cwd: root }).stdout;
-  spawnSync("git", ["update-index", "--skip-worktree", "-z", "--stdin"], {
-    cwd: root,
-    input: tracked,
-  });
+  // Synthetic, private repository only: write its actual fixture tree so a
+  // pre-push hook receives real objects, not another checkout's unrelated HEAD.
+  const seed = () => {
+    const git = (...args) => {
+      const out = spawnSync(
+        "git",
+        [
+          "-c",
+          "user.name=Fixture",
+          "-c",
+          "user.email=fixture@example.invalid",
+          ...args,
+        ],
+        { cwd: root, encoding: "utf8" },
+      );
+      assert.equal(out.status, 0, out.stderr);
+      return out.stdout.trim();
+    };
+    git("add", ".");
+    const head = git("commit-tree", git("write-tree"), "-m", "fixture");
+    git("update-ref", "HEAD", head);
+    return head;
+  };
+  seed();
   const calls = () =>
     fs.existsSync(path.join(root, "calls.jsonl"))
       ? fs
@@ -140,13 +160,18 @@ process.exitCode=await main(process.argv.slice(2),{observe:()=>({...readHost(),p
           .split("\n")
           .map(JSON.parse)
       : [];
-  const hook = (name, extra = {}) =>
-    spawnSync("sh", ["-e", `.husky/${name}`], {
+  const hook = (name, extra = {}) => {
+    const head = name === "pre-push" ? seed() : null;
+    return spawnSync("sh", ["-e", `.husky/${name}`], {
       cwd: root,
       env: { ...env, ...extra },
       encoding: "utf8",
       timeout: 15000,
+      input: head
+        ? `refs/heads/fixture ${head} refs/heads/fixture ${"0".repeat(40)}\n`
+        : undefined,
     });
+  };
   return { root, put, env, calls, hook };
 }
 
@@ -158,6 +183,26 @@ test("pre-commit hook refuses pressure before lint-staged and preserves Node ver
   const old = f.hook("pre-commit", { FIXTURE_NODE_MAJOR: "24" });
   assert.equal(old.status, 1);
   assert.match(old.stderr, /HOOK BLOCKED/);
+});
+
+test("pre-commit verified staged prose launches no app lint or typecheck", (t) => {
+  const f = fixture(t);
+  f.put("README.md", "Plain staged documentation\n");
+  const staged = spawnSync("git", ["add", "README.md"], { cwd: f.root });
+  assert.equal(staged.status, 0);
+  const result = f.hook("pre-commit");
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(f.calls(), []);
+  assert.equal(fs.existsSync(path.join(f.root, "lint.log")), false);
+  assert.match(
+    result.stdout,
+    /staged conflict markers and skill parity checked/,
+  );
+  f.put("app/new.ts", "export const relevant = true;\n");
+  const code = f.hook("pre-commit");
+  assert.equal(code.status, 0, code.stderr);
+  assert.equal(f.calls().filter((call) => call.kind === "tsc").length, 4);
+  assert.equal(fs.existsSync(path.join(f.root, "lint.log")), true);
 });
 
 test("documented local capture owns native evidence with exactly one resource sampler", (t) => {
@@ -258,7 +303,12 @@ const timer=setInterval(()=>{
   assert.equal(receipt.phases[0].workers.source, "cli");
   assert.equal(receipt.phases[0].workers.actual, null);
   assert.deepEqual(receipt.scope.projects, ["unit"]);
-  assert.equal(receipt.phases[0].argv.includes("fixture.test.ts"), true);
+  assert.equal(
+    JSON.parse(receipt.phases[0].args[2]).request.files.includes(
+      "fixture.test.ts",
+    ),
+    true,
+  );
   assert.equal(fs.existsSync(path.join(f.root, "app/.test-evidence")), false);
   for (const [action, needle] of [
     ["check", /evidence: complete/],
@@ -360,25 +410,30 @@ test("pre-commit has one owner, fails fast after staged lint, and preserves type
   assert.equal(f.calls().length, 1);
   assert.ok(f.calls()[0].owner);
 });
-test("pre-push executes all three legacy populations despite ambient dry-run flags", (t) => {
+test("pre-push executes the protection union once despite ambient dry-run flags", (t) => {
   const f = fixture(t);
   const result = f.hook("pre-push", { PREPUSH_DRY_RUN: "1", DRY_RUN: "1" });
   assert.equal(result.status, 0, result.stderr);
   const calls = f.calls();
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 2);
   assert.deepEqual(
     calls.map((c) => c.args),
     [
-      ["run", "--changed", "HEAD", "--project", "unit", "--project", "client"],
-      ["run", "--project", "unit", "scripts/"],
-      ["run", "--project", "client", "src/theme/customPropertyCensus.test.ts"],
+      [
+        "run",
+        "--project",
+        "client",
+        "src/space ü.test.tsx",
+        "src/theme/customPropertyCensus.test.ts",
+      ],
+      ["run", "--project", "unit", "fixture.test.ts", "scripts/a.test.ts"],
     ],
   );
   assert.ok(calls[0].owner);
   assert.equal(new Set(calls.map((c) => c.owner)).size, 1);
   assert.deepEqual(
     calls.map((c) => c.outcome),
-    ["1", "1", "1"],
+    ["1", "1"],
   );
   const receipt = JSON.parse(
     fs.readFileSync(
@@ -393,25 +448,35 @@ test("pre-push executes all three legacy populations despite ambient dry-run fla
   );
   assert.deepEqual(
     receipt.phases.map((phase) => phase.reportedOutcome),
-    [
-      { classification: "passed", signal: null },
-      { classification: "passed", signal: null },
-      { classification: "passed", signal: null },
-    ],
+    [{ classification: "passed", signal: null }],
   );
 });
-test("pre-push legacy missing-base fallback stays Docker-free and fails fast on runner failure", (t) => {
+test("pre-push missing-base refuses without bodies; ordinary runner failure stops later batches", (t) => {
   const f = fixture(t);
   const result = f.hook("pre-push", {
     PREPUSH_BASE: "refs/heads/missing",
     FIXTURE_FAIL_KIND: "vitest",
     FIXTURE_FAIL_CODE: "19",
   });
-  assert.equal(result.status, 19, result.stderr);
-  assert.match(result.stderr, /FALLBACK/);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /No fallback/);
+  assert.deepEqual(f.calls(), []);
+  const failed = f.hook("pre-push", {
+    FIXTURE_FAIL_KIND: "vitest",
+    FIXTURE_FAIL_CODE: "19",
+  });
+  assert.equal(failed.status, 19, failed.stderr);
   assert.deepEqual(
     f.calls().map((c) => c.args),
-    [["run", "--project", "unit", "--project", "client"]],
+    [
+      [
+        "run",
+        "--project",
+        "client",
+        "src/space ü.test.tsx",
+        "src/theme/customPropertyCensus.test.ts",
+      ],
+    ],
   );
 });
 test("package test preserves selectors and Node flags through the real pnpm boundary", (t) => {
@@ -520,19 +585,30 @@ test("package full and integration are explicit exclusions, while missing and ma
     assert.notEqual(result.status, 0);
     assert.deepEqual(f.calls(), []);
   }
-  const full = spawnSync(pnpm, ["--dir", "app", "test:full"], {
-    cwd: f.root,
-    env: { ...f.env, ERGOMATIC_TEST_OUTCOME: "1" },
-    encoding: "utf8",
-    timeout: 15000,
-  });
+  const full = spawnSync(
+    pnpm,
+    ["--dir", "app", "test:full", "--project", "integration"],
+    {
+      cwd: f.root,
+      env: { ...f.env, ERGOMATIC_TEST_OUTCOME: "1" },
+      encoding: "utf8",
+      timeout: 15000,
+    },
+  );
   assert.equal(full.status, 0, full.stdout + full.stderr);
-  assert.match(full.stderr, /EXCLUDED.*unit, client, integration/);
+  assert.match(full.stderr, /EXCLUDED.*integration/);
   assert.equal(f.calls()[0].owner, null);
   assert.equal(f.calls()[0].outcome, undefined);
   const refused = spawnSync(
     pnpm,
-    ["--dir", "app", "test", "--project", "integration"],
+    [
+      "--dir",
+      "app",
+      "test",
+      "--project",
+      "integration",
+      "server/fixture.integration.test.ts",
+    ],
     {
       cwd: f.root,
       env: { ...f.env, FIXTURE_PRESSURE: "warning" },
@@ -547,6 +623,10 @@ test("package full and integration are explicit exclusions, while missing and ma
 
 test("pre-push corpus census includes every current file-reading client suite", async (t) => {
   const f = fixture(t);
+  f.put(
+    "app/.fixture-empty-related",
+    "No relevant specs in this boundary fixture\n",
+  );
   const collect = (directory, prefix = "src") =>
     fs
       .readdirSync(directory, { withFileTypes: true })
@@ -569,7 +649,10 @@ test("pre-push corpus census includes every current file-reading client suite", 
   }
   const result = f.hook("pre-push");
   assert.equal(result.status, 0, result.stderr);
-  const selected = f.calls()[2].args;
+  const selected = f
+    .calls()
+    .filter((call) => call.args.includes("client"))
+    .flatMap((call) => call.args);
   assert.ok(required.length > 0);
   assert.deepEqual(
     required.filter((file) => !selected.includes(file)),
@@ -580,8 +663,9 @@ test("pre-push corpus census includes every current file-reading client suite", 
 test("pre-commit descendants cannot borrow their parent's owner to start another workload", (t) => {
   const f = fixture(t);
   f.put(
-    "bin/pnpm",
-    `#!/bin/sh\nexec node app/scripts/local-work.mjs run build\n`,
+    "node_modules/lint-staged/bin/lint-staged.js",
+    `import {spawnSync} from 'node:child_process';
+process.exitCode=spawnSync('node',['app/scripts/local-work.mjs','run','build'],{stdio:'inherit'}).status;`,
   );
   const result = f.hook("pre-commit", {
     ERGOMATIC_OWNER_TOKEN: "inherited-is-not-an-exemption",

@@ -69,6 +69,10 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm typecheck
+      - name: Install hook dependencies for real pre-commit seam tests
+        run: pnpm --dir .. install --frozen-lockfile
+      - name: Test exact selection against the installed native runner
+        run: NODE_OPTIONS=--no-experimental-webstorage node --test --test-concurrency=1 scripts/local-work/native/*.test.mjs
       - name: Capture coverage test evidence
         id: evidence
         run: node scripts/test-evidence.mjs run vitest -- bash scripts/test-run.sh --coverage

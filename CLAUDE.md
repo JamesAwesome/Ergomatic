@@ -78,8 +78,9 @@ machine-wide and does not cover independent clones or old worktrees.
 - `pnpm dev` / `pnpm dev:server` — Vite client :5173 (proxies /api) / API :8080
 - `pnpm lint` · `pnpm format` / `pnpm format:check` · `pnpm typecheck` ·
   `pnpm test --project unit <file>` · `pnpm build`. Bare local `pnpm test`
-  refuses. `pnpm test:full` / `pnpm test:coverage` explicitly include integration
-  and remain controller-managed until their lifecycle adapter lands.
+  refuses, as does a project without exact files. `pnpm test:full --project
+  unit --project client` and `pnpm test:coverage --project <name>` require
+  explicit project scope; neither silently includes integration.
 - **`--` SCOPES NEITHER `pnpm test` NOR `pnpm e2e`, and for two DIFFERENT
   reasons** — debugging the second from the first's explanation sends you to
   the wrong layer. `pnpm e2e -- <file>` does not swallow the `--`: it forwards
@@ -92,11 +93,14 @@ machine-wide and does not cover independent clones or old worktrees.
   `pnpm exec playwright test --project=chromium <spec> --list | grep -c '›'`,
   once with and once without; the counts are what they are on the day, and the
   ratio is the point.
-- Single Vitest project: `pnpm test --project unit|client|integration`.
+- Exact unit/client selection: `pnpm test --project unit|client <file...>`.
   Pass a file bare, for example `pnpm test --project client src/session/reviewSelector.test.ts`.
-  `integration` needs Docker and is not yet ownership-managed. The admitted
-  wrapper rejects a literal `--`; exact manifest selection is a separate
-  increment, so current Vitest patterns are not an exact-file guarantee.
+  `pnpm test:list --project unit <file...>` discovers without executing;
+  `pnpm test:related --project unit --base origin/main` selects related files
+  (`--list` inspects that selection). Optional `-t '<test-name regex>'`
+  narrows exact files. Missing/unmatched targets, globs and literal `--`
+  refuse; no failed selection expands to a full run. Integration still uses
+  its legacy Docker lifecycle and requires controller coordination.
   Do not bypass admission with `pnpm exec vitest run`: it also drops the
   `NODE_OPTIONS=--no-experimental-webstorage` that `package.json`'s `test`
   script sets — Node 26's experimental webStorage global then collides with
@@ -608,9 +612,19 @@ machine-wide and does not cover independent clones or old worktrees.
   being changed when doing so is safe and local, then run `pnpm lint:prune`.
   Do not expand a focused change into unrelated cleanup.
 - TDD: failing test first. Domain code gets the heaviest coverage.
-- Hooks: pre-commit runs staged format/lint first and whole-project typecheck
-  second; it is fail-fast. Pre-push runs unit + client tests only (fast,
-  Docker-free — CI runs the full gate incl. integration/e2e). Both hooks fail
+- Hooks: pre-commit keeps staged format/typed lint and full typecheck for
+  code/config/native/unknown inputs, with lint-staged task groups serialized.
+  Only verified plain documentation skips app-heavy checks; relevant unstaged
+  edits, executable files, renames, deletions and uncertainty keep full checks.
+  Staged conflict-marker and skill-parity checks run on both paths. Pre-push
+  discovers related unit/client UNION mandatory script and filesystem-reader
+  tests, closes discovery, then executes exact deduplicated batches. Missing
+  base/selection refuses; `pnpm push:full <git push arguments>` explicitly
+  requests full unit/client verification inside that push's real hook. No
+  sticky full-mode environment setting or result cache. A different pushed
+  tree or dirty checkout refuses; deletion-only pushes make no HEAD-test claim.
+  CI retains full integration/e2e/coverage. Reuse hook receipts: do not run
+  their same heavy checks immediately beforehand. Both hooks fail
   loudly and block if the active Node major is below `.nvmrc`. Don't bypass with
   `--no-verify`; fix the failure. **Root markdown AND everything under `docs/`
   are formatted by NOTHING** — lint-staged's globs are `app/**/*.{ts,tsx}` and

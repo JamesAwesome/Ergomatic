@@ -8,7 +8,8 @@
   },
   "scripts": {
     "preinstall": "npx only-allow pnpm",
-    "prepare": "husky"
+    "prepare": "husky",
+    "push:full": "node app/scripts/push-full.mjs"
   },
   "lint-staged": {
     "app/**/*.{ts,tsx}": [

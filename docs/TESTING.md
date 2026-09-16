@@ -718,25 +718,48 @@ Run these from `app/`:
 node scripts/local-work.mjs status
 pnpm test --project unit domain/pace.test.ts
 pnpm test --project client src/session/reviewSelector.test.ts
+pnpm test:list --project unit scripts/testEnv.test.ts
+pnpm test --project unit scripts/testEnv.test.ts -t 'worker'
+pnpm test:related --project unit --base origin/main --list
+pnpm test:full --project unit --project client
 node scripts/local-work.mjs recover <generation-from-status>
 ```
 
-Replace example files with existing intended tests. For now Vitest patterns
-retain native matching semantics: this does not yet promise an exact file
-manifest. Bare local `pnpm test` and literal `--` refuse. Explicit
-`pnpm test:full` / `pnpm test:coverage` include integration; they print their
-excluded-lifecycle status and need controller coordination. Exact selector
-listing, empty/miss refusal, deduplicated pre-push unions and cheaper hooks
-are the next increment. Pre-push currently retains its three populations
-and legacy fallback, visibly labelled as an exclusion.
+Replace examples with intended existing files/names. Unit/client paths are
+exact, not substring filters or shell globs. Discovery prints the native
+project/file manifest, closes its process, then execution checks exact
+membership before bodies and afterward. Bare/project-only tests, unmatched
+files/names, malformed controls and literal `--` refuse. Listing cannot
+satisfy a push hook. Full/coverage commands require explicit projects;
+integration is never included implicitly and its lifecycle remains excluded.
+
+Pre-push executes related tests UNION mandatory unit scripts UNION
+filesystem-reading client tests once, in serial bounded batches. A valid
+empty related set still runs the mandatory populations. Missing history,
+empty mandatory census or discovery errors refuse without a full fallback.
+Use `pnpm push:full <git push arguments>` (root or app) for deliberate full
+unit/client verification inside the real hook. Its one-shot request is not
+an exported mode for later pushes. Actual pushed objects must resolve to the
+checked HEAD tree, and the working tree must be clean; deletion-only pushes
+make no HEAD-test claim. Source/index/configuration changes during validation
+invalidate its receipt and fail the push. No cross-run passed-test cache.
+
+Pre-commit skips app lint/typecheck only for positively identified plain
+documentation in the staged snapshot with no relevant unstaged input.
+Executable/symlink Markdown, renames, deletions, code/config/native edits,
+empty staging and classification errors keep the complete code path.
+Staged conflict-marker and skill-parity checks remain; lint-staged groups
+run serially and retain their partial-staging restoration. Root/docs prose
+is not globally reformatted. Reuse exact-head hook evidence instead of
+duplicating those heavy checks immediately before commit/push.
 
 | Entry point                                                                                | Current ownership                                                    |
 | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | `lint`, `lint:prune`, `typecheck`, `build`                                                 | Fixed sequential foreground pipeline                                 |
-| `test`, `test:capture` with only explicit unit/client projects                             | Owner spans child wait and cleanup census; capture uses the same sampler |
-| Pre-commit                                                                                 | Owner before staged mutation, through typecheck                      |
-| Pre-push                                                                                   | Owner spans legacy related + whole-tree checks                       |
-| Integration/full coverage, browser/Compose, native, watch/dev, install/bootstrap, mutation | Not lifecycle-managed yet; controller coordination required          |
+| Exact/list/related/full/coverage unit/client tests | Owner spans discovery, execution and cleanup; capture uses the same sampler |
+| Pre-commit | Owner before classification/staged mutation, through all required checks |
+| Pre-push | Owner spans native discovery and exact deduplicated batches |
+| Integration, browser/Compose, native, watch/dev, install/bootstrap, mutation | Not lifecycle-managed yet; controller coordination required |
 | Hosted CI                                                                                  | Explicit workflow mode; not a local memory guard                     |
 | Dockerfile build                                                                           | Fixed internal container build; host Docker lifecycle is not covered |
 
