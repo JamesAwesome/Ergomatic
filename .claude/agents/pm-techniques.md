@@ -71,6 +71,13 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 
 ## Patterns that recur (check for these every time)
 
+- **One resource budget is not one risk model.** Split atomic admission,
+  hook-selection correctness, runner tuning and each tool-owned lifecycle
+  adapter into independently safe PRs. A shared slot coordinates participants;
+  it does not give browsers, Testcontainers/Ryuk, Docker stacks, simulators
+  and foreground Node children one cleanup authority. Approve warning-only
+  supersession explicitly; do not bundle an unmeasured worker default.
+
 - **An option priced from a hand-written table census is wrong in BOTH
   directions, and the omission is the expensive half.** Wave A's account-merge
   question (2026-09-13) offered a "one-way transfer of the three clean tables"
