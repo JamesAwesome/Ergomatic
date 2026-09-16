@@ -120,7 +120,9 @@ Use `pnpm test --project unit <exact-file>` (from `app/`), with optional
 `-t '<test-name regex>'`; `test:list` previews the same exact selection.
 Bare/project-only tests and unmatched targets refuse. `test:related --project
 unit --base origin/main` selects related files; `test:full --project unit
---project client` is explicit full scope. Pre-push runs the deduplicated
+--project client` is explicit full scope. Changed global config/manifests or
+lockfiles require explicit full verification, never an automatic broad run.
+Pre-push runs the deduplicated
 protection union once; `pnpm push:full <git push arguments>` explicitly runs
 full unit/client checks inside that push's hook. Verified plain-docs commits
 avoid app-heavy checks. Browser, integration/container and native lifetimes

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createVitest } from "vitest/node";
+import { changedSourcePaths, requireRelatedInputs } from "./selection-git.mjs";
 import {
   identityKey,
   requireExactMembership,
@@ -13,6 +14,13 @@ const identity = (spec) => ({
 });
 
 async function context(app, request, coverage = false) {
+  let relatedFiles;
+  if (request.mode === "related") {
+    const root = path.dirname(app),
+      changed = changedSourcePaths(root, request.base);
+    requireRelatedInputs(changed);
+    relatedFiles = changed.map((file) => path.join(root, file));
+  }
   const events = ["SIGINT", "SIGTERM", "exit"];
   const before = events.map((event) => new Set(process.listeners(event)));
   const pending = createVitest("test", {
@@ -25,7 +33,18 @@ async function context(app, request, coverage = false) {
     ...(request.testNamePattern === null
       ? {}
       : { testNamePattern: request.testNamePattern }),
-    ...(request.mode === "related" ? { changed: request.base } : {}),
+    ...(request.mode === "related"
+      ? {
+          changed: request.base,
+          experimental: {
+            vcsProvider: {
+              async findChangedFiles() {
+                return relatedFiles;
+              },
+            },
+          },
+        }
+      : {}),
     ...(coverage ? { coverage: { enabled: true } } : {}),
   });
   // Installed Vitest 4 constructs its logger synchronously, before the first

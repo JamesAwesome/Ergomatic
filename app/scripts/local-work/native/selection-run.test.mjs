@@ -8,10 +8,12 @@ import { fileURLToPath } from "node:url";
 
 const runner = fileURLToPath(new URL("../selection-run.mjs", import.meta.url));
 function fixture(t) {
-  const root = fs.realpathSync(
+  const temporary = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "ergo-selection-pipeline-")),
   );
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const root = path.join(temporary, ".worktree");
+  fs.mkdirSync(root);
   const app = path.join(root, "app");
   let receipt,
     invocation = 0;
@@ -51,7 +53,7 @@ function fixture(t) {
     },
     put,
     git,
-    run: (request, intended = request) => {
+    run: (request, intended = request, env = {}) => {
       receipt = path.join(root, ".receipts", String(++invocation));
       fs.mkdirSync(receipt, { mode: 0o700 });
       fs.writeFileSync(
@@ -67,6 +69,7 @@ function fixture(t) {
           CI: "",
           ERGOMATIC_SELECTION_DIR: receipt,
           NODE_OPTIONS: "--no-experimental-webstorage",
+          ...env,
         },
       });
     },
@@ -176,6 +179,65 @@ test("explicit full push runs the entire named population exactly once", (t) => 
   ]);
 });
 
+for (const name of [
+  "package.json",
+  "vitest.config.mjs",
+  "pnpm-lock.yaml",
+  "tsconfig.json",
+])
+  test(`related selection requires explicit full verification for changed global input ${name}`, (t) => {
+    const f = fixture(t),
+      base = f.git("rev-parse", "HEAD");
+    if (name === "vitest.config.mjs")
+      fs.appendFileSync(path.join(f.app, name), "\n// changed configuration\n");
+    else
+      f.put(name, name.endsWith("json") ? "{}\n" : "lockfileVersion: '9.0'\n");
+    f.git("add", ".");
+    f.git("commit", "-m", "global input");
+    const result = f.run({
+      request: { ...request, mode: "related", files: [], base, inspect: true },
+    });
+    assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stderr, /Global test input changed/);
+    assert.match(result.stderr, /test:full/);
+    assert.deepEqual(f.bodies(), []);
+  });
+
+test("pre-push rejects a source change between clean status and source identity mint", (t) => {
+  const f = fixture(t),
+    root = path.dirname(f.app),
+    head = f.git("rev-parse", "HEAD");
+  const realGit = spawnSync("which", ["git"], {
+    encoding: "utf8",
+  }).stdout.trim();
+  assert.ok(path.isAbsolute(realGit));
+  const shimDir = path.join(root, ".git", "shim");
+  fs.mkdirSync(shimDir);
+  fs.writeFileSync(
+    path.join(shimDir, "git"),
+    `#!${process.execPath}
+import {spawnSync} from 'node:child_process';
+import fs from 'node:fs';
+const args=process.argv.slice(2), result=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});
+if(args[0]==='status' && result.status===0) fs.appendFileSync(${JSON.stringify(path.join(f.app, "domain/a.test.ts"))},'\\n// concurrent source edit\\n');
+process.exitCode=result.status ?? 1;
+`,
+    { mode: 0o700 },
+  );
+  const input = {
+    prePush: {
+      full: true,
+      input: `refs/heads/main ${head} refs/heads/main ${"0".repeat(40)}\n`,
+    },
+  };
+  const result = f.run(input, input, {
+    PATH: `${shimDir}${path.delimiter}${process.env.PATH}`,
+  });
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stderr, /evidence is stale/);
+  assert.deepEqual(f.bodies(), []);
+});
+
 for (const input of [
   "src/index.css",
   "test/captures/workout.json",
@@ -222,4 +284,27 @@ for (const input of [
           item.file === path.join(f.app, "scripts/script.test.ts"),
       ),
     );
+  });
+
+for (const name of ["domain/space ü.test.ts", "domain/line\nbreak.test.ts"])
+  test(`related discovery preserves the actual changed Git path ${JSON.stringify(name)}`, (t) => {
+    const f = fixture(t);
+    f.put(name, "it('changed test',()=>expect(1).toBe(1));");
+    f.git("add", ".");
+    f.git("commit", "-m", "related baseline");
+    const base = f.git("rev-parse", "HEAD");
+    f.put(name, "it('changed test',()=>expect(2).toBe(2));");
+    f.git("add", ".");
+    f.git("commit", "-m", "related input");
+    const result = f.run({
+      request: { ...request, mode: "related", files: [], base, inspect: true },
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const record = JSON.parse(
+      fs.readFileSync(path.join(f.receipt, "selection.json"), "utf8"),
+    );
+    assert.deepEqual(record.selected, [
+      { project: "unit", file: path.join(f.app, name) },
+    ]);
+    assert.deepEqual(f.bodies(), []);
   });

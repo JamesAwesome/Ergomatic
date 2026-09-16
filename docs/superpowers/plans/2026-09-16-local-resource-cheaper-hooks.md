@@ -88,7 +88,8 @@ no shell/Git setting changes the next normal push. Real Git/Husky propagation
 and normal-following-full behavior are executable in `push-full.test.mjs`.
 
 The author's executable paste-test artifacts are the named modules and their
-adjacent tests at the real paths above, currently uncommitted in this worktree;
+adjacent tests at the real paths above, committed at `cfa8b6f3` with the
+mechanism-review repairs in the current working diff;
 they are not a second implementation embedded in this document. Pure/Git
 fixtures use built-in node:test. Installed-runner cases live under
 `local-work/native/`, run serially in the app CI job after dependency install;
@@ -118,6 +119,22 @@ tree for each batch. No peak-memory benefit is asserted without measurement.
 | Full-push request | Child-only pipe minted by the explicit wrapper with HEAD | Consumed/closed once by the actual hook; absent/stale/reused request refuses |
 | Original selection intent | Public parser writes receipt independently of internal phase argv | Pipeline compares before discovery; dropped project/file/name controls refuse |
 | Native cancellation | Selection child owns INT/TERM, AbortController and original signal status | Await cancel and close; no output on cancellation, including during teardown |
+| Staging restoration | Streamed source/index identity immediately before lint-staged | On failure/cancellation compare again after process cleanup; mismatch or missing proof retains ownership and backup for explicit repair |
+
+Related discovery uses the installed supported `experimental.vcsProvider`
+seam with bounded NUL-delimited Git reads. Committed, staged, unstaged and
+untracked paths are combined, with rename detection disabled so both endpoints
+survive. The installed Git provider quotes unusual filenames and splits LF;
+actual Unicode/newline regressions falsified its apparent empty selections.
+Changes to package manifests, lockfiles, workspace/package-manager config,
+Vite/Vitest config or tsconfig inputs refuse related mode and require explicit
+full verification. These are uncertain dependency selections, never empty
+passes or automatic full runs. This also avoids the installed force-rerun
+glob bugs (trailing directory suffix and hidden worktree path segments).
+`snapshotSource` precedes push-ref/cleanliness validation, and the pinned
+HEAD tree plus a second fingerprint check bind that validation to the source
+which discovery will consume. A controlled edit after Git's clean-status
+response first passed incorrectly and now refuses before bodies.
 
 The installed Vitest4.1.11 logger synchronously registers the same callback
 for INT, TERM and exit during `createVitest`; its signal callback schedules
@@ -137,6 +154,11 @@ interrupted partially-staged fixture failed through pnpm (the task-modified
 worktree returned before the hidden unstaged changes were restored), then
 passed through the direct child with index/worktree restored and no backup
 stash left. Typed lint and all four compiler checks remain required for code.
+An actual slow-restore fixture also proves SIGTERM escalation can interrupt
+lint-staged after reset and before its backup is applied. Process disappearance
+is not edit restoration. The phase now checks its pre-run source/index identity
+after failed cleanup; uncertainty retains the owner and original backup and
+names manual repair. No automatic reset, stash operation or recovery is added.
 
 ## Task 1: Exact selection kernel and real-runner seam
 

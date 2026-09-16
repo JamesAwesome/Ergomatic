@@ -142,67 +142,132 @@ test("real typecheck still blocks a type defect that staged lint accepts", (t) =
   assert.doesNotMatch(result.stdout + result.stderr, /no-floating-promises/);
 });
 
-test("interrupted real hook restores partially staged content before returning", async (t) => {
-  const f = fixture(t),
-    ready = path.join(f.root, ".git", "task-ready");
-  const task = path.join(f.root, "hold.mjs");
-  f.put(
-    "hold.mjs",
-    `import fs from 'node:fs';
+for (const slowRestore of [false, true])
+  test(
+    slowRestore
+      ? "escalation during real staging restoration retains ownership and recovery evidence"
+      : "interrupted real hook restores partially staged content before returning",
+    async (t) => {
+      const f = fixture(t),
+        ready = path.join(f.root, ".git", "task-ready");
+      const task = path.join(f.root, "hold.mjs");
+      f.put(
+        "hold.mjs",
+        `import fs from 'node:fs';
 fs.appendFileSync(process.argv[2],'// task modification\\n');
 const deadline=setTimeout(()=>{process.exitCode=1},5000);
 process.on('SIGINT',()=>{clearTimeout(deadline);process.exitCode=130});
 fs.writeFileSync(${JSON.stringify(ready)},'ready');`,
+      );
+      f.put(
+        "package.json",
+        JSON.stringify({
+          private: true,
+          type: "module",
+          "lint-staged": {
+            "app/**/*.ts": `${JSON.stringify(process.execPath)} ${JSON.stringify(task)}`,
+          },
+        }),
+      );
+      f.put("app/src/witness.ts", "export const value: number = 2;\n");
+      f.git("add", "app/src/witness.ts");
+      const staged = f.git("show", ":app/src/witness.ts");
+      const working = `${staged}\n// unstaged preservation witness\n`;
+      f.put("app/src/witness.ts", working);
+      let extraEnv = {};
+      if (slowRestore) {
+        const realGit = spawnSync("which", ["git"], {
+          encoding: "utf8",
+        }).stdout.trim();
+        assert.ok(path.isAbsolute(realGit));
+        const shimDir = path.join(f.root, ".git", "shim");
+        fs.mkdirSync(shimDir);
+        fs.writeFileSync(
+          path.join(shimDir, "git"),
+          `#!${process.execPath}
+import {spawnSync} from 'node:child_process';
+import fs from 'node:fs';
+const args=process.argv.slice(2);
+if(args.includes('stash') && args[args.indexOf('stash')+1]==='apply') {
+  fs.writeFileSync(${JSON.stringify(path.join(f.root, ".git", "restore-held"))},'held');
+  setTimeout(()=>{process.exitCode=1},12000);
+} else process.exitCode=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'}).status ?? 1;
+`,
+          { mode: 0o700 },
+        );
+        extraEnv = { PATH: `${shimDir}${path.delimiter}${process.env.PATH}` };
+      }
+      // This is the production shell hook itself: its exec leaves a live child
+      // handle for the resource owner, not a census PID or the Husky parent shell.
+      const child = spawn("sh", [".husky/pre-commit"], {
+        cwd: f.root,
+        env: {
+          ...process.env,
+          pnpm_config_verify_deps_before_run: "false",
+          ...extraEnv,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let output = "";
+      for (const stream of [child.stdout, child.stderr])
+        stream.on("data", (chunk) => {
+          output += chunk;
+        });
+      const done = new Promise((resolve, reject) => {
+        child.once("error", reject);
+        child.once("close", (code, signal) => resolve({ code, signal }));
+      });
+      try {
+        const deadline = Date.now() + 10000;
+        while (!fs.existsSync(ready)) {
+          assert.ok(
+            child.exitCode === null && child.signalCode === null,
+            output,
+          );
+          assert.ok(Date.now() < deadline, "task readiness deadline");
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        child.kill("SIGINT");
+        const result = await done;
+        assert.notEqual(result.code, 0, output);
+        if (slowRestore) {
+          assert.ok(
+            fs.existsSync(path.join(f.root, ".git", "restore-held")),
+            output,
+          );
+          const receipts = path.join(
+            f.root,
+            ".git",
+            "ergomatic-local-work",
+            "receipts",
+          );
+          const names = fs.readdirSync(receipts);
+          assert.equal(names.length, 1);
+          const receipt = JSON.parse(
+            fs.readFileSync(
+              path.join(receipts, names[0], "receipt.json"),
+              "utf8",
+            ),
+          );
+          assert.equal(receipt.cleanup, "unresolved", output);
+          assert.match(receipt.reason, /staging restoration/);
+          assert.ok(
+            fs.existsSync(
+              path.join(f.root, ".git", "ergomatic-local-work", "owner"),
+            ),
+          );
+          assert.match(f.git("stash", "list"), /lint-staged automatic backup/);
+          return;
+        }
+        assert.equal(f.git("show", ":app/src/witness.ts"), staged, output);
+        assert.equal(
+          fs.readFileSync(path.join(f.root, "app/src/witness.ts"), "utf8"),
+          working,
+          output,
+        );
+        assert.equal(f.git("stash", "list"), "", output);
+      } finally {
+        await done;
+      }
+    },
   );
-  f.put(
-    "package.json",
-    JSON.stringify({
-      private: true,
-      type: "module",
-      "lint-staged": {
-        "app/**/*.ts": `${JSON.stringify(process.execPath)} ${JSON.stringify(task)}`,
-      },
-    }),
-  );
-  f.put("app/src/witness.ts", "export const value: number = 2;\n");
-  f.git("add", "app/src/witness.ts");
-  const staged = f.git("show", ":app/src/witness.ts");
-  const working = `${staged}\n// unstaged preservation witness\n`;
-  f.put("app/src/witness.ts", working);
-  // This is the production shell hook itself: its exec leaves a live child
-  // handle for the resource owner, not a census PID or the Husky parent shell.
-  const child = spawn("sh", [".husky/pre-commit"], {
-    cwd: f.root,
-    env: { ...process.env, pnpm_config_verify_deps_before_run: "false" },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let output = "";
-  for (const stream of [child.stdout, child.stderr])
-    stream.on("data", (chunk) => {
-      output += chunk;
-    });
-  const done = new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("close", (code, signal) => resolve({ code, signal }));
-  });
-  try {
-    const deadline = Date.now() + 10000;
-    while (!fs.existsSync(ready)) {
-      assert.ok(child.exitCode === null && child.signalCode === null, output);
-      assert.ok(Date.now() < deadline, "task readiness deadline");
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    child.kill("SIGINT");
-    const result = await done;
-    assert.notEqual(result.code, 0, output);
-    assert.equal(f.git("show", ":app/src/witness.ts"), staged, output);
-    assert.equal(
-      fs.readFileSync(path.join(f.root, "app/src/witness.ts"), "utf8"),
-      working,
-      output,
-    );
-    assert.equal(f.git("stash", "list"), "", output);
-  } finally {
-    await done;
-  }
-});

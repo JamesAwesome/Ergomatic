@@ -10,6 +10,8 @@ import {
   requireSameSource,
   readPushInput,
   mandatoryIdentities,
+  changedSourcePaths,
+  requireRelatedInputs,
 } from "./selection-git.mjs";
 
 function fixture(t) {
@@ -43,6 +45,44 @@ test("base resolves once and rejects missing history and option injection", (t) 
   assert.equal(resolveBase(root, "HEAD"), git("rev-parse", "HEAD"));
   for (const base of ["", "no-such-ref", "--all", "HEAD\n", "HEAD\0"])
     assert.throws(() => resolveBase(root, base));
+});
+
+test("changed paths preserve NUL names and both rename endpoints across every Git producer", (t) => {
+  const f = fixture(t);
+  for (const name of [
+    "committed ü.txt",
+    "staged\nold.txt",
+    "unstaged.txt",
+    "deleted.txt",
+    "package.json",
+  ])
+    f.write(name, name);
+  f.git("add", ".");
+  f.git("commit", "-m", "baseline");
+  const base = f.git("rev-parse", "HEAD");
+  f.git("mv", "committed ü.txt", "committed new.txt");
+  f.git("mv", "package.json", "moved-manifest.txt");
+  f.git("commit", "-m", "committed rename");
+  f.git("mv", "staged\nold.txt", "staged new.txt");
+  f.write("unstaged.txt", "changed");
+  fs.unlinkSync(path.join(f.root, "deleted.txt"));
+  f.write("untracked ü\nfile.txt", "new");
+  const changed = changedSourcePaths(f.root, base);
+  assert.deepEqual(changed, [
+    "committed new.txt",
+    "committed ü.txt",
+    "deleted.txt",
+    "moved-manifest.txt",
+    "package.json",
+    "staged\nold.txt",
+    "staged new.txt",
+    "unstaged.txt",
+    "untracked ü\nfile.txt",
+  ]);
+  assert.throws(() => requireRelatedInputs(changed), /package.json/);
+  requireRelatedInputs(["app/domain/a.ts", "docs/README.md"]);
+  for (const invalid of ["HEAD", "", "--all", `${base}\n`])
+    assert.throws(() => changedSourcePaths(f.root, invalid), /pinned base/);
 });
 
 test("source identity changes on staged, unstaged, renamed, deleted and untracked inputs", (t) => {

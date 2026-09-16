@@ -122,8 +122,9 @@ export async function runSelection(
       throw new Error(
         "Pipeline no longer matches the owner's requested selection",
       );
+    record.source = snapshotSource(root);
     if (prePush) {
-      record.push = readPushInput(root, prePush.input);
+      record.push = readPushInput(root, prePush.input, record.source.head);
       if (record.push.kind !== "head") {
         record.status = record.push.kind;
         console.log(`pre-push: ${record.push.kind}; no HEAD-test claim`);
@@ -135,6 +136,7 @@ export async function runSelection(
         throw new Error(
           "Pre-push requires a clean checked working tree; commit or preserve outstanding edits first",
         );
+      requireSameSource(record.source, snapshotSource(root));
       request = parseSelection(
         [
           "--project",
@@ -151,7 +153,6 @@ export async function runSelection(
     if (request.mode === "related")
       request = { ...request, base: resolveBase(root, request.base) };
     record.request = request;
-    record.source = snapshotSource(root);
     atomic(recordPath, record);
     const found = await native(
       "discover",

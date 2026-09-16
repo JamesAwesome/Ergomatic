@@ -101,6 +101,8 @@ machine-wide and does not cover independent clones or old worktrees.
   narrows exact files. Missing/unmatched targets, globs and literal `--`
   refuse; no failed selection expands to a full run. Integration still uses
   its legacy Docker lifecycle and requires controller coordination.
+  Related mode refuses changed package manifests, lockfiles and global test
+  config; request explicit full verification instead of accepting an empty set.
   Do not bypass admission with `pnpm exec vitest run`: it also drops the
   `NODE_OPTIONS=--no-experimental-webstorage` that `package.json`'s `test`
   script sets — Node 26's experimental webStorage global then collides with

@@ -234,6 +234,7 @@ export function workloadPhases({
               "--concurrent",
               "false",
             ],
+            verifySourceOnFailure: true,
             cwd: dirname(app),
             env: childEnv,
           },

@@ -149,6 +149,8 @@ test files. Bare and project-only local `pnpm test` refuse. Use `pnpm test:list
 --project unit <file...>` to inspect; `pnpm test --project unit <file...> -t
 '<test-name regex>'` executes exact matches. Related discovery is `pnpm
 test:related --project unit --base origin/main` (add `--list` for inspection).
+Changed package manifests, lockfiles and global test config refuse related
+mode; use explicit full verification, never an inferred empty pass.
 Full verification requires named projects: `pnpm test:full --project unit
 --project client`, or `pnpm push:full <git push arguments>` for that actual
 push hook. Never drop a failed selector to widen scope, and never repeat the

@@ -737,6 +737,10 @@ Pre-push executes related tests UNION mandatory unit scripts UNION
 filesystem-reading client tests once, in serial bounded batches. A valid
 empty related set still runs the mandatory populations. Missing history,
 empty mandatory census or discovery errors refuse without a full fallback.
+Changed package manifests, package-manager/workspace config, lockfiles,
+Vite/Vitest config and tsconfig inputs also refuse related mode: their global
+dependency impact requires an explicit full request. Unicode/newline filenames
+and both rename endpoints survive the NUL-delimited changed-path producer.
 Use `pnpm push:full <git push arguments>` (root or app) for deliberate full
 unit/client verification inside the real hook. Its one-shot request is not
 an exported mode for later pushes. Actual pushed objects must resolve to the
@@ -752,6 +756,11 @@ Staged conflict-marker and skill-parity checks remain; lint-staged groups
 run serially and retain their partial-staging restoration. Root/docs prose
 is not globally reformatted. Reuse exact-head hook evidence instead of
 duplicating those heavy checks immediately before commit/push.
+On lint-staged failure/cancellation, process cleanup alone cannot certify edit
+restoration. A changed source/index fingerprint retains the owner, reports
+unverified staging restoration and preserves lint-staged's backup for explicit
+inspection/repair before recovery. Nothing automatically resets or reapplies
+your edits.
 
 | Entry point                                                                                | Current ownership                                                    |
 | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |

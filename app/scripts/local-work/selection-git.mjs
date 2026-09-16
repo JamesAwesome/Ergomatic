@@ -42,6 +42,36 @@ export function resolveBase(root, base) {
   return sha;
 }
 
+export function changedSourcePaths(root, base) {
+  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(base))
+    throw new Error("Related discovery requires a pinned base object");
+  // Disable rename folding so both the old and new dependency endpoints are
+  // present. NUL framing preserves Git filenames rather than its quoted display.
+  const diff = ["diff", "--no-renames", "--name-only", "-z"];
+  return [
+    ...new Set([
+      ...nulPaths(git(root, [...diff, `${base}...HEAD`, "--"])),
+      ...nulPaths(git(root, [...diff, "--cached", "--"])),
+      ...nulPaths(git(root, [...diff, "--"])),
+      ...nulPaths(
+        git(root, ["ls-files", "--others", "--exclude-standard", "-z"]),
+      ),
+    ]),
+  ].sort();
+}
+
+export function requireRelatedInputs(paths) {
+  const global = paths.filter((file) =>
+    /^(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|pnpm-(?:lock|workspace)\.yaml|yarn\.lock|bun\.lockb?|\.npmrc|(?:vite|vitest)\.config\.[^/]+|tsconfig(?:\.[^/]+)?\.json)$/.test(
+      path.basename(file),
+    ),
+  );
+  if (global.length)
+    throw new Error(
+      `Global test input changed: ${global.map((file) => JSON.stringify(file)).join(", ")}; related dependency selection is uncertain; request explicit full verification`,
+    );
+}
+
 export function snapshotSource(root) {
   const head = git(root, ["rev-parse", "--verify", "HEAD"]).trim();
   const index = git(root, ["ls-files", "--stage", "-z"]);
@@ -106,12 +136,12 @@ export function requireSameSource(before, after) {
     );
 }
 
-export function readPushInput(root, text) {
+export function readPushInput(root, text, head = "HEAD") {
   if (text === "") return { kind: "no-updates", objects: [] };
   if (!text.endsWith("\n") || text.includes("\0"))
     throw new Error("Malformed push input");
   const objects = [];
-  const tree = git(root, ["rev-parse", "HEAD^{tree}"]).trim();
+  const tree = git(root, ["rev-parse", "--verify", `${head}^{tree}`]).trim();
   for (const line of text.slice(0, -1).split("\n")) {
     const match = line.match(
       /^(\S+) ([a-f0-9]{40}|[a-f0-9]{64}) (refs\/\S+) ([a-f0-9]{40}|[a-f0-9]{64})$/,
