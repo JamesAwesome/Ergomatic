@@ -75,6 +75,44 @@ for (const [mode, code, signal] of [
   });
 }
 
+for (const [mode, failures, initialInterrupted, retryInterrupted] of [
+  ["initial-interrupted", 0, 1, 0],
+  ["retry-interrupted", 1, 0, 1],
+]) {
+  test(`native interrupted attempts stay separate from assertion failures: ${mode}`, () => {
+    const r = capture(mode);
+    assert.equal(r.run.status, 130);
+    assert.equal(r.receipt.exitCode, 130);
+    assert.equal(r.receipt.terminal, true);
+    assert.equal(r.receipt.resourceAbort, true);
+    assert.equal(r.check.status, 0);
+    assert.match(r.summary.stdout, /initial executions: 1/);
+    assert.match(r.summary.stdout, /termination\/resource events: 1/);
+    assert.match(
+      r.summary.stdout,
+      new RegExp(`first-attempt failures: ${failures}`),
+    );
+    assert.match(
+      r.summary.stdout,
+      new RegExp(`execution incidence: ${failures}/1`),
+    );
+    assert.match(
+      r.summary.stdout,
+      new RegExp(`interrupted initial attempts: ${initialInterrupted}`),
+    );
+    assert.match(
+      r.summary.stdout,
+      new RegExp(`interrupted retry attempts: ${retryInterrupted}`),
+    );
+    assert.match(r.summary.stdout, /retry recoveries: 0/);
+    assert.match(r.summary.stdout, /exhausted executions: 0/);
+    assert.match(r.summary.stdout, /suite errors: 0/);
+    if (mode === "initial-interrupted")
+      assert.doesNotMatch(r.summary.stdout, /- case.spec.ts: case/);
+    else assert.match(r.summary.stdout, /- case.spec.ts: case/);
+  });
+}
+
 test("native attempts, observer status and evidence remain independent through the CLI", () => {
   for (const [mode, code, evidence, expected] of [
     ["pass", 0, 0, "initial executions: 1"],

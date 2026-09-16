@@ -376,6 +376,8 @@ function inspect(directory) {
     counts = {
       initial: 0,
       firstFailures: 0,
+      interruptedInitial: 0,
+      interruptedRetries: 0,
       recoveries: 0,
       exhausted: 0,
       suiteErrors: 0,
@@ -439,7 +441,13 @@ function inspect(directory) {
             const initial = t.results.find((r) => r.retry === 0);
             if (!initial || initial.status === "skipped") continue;
             counts.initial++;
-            if (initial.status !== t.expectedStatus) {
+            // Native overall "skipped" can hide a failed initial plus an
+            // interrupted retry. Classify the attempts, not that aggregate.
+            counts.interruptedRetries += t.results.filter(
+              (r) => r.retry > 0 && r.status === "interrupted",
+            ).length;
+            if (initial.status === "interrupted") counts.interruptedInitial++;
+            else if (initial.status !== t.expectedStatus) {
               counts.firstFailures++;
               failures.push(
                 `${spec.file}: ${spec.title} [${t.projectName}, id ${spec.id}, repeat index unknown, ${t.status}]`,
@@ -479,7 +487,7 @@ function inspect(directory) {
 }
 function summary(result) {
   const { receipt: r, counts: c, issues } = result;
-  return `Test evidence ${r?.id ?? "missing"}\n\ncommand: exit ${r?.exitCode ?? "unknown"}, signal ${r?.signal ?? "none"}\nevidence: ${issues.length ? "incomplete" : "complete"}\ninitial executions: ${c.initial}\nfirst-attempt failures: ${c.firstFailures}\nretry recoveries: ${c.recoveries}\nexhausted executions: ${c.exhausted}\nsuite errors: ${c.suiteErrors} (native JSON; global diagnostics also in stderr)\ntermination/resource events: ${c.resourceAborts}\nexecution incidence: ${c.firstFailures}/${c.initial}\njob incidence: ${c.firstFailures ? 1 : 0}/${c.initial ? 1 : 0} (this invocation's selected population)\n\n[receipt](receipt.json) · [native report](report.json) · [stdout](stdout.log) · [stderr](stderr.log) · [resources](resources.jsonl)${r?.runner === "playwright" ? " · [HTML report](html/index.html)" : ""}\n\n${issues.map((s) => `Missing evidence: ${s}`).join("\n")}\n`;
+  return `Test evidence ${r?.id ?? "missing"}\n\ncommand: exit ${r?.exitCode ?? "unknown"}, signal ${r?.signal ?? "none"}\nevidence: ${issues.length ? "incomplete" : "complete"}\ninitial executions: ${c.initial}\nfirst-attempt failures: ${c.firstFailures}\ninterrupted initial attempts: ${c.interruptedInitial}\ninterrupted retry attempts: ${c.interruptedRetries}\nretry recoveries: ${c.recoveries}\nexhausted executions: ${c.exhausted}\nsuite errors: ${c.suiteErrors} (native JSON; global diagnostics also in stderr)\ntermination/resource events: ${c.resourceAborts}\nexecution incidence: ${c.firstFailures}/${c.initial}\njob incidence: ${c.firstFailures ? 1 : 0}/${c.initial ? 1 : 0} (this invocation's selected population)\n\n[receipt](receipt.json) · [native report](report.json) · [stdout](stdout.log) · [stderr](stderr.log) · [resources](resources.jsonl)${r?.runner === "playwright" ? " · [HTML report](html/index.html)" : ""}\n\n${issues.map((s) => `Missing evidence: ${s}`).join("\n")}\n`;
 }
 try {
   const [action, ...args] = process.argv.slice(2);

@@ -81,6 +81,17 @@ let report = {
 };
 if (mode === "fail")
   report.suites[0].specs[0].tests = [test([result("failed", 0)], "unexpected")];
+if (mode === "initial-interrupted" || mode === "retry-interrupted") {
+  report.suites[0].specs[0].tests = [
+    test(
+      mode === "initial-interrupted"
+        ? [result("interrupted", 0)]
+        : [result("failed", 0), result("interrupted", 1)],
+      "skipped",
+    ),
+  ];
+  report.stats = { expected: 0, skipped: 1, unexpected: 0, flaky: 0 };
+}
 if (mode === "recovery" || mode === "repeats")
   report.suites[0].specs[0].tests = [
     test([result("failed", 0), result("passed", 1)], "flaky"),
@@ -138,3 +149,5 @@ process.exitCode = [
 ].includes(mode)
   ? 1
   : 0;
+if (mode === "initial-interrupted" || mode === "retry-interrupted")
+  process.exitCode = 130;
