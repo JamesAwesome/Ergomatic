@@ -499,7 +499,8 @@ export default function ConnectedInterstitial({
     // the rest of them, not a moment to show tab navigation underneath.
     // Phase NF follow-on (Gate 0 §2, James 2026-09-06): on the NFC route
     // nothing is being chosen — the app is scanning for ONE exact name for
-    // up to 10 s (20 s with the cleanup bound), and the walk of 2026-09-06
+    // up to 10 s per pass (20 s with cleanup; one foreground recovery),
+    // and the walk of 2026-09-06
     // left a rower on this backdrop with no way out. The targeted variant
     // names the target and carries the same Cancel every other card here
     // has; `handleCancel` → `session.cancel()` aborts the scan
@@ -515,7 +516,8 @@ export default function ConnectedInterstitial({
               Looking for {request.exactName}
             </p>
             <p className="connected-body-line">
-              Keep the monitor on and close by.
+              Tag read. Move your phone away from the NFC spot and keep
+              Ergomatic open.
             </p>
           </div>
           <div className="action-stack connected-interstitial-actions">

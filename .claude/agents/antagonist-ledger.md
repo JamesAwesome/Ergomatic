@@ -11478,3 +11478,15 @@ Controller evidence and repair status live in
   Bluetooth recovery narrows the possibilities without identifying the cause.
   Enumerate constructors and actual vendor call sites before naming the fault.
 - **Record:** [hardened prescription and author verification](../../docs/superpowers/plans/2026-09-17-nfc-scan-diagnostics.md).
+
+## 2026-09-17 — NFC foreground recovery delta
+
+**Verdict: PASS with revised invariants.** Source review found a lost-return
+window in sequential pause-then-resume registration; native events without
+listeners are not retained. Resume-first closes the witnessed-departure case.
+Recovery requires exact aborted-pass identity and a successful cleanup result,
+waits for current foreground readiness, and remains independently cancellable.
+A matched result waits for foreground without rescanning. No hardware behavior
+or test execution was established by this review; pre-registration transitions
+remain outside the guarantee. See the approved follow-up brief in
+`docs/superpowers/plans/2026-09-17-nfc-scan-diagnostics/execution.md`.

@@ -2363,7 +2363,9 @@ test.describe("Phase NF: Scan NFC, fake-driven (390×844)", () => {
       }),
     ).toBeVisible({ timeout: 15_000 });
     await expect(
-      page.getByText("Keep the monitor on and close by."),
+      page.getByText(
+        "Tag read. Move your phone away from the NFC spot and keep Ergomatic open.",
+      ),
     ).toBeVisible();
     await expect(page.getByText("Choosing your monitor")).toHaveCount(0);
     const cancel = page.locator(".connected-interstitial-actions .button-l2", {

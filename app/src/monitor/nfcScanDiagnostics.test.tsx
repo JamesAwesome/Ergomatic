@@ -37,6 +37,7 @@ const native = vi.hoisted(() => ({
   picker: vi.fn<() => Promise<{ deviceId: string; name: string }>>(),
   display: vi.fn<() => Promise<void>>(),
   callbacks: [] as ((value: unknown) => void)[],
+  pauseRegistration: null as Promise<void> | null,
 }));
 function fire(
   events: Map<string, Set<(value?: unknown) => void>>,
@@ -51,6 +52,7 @@ vi.mock("@capacitor/app", () => ({
       const listeners = native.app.get(name) ?? new Set();
       native.app.set(name, listeners);
       listeners.add(cb);
+      if (name === "pause") await native.pauseRegistration;
       return {
         remove: async () => {
           listeners.delete(cb);
@@ -108,6 +110,7 @@ beforeEach(async () => {
   native.app.clear();
   native.nfc.clear();
   native.callbacks = [];
+  native.pauseRegistration = null;
   native.initialize.mockResolvedValue(undefined);
   native.isEnabled.mockResolvedValue(true);
   native.held.mockResolvedValue([]);
@@ -174,13 +177,236 @@ async function start(repeat = false) {
   return { ...hook, trace, discovery, pending, entries };
 }
 
+it.each(["before", "after"])(
+  "automatically resumes the same target when foreground arrives %s cleanup",
+  async (ordering) => {
+    let release!: () => void;
+    native.stop.mockImplementationOnce(
+      () =>
+        new Promise<void>((r) => {
+          release = r;
+        }),
+    );
+    const h = await start();
+    await act(async () => {
+      fire(native.app, "pause");
+      await flush();
+      if (ordering === "before") fire(native.app, "resume");
+      await flush();
+    });
+    expect(native.scan).toHaveBeenCalledOnce();
+    await act(async () => {
+      release();
+      await flush();
+      expect(h.result.current.phase).toBe("picking");
+      expect(native.scan).toHaveBeenCalledTimes(ordering === "after" ? 1 : 2);
+      if (ordering === "after") {
+        fire(native.app, "resume");
+        await flush();
+      }
+    });
+    expect(native.scan).toHaveBeenCalledTimes(2);
+    expect(native.picker).not.toHaveBeenCalled();
+    expect(
+      h.entries().filter((e) => e.kind.endsWith(":tag-event")),
+    ).toHaveLength(1);
+    await act(async () => {
+      native.callbacks[1]!({
+        device: { deviceId: "resumed" },
+        localName: request.exactName,
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+      await h.pending;
+    });
+    expect(h.trace.entries()).toContainEqual(
+      expect.objectContaining({
+        kind: "ble-scan-finished",
+        detail: "connect=1 pass=2 outcome=matched superseded=false",
+      }),
+    );
+  },
+);
+
+it("does not resume while backgrounded again during cleanup", async () => {
+  let release!: () => void;
+  native.stop.mockImplementationOnce(
+    () =>
+      new Promise<void>((r) => {
+        release = r;
+      }),
+  );
+  const h = await start();
+  await act(async () => {
+    fire(native.app, "pause");
+    fire(native.app, "resume");
+    fire(native.app, "pause");
+    await flush();
+    release();
+    await flush();
+  });
+  expect(native.scan).toHaveBeenCalledOnce();
+  expect(h.result.current.phase).toBe("picking");
+  await act(async () => {
+    fire(native.app, "resume");
+    await flush();
+  });
+  expect(native.scan).toHaveBeenCalledTimes(2);
+  await act(async () => {
+    await h.result.current.cancel();
+    await h.pending;
+  });
+});
+
+it.each(["cancel", "teardown"])(
+  "%s disarms recovery while waiting for foreground",
+  async (source) => {
+    const h = await start();
+    await act(async () => {
+      fire(native.app, "pause");
+      await flush();
+    });
+    expect(h.result.current.phase).toBe("picking");
+    await act(async () => {
+      if (source === "cancel") await h.result.current.cancel();
+      else h.unmount();
+      await h.pending;
+      fire(native.app, "resume");
+      await flush();
+    });
+    expect(native.scan).toHaveBeenCalledOnce();
+    expect(
+      [...native.app.values()].every((listeners) => listeners.size === 0),
+    ).toBe(true);
+  },
+);
+
+it("late lifecycle registration after unmount cannot start a scan or leak a return listener", async () => {
+  let release!: () => void;
+  native.pauseRegistration = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const h = await start();
+  await act(async () => {
+    fire(native.app, "pause");
+    h.unmount();
+    fire(native.app, "resume");
+    release();
+    await h.pending;
+    fire(native.app, "pause");
+    fire(native.app, "resume");
+    await flush();
+  });
+  expect(h.trace.entries()).toContainEqual(
+    expect.objectContaining({
+      kind: "ble-scan-finished",
+      detail: "connect=1 outcome=target-interrupted superseded=true",
+    }),
+  );
+  expect(native.scan).not.toHaveBeenCalled();
+  expect(
+    [...native.app.values()].every((listeners) => listeners.size === 0),
+  ).toBe(true);
+});
+
+it("a preamble deadline winning before background is not eligible for recovery", async () => {
+  native.initialize.mockImplementation(
+    () => new Promise<void>(() => undefined),
+  );
+  const h = await start();
+  await act(async () => {
+    // Synchronous timer advance leaves its settled result waiting on microtasks.
+    vi.advanceTimersByTime(10_000);
+    fire(native.app, "pause");
+    fire(native.app, "resume");
+    await h.pending;
+  });
+  expect(h.result.current.error?.reason).toBe("target-interrupted");
+  expect(
+    h.entries().filter((e) => e.kind.endsWith(":ble-scan-requested")),
+  ).toHaveLength(1);
+  expect(h.entries().some((e) => e.kind.endsWith(":ble-scan-resumed"))).toBe(
+    false,
+  );
+});
+
+it.each(["resume", "cancel"])(
+  "a match winning before background waits for %s without rescanning",
+  async (ending) => {
+    let release!: () => void;
+    native.stop.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const h = await start();
+    await act(async () => {
+      native.callbacks[0]!({
+        device: { deviceId: "matched" },
+        localName: request.exactName,
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+      fire(native.app, "pause");
+      release();
+      await flush();
+    });
+    expect(h.result.current.phase).toBe("picking");
+    expect(h.result.current.error).toBeNull();
+    await act(async () => {
+      if (ending === "resume") fire(native.app, "resume");
+      else await h.result.current.cancel();
+      await h.pending;
+    });
+    expect(native.scan).toHaveBeenCalledOnce();
+    expect(h.trace.entries()).toContainEqual(
+      expect.objectContaining({
+        kind: "ble-scan-finished",
+        detail: "connect=1 outcome=matched superseded=false",
+      }),
+    );
+    expect(h.result.current.phase).toBe(
+      ending === "cancel" ? "idle" : "failed",
+    );
+    // Resume reaches GATT (unmocked here); Cancel must never attempt it.
+    expect(h.result.current.error?.reason).toBe(
+      ending === "resume" ? "link-failed" : undefined,
+    );
+  },
+);
+
+it.each(["rejected", "deadline"])(
+  "background cleanup %s remains terminal after return",
+  async (mode) => {
+    native.stop.mockImplementation(
+      mode === "rejected"
+        ? async () => {
+            throw new Error("stop failed");
+          }
+        : () => new Promise<void>(() => undefined),
+    );
+    const h = await start();
+    await act(async () => {
+      fire(native.app, "pause");
+      fire(native.app, "resume");
+      await flush();
+      if (mode === "deadline") await vi.advanceTimersByTimeAsync(10_000);
+      await h.pending;
+    });
+    expect(native.scan).toHaveBeenCalledOnce();
+    expect(h.result.current.error?.reason).toBe("scan-cleanup-failed");
+  },
+);
+
 it.each(["background", "cancel", "teardown"])(
   "exports the first %s stop source through the real native pipeline",
   async (cause) => {
     const h = await start();
     await act(async () => {
-      if (cause === "background") fire(native.app, "pause");
-      else if (cause === "cancel") await h.result.current.cancel();
+      if (cause === "background") {
+        fire(native.app, "pause");
+        await flush();
+        await h.result.current.cancel();
+      } else if (cause === "cancel") await h.result.current.cancel();
       else h.unmount();
       await h.pending;
     });
@@ -234,33 +460,31 @@ it("inactive/active and repeated NFC callbacks leave one live search; foreground
   });
 });
 
-it("background retry keeps one NFC read and attributes the second search separately", async () => {
+it("a second background interruption ends automatic recovery without a third scan", async () => {
   const h = await start();
   await act(async () => {
     fire(native.app, "pause");
+    await flush();
+    fire(native.app, "resume");
+    await flush();
+    fire(native.app, "pause");
     await h.pending;
-  });
-  let retry!: Promise<void>;
-  await act(async () => {
-    retry = h.result.current.connect(h.discovery, h.trace);
+    fire(native.app, "resume");
     await flush();
   });
-  await act(async () => {
-    fire(native.app, "pause");
-    await retry;
-  });
+  expect(native.scan).toHaveBeenCalledTimes(2);
   expect(
     h
       .entries()
       .filter((e) => e.kind.endsWith(":ble-scan-requested"))
       .map((e) => e.detail),
-  ).toStrictEqual(["connect=1", "connect=2"]);
+  ).toStrictEqual(["connect=1", "connect=1 pass=2"]);
   expect(
     h
       .entries()
       .filter((e) => e.kind.endsWith(":ble-scan-abort-requested"))
       .map((e) => e.detail),
-  ).toStrictEqual(["connect=1 background", "connect=2 background"]);
+  ).toStrictEqual(["connect=1 background", "connect=1 pass=2 background"]);
   expect(h.entries().filter((e) => e.kind.endsWith(":tag-event"))).toHaveLength(
     1,
   );
@@ -302,6 +526,7 @@ it.each(["background", "cancel"])(
       if (source === "background") fire(native.app, "pause");
       else await h.result.current.cancel();
       await vi.advanceTimersByTimeAsync(20_000);
+      if (source === "background") await h.result.current.cancel();
       await retry;
     });
     expect(
@@ -363,6 +588,8 @@ it("real failure entries render and copy unchanged through the diagnostic sheet"
   const h = await start();
   await act(async () => {
     fire(native.app, "pause");
+    await flush();
+    await h.result.current.cancel();
     await h.pending;
   });
   const raw = h.result.current.exportLog();
@@ -525,6 +752,8 @@ it.each(["release", "cleanup-deadline"])(
     expect(vendor.calls).toStrictEqual(["start-enter"]);
     await act(async () => {
       vendor.release();
+      await flush();
+      if (mode === "release") await h.result.current.cancel();
       await h.pending;
       await flush();
     });
@@ -707,7 +936,7 @@ it("successful scan emits its final result before the later GATT phase", async (
     }),
   );
 });
-it("hook without a trace keeps native background cancellation", async () => {
+it("hook without a trace recovers once and then keeps native background cancellation", async () => {
   const h = renderHook(() =>
     useMonitorSession({
       createTransport: () => createTransport(),
@@ -717,6 +946,10 @@ it("hook without a trace keeps native background cancellation", async () => {
   let pending!: Promise<void>;
   await act(async () => {
     pending = h.result.current.connect(request);
+    await flush();
+    fire(native.app, "pause");
+    await flush();
+    fire(native.app, "resume");
     await flush();
     fire(native.app, "pause");
     await pending;
@@ -773,6 +1006,8 @@ it("interrupted targeted discovery permits manual discovery on a new transport w
   const h = await start();
   await act(async () => {
     fire(native.app, "pause");
+    await flush();
+    await h.result.current.cancel();
     await h.pending;
   });
   const manual = createTransport();

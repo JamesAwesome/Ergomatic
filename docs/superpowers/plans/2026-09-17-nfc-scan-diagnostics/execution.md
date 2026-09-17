@@ -115,6 +115,90 @@ checks have not yet run; their authoritative result is the GitHub run whose
 `headSha` equals `git rev-parse HEAD`, not an earlier green. No code change
 followed the reviewed viewer assertions, only this evidence reconciliation.
 
-Physical causality remains unresolved. This change instruments future
-failures and does not change connection policy, install a phone build,
-authorize a hardware walk or merge a PR.
+Physical causality remains unresolved. The original diagnostics commits above
+instrumented future failures without changing connection policy. The approved
+follow-up below changes pre-connection recovery; no phone installation,
+hardware walk or merge is authorized by this record.
+
+
+## Approved follow-up: move-away guidance and foreground recovery
+
+James chose this route after reviewing the proposed copy and comparison with
+Sonos and Yubico: keep connection automatic, improve the move-away cue, and
+recover after an accidental browser detour. This is a bounded change to the
+existing connection flow, implemented in the same PR. It is not a claim to
+suppress the iOS notification or identify which app the rower opened.
+
+Approved wording replaces `Hold your iPhone near the monitor.` with
+`Hold the top of your iPhone near the monitor. Move it away when this sheet closes.`
+The NFC connecting hint on workout and Just Row replaces
+`Keep the monitor on and close by.` with
+`Tag read. Move your phone away from the NFC spot and keep Ergomatic open.`
+No layout/structure changes or screenshots (CLAUDE.md wording-only Gate 0).
+
+### Recovery contract and ownership brief
+
+- One explicit targeted `connect()` may recover once. The request, validated
+  monitor name, NFC attempt ID and trace stay the same; there is no picker or
+  second NFC read. Retry diagnostics add `pass=2` under the captured connect
+  ordinal, with resume-waiting and resumed events.
+- A real background transition aborts its scan pass. Only the returned
+  `TargetScanInterruptedError` identifying that exact pass's AbortSignal can
+  authorize recovery. Timeout errors omit the signal; cleanup failure replaces
+  the outcome and remains terminal. Diagnostic text is never policy input.
+- Both successful cleanup and current foreground readiness are required.
+  Return before cleanup works; another departure revokes readiness. Waiting is
+  cancellable and has no timer: active scan/cleanup retain existing deadlines.
+- Cancel/unmount cancel the containing operation even if the pass was already
+  aborted. Late registration is unsubscribed and cannot start a radio scan.
+  The existing hook attempt and controller-identity guards still fence stale
+  completions and new explicit connections.
+- A match that won before backgrounding is retained until foreground before
+  starting GATT, without a new scan. Recovery ends at discovery: GATT/program
+  failures and workouts already underway never acquire an automatic retry.
+- Native registration observes resume before pause and removes the first
+  listener if the second registration fails. No active/inactive substitution.
+
+| State | Minted | End / reset / survival |
+| --- | --- | --- |
+| Operation controller and cancel source | Each explicit targeted connect | Cancel/teardown abort; identity-cleared finally; never survives unmount/relaunch |
+| Pass controller and background-aborted flag | First scan, then fresh at sole recovery | Only first abort sets flag; discarded when replaced or operation ends |
+| Foreground readiness | Operation entry, updated only by observed lifecycle events | Every background revokes; no state survives operation |
+| Retry index | Operation entry | At most second scan; new explicit connect gets fresh budget |
+| Foreground waiter | Only while hidden after scan cleanup/result | Foreground or operation cancel wakes; readiness rechecked; discarded finally |
+| Lifecycle unsubscribe / closed fence | Registration / operation entry | Partial registration cleaned; late callbacks ignored after cancellation/close; handle removed finally |
+| Pass trace wrapper | Sole recovery | Same capped trace, pass attribution only; no policy or persisted shape |
+
+### Research and mechanism review
+
+PRIMARY: [Apple background reading](https://developer.apple.com/documentation/corenfc/adding-support-for-background-tag-reading)
+says background reads are unavailable during a Core NFC session. We keep the
+existing reader shutdown, so banner prevention remains untested. The reader
+interface has no phone-removal event. PRIMARY:
+[Capacitor pause/resume](https://capacitorjs.com/docs/apis/app#addlistenerresume)
+distinguishes actual background transitions from active/inactive events.
+
+The antagonist's source review found a registration gap: installed
+`AppPlugin.swift` uses non-retained pause/resume notifications and
+`CAPPlugin.m` drops events with no listener; pause-first registration could
+observe departure and miss return. Resume-first closes that witnessed-departure
+case. This is source reachability, not a measured occurrence on the phone.
+The review accepted independent operation/pass cancellation and actual winning
+abort attribution. Implementation carries the exact signal directly rather
+than using newer `AbortSignal.reason`; no new OS capability is required.
+
+Pre-registration transitions, process eviction/relaunch and actual banner/copy
+timing are outside this guarantee. A new explicit retry starts a new budget.
+
+### Verification in progress
+
+The first five native pipeline recovery assertions failed against the original
+implementation (no second scan / phase failed instead of picking): receipt
+`76cc4b68-efe7-42d5-b02f-e202a9eb86f0`. Both registrar regressions failed first
+(missed foreground / leaked first listener):
+`802c41d5-3cd8-42c0-87b2-fee4d90bf0bb`. Restored behavior passed 651 targeted
+client tests across seven files at
+`c39fbb73-f906-4202-9da6-95c3e56f488f`; existing act warnings were printed by
+older hook/Just Row cases. Source review, mutations, browser validation and
+exact-head hosted CI are required before delivery; this entry does not claim
+those gates have run.

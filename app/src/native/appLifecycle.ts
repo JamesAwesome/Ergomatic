@@ -38,16 +38,23 @@ import type {
 export async function registerNativeAppLifecycleListener(
   cb: AppLifecycleCallback,
 ): Promise<AppLifecycleUnsubscribe> {
-  const pause = await App.addListener("pause", () => {
-    cb("background");
-  });
+  // Observe return before departure: native events are not retained, so a
+  // pause/resume pair during registration must not strand a recovery waiter.
   const resume = await App.addListener("resume", () => {
     cb("foreground");
   });
-  return () => {
-    void pause.remove();
-    void resume.remove();
-  };
+  try {
+    const pause = await App.addListener("pause", () => {
+      cb("background");
+    });
+    return () => {
+      void pause.remove();
+      void resume.remove();
+    };
+  } catch (error: unknown) {
+    await resume.remove();
+    throw error;
+  }
 }
 
 /* v8 ignore stop */

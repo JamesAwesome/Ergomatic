@@ -29,6 +29,8 @@ const SPEC_KINDS = [
   "reader-stop-failed",
   "foreground-abort",
   "held-device-conflict",
+  "ble-scan-resume-waiting",
+  "ble-scan-resumed",
   "ble-scan-requested",
   "ble-scan-lifecycle",
   "ble-scan-abort-requested",

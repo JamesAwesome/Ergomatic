@@ -78,6 +78,30 @@ async function register(): Promise<{
 }
 
 describe("registerNativeAppLifecycleListener: which plugin events it binds", () => {
+  it("observes return even while pause registration is completing", async () => {
+    const original = mocks.addListener.getMockImplementation()!;
+    mocks.addListener.mockImplementation(async (name, handler) => {
+      const handle = await original(name, handler);
+      if (name === "pause") {
+        handler();
+        registrations.find((r) => r.eventName === "resume")?.handler();
+      }
+      return handle;
+    });
+    const { events } = await register();
+    expect(events).toStrictEqual(["background", "foreground"]);
+  });
+
+  it("removes the first listener if the second registration fails", async () => {
+    // Register one real handle, then refuse the other.
+    mocks.addListener.mockReset();
+    const remove = vi.fn(async () => undefined);
+    mocks.addListener.mockResolvedValueOnce({ remove });
+    mocks.addListener.mockRejectedValueOnce(new Error("registration failed"));
+    await expect(register()).rejects.toThrow("registration failed");
+    expect(remove).toHaveBeenCalledOnce();
+  });
+
   it("binds `pause` and `resume` — the true background transitions — and NEVER `appStateChange`, which iOS fires on a Control Centre swipe", async () => {
     await register();
 

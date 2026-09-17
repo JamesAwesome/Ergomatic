@@ -208,8 +208,13 @@ export class TargetMonitorAmbiguousError extends Error {
   }
 }
 export class TargetScanInterruptedError extends Error {
-  constructor() {
+  // Only the winning abort carries its exact pass signal. Preamble deadlines
+  // share the name for existing UI mapping, but must not authorize recovery.
+  readonly interruptedSignal: AbortSignal | undefined;
+
+  constructor(interruptedSignal?: AbortSignal) {
     super("The targeted scan was aborted.");
+    this.interruptedSignal = interruptedSignal;
     this.name = "TargetScanInterruptedError";
   }
 }
@@ -778,7 +783,7 @@ export function createCapacitorBleTransport(
         const poisonBefore = poisoned;
         if (poisonBefore !== null) throw poisonBefore;
         request = validateTargetedRequest(requestValue);
-        if (signal.aborted) throw new TargetScanInterruptedError();
+        if (signal.aborted) throw new TargetScanInterruptedError(signal);
       } catch (err: unknown) {
         summary(err instanceof Error ? err : new Error());
         throw err;
@@ -839,7 +844,7 @@ export function createCapacitorBleTransport(
         );
       };
       const onAbort = (): void =>
-        settle({ err: new TargetScanInterruptedError() });
+        settle({ err: new TargetScanInterruptedError(signal) });
       signal.addEventListener("abort", onAbort, { once: true });
       // THE DEADLINE BOUNDS THE ATTEMPT, not only the advertisement wait
       // (antagonist delta pass F5): every call below goes through
@@ -859,7 +864,7 @@ export function createCapacitorBleTransport(
         });
       }, deadlineMs);
       const interruptedIfAborted = (): void => {
-        if (signal.aborted) throw new TargetScanInterruptedError();
+        if (signal.aborted) throw new TargetScanInterruptedError(signal);
       };
       // THE PREAMBLE RUNS DETACHED (antagonist delta pass F5, paste-test):
       // every await below goes through BleClient's serial queue, which can

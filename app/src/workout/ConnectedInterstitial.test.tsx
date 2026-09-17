@@ -2574,9 +2574,11 @@ describe("targeted failures (Phase NF)", () => {
     expect(screen.getByText("Looking for PM5 432331249 Row")).toHaveClass(
       "connected-serif-line",
     );
-    expect(screen.getByText("Keep the monitor on and close by.")).toHaveClass(
-      "connected-body-line",
-    );
+    expect(
+      screen.getByText(
+        "Tag read. Move your phone away from the NFC spot and keep Ergomatic open.",
+      ),
+    ).toHaveClass("connected-body-line");
     expect(screen.queryByText("Choosing your monitor")).toBeNull();
     const cancel = screen.getByRole("button", { name: "Cancel" });
     expect(cancel).toHaveClass("button-l2");

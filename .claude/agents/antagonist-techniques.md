@@ -804,3 +804,10 @@ is exactly what happened: every section in this file stopped growing on
     its name; test undefined, empty, arbitrary and prototype-key names at
     the rejection boundary, then assert the exported vocabulary. Synthetic
     inputs prove classifier robustness, not an observed native incident.
+
+82. **A foreground recovery waiter needs its return listener before its
+    departure listener.** Trace native event retention and bridge ordering;
+    pause-first registration can observe departure and discard return. Clean
+    partial registration and distinguish an aborted pass from cancellation
+    of the containing operation. Returned abort identity, not a lifecycle
+    flag or shared error name, determines whether retry is warranted.

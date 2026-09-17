@@ -49,6 +49,7 @@ import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { isValidPm5AdvertisingName } from "../../domain/monitor/nfc.js";
 import { newUuidV4 } from "./uuidV4";
 import type { ConnectionAttemptTrace } from "./nfc/connectionAttemptTrace";
+import { scanWithForegroundRecovery } from "./nfc/scanWithForegroundRecovery";
 import {
   hasTargetedScan,
   isValidAttemptId,
@@ -2317,12 +2318,12 @@ export function useMonitorSession(
   /** Phase NF: the abort owner of an in-flight targeted scan, paired with
    *  its attempt ID. Cleared ONLY by object-identity comparison in the
    *  scan's own `finally`, so a late-settling attempt A can never clear
-   *  attempt B's controller. `cancel()`, `teardown()` and the background
-   *  transition abort it. */
+   *  attempt B's controller. `cancel()` and `teardown()` abort it, including a foreground wait.
+   *  Backgrounding aborts only the current pass inside the recovery helper. */
   const targetedAbortRef = useRef<{
     attemptId: ConnectionAttemptId;
     controller: AbortController;
-    abort(source: "background" | "cancel" | "teardown"): void;
+    abort(source: "cancel" | "teardown"): void;
   } | null>(null);
   /** WHICH connect attempt owns the flow. Bumped at the top of every
    *  `connect()` and again by `cancel()`, so an attempt can ask whether it
@@ -5360,60 +5361,33 @@ export function useMonitorSession(
                       `connect=${attempt}${detail === undefined ? "" : ` ${detail}`}`,
                     ),
                 };
-          const abort = (
-            source: "background" | "cancel" | "teardown",
-          ): void => {
-            if (controller.signal.aborted) return;
-            scanTrace?.record("ble-scan-abort-requested", source);
-            controller.abort();
-          };
+          let cancelSource: "cancel" | "teardown" = "cancel";
           targetedAbortRef.current = {
             attemptId: discovery.attemptId,
             controller,
-            abort,
+            abort: (source) => {
+              if (controller.signal.aborted) return;
+              cancelSource = source;
+              controller.abort();
+            },
           };
-          scanTrace?.record("ble-scan-requested");
-          // The foreground lease for the SCAN (the session's own lifecycle
-          // listener is registered only after GATT connect, further down):
-          // a background transition aborts to the named interrupted state.
-          // Registration is async on native; awaited INSIDE the try so a
-          // rejected registration cannot strand the abort ref (lens 2).
-          let scanLifecycle: (() => void) | null = null;
           try {
-            try {
-              scanLifecycle = await (
+            found = await scanWithForegroundRecovery({
+              signal: controller.signal,
+              cancelSource: () => cancelSource,
+              register:
                 depsRef.current.registerAppLifecycleListener ??
-                registerAppLifecycleListener
-              )((event) => {
-                scanTrace?.record("ble-scan-lifecycle", event);
-                if (event === "background") abort("background");
-              });
-            } catch (err: unknown) {
-              scanTrace?.record(
-                "listener-registration-failed",
-                "scan lifecycle",
-              );
-              throw err;
-            }
-            if (superseded()) throw new Error("superseded");
-            found = await transport.scanTarget(
-              discovery,
-              controller.signal,
-              scanTrace,
-            );
-            scanTrace?.record(
-              "ble-scan-finished",
-              `outcome=matched superseded=${superseded()}`,
-            );
+                registerAppLifecycleListener,
+              scan: (signal, passTrace) =>
+                transport.scanTarget(discovery, signal, passTrace),
+              trace: scanTrace,
+              finished: (passTrace, error) =>
+                passTrace?.record(
+                  "ble-scan-finished",
+                  `outcome=${error === undefined ? "matched" : (mapTargetedFailure(error.value, discovery.exactName).reason ?? "link-failed")} superseded=${superseded()}`,
+                ),
+            });
           } catch (err: unknown) {
-            scanTrace?.record(
-              "ble-scan-finished",
-              `outcome=${mapTargetedFailure(err, discovery.exactName).reason ?? "link-failed"} superseded=${superseded()}`,
-            );
-            // Every targeted terminal PUBLISHES the trace (whole-branch
-            // review B3): the snapshot accessor and the export window
-            // above both read a completed attempt, and before this the
-            // only path that completed one was a successful connect.
             trace?.complete();
             if (superseded()) {
               bestEffort(transport.disconnect());
@@ -5424,8 +5398,6 @@ export function useMonitorSession(
             bestEffort(transport.disconnect());
             return;
           } finally {
-            scanLifecycle?.();
-            // Object identity: a late attempt-A settle must not clear B's ref.
             if (targetedAbortRef.current?.controller === controller) {
               targetedAbortRef.current = null;
             }
