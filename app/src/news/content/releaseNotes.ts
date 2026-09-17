@@ -5,6 +5,18 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.50.4: all five merges since v0.50.3 are accounted for.
+    // #467 NFC guidance, foreground recovery and diagnostics: both items.
+    // #463–#466 local validation ownership, selection and failure evidence:
+    // development tools only, with no tester-facing note needed.
+    version: "v0.50.4",
+    date: "2026-09-17",
+    items: [
+      "Scanning the monitor tag now tells you when to move your phone away. If leaving Ergomatic interrupts the Bluetooth search, returning to the app retries that search once.",
+      "The connection log now distinguishes a background interruption from Cancel, a timeout or cleanup trouble, and records when the search resumes.",
+    ],
+  },
+  {
     // v0.50.3: #461 is the only merge since v0.50.2, covered below.
     version: "v0.50.3",
     date: "2026-09-16",

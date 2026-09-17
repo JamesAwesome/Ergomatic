@@ -16,4 +16,4 @@
  *  claims.
  *
  *  Bump alongside each release-notes PR. */
-export const NEWEST_RELEASE_VERSION = "v0.50.3";
+export const NEWEST_RELEASE_VERSION = "v0.50.4";
