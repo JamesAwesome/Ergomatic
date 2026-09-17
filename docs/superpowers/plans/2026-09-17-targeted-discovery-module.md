@@ -46,7 +46,7 @@
 | whole-connect epoch        | hook mount; incremented by connect, Cancel and teardown                                     | hook destruction                                                                    | incremented                                         | new hook value                 | incremented by the new connect                                   |
 | current targeted operation | accepted `owner.discover()`                                                                 | only that operation's identity-guarded `finally`                                    | synchronously aborted by `owner.cancel("teardown")` | new owner                      | successor replaces the current slot; predecessor cannot clear it |
 | outer operation controller | targeted operation entry                                                                    | operation settlement                                                                | aborted                                             | discarded                      | new controller                                                   |
-| cancel source              | targeted operation entry with Cancel semantics                                              | operation settlement                                                                | first explicit source becomes teardown              | discarded                      | defaults for the new operation                                   |
+| cancel source              | targeted operation entry with Cancel semantics                                              | operation settlement                                                                | first explicit Cancel/teardown source wins          | discarded                      | defaults for the new operation                                   |
 | active pass controller     | operation entry; replaced once after acknowledged recovery                                  | pass/operation settlement                                                           | aborted through the outer controller                | discarded                      | new first pass                                                   |
 | `foreground` and `wake`    | optimistic foreground at operation entry; changed only by observed lifecycle events         | operation `finally`                                                                 | wake released by cancellation                       | discarded                      | reset for the new operation; no pre-registration state inferred  |
 | `closed` lifecycle guard   | false at operation entry                                                                    | true before listener removal                                                        | blocks late callbacks                               | discarded                      | false for the new operation                                      |
@@ -178,9 +178,11 @@ Expected: PASS.
 
 Add direct tests which prove a successful scan followed by a throwing
 lifecycle unsubscribe returns the released targeted failure union, completes
-the trace once, and leaves no operation for a later `cancel()` to abort. A
+the trace once, and makes a later `cancel()` a no-op for the settled pass. A
 second test mutates the first invalid-request result and requires the next
-invalid request to retain the released `transport-missing` copy.
+invalid request to retain the released `transport-missing` copy. Refusal tests
+also observe lifecycle registration and radio calls, proving invalid input and
+missing targeted capability return before either begins.
 
 - [ ] **Step 8: Mutate the deciding guards**
 
@@ -189,7 +191,9 @@ Temporarily replace `if (current === operation) current = null;` with `current =
 Temporarily swallow the unsubscribe exception and require the cleanup test to
 fail its returned union. Temporarily return one module-scoped refusal object
 and require the freshness test to fail after the first caller mutates it.
-Restore both and rerun the direct test to PASS.
+Temporarily register lifecycle before request/capability validation and require
+both refusal tests to fail their zero-registration assertion. Restore all
+mutants and rerun the direct test to PASS.
 
 ### Task 2: Route the session hook through the owner
 

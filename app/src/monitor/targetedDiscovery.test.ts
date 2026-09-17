@@ -83,7 +83,7 @@ it("keeps a newer operation cancellable when the cancelled predecessor settles l
   await attemptB;
 });
 
-it("settles a throwing lifecycle unsubscribe as a targeted failure and clears the operation", async () => {
+it("settles a throwing lifecycle unsubscribe and makes later cancellation a no-op", async () => {
   let completed = 0;
   let signal: AbortSignal | undefined;
   const trace: ConnectionAttemptTrace = {
@@ -125,12 +125,20 @@ it("settles a throwing lifecycle unsubscribe as a targeted failure and clears th
 
 it("returns a fresh transport-missing failure for each refused request", async () => {
   const owner = createTargetedDiscoveryOwner();
-  const transport = transportWith(async () => [MONITOR]);
+  let lifecycleRegistrations = 0;
+  let targetedScans = 0;
+  const transport = transportWith(async () => {
+    targetedScans += 1;
+    return [MONITOR];
+  });
   const refused = {
     transport,
     request: { ...REQUEST, attemptId: "" },
     attempt: { ordinal: 1, isSuperseded: () => false },
-    registerLifecycle: () => () => undefined,
+    registerLifecycle: () => {
+      lifecycleRegistrations += 1;
+      return () => undefined;
+    },
   };
 
   const first = await owner.discover(refused);
@@ -145,4 +153,42 @@ it("returns a fresh transport-missing failure for each refused request", async (
       detail: "This device has no Bluetooth transport.",
     },
   });
+  expect(lifecycleRegistrations).toBe(0);
+  expect(targetedScans).toBe(0);
+});
+
+it("refuses a transport without targeted scan before lifecycle or broad scanning", async () => {
+  let lifecycleRegistrations = 0;
+  let broadScans = 0;
+  const transport: Transport = {
+    scan: async () => {
+      broadScans += 1;
+      return [MONITOR];
+    },
+    connect: async () => undefined,
+    write: async () => undefined,
+    subscribe: () => () => undefined,
+    disconnect: async () => undefined,
+    onDisconnect: () => () => undefined,
+  };
+
+  const result = await createTargetedDiscoveryOwner().discover({
+    transport,
+    request: REQUEST,
+    attempt: { ordinal: 1, isSuperseded: () => false },
+    registerLifecycle: () => {
+      lifecycleRegistrations += 1;
+      return () => undefined;
+    },
+  });
+
+  expect(result).toStrictEqual({
+    kind: "failed",
+    error: {
+      reason: "transport-missing",
+      detail: "This device has no Bluetooth transport.",
+    },
+  });
+  expect(lifecycleRegistrations).toBe(0);
+  expect(broadScans).toBe(0);
 });

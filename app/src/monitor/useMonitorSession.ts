@@ -161,45 +161,6 @@ export type ConnectedPhase =
   | "ended";
 
 /**
- * Every way this flow can fail, typed (the spec's exit criterion: "every
- * failure path is typed and rendered; no untyped path"). The first arm is
- * the driver's own union — MACHINE STATEMENTS, things the PM5 said or
- * failed to say (`ProgramRejection`'s own doc comment) — and the other five
- * are OURS, about the phone side of the radio:
- *
- * - `"busy"` — `ProgramBusyError`, thrown before a second `program()` ever
- *   reaches the wire. Deliberately NOT a `ProgramRejectionReason` (spec's
- *   I6 ruling): the machine never saw the call, so rendering "The monitor
- *   rejected" copy for it would be a lie about it.
- * - `"transport-missing"` — no radio at all on this platform/build.
- * - `"scan-dismissed"` — the rower closed the monitor chooser (or it
- *   returned nothing). Not an error in any moral sense; it renders on state 6's
- *   skeleton with a retry, per the C2 ruling. Second producer: the scan
- *   timeout (phone-BLE §3.3) — same retry surface, its own detail line.
- * - `"permission-denied"` — iOS declined the Bluetooth permission; iOS
- *   never re-asks — the remedy is Settings, and the card carries the door.
- * - `"bluetooth-off"` — the ADAPTER itself is unavailable: off, blocked, or
- *   absent from this browser. The one remedy is "turn Bluetooth on", and
- *   that is the only situation this reason is allowed to describe.
- * - `"link-failed"` — **WIDENS THE SPEC'S FIXED UNION** (design spec §2's
- *   error block, DEVIATIONS row; task-4 review MEDIUM-4 adjudicated it).
- *   The radio worked, the pairing may well have succeeded, and then the
- *   link failed anyway: a dead GATT handle mid-program (D6's
- *   `InvalidStateError`), a `connect()` that throws for a reason no adapter
- *   documents. Without this member all of those collapsed onto
- *   `"bluetooth-off"` and rendered "check Bluetooth" at a rower whose
- *   Bluetooth is demonstrably ON — the review found the argument inside
- *   this very file: the two mappers below already wrote DIFFERENT prose for
- *   the same tag, so the code did not itself believe they were one failure.
- *   Task 5's copy keys on `reason`, so the tag is what a rower actually
- *   reads. The remedy differs too: try again / wake the monitor, not
- *   "turn something on".
- *
- * `detail` is copy-ready prose; `raw` is the un-prettified evidence (a
- * `ProgramRejectionError`'s own hex trace, or a thrown error's message) for
- * state 6's DETAIL panel.
- */
-/**
  * THE REFUSAL'S COPY, approved at Gate 0 (James, 2026-09-08).
  *
  * Two lines separated by `\n`, because both failure frames split `detail` on

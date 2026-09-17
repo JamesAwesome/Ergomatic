@@ -17,6 +17,41 @@ Baseline: released commit `dd8dbdee41cdc58502f17701ab086b060956543d`
 (`v0.50.4`). This spec changes no rower-facing copy, timer, radio call, retry
 count, stored shape, authentication rule or platform permission.
 
+## Research and system concepts
+
+- **PRIMARY — Capacitor App v8:** the official
+  [App API](https://capacitorjs.com/docs/apis/app) distinguishes event
+  subscriptions from `getState()`. On iOS, `pause` follows
+  `UIApplication.didEnterBackgroundNotification` and `resume` follows
+  `UIApplication.willEnterForegroundNotification`. The released wrapper in
+  `app/src/native/appLifecycle.ts` subscribes to those transitions; targeted
+  discovery does not read or infer the current app state.
+- **PRIMARY — Apple Core Bluetooth:**
+  [`scanForPeripherals(withServices:options:)`](<https://developer.apple.com/documentation/corebluetooth/cbcentralmanager/scanforperipherals(withservices:options:)>)
+  discovers advertising peripherals. Apple's background-processing rules
+  require the Bluetooth central background mode and service-filtered scans
+  for background discovery. This app declares no `UIBackgroundModes` or
+  `bluetooth-central` entry in `app/ios/App/App/Info.plist`, so this refactor
+  does not claim that a targeted scan continues in the background.
+- **REPO PRIMARY:** `app/src/native/appLifecycle.ts` records the installed
+  `@capacitor/app@8.1.1` definitions beside the wrapper, and
+  `app/src/monitor/transports/capacitorBle.ts` owns native scan settlement,
+  cleanup, FIFO and poison. The owner calls those existing seams without
+  adding an OS API, dependency, permission or minimum-iOS requirement.
+- **SECONDARY — observed PM5 behavior:** the Phase NF follow-on research
+  records James's repeated observation that an awake, unconnected PM5
+  advertises on any screen and that NFC wakes it
+  (`docs/superpowers/specs/2026-09-06-phase-nf-followon-design.md:41-46`).
+  This refactor neither broadens nor revises that device claim.
+
+The operating system and PM5 have scan, advertising and lifecycle concepts;
+they do not have Ergomatic's recovery pass, whole-connect epoch or targeted
+discovery operation. Those are application coordination concepts. The
+transport remains authoritative for native scan completion and cleanup, and
+the session hook remains authoritative for whether a discovered monitor may
+advance to GATT. If the application coordination is wrong, it can abort,
+delay or retry an attempt, but it cannot establish phone or PM5 state.
+
 ## Existing seam and friction
 
 The targeted branch currently validates the request and capability, creates an
@@ -124,7 +159,8 @@ owns `fail(...)` plus `transport.disconnect()`.
 Lifecycle listener removal is part of operation settlement. If removal throws,
 that error replaces the pending scan result exactly as it did through the
 released helper: the owner maps it through targeted failure policy, completes a
-failed trace, and clears current-operation identity in an outermost `finally`.
+failed trace, and an outermost `finally` clears the internal current-operation
+slot. After settlement, public `cancel` is a no-op for that pass.
 
 ## Failure vocabulary
 
@@ -179,7 +215,9 @@ The refactor preserves these released invariants:
    (`useMonitorSession.ts:5441-5453`).
 9. Lifecycle cleanup settles before terminal mapping and trace publication.
    Cleanup failure may replace a pending match or scan failure, but it cannot
-   escape the owner's result union or skip identity cleanup.
+   escape the owner's result union or leave the settled pass externally
+   cancellable. The implementation clears the internal slot in its outermost
+   identity-guarded `finally`.
 10. The hook still disposes a transport built by a superseded or failed attempt.
     The owner never touches GATT, driver creation, session/log identity,
     programming, stored authorization or UI state.
@@ -226,8 +264,9 @@ The refactor preserves these released invariants:
 Implementation is test-first. The first new interface test must fail because
 the owner does not exist, then prove that synchronous cancellation aborts its
 current operation and that late A settlement cannot clear or relabel B. Further
-behavior remains gated through the production caller: invalid
-request/capability refusal, lifecycle registration failure, one foreground
+direct refusal tests prove invalid input and missing capability return before
+lifecycle registration or any radio call. Further behavior remains gated
+through the production caller: lifecycle registration failure, one foreground
 recovery, a retained hidden match, current-foreground revocation, cleanup
 failure, terminal mapping and omitted-trace behavior. Those tests cross the
 same owner interface from `useMonitorSession`; duplicating each with a second
@@ -243,9 +282,9 @@ claim.
 
 Every new behavioral assertion gets a deciding-source mutation per
 `.claude/agent-briefing.md`: remove the synchronous abort, remove the
-identity guard, permit a second recovery, complete the trace on success, or
-open the picker on refusal, then confirm the named test fails before restoring
-green.
+identity guard, register lifecycle before validating refusal, permit a second
+recovery, complete the trace on success, or open the picker on refusal, then
+confirm the named test fails before restoring green.
 
 This is a structural refactor over released behavior. Desk tests can prove
 application ordering and exported diagnostics. They cannot prove the affected
