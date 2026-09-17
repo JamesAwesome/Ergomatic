@@ -9,9 +9,10 @@ existing log cannot distinguish those from Cancel or screen teardown. Add
 diagnostics before changing the connection policy so the next real failure
 can answer the causal question.
 
-Status: hardened; both review lenses are folded. The plan carries an author-tested patch
-prepared in an isolated scratch worktree. No product change is applied to
-this documentation branch or released.
+Status: implementation authorized; both hardening lenses are folded. The
+author-tested patch is applied in the isolated implementation worktree.
+[Execution evidence](../plans/2026-09-17-nfc-scan-diagnostics/execution.md)
+tracks validation and independent review. No release or installation is implied.
 
 Evidence: [research and executed probe](../research/2026-09-17-nfc-scan-interruption/README.md).
 Baseline `55c63d63`; seven research cases exercised unchanged product code.

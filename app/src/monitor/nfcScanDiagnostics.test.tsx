@@ -398,6 +398,14 @@ it("real failure entries render and copy unchanged through the diagnostic sheet"
   expect(
     screen.getByRole("group", { name: "Connection log entries" }),
   ).toHaveTextContent("BLE-SCAN-ABORT-REQUESTED connect=1 background");
+  expect(
+    screen.getByRole("group", { name: "Connection log entries" }),
+  ).toHaveTextContent("BLE-SCAN-REQUESTED connect=1");
+  expect(
+    screen.getByRole("group", { name: "Connection log entries" }),
+  ).toHaveTextContent(
+    "BLE-SCAN-FINISHED connect=1 outcome=target-interrupted superseded=false",
+  );
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "COPY LOG" }));
   });

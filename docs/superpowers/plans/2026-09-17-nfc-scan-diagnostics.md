@@ -18,13 +18,15 @@ Capgo NFC 8.2.5; pnpm, Vitest and Playwright. No dependency changes.
 
 **Research:** [Executed cases, source evidence and limits](../research/2026-09-17-nfc-scan-interruption/README.md).
 
-**Status:** Hardened. Both reviews are folded and the executable prescription
-is verified. The exact
+**Status:** Implementation in progress after James’s approval. Both hardening
+reviews are folded. The exact
 implementation and tests live in [implementation.patch](2026-09-17-nfc-scan-diagnostics/implementation.patch),
 a unified diff against `75e2c0a5` (product base `55c63d63`). The controller
 wrote and exercised it in the separate `codex/nfc-diagnostics-paste` worktree;
-this documentation branch contains no applied product change. This is a
-reviewable implementation prescription, not a deployment or merge approval.
+the implementation branch now applies that patch on main `9c0e0618`.
+Fresh implementation gates and independent reviews are recorded in
+[execution.md](2026-09-17-nfc-scan-diagnostics/execution.md). This is not
+a deployment or merge approval.
 
 The patch is the executable content for Tasks 1–3. The task lists below
 explain its responsibilities; do not transcribe a second implementation.
@@ -72,48 +74,48 @@ If implementation needs those, reconcile this scope before proceeding.
 `cancel`. **Produces:** the spec's requested/lifecycle/abort/finished
 records, sharing one invocation-local prefix with the transport's records.
 
-- [ ] Copy the research probe into the new permanent seam test and replace
+- [x] Copy the research probe into the new permanent seam test and replace
       research-only output with assertions on `parseLogExport(exportLog())`.
       Keep real reader, parser, coordinator, lifecycle wrapper, BLE adapter and
       hook; mock only native plugin calls and the paint/haptic seams. Use proper
       multi-listener test registrations rather than the research probe's
       single-handler map where concurrent attempts are exercised.
-- [ ] Write failing diagnostic expectations for the three distinct stops:
+- [x] Write failing diagnostic expectations for the three distinct stops:
       native `pause` => background plus failed screen; Cancel => cancel plus
       idle; unmount => teardown with no surviving screen to assert. Assert
       `appStateChange(false/true)` has no abort or finished record while the
       scan is pending. Assert the trace before test cleanup, not after it.
-- [ ] Drive a retry with the original trace and target. Assert a second
+- [x] Drive a retry with the original trace and target. Assert a second
       requested marker and different local ordinal, with no second NFC read.
       Deliver duplicate tag callbacks before reader cleanup; assert one handoff.
-- [ ] Hold A's cleanup, cancel A, start B, then release A. Assert that A's
+- [x] Hold A's cleanup, cancel A, start B, then release A. Assert that A's
       late records retain A's ordinal and B's signal is not aborted or cleared.
       Exercise Cancel followed by effect cleanup and background followed by
       Cancel; only the first controller-abort request receives a cause marker.
-- [ ] Run the new tests against unchanged product code and record the
+- [x] Run the new tests against unchanged product code and record the
       missing-event failures. These are the deciding assertions, not call counts
       against a fake transport that produces its own expected trace.
-- [ ] Add trace kinds from the spec. In the validated targeted branch,
+- [x] Add trace kinds from the spec. In the validated targeted branch,
       capture the existing `attempt` value in a trace wrapper that delegates
       entries/completion and prefixes record detail. Record requested before
       awaiting scan lifecycle registration. Use this same wrapper in the
       lifecycle callback and as `transport.scanTarget`'s optional trace.
-- [ ] Add an abort function beside the existing controller. If that
+- [x] Add an abort function beside the existing controller. If that
       controller is already aborted, return; otherwise record the fixed origin
       and synchronously call its existing `abort()`. Store the function in the
       existing owned ref. Pass `cancel` through `teardown`'s internal argument;
       the effect's default is `teardown`. Do not introduce `AbortSignal.reason`
       or a separate mutable reason slot.
-- [ ] Record received background/foreground lifecycle inputs, then retain
+- [x] Record received background/foreground lifecycle inputs, then retain
       the existing background-only abort condition. Record finished on scan
       resolution or rejection, including superseded attempts, before trace
       publication and the superseded return. Reuse the existing error mapper's
       reason, with a diagnostic-only `link-failed` fallback when missing. Preserve existing `finally` listener removal and controller
       identity comparison; do not add changing callback dependencies.
-- [ ] Include lifecycle registration rejection and omitted trace in the
+- [x] Include lifecycle registration rejection and omitted trace in the
       tests. A failure to install the listener must terminate with diagnostics;
       omitted trace must keep its existing outcome and allocate no replacement.
-- [ ] Run the focused tests to green, commit the real change, then execute
+- [x] Run the focused tests to green, commit the real change, then execute
       the spec's attribution/supersession mutations and restore cleanly. Record
       what each mutation broke. Verify worktree path before every commit.
 
@@ -124,50 +126,50 @@ and cleanup. **Produces:** one summary of the winning decision plus honest
 start-acknowledgement records. The hook's finished event remains the final
 post-cleanup authority.
 
-- [ ] Extend the existing manual-clock transport tests with callback input
+- [x] Extend the existing manual-clock transport tests with callback input
       sequences using independent counts. One sequence: invalid callback,
       valid nameless callback, valid differently named callback, exact match,
       duplicate exact match. Expected summary: results=5, valid=4, named=3,
       matches=1. Do not count scan callbacks after settlement.
-- [ ] Hold the predecessor, initialization, enabled query, held-device
+- [x] Hold the predecessor, initialization, enabled query, held-device
       query and scan-start promise separately; expire the existing deadline.
       Assert the correct stage and existing error for each. Test a pre-aborted
       signal and poisoned transport: diagnostics must not permit a native call.
-- [ ] Hold `requestLEScan` under the installed vendor queue and abort.
+- [x] Hold `requestLEScan` under the installed vendor queue and abort.
       Assert a decision summary while native stop has not entered and the
       hook has no final result. Release start, then assert late acknowledgement,
       stop/drain and final interruption. Separately hold start through the
       cleanup bound and assert cleanup failure before releasing it. Deliver
       an early exact callback separately and preserve collision-window stage.
-- [ ] Hold shared initialization over consecutive retries. Assert the same
+- [x] Hold shared initialization over consecutive retries. Assert the same
       initialization call, separate preamble timeout outcomes, no scan start
       and no abort-source event. A stalled shared owner is distinct from
       explicit cleanup poison. Assert manual discovery succeeds after clean
       interrupted cleanup but is refused after explicit poison.
-- [ ] Match then reject `stopLEScan`, and separately let it exceed its
+- [x] Match then reject `stopLEScan`, and separately let it exceed its
       existing bound. Assert the matched initial decision, cleanup-failed event
       and cleanup-failed final hook result are distinguishable. Never change
       which event wins the existing terminal guard.
-- [ ] Reject a plugin call with a synthetic message/name containing a
+- [x] Reject a plugin call with a synthetic message/name containing a
       device identifier. Assert only fixed `other-error` summary vocabulary
       reaches the new diagnostic payload. Existing raw UI error behavior is
       outside this diagnostics-only change.
-- [ ] Reject through the native boundary with undefined, empty, arbitrary
+- [x] Reject through the native boundary with undefined, empty, arbitrary
       and prototype-key error names (`constructor`, `__proto__`, `toString`).
       All summaries remain errors. Missing mapped final reasons become
       `link-failed` in the new diagnostic only; the existing error-display
       mapper is unchanged. Preserve the successful match test so success
       cannot silently fall into the error fallback.
-- [ ] Run these assertions red. Then add per-call stage and integer
+- [x] Run these assertions red. Then add per-call stage and integer
       counters as defined in the spec's lifetime table. Increment after the
       settled guard and before decoder/name filtering. Update stage immediately
       before awaits; do not regress collision-window on scan-start resolution.
-- [ ] Record the winning summary inside the existing first-settle branch,
+- [x] Record the winning summary inside the existing first-settle branch,
       before cleanup. Cover early exits explicitly. Add no new radio calls,
       waits, timer or global state. Use a closed outcome mapping; arbitrary
       errors become `other-error`. Distinguish late start acknowledgement at
       the existing post-`requestLEScan` record site.
-- [ ] Run green, commit, and prove the count, stage, cleanup-precedence,
+- [x] Run green, commit, and prove the count, stage, cleanup-precedence,
       privacy and late-start tests bite their deciding mutations. Update old
       trace expectations where a legitimate new event was added.
 
@@ -206,12 +208,20 @@ With Node 26 on PATH, run from `app/`:
 
 ```sh
 pnpm test --project client src/monitor/nfcScanDiagnostics.test.tsx src/monitor/nfc/connectionAttemptTrace.test.ts src/monitor/transports/capacitorBle.test.ts src/native/appLifecycle.test.ts src/native/nfc.test.ts src/monitor/useMonitorSession.test.ts src/workout/connected/ConnectionLogSheet.test.tsx
-pnpm lint
 pnpm format:check
-pnpm typecheck
-pnpm test --project unit --project client --coverage
+# The normal commit hook owns staged lint and full typecheck.
+# The normal push hook owns related + mandatory unit/client verification.
+# CI owns full coverage; reuse compatible per-file author receipts here.
+# If a changed file needs a fresh local full-coverage run, explicitly request:
+# pnpm test:coverage --project unit --project client
 pnpm e2e connected.spec.ts --grep 'Phase NF: Scan NFC'
 ```
+
+These commands use main’s current resource admission. Coordinate the heavy
+window before starting; refuse/abort means stop without automatic retry.
+Reuse exact-head hook receipts instead of duplicating their checks. The
+author’s existing mutation receipts remain evidence for the identical patch;
+repeat probes only for a changed source or unresolved review finding.
 
 The e2e script builds and starts the worktree's compose stack. It leaves the
 stack running; the controller downs that worktree's stack with its volume
