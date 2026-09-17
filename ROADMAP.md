@@ -5012,6 +5012,19 @@ an iceboxed item is not a phase-close requirement.
 
 Deferred, not killed. One line and one trigger each. No exits and no sizes — a
 trigger is the whole entry.
+- **Post-production: deepen connection-entry ownership** (architecture review
+  candidate 02; James, 2026-09-17). Concentrate ownership transfer, retry
+  identity, abandonment and trace completion shared by Workout Detail and
+  Just Row; keep compilation, navigation and stored-record policy with their
+  existing owners. Candidate 01, targeted discovery, goes first and preserves
+  current behavior. **Trigger:** after production launch, reassess whether one
+  attempt module removes lifetime obligations from both callers; a container
+  that only moves the request/trace pair does not justify implementation.
+  Evidence at `dd8dbdee`: `app/src/monitor/nfc/useNfcEntry.ts:202`,
+  `app/src/workout/ConnectedInterstitial.tsx:344` and
+  `app/src/justrow/JustRow.tsx:94`. · dies 2026-11-17 · deferred at James's
+  request because the wider handoff contract belongs after production, while
+  targeted discovery is the current priority.
 - **The plan calendar** (was Phase 8B's first item). Spec written and merged
   (`docs/superpowers/specs/2026-08-22-plan-calendar-design.md`). James's rulings
   stand: **the grid is a RECORD** — dates for done sessions only, future days
