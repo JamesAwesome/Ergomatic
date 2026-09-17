@@ -423,7 +423,7 @@ describe("offer transfer", () => {
 });
 
 describe("attempt session projection", () => {
-  it("manual retry reuses one request, concurrent calls share the exact promise, and a foreign collaborator is ignored", async () => {
+  it("manual retry reuses one request, shares the exact promise, and connect-bound Cancel ignores a foreign collaborator", async () => {
     const { result } = renderHook(() => useConnectionEntry());
     const attempt = claimManual(result.current);
     const held = deferred();
@@ -442,11 +442,16 @@ describe("attempt session projection", () => {
     expect(vi.mocked(first.connect).mock.calls[1]?.[0]).toBe(
       vi.mocked(first.connect).mock.calls[0]?.[0],
     );
+    await act(async () => attempt.cancel(foreign));
+    expect(first.cancel).toHaveBeenCalledTimes(1);
+    expect(foreign.connect).not.toHaveBeenCalled();
+    expect(foreign.cancel).not.toHaveBeenCalled();
   });
 
-  it("targeted retry reuses the exact request and trace", async () => {
+  it("targeted retry reuses the exact request and trace, and connect-bound Cancel ignores a foreign collaborator", async () => {
     const { owner, attempt } = await renderTargeted();
     const session = makeSession();
+    const foreign = makeSession();
     await attempt.connect(session);
     await attempt.connect(session);
     expect(vi.mocked(session.connect).mock.calls[1]?.[0]).toBe(
@@ -455,6 +460,10 @@ describe("attempt session projection", () => {
     expect(vi.mocked(session.connect).mock.calls[1]?.[1]).toBe(
       vi.mocked(session.connect).mock.calls[0]?.[1],
     );
+    await act(async () => attempt.cancel(foreign));
+    expect(session.cancel).toHaveBeenCalledTimes(1);
+    expect(foreign.connect).not.toHaveBeenCalled();
+    expect(foreign.cancel).not.toHaveBeenCalled();
     owner.unmount();
   });
 
