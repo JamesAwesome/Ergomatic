@@ -5,6 +5,16 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.50.5: both merges since v0.50.4 are accounted for. #469 reorganizes
+    // targeted monitor discovery without changing released behavior. The second
+    // merge is this release-notes PR.
+    version: "v0.50.5",
+    date: "2026-09-17",
+    items: [
+      "This build reorganizes the monitor-tag connection path behind the scenes. Its search, cancellation, return-to-app retry, messages, and timing are unchanged.",
+    ],
+  },
+  {
     // v0.50.4: all five merges since v0.50.3 are accounted for.
     // #467 NFC guidance, foreground recovery and diagnostics: both items.
     // #463–#466 local validation ownership, selection and failure evidence:
