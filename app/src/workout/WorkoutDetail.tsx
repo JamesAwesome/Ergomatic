@@ -29,17 +29,13 @@ import {
 import ConnectAction, {
   type ConnectionEntryIntent,
 } from "../monitor/ConnectAction";
-import { discardStagedRetire } from "../monitor/handoffStore";
-import type { ConnectionAttemptTrace } from "../monitor/nfc/connectionAttemptTrace";
 import {
-  useNfcEntry,
+  useConnectionEntry,
+  type ConnectionEntryAttempt,
+  type ConnectionEntryOffer,
   type NfcCapabilityState,
-} from "../monitor/nfc/useNfcEntry";
+} from "../monitor/connectionEntry";
 import type { RunIdentity } from "../monitor/useMonitorSession";
-import type {
-  ConnectionAttemptId,
-  MonitorDiscoveryRequest,
-} from "../../domain/monitor/types.js";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import { useStartWorkout } from "../session/useStartWorkout";
 import UnsavedWorkoutWarning from "../session/UnsavedWorkoutWarning";
@@ -231,10 +227,8 @@ function WorkoutDetailView({
     // widened the same way, and omits its "2K … · 6K …" line when null.
     baselines: Baselines | null;
     nudgedCount: number;
-    /** Phase NF: how the interstitial finds the monitor for THIS attempt. */
-    request: MonitorDiscoveryRequest;
-    /** Phase NF: the attempt's trace, when the NFC route produced one. */
-    trace?: ConnectionAttemptTrace;
+    /** Connection-entry ownership, including discovery and retry identity. */
+    attempt: ConnectionEntryAttempt;
   } | null>(null);
   // Lazy read-once, refreshed explicitly when the interstitial hands
   // control back (see `handleInterstitialExit`/`handleRowInstead` below) —
@@ -245,10 +239,9 @@ function WorkoutDetailView({
     loadLastDevice(),
   );
   const bluetoothStatus = useBluetoothStatus();
-  // Phase NF: the reader, the capability probe, the busy/accepted flags and
-  // the live attempt's abort owner all live in `useNfcEntry` (shared with
-  // Just Row since the follow-on); this screen only routes the outcome.
-  const nfc = useNfcEntry();
+  // The reader, capability probe, transfer and route-loss backstop share one
+  // owner. This screen compiles an offer before claiming its opaque attempt.
+  const entry = useConnectionEntry();
   // "Row on the phone timer instead"'s OWN saveDraft failure (below) — kept
   // separate from `useStartWorkout`'s own `startError` since this flow
   // never goes through the hook at all (Connect's own guard, not Start's,
@@ -296,38 +289,18 @@ function WorkoutDetailView({
   // union entirely: nothing has been sent to a monitor yet, so this is not
   // a `useMonitorSession` failure and does not deserve a phase transition
   // or a driver connection at all.
-  function handleConnectProceed(attemptId: ConnectionAttemptId) {
-    proceedWithRequest({ kind: "picker", attemptId });
-  }
-
-  // Phase NF: the NFC attempt itself lives in `useNfcEntry` (the follow-on
-  // made Just Row a second caller). This screen supplies the two things
-  // that differ per screen: where a decoded target goes (the interstitial,
-  // via `proceedWithRequest`) and where an inline outcome renders.
-  function handleNfcProceed(attemptId: ConnectionAttemptId) {
+  function handleEntryProceed(intent: ConnectionEntryIntent) {
     setConnectError(null);
-    void nfc.run(attemptId, {
-      onTarget: (request, trace) => proceedWithRequest(request, trace),
+    entry.begin(intent, {
+      onReady: proceedWithOffer,
       onInlineError: setConnectError,
     });
   }
 
-  function handleEntryProceed(intent: ConnectionEntryIntent) {
-    if (intent.kind === "nfc") {
-      handleNfcProceed(intent.attemptId);
-      return;
-    }
-    handleConnectProceed(intent.attemptId);
-  }
-
   /** Compiles THIS workout at its preview-nudged targets and mounts the
-   *  interstitial with `request`. Returns whether the handoff happened; a
-   *  `false` return has already shown its inline reason AND discarded the
-   *  attempt's staged receipt (spec §3: every pre-handoff terminal path). */
-  function proceedWithRequest(
-    request: MonitorDiscoveryRequest,
-    trace?: ConnectionAttemptTrace,
-  ): boolean {
+   *  interstitial only after claiming the offered opaque attempt. Returning
+   *  without a claim leaves compile rejection cleanup with the entry owner. */
+  function proceedWithOffer(offer: ConnectionEntryOffer): void {
     setConnectError(null);
     // Phase 6I: `needsBaselines` (domain/needsBaselines.ts) is the SAME
     // predicate every other coupled guard site shares — nudging never
@@ -347,8 +320,7 @@ function WorkoutDetailView({
     const compiled = compileProgram(run.phases);
     if ("code" in compiled) {
       setConnectError(compiled.message);
-      discardStagedRetire(request.attemptId);
-      return false;
+      return;
     }
     const nudgedCount = Object.values(nudges).filter((v) => v !== 0).length;
     // 7C Task 1: the log seed, built from the SAME `run.phases` `compiled`
@@ -363,10 +335,8 @@ function WorkoutDetailView({
       identity: { workoutId: workout.id, title: workout.title, logSeed },
       baselines,
       nudgedCount,
-      request,
-      ...(trace !== undefined ? { trace } : {}),
+      attempt: offer.claim(),
     });
-    return true;
   }
 
   // Cancel, from any interstitial state: lands back on Workout detail, and
@@ -407,7 +377,7 @@ function WorkoutDetailView({
   // run by the time this door fires — false; on this door's own path it
   // never runs at all** (the staged set is DISCARDED, not retired, by
   // `useMonitorSession.ts`'s own `cancel()` — `ConnectedInterstitial.tsx`'s
-  // own `handleRowInstead` calls `session.cancel()` immediately before
+  // own `handleRowInstead` calls `attempt.cancel(session)` immediately before
   // `onRowInstead`, and `cancel()` runs synchronously to completion for a
   // FAILED phase, so the discard has already happened by the time this
   // function runs). This fresh, non-render `currentUnretired()` read is
@@ -458,8 +428,7 @@ function WorkoutDetailView({
         onExit={handleInterstitialExit}
         onRowInstead={handleRowInstead}
         onEnded={handleConnectedEnded}
-        request={connecting.request}
-        trace={connecting.trace}
+        attempt={connecting.attempt}
       />
     );
   }
@@ -568,9 +537,9 @@ function WorkoutDetailView({
           bluetoothStatus={bluetoothStatus}
           lastDevice={lastDevice}
           onProceed={handleEntryProceed}
-          nfcCapability={nfc.capability}
-          busy={nfc.busy}
-          accepted={nfc.accepted}
+          nfcCapability={entry.capability}
+          busy={entry.busy}
+          accepted={entry.accepted}
         />
         {connectError && <p className="baseline-error">{connectError}</p>}
         {/* Start Timer — spec §4: renamed from "Start" and demoted from L1

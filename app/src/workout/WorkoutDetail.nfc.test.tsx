@@ -67,6 +67,15 @@ const WORKOUT: LibraryWorkout = {
   isGlobal: false,
   lastDoneDaysAgo: null,
 };
+const COMPILE_ERROR_WORKOUT: LibraryWorkout = {
+  id: "w-compile-error",
+  title: "Open Test Piece",
+  type: "AN",
+  effort: 5,
+  steps: [{ k: "test", label: "2k test" }],
+  isGlobal: false,
+  lastDoneDaysAgo: null,
+};
 /** A REAL seeded library workout with reps and rests (RF3: the routed
  *  proof must cross the seam on production-shaped data, not only the
  *  one-step fixture above). Scud Cloud: 5 × 0:30 at 2k-3, 1:30 rest. */
@@ -85,6 +94,7 @@ const LIBRARY_WORKOUT: LibraryWorkout = (() => {
 })();
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 const FIXED_ATTEMPT = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+const NEXT_ATTEMPT = "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
 const fixture = loadPm5NfcFixture().records;
 
 /** The program the fake will verify byte-for-byte: the same compile the
@@ -121,7 +131,7 @@ function mockHooks() {
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => ({
       state: "ready",
-      workouts: [WORKOUT, LIBRARY_WORKOUT],
+      workouts: [WORKOUT, LIBRARY_WORKOUT, COMPILE_ERROR_WORKOUT],
     }),
   }));
   vi.doMock("../api/useBaselines", () => ({
@@ -372,6 +382,92 @@ describe("Scan NFC outcomes on detail (states table)", () => {
     const trace = latestConnectionAttemptTrace()?.map((e) => e.kind) ?? [];
     expect(trace).toContain("abort-requested");
     expect(trace).not.toContain("handoff-accepted");
+  });
+
+  it("compile rejection leaves the offered attempt unclaimed and discards that exact staged authorization", async () => {
+    let releaseRead!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    setNfcScript({
+      capability: "supported",
+      outcome: { kind: "records", records: fixture },
+      gate,
+    });
+    await renderDetail(COMPILE_ERROR_WORKOUT.id);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Scan NFC" }),
+    );
+    expect(stagedRetireAttemptId()).toBe(FIXED_ATTEMPT);
+
+    releaseRead();
+    expect(
+      await screen.findByText(
+        "An open-ended (all-out/test) interval has no fixed time or distance. The PM5 requires one to program a workout.",
+      ),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".connected-interstitial")).toBeNull();
+    expect(stagedRetireAttemptId()).toBeNull();
+    expect(screen.getByRole("button", { name: "Scan NFC" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+  });
+
+  it("Cancel keeps the programmed door disabled until the local fake transport write settles, then late A cleanup cannot discard fresh B", async () => {
+    const leftoverKey = seedLeftoverHandoff();
+    const minted = [FIXED_ATTEMPT, NEXT_ATTEMPT];
+    let mintCount = 0;
+    setAttemptIdMintForTests(() => {
+      const attemptId = minted[mintCount];
+      mintCount += 1;
+      if (attemptId === undefined) throw new Error("unexpected third attempt");
+      return attemptId;
+    });
+    setNfcScript({ capability: "supported", outcome: { kind: "cancelled" } });
+    setFakeScript({
+      program: expectedProgram(),
+      deviceName: FIXTURE_PM5_NAME,
+      pausedOperation: "write",
+    });
+    await renderDetail();
+    await screen.findByRole("button", { name: "Scan NFC" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Connect anyway" }),
+    );
+    expect(await screen.findByText("Sending the workout")).toBeInTheDocument();
+    expect(stagedRetireAttemptId()).toBe(FIXED_ATTEMPT);
+
+    const controls = window.__pm5FakeControls__!;
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Scan NFC" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(stagedRetireAttemptId()).toBeNull();
+    expect(currentUnretiredHandoff()?.sessionKey).toBe(leftoverKey);
+
+    await userEvent.click(screen.getByRole("button", { name: "Scan NFC" }));
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(mintCount).toBe(1);
+    expect(stagedRetireAttemptId()).toBeNull();
+
+    await act(async () => {
+      controls.resume("write");
+      for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled(),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(
+      await screen.findByRole("button", { name: "Connect anyway" }),
+    ).toBeInTheDocument();
+    expect(stagedRetireAttemptId()).toBe(NEXT_ATTEMPT);
+    await act(async () => {
+      for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    });
+    expect(stagedRetireAttemptId()).toBe(NEXT_ATTEMPT);
+    expect(currentUnretiredHandoff()?.sessionKey).toBe(leftoverKey);
   });
 });
 

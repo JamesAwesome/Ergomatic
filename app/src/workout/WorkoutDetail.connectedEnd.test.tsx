@@ -14,9 +14,15 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildLogSeed } from "../session/logDraft";
+import {
+  resetForTests as resetHandoffStoreForTests,
+  stagedRetireAttemptId,
+} from "../monitor/handoffStore";
+import { setAttemptIdMintForTests } from "../monitor/nfc/attemptIdMint";
 import type { ConnectedInterstitialProps } from "./ConnectedInterstitial";
 
 const navigate = vi.fn();
+const ATTEMPT_ID = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
 
 vi.mock("react-router-dom", async () => {
   const actual =
@@ -134,6 +140,8 @@ async function openConnect(): Promise<void> {
 
 beforeEach(() => {
   localStorage.clear();
+  resetHandoffStoreForTests();
+  setAttemptIdMintForTests(() => ATTEMPT_ID);
   Object.defineProperty(navigator, "bluetooth", {
     configurable: true,
     value: {
@@ -147,6 +155,7 @@ beforeEach(() => {
 
 afterEach(() => {
   Reflect.deleteProperty(navigator, "bluetooth");
+  setAttemptIdMintForTests(null);
 });
 
 describe("the log seed WorkoutDetail builds (7C Task 1)", () => {
@@ -172,6 +181,21 @@ describe("the log seed WorkoutDetail builds (7C Task 1)", () => {
     expect(identity.logSeed.paces).toStrictEqual({ k6: 122 });
     expect(identity.workoutId).toBe(WORKOUT.id);
     expect(identity.title).toBe(WORKOUT.title);
+    expect(capturedProps).toHaveProperty("attempt");
+    expect("request" in capturedProps!).toBe(false);
+    expect("trace" in capturedProps!).toBe(false);
+  });
+});
+
+describe("claimed route loss before the interstitial lifetime effect", () => {
+  it("the Workout Detail owner discards the claim's keyed authorization", async () => {
+    const view = renderDetail();
+    await openConnect();
+    expect(capturedProps).not.toBeNull();
+    expect(stagedRetireAttemptId()).toBe(ATTEMPT_ID);
+
+    view.unmount();
+    expect(stagedRetireAttemptId()).toBeNull();
   });
 });
 

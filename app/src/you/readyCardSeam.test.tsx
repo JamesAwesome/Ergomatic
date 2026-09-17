@@ -10,11 +10,13 @@ import {
   type MonitorSession,
 } from "../monitor/useMonitorSession";
 import { compileProgram } from "../../domain/monitor/program.js";
+import type { MonitorDiscoveryRequest } from "../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { withDerivedAxes } from "../test/sessionAxes";
+import type { ConnectionEntryAttempt } from "../monitor/connectionEntry";
 
 /**
  * THE SEAM, AND IT STARTS UPSTREAM OF THE PRODUCER (recurring failure 24).
@@ -51,6 +53,13 @@ vi.mock("../monitor/useMonitorSession", async () => {
   return { ...actual, useMonitorSession: vi.fn() };
 });
 
+vi.mock("../monitor/connectionEntry", async () => {
+  const actual = await vi.importActual<
+    typeof import("../monitor/connectionEntry")
+  >("../monitor/connectionEntry");
+  return { ...actual, useConnectionEntryLifetime: vi.fn() };
+});
+
 const mockUseMonitorSession = vi.mocked(useMonitorSession);
 
 /** A REAL seeded library workout through the real assembly, not a hand-built
@@ -78,6 +87,19 @@ if ("code" in COMPILED) {
   throw new Error(`fixture failed to compile: ${COMPILED.code}`);
 }
 const PROGRAM = COMPILED;
+
+/** Render-only unsafe adapter for this direct interstitial construction. */
+function attemptDouble(): ConnectionEntryAttempt {
+  const request: MonitorDiscoveryRequest = {
+    kind: "picker",
+    attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+  };
+  return {
+    targetName: null,
+    connect: (session: MonitorSession) => session.connect(request),
+    cancel: (session: MonitorSession) => session.cancel(),
+  } as unknown as ConnectionEntryAttempt;
+}
 
 function readySession(): MonitorSession {
   return withDerivedAxes({
@@ -143,10 +165,7 @@ function mountTheInterstitial() {
   render(
     <MemoryRouter initialEntries={["/library/x"]}>
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={attemptDouble()}
         program={PROGRAM}
         phases={PHASES}
         identity={{
