@@ -38,6 +38,7 @@ const native = vi.hoisted(() => ({
   display: vi.fn<() => Promise<void>>(),
   callbacks: [] as ((value: unknown) => void)[],
   pauseRegistration: null as Promise<void> | null,
+  startNfc: vi.fn<(_options: unknown) => Promise<void>>(),
 }));
 function fire(
   events: Map<string, Set<(value?: unknown) => void>>,
@@ -73,7 +74,7 @@ vi.mock("@capgo/capacitor-nfc", () => ({
         },
       };
     },
-    startScanning: async () => undefined,
+    startScanning: native.startNfc,
     stopScanning: async () => undefined,
   },
 }));
@@ -111,6 +112,7 @@ beforeEach(async () => {
   native.nfc.clear();
   native.callbacks = [];
   native.pauseRegistration = null;
+  native.startNfc.mockResolvedValue(undefined);
   native.initialize.mockResolvedValue(undefined);
   native.isEnabled.mockResolvedValue(true);
   native.held.mockResolvedValue([]);
@@ -207,6 +209,25 @@ it.each(["before", "after"])(
     });
     expect(native.scan).toHaveBeenCalledTimes(2);
     expect(native.picker).not.toHaveBeenCalled();
+    expect(native.startNfc).toHaveBeenCalledExactlyOnceWith({
+      attemptId,
+      alertMessage:
+        "Hold the top of your iPhone near the monitor. Move it away when this sheet closes.",
+      iosSessionType: "ndef",
+      invalidateAfterFirstRead: false,
+    });
+    expect(
+      h.trace
+        .entries()
+        .filter((e) => e.kind === "ble-scan-resume-waiting")
+        .map((e) => e.detail),
+    ).toStrictEqual(ordering === "after" ? ["connect=1"] : []);
+    expect(
+      h.trace
+        .entries()
+        .filter((e) => e.kind === "ble-scan-resumed")
+        .map((e) => e.detail),
+    ).toStrictEqual(["connect=1 pass=2"]);
     expect(
       h.entries().filter((e) => e.kind.endsWith(":tag-event")),
     ).toHaveLength(1);
@@ -269,11 +290,12 @@ it.each(["cancel", "teardown"])(
     await act(async () => {
       if (source === "cancel") await h.result.current.cancel();
       else h.unmount();
-      await h.pending;
+      await flush();
       fire(native.app, "resume");
       await flush();
     });
     expect(native.scan).toHaveBeenCalledOnce();
+    await h.pending;
     expect(
       [...native.app.values()].every((listeners) => listeners.size === 0),
     ).toBe(true);
@@ -318,9 +340,10 @@ it("a preamble deadline winning before background is not eligible for recovery",
     vi.advanceTimersByTime(10_000);
     fire(native.app, "pause");
     fire(native.app, "resume");
-    await h.pending;
+    await flush();
   });
   expect(h.result.current.error?.reason).toBe("target-interrupted");
+  await h.pending;
   expect(
     h.entries().filter((e) => e.kind.endsWith(":ble-scan-requested")),
   ).toHaveLength(1);
@@ -468,10 +491,12 @@ it("a second background interruption ends automatic recovery without a third sca
     fire(native.app, "resume");
     await flush();
     fire(native.app, "pause");
-    await h.pending;
+    await flush();
     fire(native.app, "resume");
     await flush();
   });
+  expect(h.result.current.phase).toBe("failed");
+  await h.pending;
   expect(native.scan).toHaveBeenCalledTimes(2);
   expect(
     h
