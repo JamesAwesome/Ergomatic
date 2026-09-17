@@ -9,8 +9,9 @@ existing log cannot distinguish those from Cancel or screen teardown. Add
 diagnostics before changing the connection policy so the next real failure
 can answer the causal question.
 
-Status: proposed design for James's review. Product implementation has not
-started. Research and the execution plan precede implementation, as requested.
+Status: hardened; both review lenses are folded. The plan carries an author-tested patch
+prepared in an isolated scratch worktree. No product change is applied to
+this documentation branch or released.
 
 Evidence: [research and executed probe](../research/2026-09-17-nfc-scan-interruption/README.md).
 Baseline `55c63d63`; seven research cases exercised unchanged product code.
@@ -69,17 +70,18 @@ through the session hook. Each scan detail begins with `connect=N`, where N
 is the hook's existing captured connect-attempt counter, not a device ID.
 Ordinals are local to the hook; they can skip values and are not global IDs.
 
-| Kind | Owner | Fixed detail after `connect=N` |
-| --- | --- | --- |
-| `ble-scan-requested` | Hook, before scan lifecycle registration | No additional detail required. |
-| `ble-scan-lifecycle` | Existing scan lifecycle callback | `background` or `foreground`, as received. |
-| `ble-scan-abort-requested` | Scan's abort owner | First request: `background`, `cancel`, or `teardown`. |
-| `ble-scan-summary` | Real transport, winning settlement | `stage=S outcome=O results=R valid=V named=L matches=M`. |
-| `ble-scan-started-late` | Real transport, late native acknowledgement | Native scan-start promise resolved after terminal decision; no claim that a new scan was launched. |
-| `ble-scan-finished` | Hook, after awaited scan settles | `outcome=O superseded=true/false`. |
+| Kind                       | Owner                                       | Fixed detail after `connect=N`                                                                     |
+| -------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `ble-scan-requested`       | Hook, before scan lifecycle registration    | No additional detail required.                                                                     |
+| `ble-scan-lifecycle`       | Existing scan lifecycle callback            | `background` or `foreground`, as received.                                                         |
+| `ble-scan-abort-requested` | Scan's abort owner                          | First request: `background`, `cancel`, or `teardown`.                                              |
+| `ble-scan-summary`         | Real transport, winning settlement          | `stage=S outcome=O results=R valid=V named=L matches=M`.                                           |
+| `ble-scan-started-late`    | Real transport, late native acknowledgement | Native scan-start promise resolved after terminal decision; no claim that a new scan was launched. |
+| `ble-scan-finished`        | Hook, after awaited scan settles            | `outcome=O superseded=true/false`.                                                                 |
 
 For `ble-scan-finished`, `O` is `matched` on resolution or the existing
-mapped `ConnectedError.reason` on rejection. Never copy its raw message.
+mapped `ConnectedError.reason` on rejection, falling back to `link-failed`
+if the mapper provides no reason at runtime. Never copy its raw message.
 The marker precedes `trace.complete()` and the superseded return. Failed
 lifecycle registration has a finished marker as well as the existing
 `listener-registration-failed` marker.
@@ -95,7 +97,8 @@ The transport's outcome vocabulary is `matched`, `interrupted`,
 `not-advertising`, `already-connected`, `ambiguous`, `bluetooth-off`,
 `permission-denied`, `cleanup-failed`, `invalid-request`, `other-error`.
 Use a closed mapping from known errors; arbitrary plugin error strings
-become `other-error`. Cleanup can supersede the initial decision; the
+become `other-error`. An Error whose name is undefined remains an error;
+only absence of an error value means success. Cleanup can supersede the initial decision; the
 finished marker is authoritative for the returned outcome.
 
 Counts measure callback observations, not devices in the room:
@@ -116,14 +119,14 @@ proves that the PM5 advertised or that CoreBluetooth delivered callbacks.
 
 ## Ownership and lifetimes
 
-| Value | Created | Cleared / ends | Retry, teardown and relaunch |
-| --- | --- | --- | --- |
-| Original NFC trace | Existing NFC entry press | Existing bounded trace/latest-snapshot lifetime | Reused by targeted retries; not newly persisted. |
-| Connect ordinal | Existing `attemptRef` increment | Existing hook lifetime | Captured value per connect; cancellation may cause gaps. |
-| Scoped trace wrapper | Targeted branch after validation | Last continuation of that invocation | Captures original trace and ordinal, never reads a later mutable trace ref. |
-| Abort callback | Beside existing scan controller | Existing identity-guarded `finally` | Checks that controller's signal before logging first request and aborting; no new shared reason flag. |
-| Stage and counts | Inside one `scanTarget` call | Last continuation of that call | Never carried into retry; settled callbacks do not update counts. |
-| Existing settlement guard | Existing scan entry | Existing scan lifetime | Remains sole authority for winner and cleanup; diagnostics do not replace it. |
+| Value                     | Created                          | Cleared / ends                                  | Retry, teardown and relaunch                                                                          |
+| ------------------------- | -------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Original NFC trace        | Existing NFC entry press         | Existing bounded trace/latest-snapshot lifetime | Reused by targeted retries; not newly persisted.                                                      |
+| Connect ordinal           | Existing `attemptRef` increment  | Existing hook lifetime                          | Captured value per connect; cancellation may cause gaps.                                              |
+| Scoped trace wrapper      | Targeted branch after validation | Last continuation of that invocation            | Captures original trace and ordinal, never reads a later mutable trace ref.                           |
+| Abort callback            | Beside existing scan controller  | Existing identity-guarded `finally`             | Checks that controller's signal before logging first request and aborting; no new shared reason flag. |
+| Stage and counts          | Inside one `scanTarget` call     | Last continuation of that call                  | Never carried into retry; settled callbacks do not update counts.                                     |
+| Existing settlement guard | Existing scan entry              | Existing scan lifetime                          | Remains sole authority for winner and cleanup; diagnostics do not replace it.                         |
 
 Pass Cancel's origin through the existing teardown call as an explicit
 internal argument, defaulting to `teardown` for the effect cleanup.
@@ -142,7 +145,15 @@ Cancel; unmount; background plus retry; repeated native tag callbacks;
 no-advertisement timeout; setup-stage timeout; first abort wins;
 late A completion after B starts; unknown plugin error redaction;
 cleanup rejection and cleanup deadline; late scan-start acknowledgement;
-early matching callback before scan-start acknowledgement; no trace.
+early matching callback before scan-start acknowledgement; no trace;
+shared initialization stalled across retry; manual discovery after an
+interrupted attempt; manual refusal after explicit cleanup poison.
+
+The late-acknowledgement gates retain the installed BleClient queue around
+start and stop. After abort, the decision is recorded while stop and the
+hook result still wait. Start release permits late acknowledgement and
+cleanup; holding it past the cleanup deadline produces cleanup failure.
+A synthetic stop-before-start-resolution ordering cannot prove this path.
 
 At the transport level, feed absent-name, different-name, invalid, duplicate
 and exact-name callbacks and independently assert the counters and outcome.

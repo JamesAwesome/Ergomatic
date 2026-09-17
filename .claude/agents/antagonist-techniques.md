@@ -792,3 +792,15 @@ is exactly what happened: every section in this file stopped growing on
     `.next` and `node_modules` publicly passed after silently shrinking scope
     (6b25b70e). Check membership before bodies, not mutant-report counts:
     a valid source may genuinely contain no mutatable expressions.
+
+80. **An async plugin mock can erase the queue that decides which outcomes
+    are reachable.** Trace start and cleanup through the installed wrapper,
+    then hold start under its real queue: successful stop cannot overtake it,
+    while a cleanup deadline can. Gate both orders and distinguish the
+    settlement decision from the returned result; a biting mutation on an
+    impossible ordering proves only the injected case.
+81. **Missing error metadata is not success, and a typed object lookup is
+    not a closed dictionary.** Separate absence of the error from absence of
+    its name; test undefined, empty, arbitrary and prototype-key names at
+    the rejection boundary, then assert the exported vocabulary. Synthetic
+    inputs prove classifier robustness, not an observed native incident.
