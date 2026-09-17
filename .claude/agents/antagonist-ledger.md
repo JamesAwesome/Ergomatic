@@ -11490,3 +11490,35 @@ A matched result waits for foreground without rescanning. No hardware behavior
 or test execution was established by this review; pre-registration transitions
 remain outside the guarantee. See the approved follow-up brief in
 `docs/superpowers/plans/2026-09-17-nfc-scan-diagnostics/execution.md`.
+
+## 2026-09-17 — Targeted discovery ownership delta
+
+- **Falsified:** moving scan failure mapping into the owner preserves behavior
+  while listener removal remains a bare `finally` call. A throwing unsubscribe
+  overrode a successful return, bypassed the owner's targeted classifier, left
+  the trace unpublished and skipped current-operation clearing. Cleanup now
+  settles before terminal mapping/publication, with identity clearing in an
+  outermost `finally`; the direct gate drives a successful scan through a
+  throwing unsubscribe and then proves cancellation cannot reach the settled
+  pass (technique 83).
+- **Falsified:** an event listener supplies current foreground state. The owner
+  starts optimistic and learns only from transitions observed after
+  registration; native events are not retained and the production web arm is
+  deliberately silent. The preserved guarantee is limited to an observed
+  background transition and its matching observed foreground transition.
+- **Falsified:** a push before the implementation commit validates the review
+  head. The plan now orders local gates, commit, full-hook push and an exact
+  `headSha`/successful-conclusion comparison.
+- **Falsified:** a module-level error literal is safe to return repeatedly.
+  `ConnectedError` is mutable, so one caller could alter later refusal results;
+  the owner now mints the released `transport-missing` value per refusal and a
+  direct test mutates the first result before reading the second.
+- **Falsified:** unit/client and hosted browser CI alone satisfy this
+  `app/src/` refactor's gate. The plan had omitted the required named local
+  browser run; it now drives both shipped NFC describes before commit/push.
+- **Attacked and held:** object identity distinguishes late A from current B;
+  separate outer/pass controllers and exact interrupted-signal identity admit
+  one recovery; native FIFO and poison remain module-scoped; the direct test's
+  identity mutation bites; and the NFC diagnostic test crosses the real tag
+  producer into the real hook/owner. Desk evidence establishes application
+  ordering, not the affected phone's radio state or the incident's cause.

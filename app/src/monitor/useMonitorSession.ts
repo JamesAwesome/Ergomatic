@@ -46,12 +46,9 @@
 import { APP_VERSION } from "../appVersion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
-import { isValidPm5AdvertisingName } from "../../domain/monitor/nfc.js";
 import { newUuidV4 } from "./uuidV4";
 import type { ConnectionAttemptTrace } from "./nfc/connectionAttemptTrace";
-import { scanWithForegroundRecovery } from "./nfc/scanWithForegroundRecovery";
 import {
-  hasTargetedScan,
   isValidAttemptId,
   type ConnectionAttemptId,
   type DiscoveredMonitor,
@@ -68,8 +65,10 @@ import {
   ProgramBusyError,
   ProgramRejectionError,
   type DriverOptions,
-  type ProgramRejectionReason,
 } from "./driver";
+import { mapRadioFailure, type ConnectedError } from "./connectionFailure";
+import { createTargetedDiscoveryOwner } from "./targetedDiscovery";
+export type { ConnectedError } from "./connectionFailure";
 import {
   createEventLog,
   type MonitorEventLog,
@@ -220,37 +219,6 @@ function unsupportedMachineDetail(machine: UnsupportedMachine): string {
   const name =
     machine === "ski" ? "SkiErg" : machine === "bike" ? "BikeErg" : "Dyno";
   return `Erg type not supported\nThis monitor is on a ${name}. Nothing here will start.`;
-}
-
-export interface ConnectedError {
-  reason:
-    | ProgramRejectionReason
-    | "busy"
-    | "bluetooth-off"
-    | "link-failed"
-    | "transport-missing"
-    | "scan-dismissed"
-    | "permission-denied"
-    // Phase NF (design spec 2026-09-03 §5): the five TARGETED discovery
-    // failures. Lookup/cleanup failures, never machine refusals; each
-    // carries its approved copy in `detail` and none inherits the generic
-    // "End whatever is showing…" sentence.
-    | "target-not-advertising"
-    | "target-already-connected"
-    | "target-ambiguous"
-    | "target-interrupted"
-    | "scan-cleanup-failed"
-    // Phase MT: the monitor decoded perfectly and told us it is on a machine
-    // this app does not record. NOT a lookup or radio failure like the five
-    // above, and NOT the PM5 refusing our workout like the seven
-    // `ProgramRejectionReason` values — it is US refusing the machine, which
-    // is why `ConnectedInterstitial.tsx`'s `NOT_A_MACHINE_REFUSAL` marks it
-    // `true` and the "End whatever is showing on the monitor" line is
-    // suppressed. There is nothing on the monitor to end; we already
-    // terminated it.
-    | "unsupported-machine";
-  detail: string;
-  raw?: string;
 }
 
 /** Which side of the record a run's `title`/`workoutId` come from. The
@@ -1658,140 +1626,6 @@ function mapProgramFailure(err: unknown): ConnectedError {
   };
 }
 
-/** A `scan()`/`connect()` failure, sorted into the things it can actually
- *  be. The Capacitor transport pre-translates its own failures to NAMES
- *  (`BluetoothPermissionError`, `ScanTimeoutError`) before they ever reach
- *  this function, so only web-transport prose ever reaches the regexes
- *  below — the two name checks are what let a native rejection skip that
- *  prose matching entirely. A dismissed picker is the ORDINARY outcome (the
- *  rower changed their mind), and both adapters surface it as a
- *  `NotFoundError`-shaped rejection — Web Bluetooth's "User cancelled the
- *  requestDevice() chooser", the Capacitor client's own cancellation. The
- *  same `NotFoundError` name is ALSO what Chrome uses when the ADAPTER is
- *  unavailable, so the message is what separates those two.
- *
- *  Everything else is `"link-failed"`, not `"bluetooth-off"` (task-4
- *  review, MEDIUM-4): a `connect()` that throws after the rower already
- *  picked a device is a failure of THAT LINK, and telling them to check a
- *  Bluetooth stack that just produced a working picker is advice for a
- *  problem they do not have. `"bluetooth-off"` is reserved for the branch
- *  the `unavailable` test isolates, where "turn Bluetooth on" is the real
- *  remedy. */
-function mapRadioFailure(err: unknown): ConnectedError {
-  const message = err instanceof Error ? err.message : String(err);
-  const name = err instanceof Error ? err.name : "";
-  // Phase NF (hardening lens 2): a POISONED operation tail rejects the
-  // manual picker's `scan()` with the same named error the targeted path
-  // maps to the restart-required copy; it must not fall through to
-  // `link-failed` with a live Try again that fails identically forever.
-  if (name === "ScanCleanupFailedError") {
-    return { ...TARGETED_FAILURE_COPY.ScanCleanupFailedError!, raw: message };
-  }
-  // ORDERING PIN: these two name checks come BEFORE the message-regex arms
-  // below on purpose. A `BluetoothPermissionError`'s message can itself
-  // match the `unavailable` regex (a plugin whose denied-permission string
-  // happens to mention the adapter) — the name is what the Capacitor
-  // transport deliberately set, and it must win over prose sniffing.
-  if (name === "BluetoothPermissionError") {
-    return {
-      reason: "permission-denied",
-      detail:
-        "Ergomatic can't reach your monitor without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
-      raw: message,
-    };
-  }
-  if (name === "ScanTimeoutError") {
-    return {
-      reason: "scan-dismissed",
-      detail: "The search took too long. Try again.",
-      raw: message,
-    };
-  }
-  const unavailable =
-    /adapter|not enabled|not available|unavailable|disabled|powered off|turned off/i.test(
-      message,
-    );
-  if (unavailable) {
-    return {
-      reason: "bluetooth-off",
-      detail: "Bluetooth isn't available.",
-      raw: message,
-    };
-  }
-  if (name === "NotFoundError" || /cancel/i.test(message)) {
-    return {
-      reason: "scan-dismissed",
-      detail: "No monitor was picked.",
-      raw: message,
-    };
-  }
-  return {
-    reason: "link-failed",
-    detail: "The link to the monitor failed.",
-    raw: message,
-  };
-}
-
-/** Phase NF (design spec 2026-09-03 §5): the targeted failures travel by
- *  NAME from `capacitorBle.ts` (and the fake/replay, which throw the same
- *  names) and map here onto the approved copy — independent literals a
- *  test pins one by one. An invalid request or a transport without the
- *  capability is `transport-missing`: honest (no targeted transport) and
- *  already-approved copy. Anything else falls through to the radio mapper. */
-const TARGETED_FAILURE_COPY: Readonly<
-  Record<string, { reason: ConnectedError["reason"]; detail: string }>
-> = {
-  TargetAlreadyConnectedError: {
-    reason: "target-already-connected",
-    detail: "End the monitor's current connection, then try again.",
-  },
-  TargetMonitorAmbiguousError: {
-    reason: "target-ambiguous",
-    detail: "More than one PM5 has this name. Use Connect.",
-  },
-  TargetScanInterruptedError: {
-    reason: "target-interrupted",
-    detail: "Connection interrupted. Try again.",
-  },
-  ScanCleanupFailedError: {
-    reason: "scan-cleanup-failed",
-    detail: "Bluetooth cleanup failed. Restart Ergomatic before trying again.",
-  },
-  // Unreachable from any product path (the detail screen mints the ID and
-  // the parser produced the name), kept fail-closed. Approved "stopped"
-  // copy rather than a false claim about the transport (review NIT).
-  TargetedRequestInvalidError: {
-    reason: "target-interrupted",
-    detail: "Connection interrupted. Try again.",
-  },
-};
-
-/** The not-advertising card's two lines, separated by `\n` — every failure
- *  card that renders `detail` splits on it (the interstitial, Just Row).
- *  Built from the request's exact name (follow-on Gate 0, James
- *  2026-09-06: the PM5 advertises whenever it is awake and not already
- *  connected, on any screen, so the old "Open Connect Device" instruction
- *  asked for something the rower does not need to do). Not exported: no
- *  test may import the string it exists to pin (RF21). */
-function notAdvertisingDetail(exactName: string): string {
-  return `Couldn't reach ${exactName}.\nCheck nothing else is connected to it, then try again.`;
-}
-
-function mapTargetedFailure(err: unknown, exactName: string): ConnectedError {
-  const name = err instanceof Error ? err.name : "";
-  const raw = err instanceof Error ? err.message : String(err);
-  if (name === "TargetMonitorNotAdvertisingError") {
-    return {
-      reason: "target-not-advertising",
-      detail: notAdvertisingDetail(exactName),
-      raw,
-    };
-  }
-  const hit = TARGETED_FAILURE_COPY[name];
-  if (hit !== undefined) return { ...hit, raw };
-  return mapRadioFailure(err);
-}
-
 /** Phase NF: mints a `ConnectionAttemptId` for a zero-argument `connect()`
  *  (JustRow's callers). The detail screen mints its own at the press and
  *  passes it in a request; both use the same generator as the session id. */
@@ -2315,16 +2149,6 @@ export function useMonitorSession(
    *  entry (`null` for a manual attempt, so a stale NFC trace can never
    *  shadow a picker attempt's export), cleared by the ring-prefix copy. */
   const attemptTraceRef = useRef<ConnectionAttemptTrace | null>(null);
-  /** Phase NF: the abort owner of an in-flight targeted scan, paired with
-   *  its attempt ID. Cleared ONLY by object-identity comparison in the
-   *  scan's own `finally`, so a late-settling attempt A can never clear
-   *  attempt B's controller. `cancel()` and `teardown()` abort it, including a foreground wait.
-   *  Backgrounding aborts only the current pass inside the recovery helper. */
-  const targetedAbortRef = useRef<{
-    attemptId: ConnectionAttemptId;
-    controller: AbortController;
-    abort(source: "cancel" | "teardown"): void;
-  } | null>(null);
   /** WHICH connect attempt owns the flow. Bumped at the top of every
    *  `connect()` and again by `cancel()`, so an attempt can ask whether it
    *  is still the current one after each of its awaits.
@@ -2349,6 +2173,10 @@ export function useMonitorSession(
    *  newer attempt's `connectingRef` claim is never cleared by an older
    *  one's `finally`. */
   const attemptRef = useRef(0);
+  /** The complete pre-GATT targeted operation. It owns its current
+   *  controller, foreground recovery and diagnostic lifetime. This hook owns
+   *  the wider connect epoch and reads the result before allowing GATT. */
+  const [targetedDiscovery] = useState(createTargetedDiscoveryOwner);
   /** Phase LT spec 2, Task 2. This session's own in-memory `SeriesRecorder`
    *  (Task 1) — created at the exact moment `runRef` opens (the ready ->
    *  live promotion in `handleFrame` below), fed every live frame, stopped
@@ -4483,9 +4311,11 @@ export function useMonitorSession(
       // supersede itself. `cancel()` bumping and then calling `teardown`
       // bumps twice, which a counter does not care about.
       attemptRef.current += 1;
-      // Phase NF: an in-flight targeted scan is aborted synchronously here
-      // too — an unmount mid-scan must stop the radio, not only the driver.
-      targetedAbortRef.current?.abort(source);
+      // Phase NF: an in-flight targeted discovery is cancelled synchronously
+      // here too — an unmount mid-scan must stop the radio, not only the
+      // driver. The owner retains object-identity cleanup, so late A cannot
+      // clear or redirect B.
+      targetedDiscovery.cancel(source);
       // Resolved FIRST — every step below needs the same driver, and
       // clearing `driverRef` here (rather than after stash/unsubscribe, as
       // this used to) is a pure reordering: a re-entrant teardown
@@ -5054,7 +4884,7 @@ export function useMonitorSession(
       stash();
       unsubscribeAndDisconnect();
     },
-    [releaseHandoff, stopSeriesFlush, nowDate],
+    [releaseHandoff, stopSeriesFlush, nowDate, targetedDiscovery],
   );
 
   const fail = useCallback(
@@ -5328,80 +5158,30 @@ export function useMonitorSession(
         // never sees a list (C2, as revised by phone-BLE §3).
         let found: DiscoveredMonitor[];
         if (discovery.kind === "advertised-name") {
-          // Phase NF (design spec 2026-09-03 §5): NO fallback from
-          // `scanTarget` to `scan()`. A transport without the capability
-          // fails closed before any picker or radio call.
-          // Runtime validation BEFORE any radio call (spec §5): a request
-          // that is not a minted UUID plus a PM5 advertising name is not a
-          // targeted request at all.
-          if (
-            !isValidAttemptId(discovery.attemptId) ||
-            !isValidPm5AdvertisingName(discovery.exactName) ||
-            !hasTargetedScan(transport)
-          ) {
-            connectingRef.current = false;
-            fail({
-              reason: "transport-missing",
-              detail: "This device has no Bluetooth transport.",
-            });
-            bestEffort(transport.disconnect());
-            return;
-          }
-          const controller = new AbortController();
-          // Capture this invocation, not the mutable current-attempt slot:
-          // cleanup and native acknowledgements can arrive after a retry.
-          const scanTrace: ConnectionAttemptTrace | undefined =
-            trace === undefined
-              ? undefined
-              : {
-                  ...trace,
-                  record: (kind, detail) =>
-                    trace.record(
-                      kind,
-                      `connect=${attempt}${detail === undefined ? "" : ` ${detail}`}`,
-                    ),
-                };
-          let cancelSource: "cancel" | "teardown" = "cancel";
-          targetedAbortRef.current = {
-            attemptId: discovery.attemptId,
-            controller,
-            abort: (source) => {
-              if (controller.signal.aborted) return;
-              cancelSource = source;
-              controller.abort();
-            },
-          };
-          try {
-            found = await scanWithForegroundRecovery({
-              signal: controller.signal,
-              cancelSource: () => cancelSource,
-              register:
-                depsRef.current.registerAppLifecycleListener ??
-                registerAppLifecycleListener,
-              scan: (signal, passTrace) =>
-                transport.scanTarget(discovery, signal, passTrace),
-              trace: scanTrace,
-              finished: (passTrace, error) =>
-                passTrace?.record(
-                  "ble-scan-finished",
-                  `outcome=${error === undefined ? "matched" : (mapTargetedFailure(error.value, discovery.exactName).reason ?? "link-failed")} superseded=${superseded()}`,
-                ),
-            });
-          } catch (err: unknown) {
-            trace?.complete();
+          const result = await targetedDiscovery.discover({
+            transport,
+            request: discovery,
+            trace,
+            attempt: { ordinal: attempt, isSuperseded: superseded },
+            registerLifecycle:
+              depsRef.current.registerAppLifecycleListener ??
+              registerAppLifecycleListener,
+          });
+          if (result.kind === "failed") {
+            // The owner reads the same whole-connect epoch only for its
+            // terminal diagnostic. This hook remains authoritative for
+            // whether the transport it created may publish a failure or
+            // proceed into GATT.
             if (superseded()) {
               bestEffort(transport.disconnect());
               return;
             }
             connectingRef.current = false;
-            fail(mapTargetedFailure(err, discovery.exactName));
+            fail(result.error);
             bestEffort(transport.disconnect());
             return;
-          } finally {
-            if (targetedAbortRef.current?.controller === controller) {
-              targetedAbortRef.current = null;
-            }
           }
+          found = result.monitors;
         } else {
           found = await transport.scan();
         }
@@ -5886,7 +5666,7 @@ export function useMonitorSession(
         if (!superseded()) connectingRef.current = false;
       }
     },
-    [fail, handleEvent, update, mintSessionId, nowDate],
+    [fail, handleEvent, update, mintSessionId, nowDate, targetedDiscovery],
   );
 
   /**

@@ -87,23 +87,28 @@ export interface TargetedDiscoveryOwner {
     transport: Transport;
     request: TargetedMonitorDiscoveryRequest;
     trace?: ConnectionAttemptTrace;
+    attempt: {
+      ordinal: number;
+      isSuperseded(): boolean;
+    };
+    registerLifecycle(
+      callback: AppLifecycleCallback,
+    ): AppLifecycleUnsubscribe | Promise<AppLifecycleUnsubscribe>;
   }): Promise<TargetedDiscoveryResult>;
   cancel(source: TargetedDiscoveryCancelSource): void;
 }
 
-export function createTargetedDiscoveryOwner(deps: {
-  registerLifecycle(
-    callback: AppLifecycleCallback,
-  ): AppLifecycleUnsubscribe | Promise<AppLifecycleUnsubscribe>;
-  readConnectEpoch(): number;
-}): TargetedDiscoveryOwner;
+export function createTargetedDiscoveryOwner(): TargetedDiscoveryOwner;
 ```
 
-The caller creates one owner for the hook lifetime. `readConnectEpoch` reads the
-existing `attemptRef`; the module never increments it. `discover` captures that
-value as the existing `connect=N` ordinal and compares it again only for the
-existing `superseded=true|false` diagnostic. The session hook remains the sole
-authority for whether a result may advance to GATT.
+The caller creates one owner for the hook lifetime. Each accepted `discover`
+call supplies its immutable connect ordinal, a reader for the existing
+whole-connect supersession predicate, and the current lifecycle registrar.
+The owner never increments the epoch. It records the ordinal as the existing
+`connect=N` diagnostic and reads supersession only for the existing terminal
+diagnostic. Keeping these values on the operation avoids reading React refs
+during owner construction while the session hook remains the sole authority
+for whether a result may advance to GATT.
 
 `cancel` synchronously claims the current operation's first explicit source,
 aborts its active pass and wakes a foreground wait. It is a no-op with no active
@@ -115,6 +120,11 @@ their captured trace even after the higher operation settles.
 failure. It does not mutate UI state or dispose the transport. The hook handles
 the returned union, repeats its existing whole-connect supersession check, and
 owns `fail(...)` plus `transport.disconnect()`.
+
+Lifecycle listener removal is part of operation settlement. If removal throws,
+that error replaces the pending scan result exactly as it did through the
+released helper: the owner maps it through targeted failure policy, completes a
+failed trace, and clears current-operation identity in an outermost `finally`.
 
 ## Failure vocabulary
 
@@ -152,8 +162,10 @@ The refactor preserves these released invariants:
    eligible after the transport returns the interruption tied to that pass's
    exact signal and confirms cleanup
    (`app/src/monitor/nfc/scanWithForegroundRecovery.ts:77-113`).
-5. A match that wins before backgrounding is retained, but GATT waits for
-   current foreground readiness
+5. A match that wins before an observed background transition is retained,
+   but it waits for a matching observed foreground transition before the
+   owner returns it to the GATT path. The listener is not a current-state
+   read: a transition before registration is outside this released guarantee
    (`app/src/monitor/nfc/scanWithForegroundRecovery.ts:115-119`).
 6. Cleanup failure outranks an earlier match. The native adapter continues to
    settle only after bounded `stopLEScan()` cleanup
@@ -165,27 +177,30 @@ The refactor preserves these released invariants:
    Discovery success does not complete it; the hook copies it into the new
    session log and completes it only after GATT succeeds
    (`useMonitorSession.ts:5441-5453`).
-9. The hook still disposes a transport built by a superseded or failed attempt.
-   The owner never touches GATT, driver creation, session/log identity,
-   programming, stored authorization or UI state.
-10. The Capacitor adapter keeps its module-scoped initialization, FIFO and
+9. Lifecycle cleanup settles before terminal mapping and trace publication.
+   Cleanup failure may replace a pending match or scan failure, but it cannot
+   escape the owner's result union or skip identity cleanup.
+10. The hook still disposes a transport built by a superseded or failed attempt.
+    The owner never touches GATT, driver creation, session/log identity,
+    programming, stored authorization or UI state.
+11. The Capacitor adapter keeps its module-scoped initialization, FIFO and
     poison state, as well as scan-local deadline, collision and cleanup logic.
 
 ## Ownership and lifetimes
 
-| Value | Owner after this refactor | Created | Ends / survives |
-| --- | --- | --- | --- |
-| `connectingRef` | session hook | accepted `connect()` | current attempt finalization or Cancel; spans discovery and GATT |
-| whole-connect epoch | session hook | hook mount; incremented by connect, Cancel and teardown | hook lifetime; targeted discovery reads but never writes |
-| request attempt ID | session hook | accepted request | existing keyed authorization lifetime; unchanged |
-| original NFC trace | session hook | NFC entry | failed-attempt export or successful GATT prefix transfer; unchanged |
-| current targeted operation | targeted-discovery owner | targeted `discover()` entry | identity-guarded settlement; a later operation cannot be cleared by an earlier one |
-| cancel source | targeted-discovery operation | defaults to Cancel semantics at operation entry | first explicit Cancel/teardown wins; operation lifetime only |
-| connect/pass trace views | targeted-discovery operation | operation/pass entry | closures retain the original trace and ordinal through late native callbacks |
-| foreground, recovery pass, wake and lifecycle unsubscribe | targeted-discovery operation | operation entry / lifecycle registration | operation `finally`; no state survives return |
-| native scan state | Capacitor adapter | each `scanTarget` call | native settle and drain |
-| native FIFO and poison | Capacitor module | module initialization / cleanup failure | process/module lifetime; survives screens and transport instances |
-| logical session and log | session hook | successful GATT | existing session teardown/replacement rules |
+| Value                                                     | Owner after this refactor    | Created                                                 | Ends / survives                                                                    |
+| --------------------------------------------------------- | ---------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `connectingRef`                                           | session hook                 | accepted `connect()`                                    | current attempt finalization or Cancel; spans discovery and GATT                   |
+| whole-connect epoch                                       | session hook                 | hook mount; incremented by connect, Cancel and teardown | hook lifetime; targeted discovery reads but never writes                           |
+| request attempt ID                                        | session hook                 | accepted request                                        | existing keyed authorization lifetime; unchanged                                   |
+| original NFC trace                                        | session hook                 | NFC entry                                               | failed-attempt export or successful GATT prefix transfer; unchanged                |
+| current targeted operation                                | targeted-discovery owner     | targeted `discover()` entry                             | identity-guarded settlement; a later operation cannot be cleared by an earlier one |
+| cancel source                                             | targeted-discovery operation | defaults to Cancel semantics at operation entry         | first explicit Cancel/teardown wins; operation lifetime only                       |
+| connect/pass trace views                                  | targeted-discovery operation | operation/pass entry                                    | closures retain the original trace and ordinal through late native callbacks       |
+| foreground, recovery pass, wake and lifecycle unsubscribe | targeted-discovery operation | operation entry / lifecycle registration                | operation `finally`; no state survives return                                      |
+| native scan state                                         | Capacitor adapter            | each `scanTarget` call                                  | native settle and drain                                                            |
+| native FIFO and poison                                    | Capacitor module             | module initialization / cleanup failure                 | process/module lifetime; survives screens and transport instances                  |
+| logical session and log                                   | session hook                 | successful GATT                                         | existing session teardown/replacement rules                                        |
 
 ## File shape
 
@@ -211,10 +226,13 @@ The refactor preserves these released invariants:
 Implementation is test-first. The first new interface test must fail because
 the owner does not exist, then prove that synchronous cancellation aborts its
 current operation and that late A settlement cannot clear or relabel B. Further
-owner-interface tests cover invalid request/capability refusal, lifecycle
-registration failure, one foreground recovery, a retained hidden match,
-current-foreground revocation, cleanup failure, terminal mapping and omitted
-trace behavior.
+behavior remains gated through the production caller: invalid
+request/capability refusal, lifecycle registration failure, one foreground
+recovery, a retained hidden match, current-foreground revocation, cleanup
+failure, terminal mapping and omitted-trace behavior. Those tests cross the
+same owner interface from `useMonitorSession`; duplicating each with a second
+fake transport at the direct seam would mirror the implementation without
+adding an independent observable.
 
 Existing integration tests remain the higher-level evidence for real native
 plugin callbacks, installed queue ordering, exported trace contents, manual
