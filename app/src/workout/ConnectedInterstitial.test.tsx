@@ -1861,7 +1861,7 @@ describe("phase disconnected — the fall-through this task closes", () => {
     // Reuses state 6's own element/copy (no ConnectedError exists for a
     // raw phase-level drop, so `LINK_LOST_NO_RUN_ERROR` stands in) — the
     // same serif line a connect-time link failure already shows a rower
-    // today (`useMonitorSession.ts`'s `mapRadioFailure` fallback).
+    // today (`connectionFailure.ts`'s `mapRadioFailure` fallback).
     expect(
       screen.getByText("The link to the monitor failed.", {
         selector: ".connected-serif-line",

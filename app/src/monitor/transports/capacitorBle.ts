@@ -159,7 +159,7 @@ export const TARGET_COLLISION_WINDOW_MS = 1_000;
 // Recorded here rather than in a PR body (RF14) so the next anonymise-the-PM5
 // sweep does not have to re-litigate it.
 //
-// They are NOT diagnostics that stop at a log. `useMonitorSession.ts`'s
+// They are NOT diagnostics that stop at a log. `connectionFailure.ts`'s
 // `mapTargetedFailure` copies each into `ConnectedError.raw`, and the failure
 // screen renders `raw` for every reason except `unsupported-machine`
 // (`ConnectedInterstitial.tsx`'s detail panel) — so an NFC scan that finds

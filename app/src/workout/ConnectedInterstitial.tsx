@@ -43,10 +43,10 @@ import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 import { saveLastDevice } from "../monitor/lastDevice";
 import { loadReadyCard } from "../you/readyCard";
 
-/** Every reason that is NOT the machine actively refusing a workout — the
- *  six that are OURS (about the phone/radio side, never the PM5's own
+/** Every reason that is NOT the machine actively refusing a workout — those
+ *  that are OURS (about the phone/radio side, never the PM5's own
  *  vocabulary — `ConnectedError`'s own doc comment in
- *  `useMonitorSession.ts`), plus `"disconnected"` (task-5 review, MEDIUM-7):
+ *  `connectionFailure.ts`), plus `"disconnected"` (task-5 review, MEDIUM-7):
  *  it IS one of the eight `ProgramRejectionReason` values, but it says the
  *  LINK died mid-conversation, not that the PM5 looked at the workout and
  *  said no — rendering "The monitor wouldn't take it" for a link that
@@ -92,9 +92,9 @@ const NOT_A_MACHINE_REFUSAL: Record<ConnectedError["reason"], boolean> = {
 
 /** `detail` is documented as copy-ready prose (`ConnectedError`'s own doc
  *  comment) for exactly this reason: reusing it here, rather than
- *  authoring six near-duplicate serif lines, is also what keeps
+ *  authoring near-duplicate serif lines, is also what keeps
  *  `link-failed`'s copy from ever drifting back onto `bluetooth-off`'s by
- *  accident — the two mappers in `useMonitorSession.ts` already write
+ *  accident — the classifiers in `connectionFailure.ts` already write
  *  different prose for the two tags (task-4 review MEDIUM-4's own
  *  finding), so keying off `detail` inherits that distinction rather than
  *  re-deriving it. `permission-denied` gets its own fixed title (spec §7) —
@@ -139,7 +139,7 @@ function detailIsAlreadyOnScreen(error: ConnectedError): boolean {
  *  so there is no `ConnectedError` this raw link drop ever produces. Reused
  *  rather than invented (house rule: new user-facing strings need James's
  *  eyes) — `detail` is `mapRadioFailure`'s own EXISTING fallback text for a
- *  connect-time link failure (`useMonitorSession.ts`'s `link-failed` case),
+ *  connect-time link failure (`connectionFailure.ts`'s `link-failed` case),
  *  already shown to a rower today; it says only that the link failed, with
  *  no claim about which step was interrupted (unlike `driver.ts`'s
  *  `REJECTION_VERBS.disconnected`, "…before completing", which is

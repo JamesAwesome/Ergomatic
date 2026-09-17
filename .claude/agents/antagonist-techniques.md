@@ -811,3 +811,10 @@ is exactly what happened: every section in this file stopped growing on
     partial registration and distinguish an aborted pass from cancellation
     of the containing operation. Returned abort identity, not a lifecycle
     flag or shared error name, determines whether retry is warranted.
+83. **A throwing cleanup in `finally` can skip the ownership clear and escape
+    a closed result union.** Put fallible listener removal inside the
+    operation's settlement model and keep identity clearing in an outermost
+    `finally`. Gate the success-plus-throw case: require terminal mapping and
+    trace publication, then prove a later cancel cannot target the settled
+    operation. Comparing only the main async body misses the cleanup channel
+    that overrides its return.
