@@ -228,3 +228,9 @@ The scoped Compose stack, network and pgdata volume were removed afterward.
 
 Hosted CI must certify the published head; older diagnostics-only green runs
 do not certify this behavior change.
+
+The normal push hook for `839b9d28` passed 2,702 tests in four exact batches,
+receipt `2552a034-923b-4e6f-9ce8-7ffc6d809fa6`, with no signal and verified
+cleanup. A final record-only follow-up marks the original spec/plan constraints
+as historical; app and test bytes remain unchanged. Hosted run results belong
+to their exact GitHub head and are reconciled in the PR before delivery.

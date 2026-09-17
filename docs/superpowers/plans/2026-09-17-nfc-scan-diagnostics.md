@@ -1,5 +1,13 @@
 # NFC scan diagnostics implementation plan
 
+**Scope record:** This document preserves the original diagnostics-only
+implementation through `f0a3e4fe`. James subsequently approved move-away copy
+and one foreground recovery in the same PR. The [approved follow-up](2026-09-17-nfc-scan-diagnostics/execution.md#approved-follow-up-move-away-guidance-and-foreground-recovery)
+supersedes this document's no-automatic-retry and unchanged-scan-policy
+constraints and records the new lifetime contract and validation. The original
+prescription and its evidence below remain historical, not the current full
+PR scope.
+
 > For agentic workers: use `superpowers:executing-plans` for inline execution
 > after design review; the repository requires independent code review.
 
