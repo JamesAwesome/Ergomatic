@@ -28,9 +28,10 @@ import type { ProgramRejectionReason } from "./driver";
  *   `InvalidStateError`), a `connect()` that throws for a reason no adapter
  *   documents. Without this member all of those collapsed onto
  *   `"bluetooth-off"` and rendered "check Bluetooth" at a rower whose
- *   Bluetooth is demonstrably ON — the review found the argument inside
- *   this very file: the two mappers below already wrote DIFFERENT prose for
- *   the same tag, so the code did not itself believe they were one failure.
+ *   Bluetooth is demonstrably ON — the review found the argument split
+ *   between `useMonitorSession.ts`'s `mapProgramFailure` and
+ *   `mapRadioFailure` below: both produce this tag with step-specific prose,
+ *   so the code did not itself believe these were one failure.
  *   Task 5's copy keys on `reason`, so the tag is what a rower actually
  *   reads. The remedy differs too: try again / wake the monitor, not
  *   "turn something on".

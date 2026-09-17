@@ -693,8 +693,8 @@ export function applyContinuityCheck(
  * Wrapped in its own `try`/`catch` (no runtime is documented to throw
  * synchronously here, but a throw would otherwise escape into `connect()`'s
  * own surrounding catch and get mis-reported as a radio failure — the exact
- * kind of wrong-layer error this file's `mapRadioFailure` exists to sort,
- * not extend to an unrelated API).
+ * kind of wrong-layer error `connectionFailure.ts`'s `mapRadioFailure` exists
+ * to sort, not extend to an unrelated API).
  */
 function requestStoragePersistence(log: MonitorEventLog): void {
   try {

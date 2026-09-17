@@ -24,20 +24,28 @@ count, stored shape, authentication rule or platform permission.
   subscriptions from `getState()`. On iOS, `pause` follows
   `UIApplication.didEnterBackgroundNotification` and `resume` follows
   `UIApplication.willEnterForegroundNotification`. The released wrapper in
-  `app/src/native/appLifecycle.ts` subscribes to those transitions; targeted
-  discovery does not read or infer the current app state.
+  `app/src/native/appLifecycle.ts:38-57` subscribes to those transitions. The
+  targeted owner updates foreground state only inside that supplied event
+  callback (`app/src/monitor/targetedDiscovery.ts:138-144`); it does not read
+  or infer current app state.
 - **PRIMARY — Apple Core Bluetooth:**
   [`scanForPeripherals(withServices:options:)`](<https://developer.apple.com/documentation/corebluetooth/cbcentralmanager/scanforperipherals(withservices:options:)>)
   discovers advertising peripherals. Apple's background-processing rules
   require the Bluetooth central background mode and service-filtered scans
   for background discovery. This app declares no `UIBackgroundModes` or
-  `bluetooth-central` entry in `app/ios/App/App/Info.plist`, so this refactor
-  does not claim that a targeted scan continues in the background.
-- **REPO PRIMARY:** `app/src/native/appLifecycle.ts` records the installed
-  `@capacitor/app@8.1.1` definitions beside the wrapper, and
-  `app/src/monitor/transports/capacitorBle.ts` owns native scan settlement,
-  cleanup, FIFO and poison. The owner calls those existing seams without
-  adding an OS API, dependency, permission or minimum-iOS requirement.
+  `bluetooth-central` entry: `/usr/libexec/PlistBuddy -c 'Print
+  :UIBackgroundModes' app/ios/App/App/Info.plist` reports `Entry,
+  ":UIBackgroundModes", Does Not Exist` against the complete dictionary at
+  `app/ios/App/App/Info.plist:4-77`. This refactor therefore does not claim
+  that a targeted scan continues in the background.
+- **REPO PRIMARY:** `app/src/native/appLifecycle.ts:13-57` records the
+  installed `@capacitor/app@8.1.1` definitions beside the wrapper. The
+  Capacitor adapter's module-scoped operation tail and poison are defined and
+  justified at `app/src/monitor/transports/capacitorBle.ts:234-267`, and its
+  targeted scan settles through native cleanup at
+  `app/src/monitor/transports/capacitorBle.ts:783-885`. The owner calls the
+  supplied lifecycle registrar and existing targeted transport seam at
+  `app/src/monitor/targetedDiscovery.ts:138-154`.
 - **SECONDARY — observed PM5 behavior:** the Phase NF follow-on research
   records James's repeated observation that an awake, unconnected PM5
   advertises on any screen and that NFC wakes it
