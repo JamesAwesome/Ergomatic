@@ -11522,3 +11522,56 @@ remain outside the guarantee. See the approved follow-up brief in
   identity mutation bites; and the NFC diagnostic test crosses the real tag
   producer into the real hook/owner. Desk evidence establishes application
   ordering, not the affected phone's radio state or the incident's cause.
+
+## 2026-09-17 — Connection-entry ownership spec, Lens 1 mechanism hardening
+
+**Verdict: NOT READY.** The opaque attempt is a deep seam, but its proposed
+state machine had no Cancel-drain generation and promised replacement after
+ownership had already transferred to the session.
+
+- **Claim:** fire-and-forget Cancel may return the door immediately because the
+  lifetime hook is a synchronous safety net.
+  **Why plausible:** `cancel()` clears `connectingRef` and claims `driverRef`
+  before its first await, which fixed duplicate termination.
+  **Settled by:** holding real-like PM5 termination pending in the existing
+  deferred-notification path and tracing the continuation. A new B passes the
+  `connectingRef`/`driverRef` guard; A then resumes through `teardown()`,
+  increments the shared epoch, cancels current targeted discovery, resets
+  session state and reads the mutable `attemptIdRef`, allowing A to discard B's
+  authorization. The entry owner must remain `draining` and busy until the
+  captured Cancel settles; B requires a fresh press. Technique 84.
+
+- **Claim:** `begin(B)` can abandon claimed A before B becomes current.
+  **Why plausible:** entry attempts have object identity and keyed store cleanup.
+  **Settled by:** following the authority beyond the entry object. Abandonment
+  does not cancel A's session radio, `session.connect(B)` returns at A's wider
+  guard, and `ConnectAction` stages B into the store's single global slot before
+  `begin(B)` runs. There is no production producer that needs replacement.
+  Refuse B while any A is resolving, claimed, retryable or draining; only a
+  future, evidenced pre-handoff producer may replace entry-owned NFC work.
+
+- **Claim:** the lifetime hook owns every true route loss.
+  **Why plausible:** the released mount lease handles StrictMode cleanup/setup
+  replay and genuine detach.
+  **Settled by:** walking claim-to-commit ordering. Ownership transfers inside
+  `onReady`, while the lifetime effect cannot mount until a later committed
+  render; owner unmount in that interval releases no lease. `useConnectionEntry`
+  needs its own identity-checked unmount backstop in addition to the conditional
+  surface hook.
+
+- **Claim:** the attempt is bound to one existing session and concurrent connect
+  calls share one promise.
+  **Why plausible:** both production doors pass their local `MonitorSession`.
+  **Settled by:** reading the public type and session guard. Each operation may
+  receive a different session, and duplicate `session.connect()` returns a
+  separate resolved async promise. Bind the stable `connect`/`cancel` callback
+  pair on first use and gate exact attempt-level promise identity.
+
+**Held under attack:** keyed take/discard is deterministic by attempt ID;
+request, trace and ID can remain immutable across retry; repeatable trace
+completion can republish an enlarged snapshot; the lifetime adapter is deep
+because callers declare only the UI boundary and receive neither IDs nor
+cleanup callbacks. The Web Bluetooth call topology remains appropriate, though
+the cited scanning-extension source was replaced by the normative
+`requestDevice()` algorithm. React's microtask lease is an explicitly tested
+heuristic, not a vendor guarantee.

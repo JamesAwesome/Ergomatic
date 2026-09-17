@@ -818,3 +818,11 @@ is exactly what happened: every section in this file stopped growing on
     trace publication, then prove a later cancel cannot target the settled
     operation. Comparing only the main async body misses the cleanup channel
     that overrides its return.
+84. **A fire-and-forget Cancel is a live generation until its last await
+    settles.** Hold the old Cancel at the real asynchronous device
+    acknowledgement, expose the connection door, try to start B, then release
+    A and inspect B's epoch, controller and keyed authorization. Clearing a
+    driver ref synchronously prevents duplicate teardown but does not stop A's
+    later cleanup from invalidating B through shared refs. Keep a drain barrier
+    through settlement; when user activation matters, refuse B and require a
+    fresh press rather than queueing it.
