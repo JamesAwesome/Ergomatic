@@ -26,6 +26,13 @@ James's report that the phone may have stayed on the tag is SECONDARY
 evidence. No phone movement, banner interaction or lifecycle transition
 was captured. These are not timed screenshots from a controlled experiment.
 
+Follow-up report from James during implementation, 2026-09-17: his wife
+thinks she tapped the popup the first time she saw it (SECONDARY; recollection,
+not a captured transition). This strengthens app switching/backgrounding as
+an explanation for the first interruption (INFERENCE, using the lifecycle
+path below). It does not establish what happened during the later failures
+or show that a persistent poisoned state was cleared by manual Bluetooth.
+
 ## Primary sources and what they establish
 
 1. [Apple: background tag reading](https://developer.apple.com/documentation/corenfc/adding-support-for-background-tag-reading),
