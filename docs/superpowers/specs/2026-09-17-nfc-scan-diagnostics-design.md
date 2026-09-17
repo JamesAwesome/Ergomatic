@@ -9,7 +9,7 @@ existing log cannot distinguish those from Cancel or screen teardown. Add
 diagnostics before changing the connection policy so the next real failure
 can answer the causal question.
 
-Status: implementation authorized; both hardening lenses are folded. The
+Status: implemented and independently reviewed; both hardening lenses are folded. The
 author-tested patch is applied in the isolated implementation worktree.
 [Execution evidence](../plans/2026-09-17-nfc-scan-diagnostics/execution.md)
 tracks validation and independent review. No release or installation is implied.

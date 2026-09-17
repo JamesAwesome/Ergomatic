@@ -18,7 +18,7 @@ Capgo NFC 8.2.5; pnpm, Vitest and Playwright. No dependency changes.
 
 **Research:** [Executed cases, source evidence and limits](../research/2026-09-17-nfc-scan-interruption/README.md).
 
-**Status:** Implementation in progress after James’s approval. Both hardening
+**Status:** Implemented and independently reviewed after James’s approval. Both hardening
 reviews are folded. The exact
 implementation and tests live in [implementation.patch](2026-09-17-nfc-scan-diagnostics/implementation.patch),
 a unified diff against `75e2c0a5` (product base `55c63d63`). The controller
@@ -175,10 +175,10 @@ post-cleanup authority.
 
 ## Task 3: Deliver evidence through the existing log
 
-- [ ] Exercise the new seam's exported JSON through `ConnectionLogSheet`;
+- [x] Exercise the new seam's exported JSON through `ConnectionLogSheet`;
       assert cause, invocation and terminal records render, and clipboard gets
       the exact exported string. Keep build metadata and pre-connection `atMs`.
-- [ ] Extend the existing fake-driven NFC flow in `e2e/connected.spec.ts`
+- [x] Extend the existing fake-driven NFC flow in `e2e/connected.spec.ts`
       for requested/finished markers and retry distinction. This browser gate
       validates hook/export/viewer wiring only: it cannot stand in for the real
       Capacitor transport's summary or the native event seam tests.
@@ -186,7 +186,7 @@ post-cleanup authority.
       read full e2e CI on the eventual PR's current head. Inspect per-file
       coverage for changed covered modules; acknowledge the existing native
       transport coverage exclusion and cite its direct tests instead.
-- [ ] Obtain independent Standards and Spec code reviews. No DBA or
+- [x] Obtain independent Standards and Spec code reviews. No DBA or
       number/storage/auth PM gate applies to this diagnostics-only scope. Apply
       full gates if the scope changes; hardware validation has its separate gate.
 - [ ] Open one reviewable PR with research limits and mutation evidence.
