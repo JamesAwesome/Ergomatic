@@ -15741,8 +15741,10 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
     // Published at the terminal, not only on success.
     expect(latestConnectionAttemptTrace()?.map((e) => e.kind)).toStrictEqual([
       "tag-event",
+      "ble-scan-requested",
       "ble-scan-started",
       "ble-scan-timed-out",
+      "ble-scan-finished",
     ]);
     // The failure screen's View connection log reads THIS, never "[]".
     const exported = parseLogExport(result.current.exportLog()).entries as {
@@ -15751,8 +15753,13 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
     }[];
     expect(exported.map((e) => [e.kind, e.detail])).toStrictEqual([
       ["nfc-attempt:tag-event", "seq 0"],
-      ["nfc-attempt:ble-scan-started", "seq 1"],
-      ["nfc-attempt:ble-scan-timed-out", "not advertising"],
+      ["nfc-attempt:ble-scan-requested", "connect=1"],
+      ["nfc-attempt:ble-scan-started", "connect=1"],
+      ["nfc-attempt:ble-scan-timed-out", "connect=1 not advertising"],
+      [
+        "nfc-attempt:ble-scan-finished",
+        "connect=1 outcome=target-not-advertising superseded=false",
+      ],
     ]);
     // A manual connect() on the same hook exports its own ring and never the
     // stale NFC trace ahead of it.

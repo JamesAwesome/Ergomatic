@@ -34,6 +34,14 @@ export type ConnectionAttemptTraceKind =
   | "reader-stop-failed"
   | "foreground-abort"
   | "held-device-conflict"
+  | "ble-scan-resume-waiting"
+  | "ble-scan-resumed"
+  | "ble-scan-requested"
+  | "ble-scan-lifecycle"
+  | "ble-scan-abort-requested"
+  | "ble-scan-summary"
+  | "ble-scan-started-late"
+  | "ble-scan-finished"
   | "ble-scan-started"
   | "ble-scan-matched"
   | "ble-scan-timed-out"
@@ -65,6 +73,14 @@ export const CONNECTION_ATTEMPT_TRACE_KINDS: readonly ConnectionAttemptTraceKind
     "reader-stop-failed",
     "foreground-abort",
     "held-device-conflict",
+    "ble-scan-resume-waiting",
+    "ble-scan-resumed",
+    "ble-scan-requested",
+    "ble-scan-lifecycle",
+    "ble-scan-abort-requested",
+    "ble-scan-summary",
+    "ble-scan-started-late",
+    "ble-scan-finished",
     "ble-scan-started",
     "ble-scan-matched",
     "ble-scan-timed-out",

@@ -208,8 +208,13 @@ export class TargetMonitorAmbiguousError extends Error {
   }
 }
 export class TargetScanInterruptedError extends Error {
-  constructor() {
+  // Only the winning abort carries its exact pass signal. Preamble deadlines
+  // share the name for existing UI mapping, but must not authorize recovery.
+  readonly interruptedSignal: AbortSignal | undefined;
+
+  constructor(interruptedSignal?: AbortSignal) {
     super("The targeted scan was aborted.");
+    this.interruptedSignal = interruptedSignal;
     this.name = "TargetScanInterruptedError";
   }
 }
@@ -728,10 +733,61 @@ export function createCapacitorBleTransport(
       signal: AbortSignal,
       trace?: DiscoveryTrace,
     ): Promise<DiscoveredMonitor[]> {
-      const poisonBefore = poisoned;
-      if (poisonBefore !== null) throw poisonBefore;
-      const request = validateTargetedRequest(requestValue);
-      if (signal.aborted) throw new TargetScanInterruptedError();
+      let stage = "queue";
+      let results = 0;
+      let valid = 0;
+      let named = 0;
+      const matches: DiscoveredMonitor[] = [];
+      // Closed vocabulary: native error names/messages can contain identities.
+      const summary = (err?: Error): void => {
+        let outcome: string;
+        switch (err?.name) {
+          case undefined:
+            // Missing metadata on a rejection is not a successful result.
+            outcome = err === undefined ? "matched" : "other-error";
+            break;
+          case "TargetScanInterruptedError":
+            outcome = "interrupted";
+            break;
+          case "TargetMonitorNotAdvertisingError":
+            outcome = "not-advertising";
+            break;
+          case "TargetAlreadyConnectedError":
+            outcome = "already-connected";
+            break;
+          case "TargetMonitorAmbiguousError":
+            outcome = "ambiguous";
+            break;
+          case "BluetoothOffError":
+            outcome = "bluetooth-off";
+            break;
+          case "BluetoothPermissionError":
+            outcome = "permission-denied";
+            break;
+          case "ScanCleanupFailedError":
+            outcome = "cleanup-failed";
+            break;
+          case "TargetedRequestInvalidError":
+            outcome = "invalid-request";
+            break;
+          default:
+            outcome = "other-error";
+        }
+        trace?.record(
+          "ble-scan-summary",
+          `stage=${stage} outcome=${outcome} results=${results} valid=${valid} named=${named} matches=${matches.length}`,
+        );
+      };
+      let request: TargetedMonitorDiscoveryRequest;
+      try {
+        const poisonBefore = poisoned;
+        if (poisonBefore !== null) throw poisonBefore;
+        request = validateTargetedRequest(requestValue);
+        if (signal.aborted) throw new TargetScanInterruptedError(signal);
+      } catch (err: unknown) {
+        summary(err instanceof Error ? err : new Error());
+        throw err;
+      }
       const { prior, release } = captureTail();
       // The terminal/abort owner is installed before any await.
       let settled = false;
@@ -739,7 +795,6 @@ export function createCapacitorBleTransport(
       let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
       let windowTimer: ReturnType<typeof setTimeout> | null = null;
       const seen = new Set<string>();
-      const matches: DiscoveredMonitor[] = [];
       type Outcome = { ok: DiscoveredMonitor[] } | { err: Error };
       let finish!: (outcome: Outcome) => void;
       const outcome = new Promise<Outcome>((resolve) => {
@@ -748,6 +803,7 @@ export function createCapacitorBleTransport(
       const settle = (result: Outcome): void => {
         if (settled) return;
         settled = true;
+        summary("err" in result ? result.err : undefined);
         if (deadlineTimer !== null) unschedule(deadlineTimer);
         if (windowTimer !== null) unschedule(windowTimer);
         // Every settle path awaits `stopLEScan()` before the caller hears
@@ -788,7 +844,7 @@ export function createCapacitorBleTransport(
         );
       };
       const onAbort = (): void =>
-        settle({ err: new TargetScanInterruptedError() });
+        settle({ err: new TargetScanInterruptedError(signal) });
       signal.addEventListener("abort", onAbort, { once: true });
       // THE DEADLINE BOUNDS THE ATTEMPT, not only the advertisement wait
       // (antagonist delta pass F5): every call below goes through
@@ -808,7 +864,7 @@ export function createCapacitorBleTransport(
         });
       }, deadlineMs);
       const interruptedIfAborted = (): void => {
-        if (signal.aborted) throw new TargetScanInterruptedError();
+        if (signal.aborted) throw new TargetScanInterruptedError(signal);
       };
       // THE PREAMBLE RUNS DETACHED (antagonist delta pass F5, paste-test):
       // every await below goes through BleClient's serial queue, which can
@@ -826,10 +882,12 @@ export function createCapacitorBleTransport(
           settledOrAborted();
           const poisonAfter = poisoned;
           if (poisonAfter !== null) throw poisonAfter;
+          stage = "initialize";
           await ensureInitialized();
           settledOrAborted();
           // `isEnabled` AFTER initialize (the manual path's own I2 rule) and
           // BEFORE the held-device query.
+          stage = "enabled";
           if (!(await BleClient.isEnabled())) {
             throw new BluetoothOffError("Bluetooth is powered off.");
           }
@@ -838,6 +896,7 @@ export function createCapacitorBleTransport(
           // callbacks, so a held exact-name device would otherwise time out
           // as "not advertising". Cached `name` is used ONLY to refuse —
           // never to select: a held device is never returned from here.
+          stage = "held-devices";
           const held = await BleClient.getConnectedDevices([
             ROWING_SERVICE_UUID,
             CONTROL_SERVICE_UUID,
@@ -856,21 +915,27 @@ export function createCapacitorBleTransport(
           // From here the native scan MAY be live even if the promise below
           // never resolves; a settle must therefore stop it (F6 + the early
           // callback case).
+          stage = "scan-start";
           scanning = true;
           await BleClient.requestLEScan(
             { allowDuplicates: true },
             (raw: unknown) => {
               if (settled) return;
+              results += 1;
               const result = decodeScanResult(raw);
               if (result === null) {
                 trace?.record("invalid-scan-result");
                 return;
               }
+              valid += 1;
+              if (result.localName !== null && result.localName.length > 0)
+                named += 1;
               if (result.localName !== request.exactName) return;
               if (seen.has(result.deviceId)) return;
               seen.add(result.deviceId);
               matches.push({ id: result.deviceId, name: request.exactName });
               if (matches.length === 1) {
+                stage = "collision-window";
                 trace?.record("ble-scan-matched");
                 if (deadlineTimer !== null) unschedule(deadlineTimer);
                 deadlineTimer = null;
@@ -885,7 +950,8 @@ export function createCapacitorBleTransport(
               }
             },
           );
-          trace?.record("ble-scan-started");
+          if (!settled && stage === "scan-start") stage = "advertisements";
+          trace?.record(settled ? "ble-scan-started-late" : "ble-scan-started");
         } catch (err: unknown) {
           settle({
             err: err instanceof Error ? err : new Error(String(err)),

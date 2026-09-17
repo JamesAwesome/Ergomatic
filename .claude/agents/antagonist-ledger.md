@@ -11451,3 +11451,42 @@ recalculated client pairs: sampled386.609/487.734/493.219MiB reductions at
 candidate measurements, not a worker-default decision or whole-spec completion.
 Controller evidence and repair status live in
 [the tuning record](../../docs/testing/2026-09-16-resource-tuning.md).
+
+
+### 2026-09-17 — NFC scan diagnostics hardening
+
+- **Falsified:** successful cleanup may finish before a held BLE start
+  acknowledges. Independent mocks allowed it; installed BleClient routes
+  both through one promise queue. A read-only `getQueue(true)` probe admitted
+  stop only after start resolved. Retain that queue in the gate and assert
+  decision, cleanup and returned outcome separately, including cleanup expiry.
+- **Falsified:** an optional-chained error-name switch and a typed lookup
+  guarantee fixed diagnostic vocabulary. Undefined name became `matched`;
+  prototype-key names passed the existing mapper with no reason, producing
+  `outcome=undefined`. Native-boundary rejection tests and exported outcomes
+  settled both; separate error presence from classification and use a
+  diagnostic fallback for missing mapped reasons. These inputs are synthetic,
+  not evidence of what the installed native plugin emitted in the incident.
+- **Attacked and held:** captured ordinals, original trace closures,
+  controller-identity cleanup and the existing first-settlement guard retain
+  retry attribution without changing policy. Counters report callbacks, not
+  devices in the room; the hook's post-cleanup result outranks a match decision.
+- **Causal limit:** background input conditionally reproduces the photograph;
+  a banner proves no transition. Explicit poison gives `scan-cleanup-failed`
+  and blocks manual discovery too. Shared pending setup can repeat preamble
+  timeouts, whose evidence is absent from the photograph. Reported manual
+  Bluetooth recovery narrows the possibilities without identifying the cause.
+  Enumerate constructors and actual vendor call sites before naming the fault.
+- **Record:** [hardened prescription and author verification](../../docs/superpowers/plans/2026-09-17-nfc-scan-diagnostics.md).
+
+## 2026-09-17 — NFC foreground recovery delta
+
+**Verdict: PASS with revised invariants.** Source review found a lost-return
+window in sequential pause-then-resume registration; native events without
+listeners are not retained. Resume-first closes the witnessed-departure case.
+Recovery requires exact aborted-pass identity and a successful cleanup result,
+waits for current foreground readiness, and remains independently cancellable.
+A matched result waits for foreground without rescanning. No hardware behavior
+or test execution was established by this review; pre-registration transitions
+remain outside the guarantee. See the approved follow-up brief in
+`docs/superpowers/plans/2026-09-17-nfc-scan-diagnostics/execution.md`.

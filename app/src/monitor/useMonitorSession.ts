@@ -49,6 +49,7 @@ import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { isValidPm5AdvertisingName } from "../../domain/monitor/nfc.js";
 import { newUuidV4 } from "./uuidV4";
 import type { ConnectionAttemptTrace } from "./nfc/connectionAttemptTrace";
+import { scanWithForegroundRecovery } from "./nfc/scanWithForegroundRecovery";
 import {
   hasTargetedScan,
   isValidAttemptId,
@@ -2317,11 +2318,12 @@ export function useMonitorSession(
   /** Phase NF: the abort owner of an in-flight targeted scan, paired with
    *  its attempt ID. Cleared ONLY by object-identity comparison in the
    *  scan's own `finally`, so a late-settling attempt A can never clear
-   *  attempt B's controller. `cancel()`, `teardown()` and the background
-   *  transition abort it. */
+   *  attempt B's controller. `cancel()` and `teardown()` abort it, including a foreground wait.
+   *  Backgrounding aborts only the current pass inside the recovery helper. */
   const targetedAbortRef = useRef<{
     attemptId: ConnectionAttemptId;
     controller: AbortController;
+    abort(source: "cancel" | "teardown"): void;
   } | null>(null);
   /** WHICH connect attempt owns the flow. Bumped at the top of every
    *  `connect()` and again by `cancel()`, so an attempt can ask whether it
@@ -4458,7 +4460,11 @@ export function useMonitorSession(
    *  React never passes arguments to an effect cleanup, so the unmount
    *  path always takes the `driverRef.current` branch. */
   const teardown = useCallback(
-    (alreadyTerminated = false, claimed: MonitorDriver | null = null): void => {
+    (
+      alreadyTerminated = false,
+      claimed: MonitorDriver | null = null,
+      source: "cancel" | "teardown" = "teardown",
+    ): void => {
       // RETIRE ANY IN-FLIGHT ATTEMPT FIRST, for the same reason `cancel()`
       // does (see `attemptRef`). Everything below this line reasons about a
       // driver, and an attempt still inside `createTransport()`/`scan()`/
@@ -4479,7 +4485,7 @@ export function useMonitorSession(
       attemptRef.current += 1;
       // Phase NF: an in-flight targeted scan is aborted synchronously here
       // too — an unmount mid-scan must stop the radio, not only the driver.
-      targetedAbortRef.current?.controller.abort();
+      targetedAbortRef.current?.abort(source);
       // Resolved FIRST — every step below needs the same driver, and
       // clearing `driverRef` here (rather than after stash/unsubscribe, as
       // this used to) is a pure reordering: a re-entrant teardown
@@ -5342,39 +5348,46 @@ export function useMonitorSession(
             return;
           }
           const controller = new AbortController();
+          // Capture this invocation, not the mutable current-attempt slot:
+          // cleanup and native acknowledgements can arrive after a retry.
+          const scanTrace: ConnectionAttemptTrace | undefined =
+            trace === undefined
+              ? undefined
+              : {
+                  ...trace,
+                  record: (kind, detail) =>
+                    trace.record(
+                      kind,
+                      `connect=${attempt}${detail === undefined ? "" : ` ${detail}`}`,
+                    ),
+                };
+          let cancelSource: "cancel" | "teardown" = "cancel";
           targetedAbortRef.current = {
             attemptId: discovery.attemptId,
             controller,
+            abort: (source) => {
+              if (controller.signal.aborted) return;
+              cancelSource = source;
+              controller.abort();
+            },
           };
-          // The foreground lease for the SCAN (the session's own lifecycle
-          // listener is registered only after GATT connect, further down):
-          // a background transition aborts to the named interrupted state.
-          // Registration is async on native; awaited INSIDE the try so a
-          // rejected registration cannot strand the abort ref (lens 2).
-          let scanLifecycle: (() => void) | null = null;
           try {
-            try {
-              scanLifecycle = await (
+            found = await scanWithForegroundRecovery({
+              signal: controller.signal,
+              cancelSource: () => cancelSource,
+              register:
                 depsRef.current.registerAppLifecycleListener ??
-                registerAppLifecycleListener
-              )((event) => {
-                if (event === "background") controller.abort();
-              });
-            } catch (err: unknown) {
-              trace?.record("listener-registration-failed", "scan lifecycle");
-              throw err;
-            }
-            if (superseded()) throw new Error("superseded");
-            found = await transport.scanTarget(
-              discovery,
-              controller.signal,
-              trace,
-            );
+                registerAppLifecycleListener,
+              scan: (signal, passTrace) =>
+                transport.scanTarget(discovery, signal, passTrace),
+              trace: scanTrace,
+              finished: (passTrace, error) =>
+                passTrace?.record(
+                  "ble-scan-finished",
+                  `outcome=${error === undefined ? "matched" : (mapTargetedFailure(error.value, discovery.exactName).reason ?? "link-failed")} superseded=${superseded()}`,
+                ),
+            });
           } catch (err: unknown) {
-            // Every targeted terminal PUBLISHES the trace (whole-branch
-            // review B3): the snapshot accessor and the export window
-            // above both read a completed attempt, and before this the
-            // only path that completed one was a successful connect.
             trace?.complete();
             if (superseded()) {
               bestEffort(transport.disconnect());
@@ -5385,8 +5398,6 @@ export function useMonitorSession(
             bestEffort(transport.disconnect());
             return;
           } finally {
-            scanLifecycle?.();
-            // Object identity: a late attempt-A settle must not clear B's ref.
             if (targetedAbortRef.current?.controller === controller) {
               targetedAbortRef.current = null;
             }
@@ -6390,7 +6401,7 @@ export function useMonitorSession(
     // not what "best-effort" is supposed to mean here. `driver` is handed
     // back explicitly because the ref was claimed above; without it the
     // hang-up would be skipped entirely (`teardown`'s own doc comment).
-    teardown(armed, driver);
+    teardown(armed, driver, "cancel");
     identityRef.current = NO_IDENTITY;
     freezeRef.current = NO_FREEZE;
     rowingStreakRef.current = null;

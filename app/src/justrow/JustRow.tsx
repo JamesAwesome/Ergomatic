@@ -539,7 +539,7 @@ export default function JustRow() {
           {ready
             ? "The clock starts on your first stroke."
             : lookingFor !== null
-              ? "Keep the monitor on and close by."
+              ? "Tag read. Move your phone away from the NFC spot and keep Ergomatic open."
               : "Wake the monitor if its screen is dark."}
         </p>
         {ready && (

@@ -26,7 +26,8 @@ import type { ConnectionAttemptId } from "../../../domain/monitor/types.js";
 import type { NfcReader } from "../../adapters/nfcReader";
 import type { ConnectionAttemptTrace } from "./connectionAttemptTrace";
 
-export const NFC_ALERT_MESSAGE = "Hold your iPhone near the monitor.";
+export const NFC_ALERT_MESSAGE =
+  "Hold the top of your iPhone near the monitor. Move it away when this sheet closes.";
 
 export type NfcInlineCopy =
   | "Unsupported NFC tag"
