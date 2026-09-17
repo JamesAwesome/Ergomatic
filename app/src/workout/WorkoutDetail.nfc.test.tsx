@@ -26,6 +26,7 @@ import {
   commit as commitHandoff,
   currentUnretired as currentUnretiredHandoff,
   resetForTests as resetHandoffStoreForTests,
+  stageRetire,
   stagedRetireAttemptId,
 } from "../monitor/handoffStore";
 import type { MonitorRun } from "../monitor/monitorRun";
@@ -412,7 +413,7 @@ describe("Scan NFC outcomes on detail (states table)", () => {
     expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
   });
 
-  it("Cancel keeps the programmed door disabled until the local fake transport write settles, then late A cleanup cannot discard fresh B", async () => {
+  it("Cancel settlement is the programmed door's barrier: A's session cleanup completes before B can stage", async () => {
     const leftoverKey = seedLeftoverHandoff();
     const minted = [FIXED_ATTEMPT, NEXT_ATTEMPT];
     let mintCount = 0;
@@ -450,6 +451,17 @@ describe("Scan NFC outcomes on detail (states table)", () => {
     expect(mintCount).toBe(1);
     expect(stagedRetireAttemptId()).toBeNull();
 
+    // `attempt.cancel` already discarded the original A authorization. Stage
+    // an A sentinel while the held terminate write keeps `session.cancel()`
+    // suspended: its post-write continuation performs the session's own
+    // keyed authorization cleanup before returning. The entry owner clears
+    // `busy` only after that returned promise settles, so an enabled door
+    // must observe this sentinel gone before it can admit B.
+    const leftover = currentUnretiredHandoff();
+    expect(leftover).not.toBeNull();
+    stageRetire(leftover, FIXED_ATTEMPT);
+    expect(stagedRetireAttemptId()).toBe(FIXED_ATTEMPT);
+
     await act(async () => {
       controls.resume("write");
       for (let i = 0; i < 20; i += 1) await Promise.resolve();
@@ -457,15 +469,12 @@ describe("Scan NFC outcomes on detail (states table)", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled(),
     );
+    expect(stagedRetireAttemptId()).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     expect(
       await screen.findByRole("button", { name: "Connect anyway" }),
     ).toBeInTheDocument();
-    expect(stagedRetireAttemptId()).toBe(NEXT_ATTEMPT);
-    await act(async () => {
-      for (let i = 0; i < 20; i += 1) await Promise.resolve();
-    });
     expect(stagedRetireAttemptId()).toBe(NEXT_ATTEMPT);
     expect(currentUnretiredHandoff()?.sessionKey).toBe(leftoverKey);
   });
