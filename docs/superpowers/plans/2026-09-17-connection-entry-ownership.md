@@ -16,11 +16,11 @@
 - Change no rower-facing copy, timeout, retry eligibility, radio call, compilation rule, authorization acceptance point, stored shape or diagnostic vocabulary.
 - Keep `useMonitorSession`'s public and implementation interface unchanged: `connect(request?, trace?)` and `cancel()` remain the low-level operations.
 - Manual `begin` must invoke `onReady` synchronously from the current `ConnectAction` press continuation.
-- A claimed, retryable or draining attempt refuses a later `begin`; it discards only the later attempt's staged authorization and never replaces the live attempt.
+- A claimed, retryable or draining attempt refuses a later `begin` without replacing the live operation or radio. The supported `ConnectAction` producer cannot stage B while the door is absent or its hardware actions are disabled for A.
 - Cancel enters `draining` synchronously, calls the bound session once, abandons authorization after the session's synchronous retirement prefix, and keeps `busy` true until the captured Cancel promise settles.
 - Nothing queues behind Cancel. The rower must make a fresh hardware press after drain settlement.
 - Attempt request, trace and ID are immutable across retries and are never exposed to screen code.
-- The first accepted attempt operation binds one stable `connect`/`cancel` method pair. Calls with a different pair perform no work.
+- The first accepted attempt operation binds one stable `connect`/`cancel` method pair. Later calls cannot rebind it and continue through the original pair without invoking foreign methods.
 - Concurrent attempt `connect` calls return the exact same attempt-level promise object.
 - Use the existing mount-lease microtask heuristic and gate its actual behavior under the pinned React runtime; do not claim a React scheduling guarantee.
 - Run every `pnpm` command from `app/`.
@@ -42,8 +42,28 @@
 1. **Production invariant:** only the current entry operation may offer, connect, cancel, abandon, publish or clear itself; a late predecessor cannot mutate its successor.
 2. **Supported producers:** `ConnectAction` produces manual or NFC intents for Workout Detail and Just Row; both cross the same `ConnectionEntry.begin` seam.
 3. **Independent observables:** bound session method calls, exact promise identity, `entry.busy`, keyed staged authorization, targeted fake-transport requests and the exported connection-attempt trace.
-4. **Deciding-source mutations:** remint retry identity, return a new concurrent promise, release `busy` before Cancel settles, permit claimed replacement, remove identity-checked finalization, commit mount loss immediately, or restore direct screen `session.connect` ownership; the named direct, routed or source test must fail.
+4. **Deciding-source mutations:** each new behavioral test names and runs its deciding-source mutation in the task that introduces it; the restored source must then pass the same gate.
 5. **Strongest conclusion:** desk tests establish application ownership and late-continuation ordering through the existing radio seams. They do not establish the affected phone's radio state or the cause of the original incident.
+
+## Lifetime Table
+
+| Value                                         | Mint site                                           | Clear site                                                                    | Teardown / route loss                                                                        | Document reload                                | Retry / re-arm                                                                    |
+| --------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------- |
+| current entry operation ref                   | accepted `begin`                                    | identity-checked unclaimed terminal, Cancel settlement or abandonment cleanup | owner unmount marks the current operation abandoned; cleanup clears by identity              | discarded with hook                            | retry retains it; fresh accepted press mints another after terminal settlement    |
+| NFC reader controller and listener            | accepted NFC `begin`                                | reader/listener settlement under operation identity                           | owner unmount aborts; late listener resolution self-removes                                  | discarded                                      | fresh NFC press mints both                                                        |
+| owner mounted ref                             | `useConnectionEntry` mount                          | effect cleanup                                                                | prevents state writes and runs the claimed-attempt backstop                                  | new ref                                        | unchanged by retry                                                                |
+| offer claim state                             | offer creation                                      | callback return/throw fixes it as claimed or abandoned                        | owner cleanup can abandon only the claimed result                                            | discarded                                      | never reopens                                                                     |
+| attempt lifecycle state                       | offer creation                                      | terminal abandonment; `draining` ends at Cancel settlement                    | route loss marks abandoned but retains async cleanup state                                   | discarded                                      | recoverable failure stays retryable; no remint                                    |
+| bound session method pair                     | first accepted `connect` or `cancel`                | attempt terminal cleanup                                                      | retained only for captured async settlement                                                  | discarded                                      | same pair required across retry                                                   |
+| exact `connectPromise` slot                   | accepted connect call                               | identity-checked connect settlement                                           | captured by abandonment cleanup before slot clearing                                         | discarded                                      | concurrent calls share it; later settled retry replaces it                        |
+| exact `cancelPromise` slot                    | first Cancel call                                   | retained as terminal result; operation releases on its settlement             | lifetime cleanup cannot release drain early                                                  | discarded                                      | repeated Cancel returns it; no Cancel retry                                       |
+| trace cleanup barrier                         | abandonment with captured connect/Cancel work       | `Promise.allSettled` completion and final publication attempt                 | survives only in the abandoned operation closure                                             | discarded                                      | independent of releasing the door for a fresh press                               |
+| trace record generation                       | owned trace creation; incremented by every `record` | attempt closure dies                                                          | compared with published generation after cleanup settles                                     | discarded                                      | monotonic across capped-buffer eviction and retry                                 |
+| trace published generation                    | each delegated `complete()`                         | replaced at the next publication                                              | final abandonment publishes only when record generation differs                              | discarded                                      | enlarged retry snapshot advances it                                               |
+| trace publication order                       | module-level monotonic counter at accepted `begin`  | module reload                                                                 | wrapper refuses publication older than the last published entry order                        | reset with document                            | retry equality republishes; fresh attempt has a greater order                     |
+| branded attempt private-state `WeakMap` entry | owner-created attempt object                        | garbage collection after callers and cleanup closures release it              | route-loss cleanup retains it only through captured promises; foreign lookalikes fail closed | discarded                                      | same object and entry survive retry                                               |
+| mount lease                                   | non-null lifetime-hook effect                       | same-ID reclaim or committed release                                          | committed release invokes identity-checked abandonment                                       | module state is lost with staged authorization | StrictMode replay reclaims the same ID                                            |
+| React `busy` / `accepted` state               | hook mount; changed by accepted operation           | operation-specific terminal finalizers                                        | no state write after owner unmount                                                           | new state                                      | retry does not replay accepted paint; Cancel drain owns `busy` through settlement |
 
 ---
 
@@ -65,7 +85,7 @@ Create `connectionEntry.test.tsx` from the existing `useNfcEntry.test.tsx` fixtu
 
 - [ ] **Step 2: Add the direct transfer contract before implementation**
 
-Add tests with two independent valid UUID-v4 attempt IDs. The manual case must call `onReady` before `begin` returns, expose `targetName === null`, and abandon when the callback returns unclaimed. The NFC case must offer the exact decoded target only after the accepted paint barrier. Add throw-before-claim and throw-after-claim cases; both must discard the matching staged authorization, and the latter's returned handle must refuse `connect`.
+Add tests with two independent valid UUID-v4 attempt IDs. The manual case must call `onReady` before `begin` returns, expose `targetName === null`, and abandon when the callback returns unclaimed. The NFC case must offer the exact decoded target only after the accepted paint barrier. Add throw-before-claim and throw-after-claim cases; both must discard the matching staged authorization, and the latter's returned handle must refuse `connect`. Cast one structural lookalike to the public type and assert `useConnectionEntryLifetime` throws before installing a fail-open lease.
 
 ```ts
 const captured: { offer?: ConnectionEntryOffer } = {};
@@ -95,7 +115,12 @@ export interface ConnectionEntryOffer {
   claim(): ConnectionEntryAttempt;
 }
 
+const connectionEntryAttemptBrand: unique symbol = Symbol(
+  "connection-entry-attempt",
+);
+
 export interface ConnectionEntryAttempt {
+  readonly [connectionEntryAttemptBrand]: true;
   readonly targetName: string | null;
   connect(session: Pick<MonitorSession, "connect" | "cancel">): Promise<void>;
   cancel(session: Pick<MonitorSession, "connect" | "cancel">): Promise<void>;
@@ -121,11 +146,11 @@ Move `NfcCapabilityState`, `NFC_CAPABILITY_DEADLINE_MS`, `useNfcCapability` and 
 
 Create one operation object per accepted `begin`, store it in `currentRef`, and make every completion clear it only under `currentRef.current === operation`. Construct one offer-owned attempt object before invoking `onReady`. `claim()` returns that same object on every call. In a `finally` around `onReady`, abandon when the callback returned unclaimed or threw; NFC maps the throw through the released stopped-copy path, while manual entry rethrows after cleanup.
 
-When `begin(B)` sees any resolving, claimed, retryable or draining A, call `discardStagedRetire(B.attemptId)` and return without changing A. Manual delivery stays in the same synchronous call. NFC retains the current asynchronous reader path and its accepted paint.
+When `begin(B)` sees any resolving, claimed, retryable or draining A, call `discardStagedRetire(B.attemptId)` and return without changing A's operation or radio. Do not assert that this can restore an A authorization already overwritten before the call: the one-slot store cannot do that. The production proof starts upstream at `ConnectAction`, where the door is absent for claimed/retryable A and both hardware actions are disabled for draining A, so supported UI cannot stage B. Manual delivery stays in the same synchronous call. NFC retains the current asynchronous reader path and its accepted paint.
 
 - [ ] **Step 6: Add session binding, retry and single-flight tests**
 
-Claim one manual and one targeted attempt. For each, assert the first `connect(session)` passes the same private request object on every settled retry and the same trace object on targeted retry. Hold the first session promise and assert `p1 === p2` for two concurrent calls. Pass a second object with different `connect` or `cancel` method identity and assert no second collaborator method runs.
+Claim one manual and one targeted attempt. For each, assert the first `connect(session)` passes the same private request object on every settled retry and the same trace object on targeted retry. Hold the first session promise and assert `p1 === p2` for two concurrent calls. Pass a second object with different `connect` or `cancel` method identity; assert neither foreign method runs and the operation continues through the originally bound collaborator.
 
 ```ts
 const p1 = attempt.connect(session);
@@ -144,11 +169,11 @@ expect(vi.mocked(session.connect).mock.calls[1]?.[0]).toBe(
 
 Keep private `request`, optional owned trace wrapper, hidden attempt ID, lifecycle state, bound method pair, `connectPromise` and `cancelPromise` in module-private operation state. `connect()` must return the retained promise directly; declaring the public method `async` would wrap it and break exact identity. Its identity-checked `finally` clears only the matching `connectPromise`. After settlement, a new call reuses the same request and trace.
 
-Bind `session.connect` and `session.cancel` together on the first accepted operation. A later pair mismatch returns `Promise.reject(new Error("connection entry session mismatch"))` without invoking either pair, and the direct test awaits that rejection. An abandoned or draining attempt returns `Promise.resolve()` before radio work.
+Bind `session.connect` and `session.cancel` together on the first accepted operation. Later calls use that captured pair regardless of the render-created object passed at the call site; they never invoke a foreign pair and mint no dropped error. An abandoned or draining attempt returns `Promise.resolve()` before radio work.
 
 - [ ] **Step 8: Add and implement the Cancel drain contract**
 
-Test that `cancel(session)` sets `entry.busy` before `session.cancel()` returns, calls it once, immediately discards the matching staged authorization after the mock's synchronous prefix, refuses `connect` and `begin(B)`, and returns the same promise on repeat. Hold both a prior connect and Cancel; `busy` must clear only after the Cancel continuation and all captured attempt work settle. After settlement, a fresh B may begin.
+Test that `cancel(session)` sets `entry.busy` before `session.cancel()` returns, calls it once, immediately discards the matching staged authorization after the mock's synchronous prefix, refuses `connect` and `begin(B)`, and returns the same promise on repeat. Hold both a prior connect and Cancel; `busy` and the current-operation admission barrier clear when the captured Cancel settles even if the old connect remains pending. After Cancel settlement, a fresh B may begin, while the old operation retains a separate cleanup barrier until all captured work settles.
 
 Implementation order is fixed:
 
@@ -156,18 +181,20 @@ Implementation order is fixed:
 2. transition the attempt to `draining` and publish `busy: true` synchronously;
 3. invoke `session.cancel()` exactly once;
 4. immediately call `discardStagedRetire(attemptId)`;
-5. retain one attempt-level promise that waits for Cancel and captured connect settlement;
-6. publish a final dirty trace, then identity-clear current operation and `busy` in its finalizer.
+5. retain one exact attempt-level Cancel promise and release the current operation plus `busy` from its identity-checked settlement finalizer;
+6. retain a separate `Promise.allSettled` cleanup barrier over captured connect and Cancel work, then publish the final dirty trace without clearing a successor.
 
 - [ ] **Step 9: Add and implement lifetime ownership**
 
-Use a module-private `WeakMap<ConnectionEntryAttempt, AttemptPrivate>` so `useConnectionEntryLifetime` can reach the hidden ID and identity-checked abandon operation without enlarging the public interface. Its effect registers `onMountLeaseLost`, claims the lease, and releases it in cleanup.
+Give owner-created attempts a module-private `unique symbol` property in addition to a `WeakMap<ConnectionEntryAttempt, AttemptPrivate>`. The non-exported brand prevents ordinary structural construction in TypeScript; the runtime WeakMap lookup throws for a cast foreign lookalike rather than silently skipping route-loss ownership. `useConnectionEntryLifetime` uses the private state to register `onMountLeaseLost`, claim the lease and release it in cleanup.
 
 Add a StrictMode setup/cleanup/setup test that retains the staged authorization and a true-detach test that discards it. Add an owner-unmount test that claims during `onReady` and unmounts before a conditional child can install `useConnectionEntryLifetime`; the hook's own mount effect cleanup must abandon the current claimed attempt.
 
 - [ ] **Step 10: Track trace publication at the owner**
 
-Wrap the NFC trace so its `complete()` delegates to the existing trace and records the published entry count. On claimed abandonment, wait for captured connect/Cancel promises, then call `complete()` only when `entries().length` exceeds that count. Add a test that reaches targeted handoff, appends cleanup entries during a held connect/Cancel, abandons, and observes one enlarged final snapshot only after settlement.
+Wrap the NFC trace with a monotonic `recordGeneration` incremented by every delegated `record()` and a `publishedGeneration` updated by every accepted delegated `complete()`. Do not compare bounded-buffer length: once the 200-entry trace is full, eviction keeps its length constant while tail content changes. Assign every accepted `begin` a process-local monotonic `publicationOrder`; delegate `complete()` only when that order is at least the last entry order that published, so same-attempt retry may republish but late A cannot overwrite newer B.
+
+On claimed abandonment, await `Promise.allSettled` over captured connect/Cancel work, then call the arbitrated `complete()` only when the generations differ. Add four witnesses: ordinary held cleanup; a 200-entry capacity boundary with an evicting append; one captured rejection whose sibling remains held, proving publication waits for all settlement without an unhandled rejection; and A Cancel settling, B beginning and publishing, then A connect settling late without replacing B's global latest snapshot.
 
 - [ ] **Step 11: Run the direct module gate and bite the identity mutations**
 
@@ -175,7 +202,28 @@ Run: `pnpm test --project client src/monitor/connectionEntry.test.tsx`
 
 Expected: PASS.
 
-Temporarily make current-operation cleanup unconditional and require late A settlement to clear B in the direct test. Restore the identity check. Temporarily return `session.connect(...).finally(...)` on every concurrent call and require the `p1 === p2` assertion to fail. Restore the retained promise. Temporarily clear `busy` before Cancel settlement and require the drain test to fail. Restore all mutants and rerun the direct gate to PASS.
+Run one fail-then-pass mutation for every new behavioral group:
+
+- defer manual offer delivery to a microtask for the synchronous-begin test;
+- invoke `onReady` before the accepted paint barrier for the NFC ordering test;
+- remove callback-return abandonment for the unclaimed-offer test;
+- skip throw-path abandonment for the callback-throw tests;
+- bypass live-operation refusal for the A-refuses-B test;
+- remint the request or trace for the retry-identity test;
+- return `session.connect(...).finally(...)` anew for the exact-promise test;
+- invoke the call-site's foreign methods instead of the captured pair for the collaborator-binding test;
+- make current-operation cleanup unconditional for late A versus B;
+- release `busy` before Cancel settlement for the drain test;
+- clear `cancelPromise` while it is pending so repeat Cancel invokes the session twice;
+- allow `connect` through while abandoned/draining for the no-radio-work test;
+- make the owner-unmount backstop a no-op for the claim-to-effect gap;
+- commit lease loss synchronously for StrictMode reclaim, then make committed loss a no-op for true detach;
+- use `Promise.all` or publish before the cleanup barrier for the all-settled trace test;
+- compare capped `entries().length` instead of record generation for the capacity-boundary publication test;
+- remove the publication-order comparison for the late-A/global-B diagnostic test;
+- accept a foreign structural attempt in the lifetime hook for the private-brand test.
+
+For each mutation, require its named test to fail, restore the deciding source, and rerun that test to PASS. Then rerun the complete direct module gate.
 
 - [ ] **Step 12: Commit the deep module**
 
@@ -200,6 +248,8 @@ Run `git rev-parse --show-toplevel` and require the connection-entry worktree pa
 - [ ] **Step 1: Change the routed tests before the screen**
 
 Keep the existing presence, busy, foreground-abort, unmount, native-shaped NFC-to-armed and keyed-authorization assertions. Add a compile-rejection assertion that the offered attempt remains unclaimed and the exact staged authorization is discarded. Add a route-loss case immediately after claim and before the interstitial lifetime effect commits; unmount Workout Detail and assert keyed discard.
+
+Add the programmed door's real Cancel-drain witness: connect through the real owner and session, hold the injected fake's transport-write settlement during interstitial Cancel, return to Workout Detail, prove Scan NFC and Connect remain disabled and cannot stage B, release A, then make a fresh press and prove late A cannot invalidate B. This is the producer/consumer counterpart to Task 3's Just Row witness; an attempt double cannot satisfy it.
 
 Update `WorkoutDetail.connectedEnd.test.tsx`'s captured prop expectation from raw `request`/`trace` fields to one `attempt` field without inspecting its hidden state.
 
@@ -227,9 +277,9 @@ Run the Task 2 command again.
 
 Expected: the new entry/compile assertions pass, with the remaining failure limited to `ConnectedInterstitial` still requiring raw `request`/`trace` props. A reader, parser, store or compilation failure is not this expected red result.
 
-- [ ] **Step 5: Replace interstitial fixtures with attempt doubles**
+- [ ] **Step 5: Replace render-only interstitial fixtures with explicit lifetime-adapter doubles**
 
-Add one test helper that creates an opaque-shaped attempt double with `targetName`, `connect` and `cancel` spies. The default helper delegates the spies to the supplied session so rendering tests preserve their existing phase fixtures. Targeted tests use `targetName: "PM5 432331249 Row"`; picker tests use `null`.
+Mock only `useConnectionEntryLifetime` in render-unit files, then add one explicit test helper that casts a structural attempt double with `targetName`, `connect` and `cancel` spies through `unknown`. The unsafe cast is confined to tests that deliberately bypass lifetime ownership; routed Workout Detail tests use only attempts claimed from the real owner. The default double delegates operations to the supplied session so rendering fixtures preserve their existing phase behavior. Targeted tests use `targetName: "PM5 432331249 Row"`; picker tests use `null`.
 
 Change `ConnectedSurface.test.tsx`'s direct interstitial construction to pass the helper attempt. Keep raw requests only inside the helper's private test implementation when an assertion needs to inspect session delegation.
 
@@ -283,7 +333,7 @@ Run `git rev-parse --show-toplevel`, stage all six Task 2 files, inspect `git di
 
 - [ ] **Step 1: Add the real-session Cancel-drain regression first**
 
-Extend `JustRow.nfc.test.tsx` with a routed manual connection through the real `useMonitorSession` and injected fake transport. Reach Ready, call `window.__pm5FakeControls__.pause("write")`, press Cancel, and assert the door returns with Scan NFC and Connect disabled and `aria-busy="true"`. Attempt a second click and assert no new fake transport, targeted request or staged authorization appears. Resume the held write, wait for both hardware buttons to enable, make a fresh press, then prove the new connection survives all late A continuations and reaches its expected card/ready state.
+Extend `JustRow.nfc.test.tsx` with a routed manual connection through the real `useMonitorSession` and injected fake transport. Reach Ready, call `window.__pm5FakeControls__.pause("write")`, press Cancel, and assert the door returns with Scan NFC and Connect disabled and `aria-busy="true"`. This holds local transport-write promise settlement; wire processing and notifications remain synchronous, so the test makes no PM5-acknowledgement timing claim. Attempt a second click and assert no new fake transport, targeted request or staged authorization appears. Resume the held write, wait for both hardware buttons to enable, make a fresh press, then prove the new connection survives all late A continuations and reaches its expected card/ready state.
 
 ```ts
 const oldFake = window.__pm5FakeControls__!;
@@ -370,6 +420,8 @@ Run `git rev-parse --show-toplevel`, stage the four Just Row files and the two d
 Read the three production callers as source text. Require `WorkoutDetail.tsx` and `JustRow.tsx` to import `useConnectionEntry`; require `ConnectedInterstitial.tsx` and `JustRow.tsx` to use `useConnectionEntryLifetime`. Independently forbid `MonitorDiscoveryRequest`, `ConnectionAttemptTrace`, `discardStagedRetire`, `claimMountLease`, `onMountLeaseLost`, `session.connect(` and `session.cancel(` in `WorkoutDetail.tsx`, `ConnectedInterstitial.tsx` and `JustRow.tsx`.
 
 Allow direct session End/program/free-row operations; the gate is specific to entry connect/Cancel ownership.
+
+Temporarily add a direct `session.connect()` call to one guarded production caller and require this source test to fail, then restore the caller and rerun the test to PASS.
 
 - [ ] **Step 2: Run the complete focused client gate**
 

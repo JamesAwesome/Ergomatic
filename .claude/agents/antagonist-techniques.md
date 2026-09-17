@@ -819,10 +819,30 @@ is exactly what happened: every section in this file stopped growing on
     operation. Comparing only the main async body misses the cleanup channel
     that overrides its return.
 84. **A fire-and-forget Cancel is a live generation until its last await
-    settles.** Hold the old Cancel at the real asynchronous device
-    acknowledgement, expose the connection door, try to start B, then release
-    A and inspect B's epoch, controller and keyed authorization. Clearing a
-    driver ref synchronously prevents duplicate teardown but does not stop A's
-    later cleanup from invalidating B through shared refs. Keep a drain barrier
+    settles.** Hold the old Cancel at an asynchronous transport continuation,
+    expose the connection door, try to start B, then release A and inspect B's
+    epoch, controller and keyed authorization. Clearing a driver ref
+    synchronously prevents duplicate teardown but does not stop A's later
+    cleanup from invalidating B through shared refs. Keep a drain barrier
     through settlement; when user activation matters, refuse B and require a
     fresh press rather than queueing it.
+85. **A refusal seam cannot preserve authority that its producer already
+    overwrote.** Trace mint and staging order into the refusal callback, then
+    inspect the authoritative slot after the refused successor. If a
+    single-slot producer writes B before `begin(B)` can reject it, discarding B
+    cannot restore A. Put admission before staging, make staging conditional,
+    or narrow the invariant to producers that cannot invoke B.
+86. **A bounded buffer's length is not a publication version.** Fill it to
+    capacity, publish, append one entry, and compare both length and tail
+    identity. Once eviction begins, length stays constant while content
+    changes; dirty detection needs a monotonic generation or tail sequence.
+87. **Identity checks on owner state do not protect an unkeyed global
+    diagnostic sink.** Release A's admission barrier, let B publish, then
+    settle A's retained cleanup. Assert the global readout still names B;
+    otherwise late A can overwrite the evidence for the operation the rower is
+    currently seeing.
+88. **A structural test double cannot stand in for an object whose authority
+    lives in a private `WeakMap`.** Exercise the lifetime consumer with a
+    foreign lookalike. Throwing breaks prescribed fixtures; returning quietly
+    makes route loss fail open. Brand owner-created objects and mock the
+    boundary only in tests that deliberately do not exercise ownership.

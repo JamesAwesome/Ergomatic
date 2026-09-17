@@ -136,6 +136,11 @@ implementation. The implementation may split React integration from the
 non-React attempt owner as long as this screen-facing interface and the
 behavior below remain intact.
 
+The concrete attempt carries a non-exported `unique symbol` brand and is also
+registered in module-private state. The brand prevents ordinary structural
+construction; the runtime lookup fails closed for a cast foreign lookalike.
+Neither mechanism adds caller-visible data or cleanup operations.
+
 `begin` handles both intents. Manual delivery invokes `onReady` synchronously,
 so Just Row can retain its current user-activation path. NFC delivery owns the
 reader, lifecycle listener, trace, busy/accepted state and paint barrier now in
@@ -168,9 +173,10 @@ the non-null type without resurrecting the attempt.
 `attempt.connect(session)` performs both the first connection and every retry.
 It always delegates the same immutable discovery request and the same owned
 trace to the session. The first accepted `connect` or `cancel` binds the stable
-`connect` and `cancel` method identities as one collaborator; a later call with
-a different pair is rejected before work starts. The render-created session
-object itself need not retain identity.
+`connect` and `cancel` method identities as one collaborator. A later call
+cannot rebind the attempt: it continues through the original pair and never
+invokes the foreign pair. The render-created session object itself need not
+retain identity.
 
 Concurrent `connect` calls return the exact same retained attempt-level promise
 object and make one underlying session call. An identity-checked finalizer
@@ -185,11 +191,12 @@ Cancel calls return the exact captured attempt-level promise. A lifetime
 cleanup during draining cannot release the owner early.
 
 The owner remains busy until the captured Cancel settles, fulfilled or
-rejected. Only then does it publish any final dirty trace and release the door.
-Callers may navigate or change state without awaiting it, but a new hardware
-press stays disabled throughout the drain and must be made afresh afterward.
-Nothing is queued behind Cancel, because a queued Web Bluetooth request would
-not carry a fresh user activation.
+rejected. It then releases the door. Final dirty-trace publication follows the
+trace-ownership rule below and may wait longer for separately captured connect
+work. Callers may navigate or change state without awaiting Cancel, but a new
+hardware press stays disabled throughout the drain and must be made afresh
+afterward. Nothing is queued behind Cancel, because a queued Web Bluetooth
+request would not carry a fresh user activation.
 
 `targetName` is presentation only: the exact advertised name for an NFC route
 and `null` for a picker route. No caller can read the attempt ID, discovery
@@ -271,6 +278,13 @@ session may signal the same existing `complete()` operation at their
 established terminals; they do not retain or replace the trace. Screens no
 longer decide trace completion.
 
+Every entry operation also receives a process-local monotonic publication
+order. The wrapped trace delegates `complete()` only when its order is at least
+the last entry order that published. Equality permits retry publication from
+the same attempt; a late A completion after newer B has published is a no-op.
+This arbitration sits at the wrapper because the underlying trace sink stores
+one unkeyed process-global latest snapshot.
+
 ## Abandonment and authorization
 
 Abandonment is idempotent and keyed by the hidden attempt ID. It marks the
@@ -296,12 +310,15 @@ hidden ID to the current session path. A later abandon after consumption is a
 store no-op.
 
 A claimed, retryable or draining attempt is never replaceable. `begin(B)` while
-A is current refuses B and discards only B's newly staged authorization; it does
-not abandon A or touch A's radio. During a Cancel drain the rendered door also
-prevents this path with `busy`; at every other point the owner enforces the rule
-against reentrant or stale callers. No current producer needs replacement. A
-future producer may replace only entry-owned pre-handoff work after specifying
-how that reader is synchronously aborted.
+A is current refuses B, performs a keyed discard for B, and does not abandon A
+or touch A's radio. This owner-level refusal cannot restore A's staged
+authorization if an unsupported producer already overwrote the store's one
+slot before calling `begin(B)`. The supported `ConnectAction` producer admits no
+such B: the door is absent while A is claimed/retryable, and both hardware
+actions are disabled while A is draining. No current producer needs
+replacement. A future producer may replace only entry-owned pre-handoff work
+after specifying admission before staging and how its reader is synchronously
+aborted.
 
 The session's existing direct discard remains for zero-argument observer
 connections and as defense in depth. The attempt adapter supplies its hidden ID
@@ -321,6 +338,8 @@ screen.
 | opaque attempt                                    | connection-entry module; object identity plus hidden attempt ID   | offer claim                            | explicit Cancel or true route loss; remains live across recoverable retry                  |
 | discovery request                                 | opaque attempt                                                    | manual `begin` or accepted NFC target  | immutable for the attempt; never exposed to screens                                        |
 | NFC trace                                         | opaque attempt                                                    | NFC `begin`                            | published at existing terminals; same object survives retry and may be republished         |
+| abandoned trace cleanup                           | abandoned attempt closure plus captured promises                  | claimed abandonment                    | all captured work settles, then a dirty generation publishes                               |
+| trace publication order                           | connection-entry module; process-local counter                    | each accepted `begin`                  | document reload; older operation cannot overwrite a newer published operation              |
 | mount lease                                       | connection-entry lifetime hook; attempt ID                        | non-null mounted attempt               | same-ID StrictMode reclaim, or committed real-detach abandonment                           |
 | Cancel drain                                      | connection-entry module; attempt object plus exact Cancel promise | first `attempt.cancel` invocation      | fulfilled or rejected Cancel settlement; keeps owner busy and refuses connect/begin        |
 | staged authorization                              | `handoffStore`; hidden attempt ID                                 | `ConnectAction` stage                  | `armed` consumes; keyed abandonment discards; mismatch is a no-op                          |
@@ -334,7 +353,8 @@ are already process-local; the new module adds no persistence or stored shape.
 ## Failure and concurrency contract
 
 - Only one entry operation is live per mounted connection door. A claimed,
-  retryable or draining A refuses B and discards only B's staged authorization.
+  retryable or draining A refuses B without replacing A's operation or radio;
+  supported UI admission prevents B from staging before that refusal.
 - Cancel is a live generation until its captured promise settles. The owner
   remains busy, refuses `begin` and `connect`, and releases no queued successor.
 - Late NFC or lifecycle completion from A checks A's operation identity and
@@ -346,8 +366,8 @@ are already process-local; the new module adds no persistence or stored shape.
   remints an ID, restages authorization, changes target or opens the picker for
   a targeted attempt.
 - The first operation binds the stable session `connect`/`cancel` method pair.
-  Another pair is refused even if its render-created session object is
-  structurally compatible.
+  Another pair cannot rebind it; retry and Cancel continue through the original
+  collaborator even if a render-created session object changed.
 - Concurrent `connect` calls for one attempt return one exact promise and make
   one session call. The session's current `connectingRef` and numeric epoch
   remain the authoritative wider guard against stale transport work.
@@ -409,19 +429,22 @@ Implementation is test-first. The direct interface tests must prove:
    session method pair;
 5. `cancel` invokes the session once, abandons authorization after the
    session's synchronous retirement prefix, keeps the owner busy through an
-   asynchronously held PM5 terminate, and requires a fresh press after settle;
+   asynchronously held transport-write settlement, and requires a fresh press
+   after settle;
 6. StrictMode setup/cleanup/setup retains the staged authorization, while a
    true detach discards it for both Workout Detail and Just Row;
 7. owner unmount after claim but before the conditional lifetime Effect mounts
    still discards the keyed authorization;
 8. callback throws before or after claim leave one inert attempt and no staged
    authorization;
-9. late completion from terminal A cannot affect B, and a live A refuses B
-   without replacing A's authorization or radio work;
+9. late completion from terminal A cannot affect B, and the supported hardware
+   door cannot stage B while A remains live or draining;
 10. connecting an abandoned, draining or unresolved attempt performs no radio
     call;
 11. claimed abandonment after targeted success but before GATT publishes the
-    final dirty trace after connection/Cancel cleanup settles.
+    final dirty trace after connection/Cancel cleanup settles;
+12. after A's Cancel releases the door, newer B may publish before A's held
+    connect settles; releasing A cannot replace B's global latest snapshot.
 
 Existing routed tests remain the higher-level proof for Scan NFC through both
 doors, exact-target retry, compile rejection, targeted failure copy, connection
@@ -429,11 +452,14 @@ log export, keyed `armed` consumption and Web Bluetooth picker behavior. Replace
 obsolete assertions about raw prop/ref wiring with outcomes observed through
 the public attempt interface.
 
-One routed Just Row test must hold the existing PM5 terminate acknowledgement,
-return the UI to the door, prove a second press cannot stage authorization or
-call session connect, release Cancel, and then prove a fresh B survives every
-late A continuation. This test starts above the screen and uses the real session
-hook; a mocked `cancel` cannot expose the shared epoch/ref race.
+One routed Just Row test must hold the injected transport write promise during
+terminate, return the UI to the door, prove a second press cannot stage
+authorization or call session connect, release Cancel, and then prove a fresh B
+survives every late A continuation. The fake processes wire bytes and
+notifications synchronously, so this establishes the late application
+continuation and makes no PM5 acknowledgement-timing claim. This test starts
+above the screen and uses the real session hook; a mocked `cancel` cannot expose
+the shared epoch/ref race.
 
 The deciding-source mutations are: remove unclaimed-offer abandonment, remint
 the retry request, separate the retry trace, return a new promise for a

@@ -11533,8 +11533,8 @@ ownership had already transferred to the session.
   lifetime hook is a synchronous safety net.
   **Why plausible:** `cancel()` clears `connectingRef` and claims `driverRef`
   before its first await, which fixed duplicate termination.
-  **Settled by:** holding real-like PM5 termination pending in the existing
-  deferred-notification path and tracing the continuation. A new B passes the
+  **Settled by:** holding session Cancel at asynchronous transport settlement
+  and tracing the continuation. A new B passes the
   `connectingRef`/`driverRef` guard; A then resumes through `teardown()`,
   increments the shared epoch, cancels current targeted discovery, resets
   session state and reads the mutable `attemptIdRef`, allowing A to discard B's
@@ -11575,3 +11575,71 @@ cleanup callbacks. The Web Bluetooth call topology remains appropriate, though
 the cited scanning-extension source was replaced by the normative
 `requestDevice()` algorithm. React's microtask lease is an explicitly tested
 heuristic, not a vendor guarantee.
+
+## 2026-09-17 — Connection-entry ownership implementation-plan hardening
+
+**Verdict: NOT READY.** The planned seam remained deep, but the two lenses
+found authority loss before admission, two diagnostic ordering defects and two
+proof paths that bypassed the ownership being claimed.
+
+- **Claim:** refusing `begin(B)` preserves live A's staged authorization.
+  **Why plausible:** abandonment is keyed, so discarding B cannot directly
+  discard A.
+  **Settled by:** tracing the real producer before the refusal seam.
+  `ConnectAction` stages B before `onProceed(B)`, and the store's one slot has
+  already replaced A when `begin(B)` runs. The contract is now limited to the
+  supported producer, whose door is absent or disabled before staging; the
+  owner still refuses replacement but does not claim it can restore overwritten
+  authority. Technique 85.
+
+- **Claim:** published entry count identifies whether a bounded trace became
+  dirty.
+  **Why plausible:** every ordinary append increases `entries().length`.
+  **Settled by:** filling the trace to capacity. Later records evict the head
+  while length remains fixed, so the owner now tracks a monotonic record
+  generation and gates the eviction boundary. Technique 86.
+
+- **Claim:** Cancel drain and final diagnostic cleanup share one lifetime.
+  **Why plausible:** both belong to the same opaque attempt.
+  **Settled by:** separating the rower-facing barrier from retained cleanup.
+  The exact Cancel promise releases `busy` and admission; a separate
+  `Promise.allSettled` barrier waits for captured connect/Cancel work before
+  final publication. Its test includes a rejection while sibling work remains
+  held, so a `Promise.all` mutation bites.
+
+- **Claim:** identity-checked operation cleanup prevents late A from affecting
+  B.
+  **Why plausible:** React state and store writes compare object or attempt ID.
+  **Settled by:** following A's retained cleanup into the trace's unkeyed global
+  latest snapshot. Operations now receive a monotonic publication order; after
+  B publishes, late A cannot replace it. Technique 87.
+
+- **Claim:** structural attempt doubles are sufficient consumer fixtures.
+  **Why plausible:** the exported interface names only `targetName`, `connect`
+  and `cancel`.
+  **Settled by:** following the object into the lifetime hook's private
+  `WeakMap`. Owner attempts now carry a non-exported brand and foreign lookalikes
+  fail closed. Render-only tests mock the lifetime adapter explicitly; routed
+  tests obtain attempts from the real owner. Technique 88.
+
+- **Claim:** the direct drain test plus Just Row's route proves both doors.
+  **Why plausible:** both render the same `entry.busy` value.
+  **Settled by:** tracing programmed Cancel from the interstitial back to
+  Workout Detail. The plan now holds transport-write settlement across both
+  routed doors and proves neither can stage B before Cancel settles.
+
+- **Claim:** a rejected collaborator mismatch is a safe refusal.
+  **Why plausible:** neither foreign method runs.
+  **Settled by:** reading every fire-and-forget caller. The error reached no
+  readout, log or record, and Cancel could restore a door without touching the
+  radio. The attempt now stays bound and uses its original method pair; foreign
+  methods never run and no dropped error is minted.
+
+**Held under attack:** task ordering keeps every committed head buildable; the
+injected fake reaches the late Cancel continuation but makes no PM5
+acknowledgement-timing claim; stable session callbacks permit collaborator
+binding; a retained non-async wrapper can provide exact promise identity;
+manual connection remains in the press continuation; the source-boundary
+mutation targets production code; React scheduling remains a tested heuristic;
+and desk evidence remains bounded away from the original phone incident's
+cause.
