@@ -2418,6 +2418,34 @@ test.describe("Phase NF: Scan NFC, fake-driven (390×844)", () => {
       page.getByText("End whatever is showing on the monitor"),
     ).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Try again" })).toBeEnabled();
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(
+      page.getByRole("button", { name: "View connection log" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "View connection log" }).click();
+    const entries = page.getByRole("group", { name: "Connection log entries" });
+    await expect(entries).toContainText("BLE-SCAN-REQUESTED connect=1");
+    await expect(entries).toContainText("BLE-SCAN-REQUESTED connect=2");
+    await expect(entries).toContainText(
+      "BLE-SCAN-FINISHED connect=2 outcome=target-not-advertising superseded=false",
+    );
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            document.documentElement.dataset.copiedLog = text;
+          },
+        },
+      });
+    });
+    await page.getByRole("button", { name: "COPY LOG" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.dataset.copiedLog),
+      )
+      .toContain("connect=2 outcome=target-not-advertising superseded=false");
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("button", { name: "Cancel" }).click();
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
     await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();

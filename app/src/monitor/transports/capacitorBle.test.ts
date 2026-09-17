@@ -1351,6 +1351,10 @@ describe("scanTarget (Phase NF)", () => {
         ["ble-scan-started", undefined],
         ["invalid-scan-result", undefined],
         ["ble-scan-matched", undefined],
+        [
+          "ble-scan-summary",
+          "stage=collision-window outcome=matched results=2 valid=1 named=1 matches=1",
+        ],
         ["scan-drain-settled", undefined],
       ]);
     });

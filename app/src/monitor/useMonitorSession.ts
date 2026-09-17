@@ -2322,6 +2322,7 @@ export function useMonitorSession(
   const targetedAbortRef = useRef<{
     attemptId: ConnectionAttemptId;
     controller: AbortController;
+    abort(source: "background" | "cancel" | "teardown"): void;
   } | null>(null);
   /** WHICH connect attempt owns the flow. Bumped at the top of every
    *  `connect()` and again by `cancel()`, so an attempt can ask whether it
@@ -4458,7 +4459,11 @@ export function useMonitorSession(
    *  React never passes arguments to an effect cleanup, so the unmount
    *  path always takes the `driverRef.current` branch. */
   const teardown = useCallback(
-    (alreadyTerminated = false, claimed: MonitorDriver | null = null): void => {
+    (
+      alreadyTerminated = false,
+      claimed: MonitorDriver | null = null,
+      source: "cancel" | "teardown" = "teardown",
+    ): void => {
       // RETIRE ANY IN-FLIGHT ATTEMPT FIRST, for the same reason `cancel()`
       // does (see `attemptRef`). Everything below this line reasons about a
       // driver, and an attempt still inside `createTransport()`/`scan()`/
@@ -4479,7 +4484,7 @@ export function useMonitorSession(
       attemptRef.current += 1;
       // Phase NF: an in-flight targeted scan is aborted synchronously here
       // too — an unmount mid-scan must stop the radio, not only the driver.
-      targetedAbortRef.current?.controller.abort();
+      targetedAbortRef.current?.abort(source);
       // Resolved FIRST — every step below needs the same driver, and
       // clearing `driverRef` here (rather than after stash/unsubscribe, as
       // this used to) is a pure reordering: a re-entrant teardown
@@ -5342,10 +5347,32 @@ export function useMonitorSession(
             return;
           }
           const controller = new AbortController();
+          // Capture this invocation, not the mutable current-attempt slot:
+          // cleanup and native acknowledgements can arrive after a retry.
+          const scanTrace: ConnectionAttemptTrace | undefined =
+            trace === undefined
+              ? undefined
+              : {
+                  ...trace,
+                  record: (kind, detail) =>
+                    trace.record(
+                      kind,
+                      `connect=${attempt}${detail === undefined ? "" : ` ${detail}`}`,
+                    ),
+                };
+          const abort = (
+            source: "background" | "cancel" | "teardown",
+          ): void => {
+            if (controller.signal.aborted) return;
+            scanTrace?.record("ble-scan-abort-requested", source);
+            controller.abort();
+          };
           targetedAbortRef.current = {
             attemptId: discovery.attemptId,
             controller,
+            abort,
           };
+          scanTrace?.record("ble-scan-requested");
           // The foreground lease for the SCAN (the session's own lifecycle
           // listener is registered only after GATT connect, further down):
           // a background transition aborts to the named interrupted state.
@@ -5358,19 +5385,31 @@ export function useMonitorSession(
                 depsRef.current.registerAppLifecycleListener ??
                 registerAppLifecycleListener
               )((event) => {
-                if (event === "background") controller.abort();
+                scanTrace?.record("ble-scan-lifecycle", event);
+                if (event === "background") abort("background");
               });
             } catch (err: unknown) {
-              trace?.record("listener-registration-failed", "scan lifecycle");
+              scanTrace?.record(
+                "listener-registration-failed",
+                "scan lifecycle",
+              );
               throw err;
             }
             if (superseded()) throw new Error("superseded");
             found = await transport.scanTarget(
               discovery,
               controller.signal,
-              trace,
+              scanTrace,
+            );
+            scanTrace?.record(
+              "ble-scan-finished",
+              `outcome=matched superseded=${superseded()}`,
             );
           } catch (err: unknown) {
+            scanTrace?.record(
+              "ble-scan-finished",
+              `outcome=${mapTargetedFailure(err, discovery.exactName).reason ?? "link-failed"} superseded=${superseded()}`,
+            );
             // Every targeted terminal PUBLISHES the trace (whole-branch
             // review B3): the snapshot accessor and the export window
             // above both read a completed attempt, and before this the
@@ -6390,7 +6429,7 @@ export function useMonitorSession(
     // not what "best-effort" is supposed to mean here. `driver` is handed
     // back explicitly because the ref was claimed above; without it the
     // hang-up would be skipped entirely (`teardown`'s own doc comment).
-    teardown(armed, driver);
+    teardown(armed, driver, "cancel");
     identityRef.current = NO_IDENTITY;
     freezeRef.current = NO_FREEZE;
     rowingStreakRef.current = null;
