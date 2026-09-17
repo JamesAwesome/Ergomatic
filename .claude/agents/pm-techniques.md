@@ -431,3 +431,9 @@ is exactly what happened: every section in this file stopped growing on
   does not appear. The claim rode FOUR versions of a card and would have
   manufactured a false abort the night before the walk. **A gate's own verdict
   is a claim with the same evidence bar as the artefact it judges.**
+
+- **A pre-connection retry can be automatic when the interrupted operation
+  proves its own cause.** Require the winning error to carry the exact pass
+  identity, successful cleanup, observed foreground return, one retry, and
+  containing-operation cancellation. Keep GATT, programming, active workouts
+  and a second interruption terminal.

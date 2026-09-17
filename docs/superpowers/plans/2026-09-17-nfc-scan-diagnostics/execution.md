@@ -168,6 +168,7 @@ No layout/structure changes or screenshots (CLAUDE.md wording-only Gate 0).
 | Foreground waiter | Only while hidden after scan cleanup/result | Foreground or operation cancel wakes; readiness rechecked; discarded finally |
 | Lifecycle unsubscribe / closed fence | Registration / operation entry | Partial registration cleaned; late callbacks ignored after cancellation/close; handle removed finally |
 | Pass trace wrapper | Sole recovery | Same capped trace, pass attribution only; no policy or persisted shape |
+| Scan-entered flag | Operation entry | Records whether an early error still owes a terminal diagnostic; discarded at operation end |
 
 ### Research and mechanism review
 
@@ -190,7 +191,7 @@ than using newer `AbortSignal.reason`; no new OS capability is required.
 Pre-registration transitions, process eviction/relaunch and actual banner/copy
 timing are outside this guarantee. A new explicit retry starts a new budget.
 
-### Verification in progress
+### Follow-up verification
 
 The first five native pipeline recovery assertions failed against the original
 implementation (no second scan / phase failed instead of picking): receipt
@@ -199,6 +200,31 @@ implementation (no second scan / phase failed instead of picking): receipt
 `802c41d5-3cd8-42c0-87b2-fee4d90bf0bb`. Restored behavior passed 651 targeted
 client tests across seven files at
 `c39fbb73-f906-4202-9da6-95c3e56f488f`; existing act warnings were printed by
-older hook/Just Row cases. Source review, mutations, browser validation and
-exact-head hosted CI are required before delivery; this entry does not claim
-those gates have run.
+older hook/Just Row cases. The final 58 native seam/registrar tests passed at
+`080ee926` after all mutations were restored, receipt
+`0e84c4f7-5f69-4a4e-88bc-6a57c68578b8`.
+
+Fourteen deciding-source mutations each failed the intended tests against
+`080ee926`; results are in `foreground-recovery-mutation-results.txt`. They
+cover retry eligibility/budget, cleanup ordering, foreground revocation,
+cancellation/wakeup, matched-result waiting, emitted recovery diagnostics,
+early terminal diagnostics, native instructions and both listener-registration
+hazards. Sources were restored byte-for-byte; git status was clean. The
+missing-wakeup mutation terminates by test timeout; all other failures expose
+assertions about the supported native path. Normal pre-commit hooks passed
+for both follow-up commits, including full typecheck and E2E membership 30/30.
+
+Correctness/spec review: PASS at `903a3c19`, no product defects. Standards
+review found two missing assertions: positive recovery-event emission and
+native instructions through the actual reader. Both were added in `080ee926`
+and their producer mutations failed. No product code changed after review.
+The PM conditionally passed the bounded behavior and same-PR scope, subject
+to source, mutation, browser and exact-head CI gates. Its physical notification
+timing limitation remains an observation for TestFlight, not a merge premise.
+
+At `080ee926`, `pnpm e2e connected.spec.ts justrow.spec.ts -g 'Scan NFC'`
+passed all five selected Chromium tests against freshly rebuilt product bytes.
+The scoped Compose stack, network and pgdata volume were removed afterward.
+
+Hosted CI must certify the published head; older diagnostics-only green runs
+do not certify this behavior change.
