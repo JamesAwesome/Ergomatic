@@ -157,8 +157,8 @@ and the no-growth campsite rule.
   Import `cacheFingerprint`, `lintInvocations`, and `runLint` from the wished-for
   module. Inject a fake child runner and pressure reader; assert:
 
-  1. normal mode runs production, app tests, server, E2E, root configs, then
-     final `.` in that exact order;
+  1. cold normal mode runs the three app-test partitions, production, server,
+     E2E, root configs, then final `.` in that exact order;
   2. every invocation receives `--cache`, `--cache-strategy content`, the same
      `--cache-location`, and no `--concurrency` flag;
   3. the final `.` sweep exists—deleting it is the deciding mutation;
@@ -174,15 +174,27 @@ and the no-growth campsite rule.
   ```js
   [
     [
-      "src", "domain", "scripts", "shared",
-      "--ignore-pattern", "**/*.test.{ts,tsx}",
+      "src/monitor/**/*.test.{ts,tsx}",
+      "--no-error-on-unmatched-pattern",
+    ],
+    [
+      "src/session/**/*.test.{ts,tsx}",
+      "src/workout/**/*.test.{ts,tsx}",
+      "--no-error-on-unmatched-pattern",
     ],
     [
       "src/**/*.test.{ts,tsx}",
       "domain/**/*.test.{ts,tsx}",
       "scripts/**/*.test.{ts,tsx}",
       "shared/**/*.test.{ts,tsx}",
+      "--ignore-pattern", "src/monitor/**",
+      "--ignore-pattern", "src/session/**",
+      "--ignore-pattern", "src/workout/**",
       "--no-error-on-unmatched-pattern",
+    ],
+    [
+      "src", "domain", "scripts", "shared",
+      "--ignore-pattern", "**/*.test.{ts,tsx}",
     ],
     ["server"],
     ["e2e"],
@@ -229,7 +241,20 @@ and the no-growth campsite rule.
   `PARTITIONS` ends with the authoritative `.` sweep shown in Step 1. Read and
   hash `pnpm-lock.yaml`, `eslint.config.js`, and
   `eslint-suppressions.json`; include `process.version`; create only the
-  selected cache directory beneath `node_modules/.cache/eslint`.
+  selected cache directory beneath `node_modules/.cache/eslint`. If the
+  selected fingerprint cache and its success marker already exist, schedule
+  only the final authoritative sweep; ESLint's content cache decides which
+  files changed. Write the adjacent `<fingerprint>.complete` marker only after
+  the cold final sweep succeeds, so a failed or interrupted partial cache is
+  never mistaken for warm.
+
+  Implementation amendment: the production-first and combined-test layouts
+  missed the cold ceiling, so the final runner uses three test slices selected
+  by measured source weight. `/usr/bin/time -l pnpm lint`, run from `app/` at
+  normal pressure on the working tree based at `b9fb6fcc` with the final Task 4
+  partition amendments and the selected cache removed, reported a
+  `1713799168`-byte maximum RSS. The warm single-sweep path removes seven
+  needless process startups without changing lint membership.
 
 - [ ] **Step 4: Implement pressure and child-process control**
 
@@ -357,7 +382,8 @@ and the no-growth campsite rule.
 
   - cold maximum RSS at or below 2.2 GB;
   - warm maximum RSS below 500 MB;
-  - warm wall time below 3 seconds for ESLint plus normal census time;
+  - warm ESLint-runner wall time below 3 seconds, plus the unchanged normal
+    census time for the full package command;
   - both runs execute the final population sweep and all four downstream
     repository gates.
 

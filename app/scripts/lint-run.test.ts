@@ -1,4 +1,11 @@
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +17,25 @@ import { cacheFingerprint, lintInvocations, runLint } from "./lint-run.mjs";
 const cacheLocation = "/tmp/eslint/cache.cache";
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
 const expectedPartitions = [
+  ["src/monitor/**/*.test.{ts,tsx}", "--no-error-on-unmatched-pattern"],
+  [
+    "src/session/**/*.test.{ts,tsx}",
+    "src/workout/**/*.test.{ts,tsx}",
+    "--no-error-on-unmatched-pattern",
+  ],
+  [
+    "src/**/*.test.{ts,tsx}",
+    "domain/**/*.test.{ts,tsx}",
+    "scripts/**/*.test.{ts,tsx}",
+    "shared/**/*.test.{ts,tsx}",
+    "--ignore-pattern",
+    "src/monitor/**",
+    "--ignore-pattern",
+    "src/session/**",
+    "--ignore-pattern",
+    "src/workout/**",
+    "--no-error-on-unmatched-pattern",
+  ],
   [
     "src",
     "domain",
@@ -17,13 +43,6 @@ const expectedPartitions = [
     "shared",
     "--ignore-pattern",
     "**/*.test.{ts,tsx}",
-  ],
-  [
-    "src/**/*.test.{ts,tsx}",
-    "domain/**/*.test.{ts,tsx}",
-    "scripts/**/*.test.{ts,tsx}",
-    "shared/**/*.test.{ts,tsx}",
-    "--no-error-on-unmatched-pattern",
   ],
   ["server"],
   ["e2e"],
@@ -36,6 +55,11 @@ const cacheArgs = [
   "content",
   "--cache-location",
   cacheLocation,
+];
+const fixtureCacheInputs: Array<[string, string]> = [
+  ["pnpm-lock.yaml", "lock"],
+  ["eslint.config.js", "config"],
+  ["eslint-suppressions.json", "suppressions"],
 ];
 
 const fixtures: string[] = [];
@@ -123,6 +147,21 @@ describe("runLint", () => {
 
     expect(status).toBe(23);
     expect(runChild).toHaveBeenCalledTimes(2);
+    const fingerprint = cacheFingerprint({
+      nodeVersion: process.version,
+      files: fixtureCacheInputs,
+    });
+    await expect(
+      access(
+        path.join(
+          cwd,
+          "node_modules",
+          ".cache",
+          "eslint",
+          `${fingerprint}.complete`,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it.each(["2", "4", "", "7", new Error("sysctl failed")])(
@@ -175,6 +214,52 @@ describe("runLint", () => {
 
     expect(runLint({ cwd, platform: "linux", readPressure, runChild })).toBe(0);
     expect(readPressure).not.toHaveBeenCalled();
+  });
+
+  it("runs only the authoritative sweep when the fingerprint cache exists", async () => {
+    const cwd = await workspace();
+    const nodeVersion = "v-test";
+    const fingerprint = cacheFingerprint({
+      nodeVersion,
+      files: fixtureCacheInputs,
+    });
+    const cacheDirectory = path.join(cwd, "node_modules", ".cache", "eslint");
+    await mkdir(cacheDirectory, { recursive: true });
+    await writeFile(path.join(cacheDirectory, `${fingerprint}.cache`), "warm");
+    await writeFile(path.join(cacheDirectory, `${fingerprint}.complete`), "");
+    const runChild = vi.fn((_command: string, _args: string[]) => ({
+      status: 0,
+      signal: null,
+    }));
+
+    expect(runLint({ cwd, platform: "linux", nodeVersion, runChild })).toBe(0);
+    expect(runChild).toHaveBeenCalledTimes(1);
+    expect(runChild.mock.calls[0]?.[1]?.[0]).toBe(".");
+  });
+
+  it("treats a cache without a completion marker as cold", async () => {
+    const cwd = await workspace();
+    const nodeVersion = "v-partial";
+    const fingerprint = cacheFingerprint({
+      nodeVersion,
+      files: fixtureCacheInputs,
+    });
+    const cacheDirectory = path.join(cwd, "node_modules", ".cache", "eslint");
+    await mkdir(cacheDirectory, { recursive: true });
+    await writeFile(
+      path.join(cacheDirectory, `${fingerprint}.cache`),
+      "partial",
+    );
+    const runChild = vi.fn((_command: string, _args: string[]) => ({
+      status: 0,
+      signal: null,
+    }));
+
+    expect(runLint({ cwd, platform: "linux", nodeVersion, runChild })).toBe(0);
+    expect(runChild).toHaveBeenCalledTimes(expectedPartitions.length);
+    await expect(
+      access(path.join(cacheDirectory, `${fingerprint}.complete`)),
+    ).resolves.toBeUndefined();
   });
 
   it("re-signals the process when ESLint is killed", async () => {

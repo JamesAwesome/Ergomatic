@@ -8,6 +8,14 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const execFile = promisify(execFileCallback);
 const census = join(import.meta.dirname, "eslint-suppression-census.mjs");
+const eslintCli = join(
+  import.meta.dirname,
+  "..",
+  "node_modules",
+  "eslint",
+  "bin",
+  "eslint.js",
+);
 const fixtures: string[] = [];
 
 const ledger = {
@@ -36,16 +44,9 @@ async function makeFixture(): Promise<string> {
   return cwd;
 }
 
-async function runCensus(cwd: string, prune = false) {
+async function runNode(args: string[], cwd?: string) {
   try {
-    const result = await execFile(process.execPath, [
-      census,
-      "--cwd",
-      cwd,
-      "--suppressions-location",
-      "eslint-suppressions.json",
-      ...(prune ? ["--prune"] : []),
-    ]);
+    const result = await execFile(process.execPath, args, { cwd });
     return { code: 0, stdout: result.stdout, stderr: result.stderr };
   } catch (error) {
     const failed = error as {
@@ -61,6 +62,30 @@ async function runCensus(cwd: string, prune = false) {
   }
 }
 
+async function runCensus(cwd: string, prune = false) {
+  return runNode([
+    census,
+    "--cwd",
+    cwd,
+    "--suppressions-location",
+    "eslint-suppressions.json",
+    ...(prune ? ["--prune"] : []),
+  ]);
+}
+
+async function runNativeLint(cwd: string, prune = false) {
+  return runNode(
+    [
+      eslintCli,
+      ".",
+      "--suppressions-location",
+      "eslint-suppressions.json",
+      ...(prune ? ["--prune-suppressions"] : []),
+    ],
+    cwd,
+  );
+}
+
 async function lintedPaths(cwd: string): Promise<string[]> {
   const eslint = new ESLint({ cwd });
   const results = await eslint.lintFiles(["."]);
@@ -74,6 +99,39 @@ afterEach(async () => {
 });
 
 describe("eslint suppression census CLI", () => {
+  it("leaves stale native suppressions untouched until explicit prune", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "eslint-native-prune-"));
+    fixtures.push(cwd);
+    await writeFile(
+      join(cwd, "eslint.config.js"),
+      `export default [
+  { files: ["**/*.js"], rules: { "no-unused-vars": "error" } },
+];\n`,
+    );
+    await writeFile(join(cwd, "clean.js"), 'console.log("clean");\n');
+    const suppressions = `${JSON.stringify(
+      { "clean.js": { "no-unused-vars": { count: 1 } } },
+      null,
+      2,
+    )}\n`;
+    const location = join(cwd, "eslint-suppressions.json");
+    await writeFile(location, suppressions);
+
+    expect((await runNativeLint(cwd)).code).not.toBe(0);
+    expect(await readFile(location, "utf8")).toBe(suppressions);
+    expect(await runNativeLint(cwd, true)).toStrictEqual({
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+    expect(JSON.parse(await readFile(location, "utf8"))).toStrictEqual({});
+    expect(await runNativeLint(cwd)).toStrictEqual({
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+  });
+
   it("accepts a debt-bearing file in ESLint's configured population", async () => {
     const cwd = await makeFixture();
 

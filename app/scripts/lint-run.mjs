@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -11,6 +11,25 @@ const CACHE_INPUTS = [
 ];
 
 const PARTITIONS = [
+  ["src/monitor/**/*.test.{ts,tsx}", "--no-error-on-unmatched-pattern"],
+  [
+    "src/session/**/*.test.{ts,tsx}",
+    "src/workout/**/*.test.{ts,tsx}",
+    "--no-error-on-unmatched-pattern",
+  ],
+  [
+    "src/**/*.test.{ts,tsx}",
+    "domain/**/*.test.{ts,tsx}",
+    "scripts/**/*.test.{ts,tsx}",
+    "shared/**/*.test.{ts,tsx}",
+    "--ignore-pattern",
+    "src/monitor/**",
+    "--ignore-pattern",
+    "src/session/**",
+    "--ignore-pattern",
+    "src/workout/**",
+    "--no-error-on-unmatched-pattern",
+  ],
   [
     "src",
     "domain",
@@ -18,13 +37,6 @@ const PARTITIONS = [
     "shared",
     "--ignore-pattern",
     "**/*.test.{ts,tsx}",
-  ],
-  [
-    "src/**/*.test.{ts,tsx}",
-    "domain/**/*.test.{ts,tsx}",
-    "scripts/**/*.test.{ts,tsx}",
-    "shared/**/*.test.{ts,tsx}",
-    "--no-error-on-unmatched-pattern",
   ],
   ["server"],
   ["e2e"],
@@ -44,10 +56,6 @@ function systemPressure() {
     throw result.error ?? new Error(`sysctl exited ${String(result.status)}`);
   }
   return result.stdout;
-}
-
-function eslintChild(command, args, options) {
-  return spawnSync(command, args, options);
 }
 
 export function cacheFingerprint({ nodeVersion, files }) {
@@ -81,7 +89,7 @@ export function runLint({
   nodeVersion = process.version,
   prune = false,
   readPressure = systemPressure,
-  runChild = eslintChild,
+  runChild = spawnSync,
   resignal = (signal) => process.kill(process.pid, signal),
   logError = console.error,
 } = {}) {
@@ -101,6 +109,8 @@ export function runLint({
   }
 
   let cacheLocation = "";
+  let completionMarker = "";
+  let warmCache = false;
   if (!prune) {
     const files = CACHE_INPUTS.map((name) => [
       name,
@@ -108,8 +118,10 @@ export function runLint({
     ]);
     const fingerprint = cacheFingerprint({ nodeVersion, files });
     const cacheDirectory = path.join(cwd, "node_modules", ".cache", "eslint");
-    mkdirSync(cacheDirectory, { recursive: true });
     cacheLocation = path.join(cacheDirectory, `${fingerprint}.cache`);
+    completionMarker = path.join(cacheDirectory, `${fingerprint}.complete`);
+    warmCache = existsSync(cacheLocation) && existsSync(completionMarker);
+    mkdirSync(cacheDirectory, { recursive: true });
   }
 
   const executable = path.join(
@@ -118,7 +130,9 @@ export function runLint({
     ".bin",
     platform === "win32" ? "eslint.cmd" : "eslint",
   );
-  for (const args of lintInvocations({ cacheLocation, prune })) {
+  const invocations = lintInvocations({ cacheLocation, prune });
+  const scheduledInvocations = warmCache ? invocations.slice(-1) : invocations;
+  for (const args of scheduledInvocations) {
     const result = runChild(executable, args, { cwd, stdio: "inherit" });
     if (result.signal) {
       resignal(result.signal);
@@ -126,6 +140,7 @@ export function runLint({
     }
     if (result.status !== 0) return result.status ?? 1;
   }
+  if (!prune) writeFileSync(completionMarker, "");
   return 0;
 }
 

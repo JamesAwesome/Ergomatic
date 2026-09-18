@@ -551,14 +551,18 @@ each source file because the runner always selects `--cache-strategy content`.
 Changing any identity input selects a fresh cache instead of trusting results
 produced by a different toolchain or policy.
 
-On a cold cache, the runner lints production, app tests, server, E2E, and root
-configuration files in sequential processes so their TypeScript programs are
-not resident together. It then runs an authoritative `eslint .` sweep against
-the same populated cache: the partition list controls memory, while the final
-sweep controls membership. A warm run therefore skips unchanged files. A run
-with one changed TypeScript file still has to initialize TypeScript Project
-Service for that process; the cache avoids repeat rule work, not TypeScript's
-per-process startup cost.
+On a cold cache, the runner lints three measured app-test slices first, then
+production, server, E2E, and root configuration files in sequential processes
+so their TypeScript programs are not resident together. It then runs an
+authoritative `eslint .` sweep against the same populated cache: the partition
+list controls memory, while the final sweep controls membership. When that
+fingerprint cache already exists, the runner starts with the authoritative
+sweep instead of paying eight process startups; ESLint checks any changed files
+and skips the rest. An adjacent `<sha256>.complete` marker is written only after
+the final sweep succeeds, so a cache left by an interrupted or failed cold run
+cannot take the warm shortcut. A run with one changed TypeScript file still has
+to initialize TypeScript Project Service for that process; the cache avoids
+repeat rule work, not TypeScript's per-process startup cost.
 
 Native ESLint owns diagnostics, per-file rule/count ceilings, and within-file
 stale-suppression pruning; the census rejects ledger files that were deleted or
