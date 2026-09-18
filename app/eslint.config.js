@@ -15,6 +15,7 @@ export default tseslint.config(
       "playwright-report",
       "test-results",
       ".test-evidence",
+      "ios/App/App/public",
     ],
   },
   {
@@ -26,18 +27,10 @@ export default tseslint.config(
       parserOptions: {
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
+        jsDocParsingMode: "none",
       },
     },
-    plugins: {
-      "react-hooks": reactHooks,
-      "react-refresh": reactRefresh,
-    },
     rules: {
-      ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
       "@typescript-eslint/no-unused-vars": [
         "error",
         {
@@ -55,6 +48,20 @@ export default tseslint.config(
       "@typescript-eslint/no-unsafe-member-access": "error",
       "@typescript-eslint/only-throw-error": "error",
       "@typescript-eslint/prefer-promise-reject-errors": "error",
+    },
+  },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    plugins: {
+      "react-hooks": reactHooks,
+      "react-refresh": reactRefresh,
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+      "react-refresh/only-export-components": [
+        "warn",
+        { allowConstantExport: true },
+      ],
     },
   },
   {

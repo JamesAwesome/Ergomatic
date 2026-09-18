@@ -236,7 +236,7 @@ test("foreground test admission does not silently include integration fixtures",
 test("lint and prune retain their complete required script populations", () => {
   const lint = plan("lint").map((p) => p.args);
   assert.deepEqual(lint, [
-    ["/checkout/app/node_modules/eslint/bin/eslint.js", "."],
+    ["scripts/lint-run.mjs"],
     ["scripts/eslint-suppression-census.mjs"],
     ["scripts/nul-check.sh"],
     ["scripts/transport-census.sh"],
@@ -245,11 +245,7 @@ test("lint and prune retain their complete required script populations", () => {
   assert.deepEqual(
     plan("lint-prune").map((p) => p.args),
     [
-      [
-        "/checkout/app/node_modules/eslint/bin/eslint.js",
-        ".",
-        "--prune-suppressions",
-      ],
+      ["scripts/lint-run.mjs", "--prune"],
       ["scripts/eslint-suppression-census.mjs", "--prune"],
     ],
   );

@@ -128,8 +128,6 @@ export function workloadPhases({
     tsc("-p", "e2e/tsconfig.json", "--noEmit"),
     shell("scripts/e2e-typecheck-census.sh"),
   ];
-  const eslint = (...rest) =>
-    node(join(app, "node_modules/eslint/bin/eslint.js"), [".", ...rest]);
   const selectionPhase = (payload) => ({
     ...shell("scripts/test-run.sh", ["--selection", JSON.stringify(payload)]),
     selection: true,
@@ -235,7 +233,7 @@ export function workloadPhases({
       ];
     case "lint":
       return [
-        eslint(),
+        node("scripts/lint-run.mjs"),
         node("scripts/eslint-suppression-census.mjs"),
         shell("scripts/nul-check.sh"),
         shell("scripts/transport-census.sh"),
@@ -243,7 +241,7 @@ export function workloadPhases({
       ];
     case "lint-prune":
       return [
-        eslint("--prune-suppressions"),
+        node("scripts/lint-run.mjs", ["--prune"]),
         node("scripts/eslint-suppression-census.mjs", ["--prune"]),
       ];
     case "pre-commit":
