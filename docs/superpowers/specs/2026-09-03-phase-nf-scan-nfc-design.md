@@ -430,9 +430,10 @@ time-based delay; abort/unmount cancels the pending barrier.
 ### 1. One platform adapter owns NFC
 
 Add an adapter port with no React, workout, PM5-driver, or persistence knowledge.
-`ConnectionAttemptId` is a UUID minted with `crypto.randomUUID()` at the shared
-detail entry owner. It is opaque correlation, not authentication; native and JS
-reject a missing or empty value and compare it only by exact equality.
+`ConnectionAttemptId` is a UUID minted with `crypto.randomUUID()` for the
+connection-entry operation. It is opaque correlation, not authentication;
+native and JS reject a missing or empty value and compare it only by exact
+equality.
 
 ```ts
 type ConnectionAttemptId = string;
@@ -548,11 +549,10 @@ session state.
 
 ### 3. One connection-entry owner shares the safety lock
 
-`ConnectAction` currently owns both the button and the replacement authorization
-(`ConnectAction.tsx:112-201`). Duplicating it for NFC would create two local
-stages and two independently staged retire receipts. Phase NF extracts or
-generalizes that ownership so the hardware-entry group has exactly one guard and
-one pending intent:
+`ConnectAction` owns both hardware buttons and the replacement authorization
+(`ConnectAction.tsx:112-201`). The connection-entry module owns the operation
+behind those buttons, so manual and NFC entry share one guard and one pending
+intent:
 
 ```ts
 type ConnectionEntryIntent =
@@ -568,30 +568,36 @@ both buttons. **Connect anyway** resumes the same intent and ID. Execution of
 retirement remains downstream at the existing wire `armed` event; Phase NF does
 not move that acceptance point.
 
-The shared owner explicitly transfers the keyed staged receipt to the connecting
-handoff. Before that transfer, every terminal path discards it: confirmation
-cancel, NFC abort/cancel/timeout/invalidation/start failure, unsupported tag,
-compile or baseline failure, and detail unmount. After transfer, the existing
-session's recoverable retry retains it, `armed` consumes it, and explicit
-Cancel, row-instead, unrecoverable failure, or true route unmount discards it.
-Cleanup is compare-by-attempt-ID, so late A cleanup cannot discard B's
-authorization.
+The connection-entry module owns each operation's request, trace and attempt ID.
+Workout Detail and Just Row receive only an offered opaque attempt; claiming it
+transfers the keyed staged receipt without exposing those values. Before that
+transfer, every terminal path discards it: confirmation cancel, NFC
+abort/cancel/timeout/invalidation/start failure, unsupported tag, compile or
+baseline failure, and owner unmount. After transfer, the attempt's recoverable
+retry retains it, `armed` consumes it, and explicit Cancel, row-instead,
+unrecoverable failure, or true route unmount discards it. Cleanup is
+compare-by-attempt-ID, so late A cleanup cannot discard B's authorization.
 
 React StrictMode rehearses effect setup → cleanup → setup. A hook-effect cleanup
-therefore cannot itself mean the connection attempt died. The route-level
-handoff owns an identity-bound mount lease: cleanup queues a microtask release
-for that attempt ID, and the replayed setup reclaims the same lease before the
-release commits. A real unmount has no reclaim and discards the receipt. Explicit
-user terminal actions still discard synchronously. The lease cannot be reclaimed
-by another ID and owns no duration threshold.
+therefore cannot itself mean the connection attempt died. Both supported doors
+declare the opaque attempt's lifetime through `useConnectionEntryLifetime`:
+`ConnectedInterstitial` for programmed workouts and `JustRow` for free rows.
+The connection-entry module applies the identity-bound mount lease: cleanup
+queues a microtask release for that attempt ID, and the replayed setup reclaims
+the same lease before the release commits. A real unmount has no reclaim and
+discards the receipt. Explicit user terminal actions still discard
+synchronously. The lease cannot be reclaimed by another ID and owns no duration
+threshold.
 
 Only one entry attempt may exist. Starting NFC disables both hardware buttons.
 Manual Connect cannot begin until NFC has settled and drained; NFC cannot begin
-while the connected interstitial owns a monitor attempt.
+while either supported door owns a claimed, retryable or draining attempt.
 
-### 4. Workout detail resolves NFC before the existing handoff
+### 4. Connection entry resolves NFC before opaque attempt transfer
 
-For manual intent, `handleConnectProceed` keeps today's behavior.
+For manual intent, the connection-entry module offers the opaque attempt
+synchronously. Workout Detail compiles before claiming it; Just Row claims it
+directly.
 
 For NFC intent:
 
@@ -603,8 +609,9 @@ For NFC intent:
 6. cross the one-paint barrier while the same attempt remains current;
 7. compile the same nudged workout, phases, identity, baselines, and log seed as
    today's `handleConnectProceed` (`WorkoutDetail.tsx:224-277`);
-8. add the ephemeral discovery request to the in-memory `connecting` handoff;
-9. render the existing `ConnectedInterstitial`.
+8. claim the offered opaque attempt into the in-memory `connecting` handoff;
+9. render the existing `ConnectedInterstitial`, which declares that attempt's
+   lifetime and invokes its operations.
 
 The success visual adds no timer. It receives one real paint before the
 interstitial render; failure to remain current at the paint boundary performs
@@ -616,10 +623,12 @@ type MonitorDiscoveryRequest =
   | TargetedMonitorDiscoveryRequest;
 ```
 
-`ConnectedInterstitial` passes this request to `session.connect(request)` on its
-existing mount-once effect (`ConnectedInterstitial.tsx:300-327`). Retry preserves
-the same request. A targeted failure retries the same exact name; it never opens
-the picker and does not require a second NFC read.
+The connection-entry module keeps this request private. The opaque attempt's
+`connect(session)` operation projects it into the unchanged low-level
+`session.connect(request, trace)` interface. `ConnectedInterstitial` and Just
+Row invoke only the attempt operation; retry preserves the same request and
+trace. A targeted failure retries the same exact name; it never opens the picker
+and does not require a second NFC read.
 
 ### 5. Transport gains a fail-closed targeted operation
 
@@ -642,8 +651,9 @@ interface TargetedScanTransport {
 }
 ```
 
-`useMonitorSession` discriminates the handoff request. Picker/legacy callers use
-today's `transport.scan()`. An advertised-name request requires
+`useMonitorSession` discriminates the private discovery request projected by the
+opaque attempt. Picker/legacy callers use today's `transport.scan()`. An
+advertised-name request requires
 `TargetedScanTransport`; an absent capability or invalid request raises a named
 targeted failure before any picker or radio call. There is no fallback from
 `scanTarget` to `scan`. Capacitor, fake, and replay implement the capability;
@@ -765,17 +775,18 @@ The UI may navigate immediately; the adapter-level raw-operation tail blocks the
 next native scan until cleanup completes. The incoming `ConnectionAttemptId` is
 stored unchanged beside the session attempt; the existing numeric `attemptRef`
 remains a local stale-await counter and is not presented as cross-layer
-identity. Phase NF passes the discovery request through those existing gates;
-it does not create a parallel driver path.
+identity. The connection-entry attempt passes its private discovery request
+through those existing gates; it does not create a parallel driver path.
 
 The established sequence remains:
 
 ```text
 detail authorization
   → NFC target (NFC route only)
-  → compile + in-memory handoff
-  → interstitial
-  → session.connect(discovery request)
+  → compile + opaque-attempt claim
+  → interstitial or Just Row lifetime owner
+  → attempt.connect(session)
+  → session.connect(private discovery request and trace)
   → transport scan + connect
   → session.program
   → driver verifies armed
@@ -790,26 +801,26 @@ point. Nothing changes first-rowing-frame run creation or terminal logging.
 | State                                                  | Owner and identity                                                       | Begins                                        | Every clear/transfer                                                                                                    | Teardown and re-arm                                                                                                                       |
 | ------------------------------------------------------ | ------------------------------------------------------------------------ | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | NFC capability                                         | JS NFC adapter cache                                                     | first probe                                   | document/process reset                                                                                                  | unsupported surfaces never arm; a new document may probe again                                                                            |
-| connection attempt ID                                  | shared detail entry owner; UUID                                          | hardware-button press                         | pre-handoff terminal clears; accepted handoff transfers unchanged; the session holds it until the next `connect()` overwrites it (never cleared by a session terminal — a keyed take on a stale ID is a pure read, F7) | does not survive a document reset; old native events retain the old ID and cannot join a new attempt                                      |
-| pending entry intent                                   | shared detail guard; attempt ID                                          | hardware-button press                         | confirmation cancel clears; authorization transfers same ID                                                             | detail unmount clears; next press mints a new ID                                                                                          |
-| staged retire receipt and mount lease                  | handoff store; attempt ID plus existing session key/revision set         | safety check; lease at interstitial ownership | every pre-handoff terminal discards by ID; handoff transfers; `armed` consumes; explicit terminal/true unmount discards | StrictMode cleanup queues release and same-ID setup reclaims; module reset loses it safely; retry keeps the same ID                       |
+| connection attempt ID                                  | connection-entry operation; UUID                                         | hardware-button press                         | pre-claim terminal clears; opaque attempt and session projection retain it through terminal cleanup                                      | does not survive a document reset; old native events retain the old ID and cannot join a new attempt                                      |
+| pending entry intent                                   | shared `ConnectAction` guard; attempt ID                                 | hardware-button press                         | confirmation cancel clears; authorization transfers same ID                                                             | door-owner unmount clears; next press mints a new ID                                                                                      |
+| staged retire receipt and mount lease                  | connection-entry operation; attempt ID plus existing session key/revision set | safety check; lease at either supported door | every pre-claim terminal discards by ID; claim transfers; `armed` consumes; explicit terminal/true unmount discards     | StrictMode cleanup queues release and same-ID setup reclaims; module reset loses it safely; retry keeps the same ID                       |
 | native NFC generation                                  | patched plugin; attempt ID plus concrete session identity                | accepted native start                         | matching record/error then matching stop, invalidation, or superseding start                                            | survives process-live WebView reload only long enough to be drained; new start serializes behind it                                       |
 | NFC and foreground listener handles                    | JS NFC adapter; attempt ID                                               | registration begins before native start       | success, rejection, abort, invalidation, or start failure removes all; a late-resolving handle self-removes             | document reset drops JS listeners; retained native events remain ID-labelled; re-arm waits for every new handle and current-state read    |
 | NFC terminal guard                                     | JS NFC adapter; attempt ID                                               | synchronously before listener awaits          | first outcome claims; all later outcomes cleanup only                                                                   | foreground loss and unmount claim before awaiting stop; next read owns a new guard                                                        |
 | raw NDEF records                                       | parser call; current attempt                                             | matching native event                         | parse returns or throws                                                                                                 | never stored or transferred                                                                                                               |
-| `Pm5NfcTarget`                                         | detail attempt; attempt ID                                               | successful parse                              | handoff transfer or any pre-handoff terminal                                                                            | no reload survival; exact retry uses handoff copy only                                                                                    |
-| success check/haptic/paint barrier                     | detail render; attempt ID                                                | target accepted                               | one committed paint then handoff, or attempt abort                                                                      | no duration timer; pending frames cancel on unmount; re-arm uses fresh barrier                                                            |
-| discovery request                                      | connecting handoff/session; attempt ID                                   | compile succeeds                              | connect terminal, cancel, or unmount                                                                                    | exact retry retains same value and ID; manual request carries no NFC target                                                               |
+| `Pm5NfcTarget`                                         | connection-entry operation; attempt ID                                   | successful parse                              | opaque-attempt claim or any pre-claim terminal                                                                           | no reload survival; exact retry remains inside the same attempt                                                                           |
+| success check/haptic/paint barrier                     | connection-entry operation and accepted-state render; attempt ID         | target accepted                               | one committed paint then offer, or attempt abort                                                                         | no duration timer; pending frames cancel on unmount; re-arm uses fresh barrier                                                            |
+| discovery request                                      | connection-entry operation/session projection; attempt ID                | accepted entry operation                      | connect terminal, cancel, or unmount                                                                                    | exact retry retains same value and ID; manual request carries no NFC target                                                               |
 | scan abort controller and pre-connect foreground lease | monitor-session attempt; object identity plus attempt ID                 | before `transport.scanTarget`                 | owning scan settle, GATT transfer, cancel, background, unmount, or supersession                                         | compare-by-object clear prevents late A from clearing B; late listener self-removes; retry creates fresh owners under the same attempt ID |
 | targeted timers and match sets                         | Capacitor operation identity                                             | immediately before `requestLEScan`            | matching stop completion on match, ambiguity, timeout, error, or abort                                                  | never cross operations; re-arm allocates fresh timers and sets                                                                            |
 | targeted raw BLE operation/drain                       | Capacitor module FIFO tail; operation identity                           | before first targeted native call             | matching `stopLEScan()` completes                                                                                       | survives component/transport replacement; successor awaits captured predecessor; stop rejection poisons tail until process restart        |
 | manual raw picker/drain                                | Capacitor module FIFO tail; raw `requestDevice` promise identity         | before raw picker call                        | raw promise settles after selection/cancel, even if UI timeout already won                                              | survives component/transport replacement; no successor radio operation starts while old sheet remains live                                |
-| redacted attempt trace                                 | bounded in-memory attempt log; attempt ID owner but no ID value recorded | hardware press                                | adopted by connected session log or retained as latest completed attempt for process-local diagnostics                  | no raw tag/name/address data; next attempt replaces only after prior snapshot remains observable                                          |
+| redacted attempt trace                                 | connection-entry operation; attempt ID owner but no ID value recorded    | hardware press                                | projected into the connected session log or retained as latest completed attempt for process-local diagnostics          | no raw tag/name/address data; next attempt replaces only after prior snapshot remains observable                                          |
 | monitor session/driver/run                             | existing owners; incoming attempt ID beside existing local generation    | existing connect/armed/first-frame points     | existing cancel/terminal rules                                                                                          | local numeric generation still suppresses stale awaits; no PM5 run rule changes                                                           |
 
 ## Failure and concurrency contract
 
-- One `ConnectionAttemptId` is carried unchanged from the detail press through
+- One `ConnectionAttemptId` is carried unchanged from either door's press through
   native NFC events, keyed staged receipt, target handoff, session, and BLE
   discovery. Any callback carrying another ID is ignored after performing only
   identity-bound cleanup; JavaScript-local counters remain subordinate.
@@ -820,12 +831,15 @@ point. Nothing changes first-rowing-frame run creation or terminal logging.
   `Unsupported NFC tag`; JavaScript is never asked to infer array order.
 - A record event closes/drains its exact Core NFC generation before starting
   BLE. BLE stops before connect. These radios do not overlap after the tag read.
-- Detail unmount or foreground loss synchronously claims abort, discards that
-  attempt's pre-handoff receipt, removes every listener including late-resolving
-  handles, and prevents a late event from mounting the interstitial.
-- Interstitial cancel and unmount use the existing session attempt invalidation
-  and synchronously abort the targeted scan. A new manual/NFC native scan awaits
-  that operation's identity-bound drain even after the old hook unmounts.
+- Entry-owner unmount or foreground loss synchronously claims abort, discards
+  that attempt's pre-claim receipt, removes every listener including
+  late-resolving handles, and prevents a late event from mounting a connected
+  surface.
+- Both supported doors declare attempt lifetime through the connection-entry
+  module, and their Cancel paths call the opaque attempt. The module delegates
+  to the existing session invalidation and synchronously aborts the targeted
+  scan. A new manual/NFC native scan awaits that operation's identity-bound
+  drain even after the old hook unmounts.
 - Haptic rejection is swallowed after instrumentation. It cannot become a
   connection failure.
 - Invalid tags never reach Bluetooth. Target timeouts never degrade to manual
@@ -850,17 +864,19 @@ seam, every browser/e2e/replay gate would replace the code most likely to be
 wrong. Phase NF adds both:
 
 1. **Scripted NFC reader.** Unit/integration tests feed native-shaped record and
-   session-end events through the production parser and detail coordinator. The
-   Gate -1 capture becomes the canonical valid fixture.
+   session-end events through the production parser and connection-entry
+   coordinator. The Gate -1 capture becomes the canonical valid fixture.
 2. **Redacted connection-attempt trace with an observable sink.** A bounded
-   in-memory `ConnectionAttemptTrace` is created at the hardware press and
-   injected through reader, detail, handoff, and session. On successful GATT it
-   becomes the prefix of the existing monitor event log; before connection, the
-   session's `exportLog()` window (the failure screen's **View connection log**)
-   serialises the pending attempt's entries in the ring's own shape under the
-   same `nfc-attempt:` prefix, ahead of any ring a previous session left.
-   **Every attempt terminal publishes the trace** — a pre-handoff terminal on
-   detail, and on the session a targeted failure, a superseded attempt or the
+   in-memory `ConnectionAttemptTrace` is created inside the connection-entry
+   operation at the hardware press and passed internally through the reader and
+   the opaque attempt's session projection. Screens never receive it. On
+   successful GATT it becomes the prefix of the existing monitor event log;
+   before connection, the session's `exportLog()` window (the failure screen's
+   **View connection log**) serialises the pending attempt's entries in the
+   ring's own shape under the same `nfc-attempt:` prefix, ahead of any ring a
+   previous session left. **Every attempt terminal publishes the trace** — the
+   connection-entry owner handles pre-claim and abandoned claimed terminals,
+   while the session handles a targeted failure, a superseded attempt or the
    ring-prefix copy — so the process-local latest snapshot is never a
    pre-scan copy of a handed-off attempt (whole-branch review B3, 2026-09-06:
    before this, only a successful connect ever published, and every failure
@@ -964,9 +980,10 @@ composition tests; adjacent mirrors are not accepted as seam proof.
   controller or drain. `stopLEScan()` rejection after match, timeout, abort, and
   ambiguity always wins, connects nothing, emits its diagnostic, poisons the
   tail, and makes successor B fail without a native call.
-- Handoff: NFC target survives detail → interstitial → retry; manual has no
-  target and still opens the existing picker. The same attempt ID reaches every
-  layer, and a mismatched or absent ID fails closed.
+- Handoff: the opaque attempt preserves the NFC target through detail →
+  interstitial → retry; manual has no target and still opens the existing
+  picker. The same private attempt ID reaches every layer, and a mismatched or
+  absent ID fails closed.
 - Session: NFC path connects once, programs once, accepts `armed` once, preserves
   staged-retire timing, and tears down on navigation/cancel/program failure.
   The keyed staged receipt is discarded on every named pre-handoff terminal
@@ -995,7 +1012,7 @@ fails:
 4. remove NFC stop/drain;
 5. remove BLE stop on timeout;
 6. remove the shared single-flight guard;
-7. drop the discovery request at detail/interstitial/session handoff;
+7. drop the private discovery request at the attempt-to-session projection;
 8. move staged retirement before `armed`;
 9. render the button while capability is unknown/unsupported.
 10. connect immediately to the first exact-name result without checking for a
@@ -1015,8 +1032,8 @@ fails:
 19. clear the session's abort-controller ref without object-identity comparison.
 20. attach the manual BLE drain to the outer timeout race instead of the raw
     picker promise.
-21. leave the keyed staged-retire receipt live on one pre-handoff terminal path.
-22. allow foreground loss to leave the detail attempt armed.
+21. leave the keyed staged-retire receipt live on one pre-claim terminal path.
+22. allow foreground loss to leave the entry operation armed.
 23. discard the staged receipt during StrictMode rehearsal, or let another
     attempt ID reclaim its mount lease.
 24. mount the interstitial before the accepted state crosses its paint barrier.
