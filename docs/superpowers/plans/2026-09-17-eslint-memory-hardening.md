@@ -124,7 +124,7 @@ and the no-growth campsite rule.
 
   ```bash
   pnpm test --project unit scripts/eslint-config-boundaries.test.ts
-  pnpm exec eslint src e2e server domain scripts shared
+  pnpm lint
   ```
 
   Expected: PASS with no Babel deoptimization warning for

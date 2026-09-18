@@ -294,7 +294,7 @@ describe("runLint", () => {
 });
 
 describe("package scripts", () => {
-  it("routes lint and prune through the memory-safe runner", async () => {
+  it("keeps lint and prune inside admitted workload pipelines", async () => {
     const pkg = JSON.parse(
       await readFile(path.join(appRoot, "package.json"), "utf8"),
     ) as { scripts: Record<string, string> };
