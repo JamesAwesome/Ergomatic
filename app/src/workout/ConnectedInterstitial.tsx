@@ -22,10 +22,6 @@ import { useEffect, useRef, useState } from "react";
 import SupportMatrixLink from "../monitor/SupportMatrixLink";
 import { fmtSplit } from "../../domain/format.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
-import type { MonitorDiscoveryRequest } from "../../domain/monitor/types.js";
-import { discardStagedRetire } from "../monitor/handoffStore";
-import type { ConnectionAttemptTrace } from "../monitor/nfc/connectionAttemptTrace";
-import { claimMountLease, onMountLeaseLost } from "../monitor/mountLease";
 import type { Baselines } from "../../domain/types.js";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
 import ChecklistLine from "./ChecklistLine";
@@ -42,11 +38,15 @@ import ConnectedSurface from "./ConnectedSurface";
 import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 import { saveLastDevice } from "../monitor/lastDevice";
 import { loadReadyCard } from "../you/readyCard";
+import {
+  useConnectionEntryLifetime,
+  type ConnectionEntryAttempt,
+} from "../monitor/connectionEntry";
 
-/** Every reason that is NOT the machine actively refusing a workout — the
- *  six that are OURS (about the phone/radio side, never the PM5's own
+/** Every reason that is NOT the machine actively refusing a workout — those
+ *  that are OURS (about the phone/radio side, never the PM5's own
  *  vocabulary — `ConnectedError`'s own doc comment in
- *  `useMonitorSession.ts`), plus `"disconnected"` (task-5 review, MEDIUM-7):
+ *  `connectionFailure.ts`), plus `"disconnected"` (task-5 review, MEDIUM-7):
  *  it IS one of the eight `ProgramRejectionReason` values, but it says the
  *  LINK died mid-conversation, not that the PM5 looked at the workout and
  *  said no — rendering "The monitor wouldn't take it" for a link that
@@ -92,9 +92,9 @@ const NOT_A_MACHINE_REFUSAL: Record<ConnectedError["reason"], boolean> = {
 
 /** `detail` is documented as copy-ready prose (`ConnectedError`'s own doc
  *  comment) for exactly this reason: reusing it here, rather than
- *  authoring six near-duplicate serif lines, is also what keeps
+ *  authoring near-duplicate serif lines, is also what keeps
  *  `link-failed`'s copy from ever drifting back onto `bluetooth-off`'s by
- *  accident — the two mappers in `useMonitorSession.ts` already write
+ *  accident — the classifiers in `connectionFailure.ts` already write
  *  different prose for the two tags (task-4 review MEDIUM-4's own
  *  finding), so keying off `detail` inherits that distinction rather than
  *  re-deriving it. `permission-denied` gets its own fixed title (spec §7) —
@@ -139,7 +139,7 @@ function detailIsAlreadyOnScreen(error: ConnectedError): boolean {
  *  so there is no `ConnectedError` this raw link drop ever produces. Reused
  *  rather than invented (house rule: new user-facing strings need James's
  *  eyes) — `detail` is `mapRadioFailure`'s own EXISTING fallback text for a
- *  connect-time link failure (`useMonitorSession.ts`'s `link-failed` case),
+ *  connect-time link failure (`connectionFailure.ts`'s `link-failed` case),
  *  already shown to a rower today; it says only that the link failed, with
  *  no claim about which step was interrupted (unlike `driver.ts`'s
  *  `REJECTION_VERBS.disconnected`, "…before completing", which is
@@ -204,14 +204,9 @@ export interface ConnectedInterstitialProps {
    *  this screen, and therefore the hook, and therefore hangs up the radio;
    *  see `ConnectedSurface.tsx`'s header for that decision in full. */
   onEnded: () => void;
-  /** Phase NF: HOW to find the monitor — today's picker under the press's
-   *  attempt ID, or the exact advertised name an NFC tag decoded to. Passed
-   *  unchanged to `session.connect(request)` on mount AND on Try again, so
-   *  a targeted retry repeats the exact target and never opens the picker. */
-  request: MonitorDiscoveryRequest;
-  /** Phase NF: the attempt's redacted trace, recorded into by the targeted
-   *  scan and copied as the prefix of the session ring at GATT connect. */
-  trace?: ConnectionAttemptTrace;
+  /** The opaque connection-entry attempt owns discovery, retry, keyed
+   *  abandonment and its trace. This screen only invokes its operations. */
+  attempt: ConnectionEntryAttempt;
   /** Test-only injection point (`useMonitorSession`'s own `deps`
    *  parameter). Production callers omit this — see the file's header
    *  note on why a production `createTransport` is NOT threaded through
@@ -228,11 +223,11 @@ export default function ConnectedInterstitial({
   onExit,
   onRowInstead,
   onEnded,
-  request,
-  trace,
+  attempt,
   deps,
 }: ConnectedInterstitialProps) {
   const session = useMonitorSession(deps);
+  useConnectionEntryLifetime(attempt);
   // Handoff §2 wrote "Ready dwell 1.2 s" — an auto-advance past this
   // screen. REMOVED, deliberately (2026-08-08, hardware walks 2-3: the
   // operator reported the skip as a bug three separate times before the
@@ -342,18 +337,7 @@ export default function ConnectedInterstitial({
   // `connect()`; `program()` fires from the separate "pairing" phase
   // effect below, once a real device is found.
   useEffect(() => {
-    // Phase NF (design spec §3, "React StrictMode rehearses effect setup →
-    // cleanup → setup"): the identity-bound MOUNT LEASE. A cleanup queues a
-    // microtask release for THIS attempt ID; a StrictMode replay reclaims
-    // it before the release commits; a genuine unmount commits it and
-    // discards the attempt's still-staged receipt (a no-op after `armed`
-    // consumed it, or after Cancel already discarded it).
-    const lease = claimMountLease(request.attemptId);
-    onMountLeaseLost(request.attemptId, () =>
-      discardStagedRetire(request.attemptId),
-    );
-    void session.connect(request, trace);
-    return () => lease.release();
+    void attempt.connect(session);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -432,12 +416,12 @@ export default function ConnectedInterstitial({
     !retryRefused;
 
   function handleCancel(): void {
-    void session.cancel();
+    void attempt.cancel(session);
     onExit();
   }
 
   function handleRowInstead(): void {
-    void session.cancel();
+    void attempt.cancel(session);
     onRowInstead();
   }
 
@@ -481,7 +465,7 @@ export default function ConnectedInterstitial({
     // line — see the test file's own "the walk's dead button" section).
     programmedForDeviceRef.current = null;
     retryingRef.current = true;
-    void session.connect(request, trace).finally(() => {
+    void attempt.connect(session).finally(() => {
       retryingRef.current = false;
     });
   }
@@ -499,23 +483,25 @@ export default function ConnectedInterstitial({
     // the rest of them, not a moment to show tab navigation underneath.
     // Phase NF follow-on (Gate 0 §2, James 2026-09-06): on the NFC route
     // nothing is being chosen — the app is scanning for ONE exact name for
-    // up to 10 s (20 s with the cleanup bound), and the walk of 2026-09-06
+    // up to 10 s per pass (20 s with cleanup; one foreground recovery),
+    // and the walk of 2026-09-06
     // left a rower on this backdrop with no way out. The targeted variant
     // names the target and carries the same Cancel every other card here
-    // has; `handleCancel` → `session.cancel()` aborts the scan
+    // has; `handleCancel` → `attempt.cancel(session)` aborts the scan
     // synchronously (a targeted scan is live only in `picking`, where no
     // driver exists — `useMonitorSession.ts`'s own precondition) and
     // `onExit` returns to detail with both buttons.
-    if (request.kind === "advertised-name") {
+    if (attempt.targetName !== null) {
       return (
         <main className="screen connected-interstitial">
           <div className="connected-interstitial-body">
             <p className="connected-status-label">CONNECT</p>
             <p className="connected-serif-line">
-              Looking for {request.exactName}
+              Looking for {attempt.targetName}
             </p>
             <p className="connected-body-line">
-              Keep the monitor on and close by.
+              Tag read. Move your phone away from the NFC spot and keep
+              Ergomatic open.
             </p>
           </div>
           <div className="action-stack connected-interstitial-actions">

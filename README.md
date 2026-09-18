@@ -99,7 +99,7 @@ layer: `src/platform.ts`, `src/api.ts`, `src/native/`, `src/adapters/`.
 
 ## What gates a change
 
-`pnpm lint · typecheck · test · build` plus, for anything touching `app/src/`,
+`pnpm lint · typecheck · build` and named test projects/files, plus, for anything touching `app/src/`,
 the named e2e specs run locally against an already-booted stack, with the
 e2e job on the PR read for the full suite — `pnpm e2e` is the Playwright
 suite that runs flows *and* structural design assertions (44 px hit targets,
@@ -107,9 +107,33 @@ WCAG AA contrast, token usage, safe-area insets) against the real compose
 stack. The gate is tiered deliberately: **CI owns the full suite; locally
 you run what your change touches** (a full local run also costs ~1.5x its
 old wall-clock under the worker cap, but the tiering is the reason, not the
-cost — CLAUDE.md RF1). `pnpm screenshots` refreshes `docs/screenshots/`,
-which the phase PR body embeds. Coverage is gated at 90% repo-wide with
+cost — CLAUDE.md RF1). Layout/structure changes capture only affected views
+with `pnpm screenshots -g "<affected test names>"`, after previewing the
+selection (TESTING.md §8). **Text-only changes and releases need no
+screenshots.** Full refresh requires James's explicit request plus `--all`;
+bare invocations refuse before Docker. Coverage is gated at 90% repo-wide with
 `app/domain/**` pinned at 100.
+
+Local lint, typecheck, build, unit/client tests and Git hooks share one
+resource owner across cooperating worktrees and refuse unsafe host pressure.
+Use `pnpm test --project unit <exact-file>` (from `app/`), with optional
+`-t '<test-name regex>'`; `test:list` previews the same exact selection.
+Bare/project-only tests and unmatched targets refuse. `test:related --project
+unit --base origin/main` selects related files; `test:full --project unit
+--project client` is explicit full scope. Changed global config/manifests or
+lockfiles require explicit full verification, never an automatic broad run.
+Pre-push runs the deduplicated
+protection union once; `pnpm push:full <git push arguments>` explicitly runs
+full unit/client checks inside that push's hook. Verified plain-docs commits
+avoid app-heavy checks. Browser, integration/container and native lifetimes
+still require controller coordination. See [local resource ownership](docs/TESTING.md#16-local-resource-ownership)
+for status, recovery and the staged boundary. Worker defaults are unchanged.
+
+On-demand mutation also uses that owner: `pnpm mutate --concurrency 1 --mutate
+domain/recency.ts`. Repeat exact `--mutate` paths, optionally narrow unit
+witnesses with `--test-file`; full mutation scope requires `--all` and an
+explicit concurrency. No bare/glob/literal-`--` fallback. JSON and HTML results
+are retained with the invocation receipt.
 
 Before writing tests, read `docs/TESTING.md`. Before starting any work, read the
 **Recurring failures** section of `CLAUDE.md` — it is a list of mistakes this

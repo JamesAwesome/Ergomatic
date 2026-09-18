@@ -1,0 +1,343 @@
+diff --git a/dist/src/child-proxy/child-process-proxy.js b/dist/src/child-proxy/child-process-proxy.js
+index b1b7bc4d718fee389b74cdbbd2a80734b43e9550..cdce09d457d1ca8815e5b38e2ffa036a1ea9875e 100644
+--- a/dist/src/child-proxy/child-process-proxy.js
++++ b/dist/src/child-proxy/child-process-proxy.js
+@@ -8,6 +8,7 @@ import { deserialize, padLeft, serialize } from '../utils/string-utils.js';
+ import { ChildProcessCrashedError } from './child-process-crashed-error.js';
+ import { ParentMessageKind, WorkerMessageKind, } from './message-protocol.js';
+ import { OutOfMemoryError } from './out-of-memory-error.js';
++import { ErgomaticWorkerFailure } from '../ergomatic-worker-failure.js';
+ const BROKEN_PIPE_ERROR_CODE = 'EPIPE';
+ const IPC_CHANNEL_CLOSED_ERROR_CODE = 'ERR_IPC_CHANNEL_CLOSED';
+ const TIMEOUT_FOR_DISPOSE = 2000;
+@@ -25,6 +26,7 @@ export class ChildProcessProxy {
+     isDisposed = false;
+     initMessage;
+     constructor(modulePath, namedExport, loggingServerAddress, options, fileDescriptions, pluginModulePaths, workingDirectory, logger, execArgv, idGenerator) {
++        this.ergomaticFailOnWorkerFailure = options.ergomaticFailOnWorkerFailure === true;
+         const workerId = idGenerator.next().toString();
+         this.worker = childProcess.fork(fileURLToPath(new URL('./child-process-proxy-worker.js', import.meta.url)), {
+             silent: true,
+@@ -103,6 +105,19 @@ export class ChildProcessProxy {
+         this.worker.on('message', (serializedMessage) => {
+             const message = deserialize(serializedMessage);
+             switch (message.kind) {
++                case ParentMessageKind.ErgomaticWorkerFailure:
++                    if (this.ergomaticFailOnWorkerFailure && !this.fatalError) {
++                        this.fatalError = new ErgomaticWorkerFailure({
++                            message: message.error,
++                            ergomaticNativeFailure: {
++                                ...message.failure,
++                                stdoutTail: this.stdout.slice(-8192),
++                                stderrTail: this.stderr.slice(-8192),
++                            },
++                        });
++                        this.reportError(this.fatalError);
++                    }
++                    break;
+                 case ParentMessageKind.Ready:
+                     // Workaround, because of a race condition more prominent in native ESM node modules
+                     // Fix has landed in v17.4.0 🎉, but we need this workaround for now.
+@@ -180,6 +195,18 @@ export class ChildProcessProxy {
+             this.fatalError = new ChildProcessCrashedError(this.worker.pid, `Child process [pid ${this.worker.pid}] exited unexpectedly with exit code ${code} (${signal || 'without signal'}). ${stdoutAndStderr()}`, code, signal);
+             this.log.warn(this.fatalError.message, this.fatalError);
+         }
++        if (this.ergomaticFailOnWorkerFailure) {
++            // Capture the native close tuple before OOM wrapping loses signal
++            // information. Tails are bounded even for a single oversized chunk.
++            this.fatalError.ergomaticNativeFailure = {
++                kind: processOutOfMemory() ? 'allocation' : 'process-exit',
++                pid: this.worker.pid ?? null, exitCode: code, signal,
++                stdoutTail: this.stdout.slice(-8192), stderrTail: this.stderr.slice(-8192),
++            };
++            // Initialization is outside RetryRejectedDecorator.run. Publish the
++            // same structured boundary there and during dry/mutant execution.
++            this.fatalError = new ErgomaticWorkerFailure(this.fatalError);
++        }
+         this.reportError(this.fatalError);
+         function processOutOfMemory() {
+             return (output.includes('JavaScript heap out of memory') ||
+diff --git a/dist/src/child-proxy/message-protocol.d.ts b/dist/src/child-proxy/message-protocol.d.ts
+index e2a6d96c543f76815bbbc6d483aaa6f0fdb10faf..9b555744904bb0c80004a48b5331a5efd1c8fb7c 100644
+--- a/dist/src/child-proxy/message-protocol.d.ts
++++ b/dist/src/child-proxy/message-protocol.d.ts
+@@ -29,10 +29,15 @@ export declare enum ParentMessageKind {
+     /**
+      * Indicates that a 'Dispose' was completed
+      */
+-    DisposeCompleted = 5
++    DisposeCompleted = 5,
++    ErgomaticWorkerFailure = 6
+ }
+ export type WorkerMessage = CallMessage | DisposeMessage | InitMessage;
+ export type ParentMessage = InitRejectionResult | RejectionResult | WorkResult | {
++    kind: ParentMessageKind.ErgomaticWorkerFailure;
++    error: string;
++    failure: import('../ergomatic-worker-failure.js').ErgomaticWorkerFailure['failure'];
++} | {
+     kind: ParentMessageKind.DisposeCompleted | ParentMessageKind.Initialized | ParentMessageKind.Ready;
+ };
+ export interface InitMessage {
+diff --git a/dist/src/child-proxy/message-protocol.js b/dist/src/child-proxy/message-protocol.js
+index a5b7131e3f547ba97373c5a87714ee8f0c958aac..51466a8f534c319b70fcee6ffc9e665c6c93cf48 100644
+--- a/dist/src/child-proxy/message-protocol.js
++++ b/dist/src/child-proxy/message-protocol.js
+@@ -30,5 +30,6 @@ export var ParentMessageKind;
+      * Indicates that a 'Dispose' was completed
+      */
+     ParentMessageKind[ParentMessageKind["DisposeCompleted"] = 5] = "DisposeCompleted";
++    ParentMessageKind[ParentMessageKind["ErgomaticWorkerFailure"] = 6] = "ErgomaticWorkerFailure";
+ })(ParentMessageKind || (ParentMessageKind = {}));
+ //# sourceMappingURL=message-protocol.js.map
+diff --git a/dist/src/ergomatic-worker-failure.d.ts b/dist/src/ergomatic-worker-failure.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..b1b9c1830265bbbd4ea38ada5ba7df93daa17ac8
+--- /dev/null
++++ b/dist/src/ergomatic-worker-failure.d.ts
+@@ -0,0 +1,14 @@
++export declare const ergomaticWorkerFailurePolicyVersion = 2;
++export declare class ErgomaticWorkerFailure extends Error {
++    readonly failure: Readonly<{
++        kind: 'allocation' | 'process-exit' | 'runner-rejection' | 'thread-exit' | 'thread-error';
++        pid: number | null;
++        exitCode: number | null;
++        signal: string | null;
++        stdoutTail: string;
++        stderrTail: string;
++        errorCode?: string | null;
++    }>;
++    constructor(error: unknown);
++}
++export declare function reportErgomaticWorkerFailure(error: ErgomaticWorkerFailure): void;
+diff --git a/dist/src/ergomatic-worker-failure.js b/dist/src/ergomatic-worker-failure.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..dd2c811ad4109e4cd85e8796e1b1d7ecf30f5eb2
+--- /dev/null
++++ b/dist/src/ergomatic-worker-failure.js
+@@ -0,0 +1,26 @@
++import { serialize } from './utils/string-utils.js';
++import { ParentMessageKind } from './child-proxy/message-protocol.js';
++// Repository-maintained opt-in policy. Absence preserves upstream behavior.
++export const ergomaticWorkerFailurePolicyVersion = 2;
++export class ErgomaticWorkerFailure extends Error {
++    constructor(error) {
++        const failure = error?.ergomaticNativeFailure ?? {
++            kind: 'runner-rejection', pid: null, exitCode: null, signal: null,
++            stdoutTail: '', stderrTail: '',
++        };
++        super(`Mutation worker failed (${failure.kind}); automatic recovery disabled: ${error?.message ?? String(error)}`);
++        this.name = 'ErgomaticWorkerFailure';
++        this.failure = Object.freeze(failure);
++    }
++}
++// Publish at the native worker event, not after Vitest's fulfilled error
++// result. In particular, a worker that dies during startup can leave Vitest
++// awaiting its handshake; the owning proxy must still observe the failure.
++export function reportErgomaticWorkerFailure(error) {
++    if (!process.send) throw error;
++    process.send(serialize({
++        kind: ParentMessageKind.ErgomaticWorkerFailure,
++        error: error.message,
++        failure: error.failure,
++    }));
++}
+diff --git a/dist/src/index.d.ts b/dist/src/index.d.ts
+index 1a6c5020e4ff80928dabdebbced3ddee1b8e22d3..2f71557644addeb710e156e4dd71d311a472cf42 100644
+--- a/dist/src/index.d.ts
++++ b/dist/src/index.d.ts
+@@ -1,6 +1,7 @@
+ export { StrykerCli } from './stryker-cli.js';
+ import { Stryker } from './stryker.js';
+ export { Stryker };
++export { ErgomaticWorkerFailure, ergomaticWorkerFailurePolicyVersion, reportErgomaticWorkerFailure } from './ergomatic-worker-failure.js';
+ export type { babel } from '@stryker-mutator/instrumenter';
+ export default Stryker;
+ //# sourceMappingURL=index.d.ts.map
+diff --git a/dist/src/index.js b/dist/src/index.js
+index 9cd5f5b09b03037180893807ed0bc0aea185d993..d112db2bb8e5fcbef1b8b95dbe2233f8ea799cef 100644
+--- a/dist/src/index.js
++++ b/dist/src/index.js
+@@ -1,6 +1,7 @@
+ export { StrykerCli } from './stryker-cli.js';
+ import { Stryker } from './stryker.js';
+ export { Stryker };
++export { ErgomaticWorkerFailure, ergomaticWorkerFailurePolicyVersion, reportErgomaticWorkerFailure } from './ergomatic-worker-failure.js';
+ // One default export for backward compatibility
+ export default Stryker;
+ //# sourceMappingURL=index.js.map
+diff --git a/dist/src/process/1-prepare-executor.js b/dist/src/process/1-prepare-executor.js
+index 67721e35ef280f8a9984185d4f1430bd4c8cd400..b51215363aefe18de408cef2d7afbf540675198e 100644
+--- a/dist/src/process/1-prepare-executor.js
++++ b/dist/src/process/1-prepare-executor.js
+@@ -1,4 +1,5 @@
+ import { strykerCoreSchema, } from '@stryker-mutator/api/core';
++import path from 'node:path';
+ import { commonTokens, tokens, } from '@stryker-mutator/api/plugin';
+ import { frameworkPluginsFileUrl } from '@stryker-mutator/instrumenter';
+ import { deepFreeze } from '@stryker-mutator/util';
+@@ -29,7 +30,14 @@ export class PrepareExecutor {
+         this.loggingBackend.configure(cliOptions);
+         // Read the config file
+         const configReaderInjector = this.injector
+-            .provideValue(coreTokens.validationSchema, strykerCoreSchema)
++            .provideValue(coreTokens.validationSchema, {
++                ...strykerCoreSchema,
++                properties: {
++                    ...strykerCoreSchema.properties,
++                    ergomaticFailOnWorkerFailure: { type: 'boolean', default: false },
++                    ergomaticExactInputs: { type: 'boolean', default: false },
++                },
++            })
+             .provideClass(coreTokens.optionsValidator, OptionsValidator);
+         const configReader = configReaderInjector.injectClass(ConfigReader);
+         const options = await configReader.readConfig(cliOptions);
+@@ -61,6 +69,21 @@ export class PrepareExecutor {
+         const project = await projectFileReaderInjector
+             .injectClass(ProjectReader)
+             .read(targetMutatePatterns);
++        if (options.ergomaticExactInputs === true) {
++            // Check the actual native population, including unconditional
++            // ignores, before sandbox preparation or any test body. A source
++            // need not yield mutants to belong to filesToMutate.
++            for (const [name, requested, actual] of [
++                ['mutation', options.mutate, [...project.filesToMutate.keys()]],
++                ['witness', options.testFiles ?? [], project.testFiles],
++            ]) {
++                const expected = [...new Set(requested.map(file => path.resolve(file)))].sort();
++                const resolved = [...new Set(actual.map(file => path.resolve(file)))].sort();
++                if (JSON.stringify(expected) !== JSON.stringify(resolved)) {
++                    throw new ConfigError(`Native ${name} membership differs from the exact requested files`);
++                }
++            }
++        }
+         if (project.isEmpty) {
+             throw new ConfigError('No input files found.');
+         }
+diff --git a/dist/src/reporters/broadcast-reporter.js b/dist/src/reporters/broadcast-reporter.js
+index c720128532ca29e6853ce33ef5e3dcd8c9506980..9282f38ddec0a5f197d3ccb0d9206074464bb2cb 100644
+--- a/dist/src/reporters/broadcast-reporter.js
++++ b/dist/src/reporters/broadcast-reporter.js
+@@ -67,6 +67,13 @@ export class BroadcastReporter {
+     async wrapUp() {
+         await this.broadcast('wrapUp');
+     }
++    async dispose() {
++        // Reporters are created via injectClass, not registered providers:
++        // the registered broadcaster owns their failure-path disposal.
++        if (this.options.ergomaticFailOnWorkerFailure) {
++            await this.broadcast('dispose');
++        }
++    }
+     handleError(error, methodName, reporterName) {
+         this.log.error(`An error occurred during '${methodName}' on reporter '${reporterName}'.`, error);
+     }
+diff --git a/dist/src/reporters/progress-append-only-reporter.js b/dist/src/reporters/progress-append-only-reporter.js
+index ad66672019d1a3f58f535243586c041de81f49c5..c063955f61493439b1279db205060a30f8e6821e 100644
+--- a/dist/src/reporters/progress-append-only-reporter.js
++++ b/dist/src/reporters/progress-append-only-reporter.js
+@@ -1,7 +1,20 @@
+ import os from 'os';
++import { commonTokens, tokens } from '@stryker-mutator/api/plugin';
+ import { ProgressKeeper } from './progress-keeper.js';
+ export class ProgressAppendOnlyReporter extends ProgressKeeper {
+     intervalReference;
++    static inject = tokens(commonTokens.options);
++    constructor(options) {
++        super();
++        this.ergomaticFailOnWorkerFailure = options.ergomaticFailOnWorkerFailure === true;
++    }
++    dispose() {
++        // A local fail-fast run never reaches onMutationTestReportReady.
++        // The injector still awaits disposal on this failure path.
++        if (this.ergomaticFailOnWorkerFailure) {
++            this.onMutationTestReportReady();
++        }
++    }
+     onMutationTestingPlanReady(event) {
+         super.onMutationTestingPlanReady(event);
+         if (event.mutantPlans.length) {
+diff --git a/dist/src/test-runner/index.js b/dist/src/test-runner/index.js
+index bfa73564ffffe29dd307f0788b8c4bfd490f376f..33228f4d96cd4f7ca6ffa8433a62c62ba1b7c630 100644
+--- a/dist/src/test-runner/index.js
++++ b/dist/src/test-runner/index.js
+@@ -8,11 +8,14 @@ import { MaxTestRunnerReuseDecorator } from './max-test-runner-reuse-decorator.j
+ import { ReloadEnvironmentDecorator } from './reload-environment-decorator.js';
+ createTestRunnerFactory.inject = tokens(commonTokens.options, commonTokens.fileDescriptions, coreTokens.sandbox, coreTokens.loggingServerAddress, commonTokens.getLogger, coreTokens.pluginModulePaths, coreTokens.workerIdGenerator);
+ export function createTestRunnerFactory(options, fileDescriptions, sandbox, loggingServerAddress, getLogger, pluginModulePaths, idGenerator) {
++    // One latch per mutation invocation, shared by all outer runners. A failed
++    // pool resource may be recycled before disposal finishes; it must not run.
++    const failurePolicy = options.ergomaticFailOnWorkerFailure ? { failure: undefined } : undefined;
+     if (CommandTestRunner.is(options.testRunner)) {
+-        return () => new RetryRejectedDecorator(getLogger(RetryRejectedDecorator.name), () => new TimeoutDecorator(getLogger(TimeoutDecorator.name), () => new CommandTestRunner(sandbox.workingDirectory, options)));
++        return () => new RetryRejectedDecorator(getLogger(RetryRejectedDecorator.name), () => new TimeoutDecorator(getLogger(TimeoutDecorator.name), () => new CommandTestRunner(sandbox.workingDirectory, options)), failurePolicy);
+     }
+     else {
+-        return () => new RetryRejectedDecorator(getLogger(RetryRejectedDecorator.name), () => new ReloadEnvironmentDecorator(() => new MaxTestRunnerReuseDecorator(() => new TimeoutDecorator(getLogger(TimeoutDecorator.name), () => new ChildProcessTestRunnerProxy(options, fileDescriptions, sandbox.workingDirectory, loggingServerAddress, pluginModulePaths, getLogger, idGenerator)), options)));
++        return () => new RetryRejectedDecorator(getLogger(RetryRejectedDecorator.name), () => new ReloadEnvironmentDecorator(() => new MaxTestRunnerReuseDecorator(() => new TimeoutDecorator(getLogger(TimeoutDecorator.name), () => new ChildProcessTestRunnerProxy(options, fileDescriptions, sandbox.workingDirectory, loggingServerAddress, pluginModulePaths, getLogger, idGenerator)), options)), failurePolicy);
+     }
+ }
+ //# sourceMappingURL=index.js.map
+diff --git a/dist/src/test-runner/retry-rejected-decorator.js b/dist/src/test-runner/retry-rejected-decorator.js
+index d16d917ca7f55d54617ab237e2e82a80c7a08d55..13a836c477cfe16eee9dc1f95b539fda483e6c97 100644
+--- a/dist/src/test-runner/retry-rejected-decorator.js
++++ b/dist/src/test-runner/retry-rejected-decorator.js
+@@ -2,6 +2,7 @@ import { DryRunStatus, MutantRunStatus, } from '@stryker-mutator/api/test-runner
+ import { errorToString } from '@stryker-mutator/util';
+ import { OutOfMemoryError } from '../child-proxy/out-of-memory-error.js';
+ import { TestRunnerDecorator } from './test-runner-decorator.js';
++import { ErgomaticWorkerFailure } from '../ergomatic-worker-failure.js';
+ const ERROR_MESSAGE = 'Test runner crashed. Tried twice to restart it without any luck. Last time the error message was: ';
+ export const MAX_RETRIES = 2;
+ /**
+@@ -9,9 +10,10 @@ export const MAX_RETRIES = 2;
+  */
+ export class RetryRejectedDecorator extends TestRunnerDecorator {
+     log;
+-    constructor(log, producer) {
++    constructor(log, producer, failurePolicy) {
+         super(producer);
+         this.log = log;
++        this.failurePolicy = failurePolicy;
+     }
+     async dryRun(options) {
+         const result = await this.run(() => super.dryRun(options));
+@@ -38,11 +40,18 @@ export class RetryRejectedDecorator extends TestRunnerDecorator {
+         }
+     }
+     async run(actRun, attemptsLeft = MAX_RETRIES, lastError) {
++        if (this.failurePolicy?.failure) {
++            throw this.failurePolicy.failure;
++        }
+         if (attemptsLeft > 0) {
+             try {
+                 return await actRun();
+             }
+             catch (error) {
++                if (this.failurePolicy) {
++                    this.failurePolicy.failure ??= error instanceof ErgomaticWorkerFailure ? error : new ErgomaticWorkerFailure(error);
++                    throw this.failurePolicy.failure;
++                }
+                 if (error instanceof OutOfMemoryError) {
+                     this.log.info("Test runner process [%s] ran out of memory. You probably have a memory leak in your tests. Don't worry, Stryker will restart the process, but you might want to investigate this later, because this decreases performance.", error.pid);
+                 }
+diff --git a/schema/stryker-schema.json b/schema/stryker-schema.json
+index 30d3727f881a81cf017a531e453430560869bd56..e9afa357a5398c787ec4fc9ec63ea64d64b297d7 100644
+--- a/schema/stryker-schema.json
++++ b/schema/stryker-schema.json
+@@ -4,6 +4,16 @@
+   "description": "Options for Stryker for JS and TypeScript and all officially supported plugins.",
+   "type": "object",
+   "properties": {
++    "ergomaticExactInputs": {
++      "description": "Repository patch: require native mutation and witness populations to equal the exact requested paths before execution.",
++      "type": "boolean",
++      "default": false
++    },
++    "ergomaticFailOnWorkerFailure": {
++      "description": "Repository patch: stop on the first rejected worker execution without recovering it. Omitted keeps upstream behavior.",
++      "type": "boolean",
++      "default": false
++    },
+     "vitest": {
+       "description": "Configuration for @stryker-mutator/vitest-runner",
+       "title": "VitestRunnerOptions",

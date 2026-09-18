@@ -7216,3 +7216,28 @@ of one antagonist round.
 
 **Release: NOT NEEDED.** Nothing rower-visible; 3 commits since `v0.49.0`
 (#449, #450, #451), all gates/walk-card/process.
+
+## 2026-09-15 — Local resource budget: overlap first, lifecycle by owner
+
+**FAIL pending staged delivery and explicit policy ruling.** The initial
+draft bundled admission, selection correctness, tuning and several resource
+lifecycles despite different proof and rollback contracts. One heavy-job
+slot does not make those contracts one mechanism.
+
+The controller incorporated the staged map, retained four-Vitest/three-browser
+defaults until measured approval, attached instruction updates to each
+behavior PR, and confined paired benchmarks to tuning. No repeat review or
+new PASS is claimed. James still must approve superseding the 2026-09-08
+warning-only rule; an unanswered preference prompt is not that approval.
+No ROADMAP row or implementation order was authorized by this spec draft.
+
+## 2026-09-17 — NFC foreground recovery follow-up (`903a3c19`)
+
+**PASS CONDITIONALLY.** Keep the diagnostics, move-away copy and one foreground
+recovery in PR #467 as one review unit. The retry is authorized only by the
+winning background-aborted pass's exact signal after cleanup and foreground
+return; Cancel/unmount stop it, a second interruption is terminal, and no
+GATT/program/active-workout recovery is added. TestFlight patch release
+recommended after source review, mutations, browser validation and exact-head
+CI pass; physical notification timing remains a TestFlight observation, not a
+merge premise.

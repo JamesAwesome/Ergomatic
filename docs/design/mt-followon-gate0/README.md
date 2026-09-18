@@ -206,7 +206,7 @@ duplicated line alone is 49px of that (option B's panel measures 76px).
    panel from the refusal frame partly because that error is built with
    `{reason, detail}` and no `raw`, "so the only non-duplicate token is the
    reason slug". `permission-denied` **always** carries a `raw`:
-   `useMonitorSession.ts`'s `mapRadioFailure` returns `raw: message` on that
+   `connectionFailure.ts`'s `mapRadioFailure` returns `raw: message` on that
    arm. So dropping the whole panel here also drops a genuinely
    non-duplicated platform string (`BLE permission denied` in the web
    capture; the plugin's own message on device).

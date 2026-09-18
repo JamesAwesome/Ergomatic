@@ -9,3 +9,5 @@ minimumReleaseAgeExclude:
   - react-router@7.18.2
 patchedDependencies:
   "@capgo/capacitor-nfc@8.2.5": patches/@capgo__capacitor-nfc@8.2.5.patch
+  "@stryker-mutator/core@10.0.0": patches/@stryker-mutator__core@10.0.0.patch
+  "@stryker-mutator/vitest-runner@10.0.0": patches/@stryker-mutator__vitest-runner@10.0.0.patch

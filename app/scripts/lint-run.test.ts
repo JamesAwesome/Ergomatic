@@ -299,10 +299,9 @@ describe("package scripts", () => {
       await readFile(path.join(appRoot, "package.json"), "utf8"),
     ) as { scripts: Record<string, string> };
 
-    expect(pkg.scripts.lint).toMatch(/^node scripts\/lint-run\.mjs && /);
+    expect(pkg.scripts.lint).toBe("node scripts/local-work.mjs run lint");
     expect(pkg.scripts["lint:prune"]).toBe(
-      "node scripts/lint-run.mjs --prune && " +
-        "node scripts/eslint-suppression-census.mjs --prune",
+      "node scripts/local-work.mjs run lint-prune",
     );
   });
 });

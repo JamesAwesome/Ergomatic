@@ -1,0 +1,37 @@
+logs: /var/folders/m8/wdf8_49130z_j4m94t3rj3w80000gn/T/nfc-diagnostics-mutations-0b8yd0ot
+undefined-error: KILLED — Test Files  1 failed (1) / Tests  1 failed | 40 passed (41)
+final-fallback: KILLED — Test Files  1 failed (1) / Tests  3 failed | 38 passed (41)
+vendor-queue: KILLED — Test Files  1 failed (1) / Tests  2 failed | 39 passed (41)
+shared-initialize: KILLED — Test Files  1 failed (1) / Tests  2 failed | 39 passed (41)
+manual-recovery: KILLED — Test Files  1 failed (1) / Tests  1 failed | 40 passed (41)
+requested: KILLED — Test Files  1 failed (1) / Tests  2 failed | 39 passed (41)
+cause: KILLED — Test Files  1 failed (1) / Tests  8 failed | 33 passed (41)
+wrong-cause: KILLED — Test Files  1 failed (1) / Tests  5 failed | 36 passed (41)
+first-cause: KILLED — Test Files  1 failed (1) / Tests  1 failed | 40 passed (41)
+captured-ordinal: KILLED — Test Files  1 failed (1) / Tests  4 failed | 37 passed (41)
+owned-ref: KILLED — Test Files  1 failed (1) / Tests  1 failed | 40 passed (41)
+lifecycle: KILLED — Test Files  1 failed (1) / Tests  1 failed | 40 passed (41)
+cleanup-authority: KILLED — Test Files  1 failed (1) / Tests  17 failed | 24 passed (41)
+terminal: KILLED — Test Files  1 failed (1) / Tests  18 failed | 23 passed (41)
+results: KILLED — Test Files  1 failed (1) / Tests  5 failed | 36 passed (41)
+valid: KILLED — Test Files  1 failed (1) / Tests  5 failed | 36 passed (41)
+named: KILLED — Test Files  1 failed (1) / Tests  3 failed | 38 passed (41)
+matches: KILLED — Test Files  1 failed (1) / Tests  2 failed | 39 passed (41)
+stages: KILLED — Test Files  1 failed (1) / Tests  1 failed | 40 passed (41)
+early-stage: KILLED — Test Files  1 failed (1) / Tests  1 failed | 40 passed (41)
+privacy: KILLED — Test Files  1 failed (1) / Tests  6 failed | 35 passed (41)
+late-start: KILLED — Test Files  1 failed (1) / Tests  2 failed | 39 passed (41)
+early-summary: KILLED — Test Files  1 failed (1) / Tests  6 failed | 35 passed (41)
+summary: KILLED — Test Files  1 failed (1) / Tests  26 failed | 15 passed (41)
+inactive: KILLED — Test Files  1 failed (1) / Tests  10 failed | 31 passed (41)
+copy: KILLED — Test Files  1 failed (1) / Tests  1 failed | 40 passed (41)
+$ bash scripts/test-run.sh --project client src/monitor/nfcScanDiagnostics.test.tsx
+test-run: cores=10 availableParallelism=10 maxWorkers=4 (the local default in vitest.config.ts)
+
+ RUN  v4.1.11 /Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/nfc-diagnostics-paste/app
+
+
+ Test Files  1 passed (1)
+      Tests  41 passed (41)
+   Start at  08:41:06
+   Duration  631ms (transform 221ms, setup 41ms, import 256ms, tests 86ms, environment 194ms)

@@ -80,49 +80,24 @@ needed: <reason>" — based on the PR contents.
   that carried them from 0.34.0 was a dated sunset (ROADMAP), and the
   0.34.0 notes told those builds to update.
 
-## Refresh the captures (with the notes PR, BEFORE the tag)
+## Screenshots are not a release step
 
-**`docs/screenshots/` is documentation, not a gate — by ruling** (James,
-2026-08-27: *"We honestly don't need to run these in ci. It can be part of
-the release skill and maybe a scheduled reup."*). `screenshots.spec.ts` is
-excluded from the chromium project CI runs, so nothing regenerates or
-checks these images except this step. If it is skipped, they rot silently.
+**Do not gather screenshots for release notes, version bumps, tags or other
+text-only changes** (James, 2026-09-16). Review the text and existing
+captures; a PNG showing an earlier release number is not a reason to boot
+the capture stack. This replaces the former mandatory release refresh and
+twice-run churn check.
 
-From `app/`, on the notes branch, before the notes PR merges:
+If the change actually alters layout/structure, follow **TESTING.md §8**:
+name the affected views, preview the selection without Docker, then capture
+only those views on the build Mac with
+`pnpm screenshots -g "<affected test names>"`. Reuse evidence from the feature
+PR when it covers the same visual change; do not recapture it just for the
+tag. Full-corpus refresh requires James's explicit request and
+`pnpm screenshots --all`; approving a release is not that request.
 
-```
-pnpm screenshots          # boots the compose stack itself; ~50s once up
-```
-
-Then **commit only the captures that changed for a REASON**, and revert the
-rest. A same-commit regeneration churns ~22 files for reasons that are not
-changes:
-
-| cause | count | what it looks like |
-| --- | --- | --- |
-| date text | 7 | `AUG 25` → `AUG 27`, monospace, no reflow |
-| time-of-day | 5 | `13:04` → `13:05`, from `loggedAt DEFAULT now()` |
-| rasterizer flicker | 2 | 8-10 px at max channel delta 2-3, invisible |
-| the test user's address | 6 | the run id genuinely differs; since 2026-08-27 it is clamped to one line, so the diff stays inside rows 45-91 instead of moving the whole page |
-
-**Open each image you are about to commit and look at it** (recurring
-failure #7). The reason this step exists: `releases.png` sat stale for two
-whole releases showing `v0.23.0` while the app shipped `v0.25.0`, and every
-assertion in the suite was green the entire time — the pin checks the app,
-not the picture. A release-time regeneration is what catches that class.
-
-**To tell real churn from noise, run it twice and diff run against run.**
-The calendar is held constant for free, so anything that still moves is
-nondeterminism rather than the date.
-
-**Run this on the build Mac, never on Linux.** The committed captures are a
-macOS artifact. Measured 2026-08-27 in
-`mcr.microsoft.com/playwright:v1.62.1-noble` against the same stack:
-**90 of 90 captures differ, zero identical**, max channel delta 255, and
-one page renders a different HEIGHT — FreeType against CoreText is a
-different layout, not a hinting wobble. The suite still passed 81/81 in the
-container, because every assertion is about the DOM and none can see this.
-Regenerating anywhere else produces a 90-file diff that means nothing.
+Captures remain documentation, not CI gates. This policy does not skip the
+release's correctness checks or claim unrun screenshot assertions passed.
 
 ## Cutting a release (~10 min, on the build Mac, fully CLI)
 

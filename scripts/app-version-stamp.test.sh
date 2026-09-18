@@ -35,20 +35,21 @@ grep -q 'process.env.APP_VERSION' app/vite.config.ts ||
   fail "app/vite.config.ts no longer reads process.env.APP_VERSION — the define would be a constant, not a stamp"
 
 # 2. The Dockerfile declares it in the stage that RUNS the client build.
-#    An ARG in the `api` stage does not reach `pnpm build`; that is the
+#    An ARG in the `api` stage does not reach the container build; that is the
 #    exact bug this line exists to prevent recurring.
 build_stage=$(sed -n '/^FROM .* AS build$/,/^FROM /p' app/Dockerfile)
 grep -q '^ARG APP_VERSION' <<<"$build_stage" ||
-  fail "app/Dockerfile's BUILD stage no longer declares ARG APP_VERSION — the api stage's copy does not reach pnpm build"
+  fail "app/Dockerfile's BUILD stage no longer declares ARG APP_VERSION — the api stage's copy does not reach the container build"
 grep -q '^ENV APP_VERSION' <<<"$build_stage" ||
   fail "app/Dockerfile's BUILD stage declares ARG APP_VERSION but never exports it as ENV — vite reads process.env"
 
-#    The ARG/ENV pair must also sit ABOVE `RUN pnpm build`: below it, both
-#    greps still pass and the stamp is still `dev`. Checked by line order.
+#    The ARG/ENV pair must sit ABOVE the actual container-build RUN: below it,
+#    both greps still pass and the stamp is still `dev`. Checked by line order.
 arg_line=$(grep -n '^ARG APP_VERSION' <<<"$build_stage" | head -1 | cut -d: -f1)
-build_line=$(grep -n '^RUN pnpm build' <<<"$build_stage" | head -1 | cut -d: -f1)
-[ -n "$arg_line" ] && [ -n "$build_line" ] && [ "$arg_line" -lt "$build_line" ] ||
-  fail "app/Dockerfile's BUILD stage declares APP_VERSION at or below RUN pnpm build — vite would not see it"
+env_line=$(grep -n '^ENV APP_VERSION' <<<"$build_stage" | head -1 | cut -d: -f1)
+build_line=$(grep -n '^RUN node scripts/local-work/container-build\.mjs$' <<<"$build_stage" | head -1 | cut -d: -f1)
+[ -n "$arg_line" ] && [ -n "$env_line" ] && [ -n "$build_line" ] && [ "$arg_line" -lt "$build_line" ] && [ "$env_line" -lt "$build_line" ] ||
+  fail "app/Dockerfile's BUILD stage must export APP_VERSION above the container-build RUN — vite would not see it"
 
 # 3. The iOS build supplies one. This is the build a TestFlight tester's
 #    log actually comes from. Anchored to the ios:build SCRIPT, not the
@@ -82,4 +83,4 @@ awk '/name: Build web image/,/^$/' .github/workflows/ci.yml | grep -q 'APP_VERSI
 grep -qE 'import\.meta\.env\??\.VITE_APP_VERSION' <<<"$(grep -A3 '^export const APP_VERSION' app/src/appVersion.ts)" ||
   fail "app/src/appVersion.ts no longer reads import.meta.env.VITE_APP_VERSION — the stamp would be a hardcoded literal"
 
-echo "app-version-stamp: OK — the define, the constant, the Dockerfile build stage (above pnpm build), ios:build, compose's web service and CI's web image all carry APP_VERSION."
+echo "app-version-stamp: OK — the define, the constant, the Dockerfile build stage (above container-build), ios:build, compose's web service and CI's web image all carry APP_VERSION."

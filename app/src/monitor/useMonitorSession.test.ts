@@ -658,6 +658,31 @@ beforeEach(() => {
 });
 
 describe("useMonitorSession: connect", () => {
+  it("unmount refuses an already-queued transport continuation before any scan or driver subscription", async () => {
+    const scan = vi.fn(async () => [{ id: "x", name: DEVICE_NAME }]);
+    const subscribe = vi.fn(() => () => undefined);
+    const disconnect = vi.fn(async () => undefined);
+    const transport = stubRadio({ scan, subscribe, disconnect });
+    const createTransport = vi.fn(() => transport);
+    const { result, unmount } = renderHook(() =>
+      useMonitorSession({ createTransport }),
+    );
+    let work!: Promise<void>;
+    act(() => {
+      // A synchronous resolver still queues the session's await continuation.
+      // Unmount in this turn: that continuation precedes a cleanup microtask.
+      work = result.current.connect();
+    });
+    expect(createTransport).toHaveBeenCalledTimes(1);
+    unmount();
+    await act(async () => {
+      await work;
+    });
+    expect(scan).not.toHaveBeenCalled();
+    expect(subscribe).not.toHaveBeenCalled();
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
   it("no transport on this platform: transport-missing, and no picker is opened", async () => {
     const { result } = renderHook(() =>
       useMonitorSession({ createTransport: () => null }),
@@ -15741,8 +15766,10 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
     // Published at the terminal, not only on success.
     expect(latestConnectionAttemptTrace()?.map((e) => e.kind)).toStrictEqual([
       "tag-event",
+      "ble-scan-requested",
       "ble-scan-started",
       "ble-scan-timed-out",
+      "ble-scan-finished",
     ]);
     // The failure screen's View connection log reads THIS, never "[]".
     const exported = parseLogExport(result.current.exportLog()).entries as {
@@ -15751,8 +15778,13 @@ describe("connect(request): advertised-name discovery (Phase NF)", () => {
     }[];
     expect(exported.map((e) => [e.kind, e.detail])).toStrictEqual([
       ["nfc-attempt:tag-event", "seq 0"],
-      ["nfc-attempt:ble-scan-started", "seq 1"],
-      ["nfc-attempt:ble-scan-timed-out", "not advertising"],
+      ["nfc-attempt:ble-scan-requested", "connect=1"],
+      ["nfc-attempt:ble-scan-started", "connect=1"],
+      ["nfc-attempt:ble-scan-timed-out", "connect=1 not advertising"],
+      [
+        "nfc-attempt:ble-scan-finished",
+        "connect=1 outcome=target-not-advertising superseded=false",
+      ],
     ]);
     // A manual connect() on the same hook exports its own ring and never the
     // stale NFC trace ahead of it.

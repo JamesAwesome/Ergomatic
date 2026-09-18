@@ -71,6 +71,13 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 
 ## Patterns that recur (check for these every time)
 
+- **One resource budget is not one risk model.** Split atomic admission,
+  hook-selection correctness, runner tuning and each tool-owned lifecycle
+  adapter into independently safe PRs. A shared slot coordinates participants;
+  it does not give browsers, Testcontainers/Ryuk, Docker stacks, simulators
+  and foreground Node children one cleanup authority. Approve warning-only
+  supersession explicitly; do not bundle an unmeasured worker default.
+
 - **An option priced from a hand-written table census is wrong in BOTH
   directions, and the omission is the expensive half.** Wave A's account-merge
   question (2026-09-13) offered a "one-way transfer of the three clean tables"
@@ -424,3 +431,9 @@ is exactly what happened: every section in this file stopped growing on
   does not appear. The claim rode FOUR versions of a card and would have
   manufactured a false abort the night before the walk. **A gate's own verdict
   is a claim with the same evidence bar as the artefact it judges.**
+
+- **A pre-connection retry can be automatic when the interrupted operation
+  proves its own cause.** Require the winning error to carry the exact pass
+  identity, successful cleanup, observed foreground return, one retry, and
+  containing-operation cancellation. Keep GATT, programming, active workouts
+  and a second interruption terminal.

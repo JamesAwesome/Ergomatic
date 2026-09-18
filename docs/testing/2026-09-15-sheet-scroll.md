@@ -128,3 +128,63 @@ does not establish why loading failed. The two-test WebKit project now
 retains traces of failed attempts, so a recurrence preserves the evidence
 needed to diagnose it. No speculative application fix or timeout increase
 was made for this isolated loading failure.
+
+## Single-document fixture setup (2026-09-16)
+
+Run `35094020059` (`59a94e98`) recovered the landscape case on retry.
+The retained first-attempt trace now identifies a document-load failure:
+after two visits to `/`, navigation to the saved log interrupted six
+Today startup requests. The log document returned HTTP 200 headers, but
+its response never completed; WebKit reported `WebKit encountered an
+internal error`, and `page.goto` exhausted the test budget before any
+scroll assertion ran. This establishes a browser loading failure, not a
+failed scroll lock. It does not establish the precise internal engine bug.
+
+The bounded test-only fix prepares the real session and unchanged ten-step
+log through `page.request`, which shares the browser context's cookie jar.
+The existing HTTP-only cookie transport adjustment happens before the first
+app load. Then the test navigates directly to the saved log once. Shared
+helpers, production auth, scroll assertions, timeouts and retries are unchanged.
+This removes unnecessary document reloads during application initialization;
+it is not a claim that WebKit itself can no longer fail.
+
+The regression guard observes actual main-frame document requests: fixture
+setup must produce none, and opening the saved log must produce exactly its
+one document request. Both orientations failed first against the old setup
+(`[]` expected, `["/", "/"]` received), then passed with API-only preparation
+(2/2, 2.2 seconds). Local validation uses only `sheetScroll.spec.ts`, the
+`webkit-sheet` project, one worker, zero retries and `--trace=off`; screenshot
+capture is off. The isolated stack is `ergomatic-43929`, web port 8429.
+Browser debug logs show clean exit and temporary-directory cleanup; subsequent
+process census found no WebKit survivors. Browser-phase samples stayed normal.
+
+The subsequent real pre-commit hook aborted at warning memory pressure during
+staged lint, before typecheck or commit. Receipt
+`c6017c87-7237-43f9-ab8a-800efabb7842` records exit 130 / SIGINT and unresolved
+cleanup, so the heavy loop stopped without retry or ownership recovery.
+The task's three containers, network and disposable fixture volume were
+removed. James subsequently authorized recovery of that exact record and
+resumption. Under the existing maintenance/generation barrier, a fresh
+normal-pressure census found no owner, child, observed identity or owned
+process group. Recovery killed nothing and preserved the original receipt.
+
+The real pre-commit then passed, including E2E type membership 30/30 and
+verified cleanup (receipt `3d512452-ce20-4171-922c-9ea51c30a317`). The fix
+landed as `252a482f` before mutation probes:
+
+- Insert `await page.goto("/")` immediately before the fixture guard:
+  both cases failed, expected `[]`, received `["/"]`.
+- Insert `await page.reload()` after the saved-log navigation: both cases
+  failed, expected one saved-log document request, received two.
+- Append `-invalid` to the fixture sign-in secret: the portrait case failed
+  at the sign-in success check with HTTP 401.
+- Send fixture creation to `/api/logs/no-such-fixture-route`: the portrait
+  case failed at the log-creation success check with HTTP 404.
+
+All probes executed the real request/browser path, compiled, and used zero
+retries. Restored source matched the committed spec exactly; both cases then
+passed in 1.9 seconds. Browser PID 53268 exited normally and cleaned its
+temporary directories; the subsequent census found no WebKit survivors.
+The task's containers, network and disposable fixture volume were removed
+again. Pressure samples remained normal during the resumed checks. No
+screenshots or traces were captured. Exact-head full CI remains outstanding.

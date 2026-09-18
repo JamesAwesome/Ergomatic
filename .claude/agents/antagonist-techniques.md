@@ -8,6 +8,25 @@ toolkit, not a history.
 
 ## Falsified claims, and how
 
+- **An exact-selection API can inherit a lossy changed-path producer.** Trace
+  Git bytes through the vendor VCS adapter into dependency matching; commit
+  Unicode/newline filenames and assert selected identities. NUL-safe source
+  fingerprints cannot repair a separate producer that splits quoted Git output
+  on newlines. Exercise both rename endpoints and global config inputs too.
+
+- **Process cleanup is not staged-edit restoration.** Hold the actual vendor
+  restore operation across the owner's escalation deadline, then inspect the
+  index/worktree and backup. A disappeared process can leave edits hidden;
+  preserve the first cancellation cause alongside the restoration diagnostic.
+
+- **A wrapper's lifetime is not its descendants' or its vendor session's
+  lifetime.** Trace actual spawn and cleanup call sites: Playwright detaches
+  browsers and can force-kill them during cleanup; Testcontainers can reuse
+  one Ryuk session across unrelated clients. Gate crashes before registration,
+  concurrent nested work, competing recoverers, and foreign resources sharing
+  vendor labels. A sampled PID/start pair is an observation, not an
+  identity-bound signaling handle.
+
 - **Performance advice is entry-point-specific.** Trace where an option
   takes effect relative to expensive work, then measure the phases: axe
   `resultTypes` prunes before serialization under `run`, but after eager raw
@@ -756,3 +775,74 @@ is exactly what happened: every section in this file stopped growing on
     It is RF16's correct-it-where-it-is-USED rule with an integer instead of a
     phrase, and an integer is worse, because a wrong number still resolves to
     something that reads like evidence.
+78. **Follow every native failure channel before claiming no recovery.** A
+    runner can reject a promise, return an Error status, lose its parent
+    process, or lose only an inner thread. Kill the actual execution unit in
+    the fixture and observe the next queued witness. Measured on Stryker10 /
+    Vitest4.1.11: the parent-process probe passed while a thread-only exit
+    became RuntimeError and four later bodies ran (8bafc6ba). With two witnesses
+    it became five Killed results (bce04c94). A final-result latch is too late
+    when the inner queue has already advanced; startup death also needs a
+    channel that does not await the runner's handshake or final reporter.
+79. **Compare requested paths with the runner's effective population.** A
+    canonical file can still belong to a vendor's unconditional ignore set.
+    Use one valid plus one excluded source/witness: an all-invalid fixture may
+    fail for unrelated reasons and conceal partial selection. Config/include
+    equality is not resolved-membership equality. Native mixed requests under
+    `.next` and `node_modules` publicly passed after silently shrinking scope
+    (6b25b70e). Check membership before bodies, not mutant-report counts:
+    a valid source may genuinely contain no mutatable expressions.
+
+80. **An async plugin mock can erase the queue that decides which outcomes
+    are reachable.** Trace start and cleanup through the installed wrapper,
+    then hold start under its real queue: successful stop cannot overtake it,
+    while a cleanup deadline can. Gate both orders and distinguish the
+    settlement decision from the returned result; a biting mutation on an
+    impossible ordering proves only the injected case.
+81. **Missing error metadata is not success, and a typed object lookup is
+    not a closed dictionary.** Separate absence of the error from absence of
+    its name; test undefined, empty, arbitrary and prototype-key names at
+    the rejection boundary, then assert the exported vocabulary. Synthetic
+    inputs prove classifier robustness, not an observed native incident.
+
+82. **A foreground recovery waiter needs its return listener before its
+    departure listener.** Trace native event retention and bridge ordering;
+    pause-first registration can observe departure and discard return. Clean
+    partial registration and distinguish an aborted pass from cancellation
+    of the containing operation. Returned abort identity, not a lifecycle
+    flag or shared error name, determines whether retry is warranted.
+83. **A throwing cleanup in `finally` can skip the ownership clear and escape
+    a closed result union.** Put fallible listener removal inside the
+    operation's settlement model and keep identity clearing in an outermost
+    `finally`. Gate the success-plus-throw case: require terminal mapping and
+    trace publication, then prove a later cancel cannot target the settled
+    operation. Comparing only the main async body misses the cleanup channel
+    that overrides its return.
+84. **A fire-and-forget Cancel is a live generation until its last await
+    settles.** Hold the old Cancel at an asynchronous transport continuation,
+    expose the connection door, try to start B, then release A and inspect B's
+    epoch, controller and keyed authorization. Clearing a driver ref
+    synchronously prevents duplicate teardown but does not stop A's later
+    cleanup from invalidating B through shared refs. Keep a drain barrier
+    through settlement; when user activation matters, refuse B and require a
+    fresh press rather than queueing it.
+85. **A refusal seam cannot preserve authority that its producer already
+    overwrote.** Trace mint and staging order into the refusal callback, then
+    inspect the authoritative slot after the refused successor. If a
+    single-slot producer writes B before `begin(B)` can reject it, discarding B
+    cannot restore A. Put admission before staging, make staging conditional,
+    or narrow the invariant to producers that cannot invoke B.
+86. **A bounded buffer's length is not a publication version.** Fill it to
+    capacity, publish, append one entry, and compare both length and tail
+    identity. Once eviction begins, length stays constant while content
+    changes; dirty detection needs a monotonic generation or tail sequence.
+87. **Identity checks on owner state do not protect an unkeyed global
+    diagnostic sink.** Release A's admission barrier, let B publish, then
+    settle A's retained cleanup. Assert the global readout still names B;
+    otherwise late A can overwrite the evidence for the operation the rower is
+    currently seeing.
+88. **A structural test double cannot stand in for an object whose authority
+    lives in a private `WeakMap`.** Exercise the lifetime consumer with a
+    foreign lookalike. Throwing breaks prescribed fixtures; returning quietly
+    makes route loss fail open. Brand owner-created objects and mock the
+    boundary only in tests that deliberately do not exercise ownership.

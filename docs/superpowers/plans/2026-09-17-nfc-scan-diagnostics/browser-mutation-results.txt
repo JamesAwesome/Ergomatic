@@ -1,0 +1,39 @@
+logs: /var/folders/m8/wdf8_49130z_j4m94t3rj3w80000gn/T/nfc-diagnostics-mutations-_myod6np
+requested: KILLED — 1 failed
+18885a8ed1afa9 done
+#24 naming to docker.io/library/ergomatic-99872-api:latest done
+#24 unpacking to docker.io/library/ergomatic-99872-api:latest done
+#24 DONE 0.1s
+
+#25 [api] resolving provenance for metadata file
+#25 DONE 0.0s
+ Image ergomatic-99872-api Built
+ Image ergomatic-99872-web Built
+ Container ergomatic-99872-postgres Running
+ Container ergomatic-99872-api Recreate
+ Container ergomatic-99872-api Recreated
+ Container ergomatic-99872-web Recreate
+ Container ergomatic-99872-web Recreated
+ Container ergomatic-99872-postgres Waiting
+ Container ergomatic-99872-postgres Healthy
+ Container ergomatic-99872-api Starting
+ Container ergomatic-99872-api Started
+ Container ergomatic-99872-api Waiting
+ Container ergomatic-99872-api Healthy
+ Container ergomatic-99872-web Starting
+ Container ergomatic-99872-web Started
+ Container ergomatic-99872-web Waiting
+ Container ergomatic-99872-postgres Waiting
+ Container ergomatic-99872-api Waiting
+ Container ergomatic-99872-postgres Healthy
+ Container ergomatic-99872-api Healthy
+ Container ergomatic-99872-web Healthy
+
+Running 1 test using 1 worker
+
+(node:12614) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/1] [chromium] › e2e/connected.spec.ts:2382:3 › Phase NF: Scan NFC, fake-driven (390×844) › a PM5 that is not advertising: the approved copy, Try again, and Cancel back to detail with Connect
+  1 passed (1.2s)

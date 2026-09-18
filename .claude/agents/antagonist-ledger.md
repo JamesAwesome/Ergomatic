@@ -1,5 +1,33 @@
 # Antagonist ledger
 
+## Cheaper-hooks hardening — 2026-09-16
+
+Mechanism delta against the admission ground, then the prescribed-code lens;
+controller paste-tests and read-only reviewers. The bounded hardening ends here.
+
+- **Related discovery preserves valid Git paths:** falsified by installed
+  Vitest's LF-split, non-NUL Git adapter. Receipt `d37c3da5` returned empty
+  selections for committed Unicode/newline test paths. Technique: exercise the
+  actual upstream producer, not just exact-file inputs and fingerprints.
+  A NUL-safe supported VCS provider preserves rename endpoints. Actual global
+  config/package/lock inputs now refuse uncertain related selection; no implicit
+  full run or credit for a false empty set.
+- **A late source baseline can certify the wrong push:** the held status-to-mint
+  boundary accepted a concurrent source edit in `eaf233f5`. Pin before validating
+  pushed trees/cleanliness and recheck afterward. The full selected pipeline
+  now refuses that interleaving before bodies (`82092d11`).
+- **Gone processes imply restored staging:** a real lint-staged restore held
+  across SIGTERM left its backup unapplied while cleanup said verified
+  (`2e6380da`). The failed phase now proves source/index restoration separately
+  or retains ownership and backup (`cb6245f1`). No automatic repair is added.
+- **Cleanup diagnostics preserve the initiating failure:** the code lens found
+  an overwritten cancellation reason. Controlled pressure plus failed staging
+  restoration was RED `9d296fe3`, then GREEN `eaae33c1` with both causes retained.
+- Exact native membership, mandatory union, before-body checks and held native
+  teardown survived source review and the repair-tree `c328d184` gate (87/87).
+  Logger compatibility is bounded to installed Vitest4.1.11's synchronous
+  registration. No whole-spec completion or measured memory saving is claimed.
+
 ## Test reliability hunt — hardening, 2026-09-15
 
 Two read-only lenses against the design/hunt plan based at `5fc01cce`.
@@ -11362,3 +11390,256 @@ passes, this was the third, and revision 5 changes no mechanism.
   WCAG tag filter excludes `frame-tested`. Historical 23-second amplification
   remains unassigned. Controller receipts, commands and limits are in
   [the repair record](../../docs/superpowers/research/2026-09-15-flake-hunt/residual-repairs.md).
+
+## 2026-09-15 — Local resource budget hardening
+
+Mechanism pass against baseline `653bd5ea`; installed-source inspection,
+no test suites, container launches, process termination or stress allocation.
+
+- **Polling can recover ownership.** Plausible because the observer follows
+  descendants and start identities. Playwright detaches; parent exit before
+  a poll leaves a gap. Traced `_launchProcess` through `launchProcess`;
+  required durable pre-launch identity and a crash-ordering gate.
+- **Atomic acquisition makes borrowing and recovery atomic.** Interleaving
+  two valid borrowers or two recoverers disproves that implication. The
+  controller removed public borrowing and specified an exclusive maintenance
+  barrier; those interleavings remain implementation proof obligations.
+- **A vendor session belongs to one task.** Traced Ryuk reuse and producer
+  labels: unrelated clients can share the session. Required application-owned
+  pre-creation labels and a foreign-fixture witness sharing the vendor label.
+- **Command completion ends native resources; no SIGKILL means no force
+  kill.** Source inspection found name-selected simulators without lifecycle
+  ownership, and Playwright's own force-kill fallback. Required UDID/prior-state
+  gates and distinguished the new owner's signals from vendor cleanup.
+
+Vetted ground: cooperative atomic admission, explicit recovery, honest
+common-Git-directory scope, pressure as a host condition rather than culprit
+attribution, and separate peak/overlap/turnaround measurements. Findings
+folded by the controller, not re-reviewed as PASS. Prescribed-code lens
+skipped because the spec has no implementation blocks. No measured savings
+or implemented guarantees claimed; warning-only supersession awaits James.
+
+## 2026-09-16 — Measured local workloads, bounded hardening
+
+Mechanism and prescribed-code lenses covered the tuning plan's mutation
+adapter. Both finished; repair verification belongs to author gates and the
+normal task/PR review, not another hardening dispatch.
+
+- **Claim: resource failure cannot recover into a pass.** Plausible because
+  the foreground owner preserves process failure. Installed Stryker's native
+  retry decorator replaced the failed child before that owner saw a result;
+  synthetic OOM receiptc511ea6a proved six replacement bodies and public exit0.
+  Technique: inject the failure inside the vendor-owned execution unit and
+  inspect recovery, not just the wrapper's final exit.
+- **Claim: the patched rejection latch closes that invariant.** A real
+  Vitest thread-only exit followed the fulfilled Error/RuntimeError channel,
+  leaving four later bodies and public exit0 (8bafc6ba). With a second queued
+  witness it left five later bodies and five Killed results (bce04c94).
+  Technique78: trace producer events through queue scheduling and the
+  status-returning consumer; parent-process death is a different seam.
+- **Claim: validated exact paths cannot silently shrink.** Native Stryker
+  ignored populations omitted one source/witness while the normal file ran
+  (6b25b70e). Technique79: mixed valid/excluded membership before bodies,
+  separate from Git-ignored inputs that do enter the sandbox and therefore
+  need freshness hashes.
+
+Held evidence: closed public grammar, original-intent handoff, inherited
+artifact clearing, independent project bounds, native cause retained alongside
+source staleness, and reachable local-only broadcaster disposal. The code lens
+recalculated client pairs: sampled386.609/487.734/493.219MiB reductions at
+1.087/1.656/1.665s cost on the same fixed372-test population. These are bounded
+candidate measurements, not a worker-default decision or whole-spec completion.
+Controller evidence and repair status live in
+[the tuning record](../../docs/testing/2026-09-16-resource-tuning.md).
+
+
+### 2026-09-17 — NFC scan diagnostics hardening
+
+- **Falsified:** successful cleanup may finish before a held BLE start
+  acknowledges. Independent mocks allowed it; installed BleClient routes
+  both through one promise queue. A read-only `getQueue(true)` probe admitted
+  stop only after start resolved. Retain that queue in the gate and assert
+  decision, cleanup and returned outcome separately, including cleanup expiry.
+- **Falsified:** an optional-chained error-name switch and a typed lookup
+  guarantee fixed diagnostic vocabulary. Undefined name became `matched`;
+  prototype-key names passed the existing mapper with no reason, producing
+  `outcome=undefined`. Native-boundary rejection tests and exported outcomes
+  settled both; separate error presence from classification and use a
+  diagnostic fallback for missing mapped reasons. These inputs are synthetic,
+  not evidence of what the installed native plugin emitted in the incident.
+- **Attacked and held:** captured ordinals, original trace closures,
+  controller-identity cleanup and the existing first-settlement guard retain
+  retry attribution without changing policy. Counters report callbacks, not
+  devices in the room; the hook's post-cleanup result outranks a match decision.
+- **Causal limit:** background input conditionally reproduces the photograph;
+  a banner proves no transition. Explicit poison gives `scan-cleanup-failed`
+  and blocks manual discovery too. Shared pending setup can repeat preamble
+  timeouts, whose evidence is absent from the photograph. Reported manual
+  Bluetooth recovery narrows the possibilities without identifying the cause.
+  Enumerate constructors and actual vendor call sites before naming the fault.
+- **Record:** [hardened prescription and author verification](../../docs/superpowers/plans/2026-09-17-nfc-scan-diagnostics.md).
+
+## 2026-09-17 — NFC foreground recovery delta
+
+**Verdict: PASS with revised invariants.** Source review found a lost-return
+window in sequential pause-then-resume registration; native events without
+listeners are not retained. Resume-first closes the witnessed-departure case.
+Recovery requires exact aborted-pass identity and a successful cleanup result,
+waits for current foreground readiness, and remains independently cancellable.
+A matched result waits for foreground without rescanning. No hardware behavior
+or test execution was established by this review; pre-registration transitions
+remain outside the guarantee. See the approved follow-up brief in
+`docs/superpowers/plans/2026-09-17-nfc-scan-diagnostics/execution.md`.
+
+## 2026-09-17 — Targeted discovery ownership delta
+
+- **Falsified:** moving scan failure mapping into the owner preserves behavior
+  while listener removal remains a bare `finally` call. A throwing unsubscribe
+  overrode a successful return, bypassed the owner's targeted classifier, left
+  the trace unpublished and skipped current-operation clearing. Cleanup now
+  settles before terminal mapping/publication, with identity clearing in an
+  outermost `finally`; the direct gate drives a successful scan through a
+  throwing unsubscribe and then proves cancellation cannot reach the settled
+  pass (technique 83).
+- **Falsified:** an event listener supplies current foreground state. The owner
+  starts optimistic and learns only from transitions observed after
+  registration; native events are not retained and the production web arm is
+  deliberately silent. The preserved guarantee is limited to an observed
+  background transition and its matching observed foreground transition.
+- **Falsified:** a push before the implementation commit validates the review
+  head. The plan now orders local gates, commit, full-hook push and an exact
+  `headSha`/successful-conclusion comparison.
+- **Falsified:** a module-level error literal is safe to return repeatedly.
+  `ConnectedError` is mutable, so one caller could alter later refusal results;
+  the owner now mints the released `transport-missing` value per refusal and a
+  direct test mutates the first result before reading the second.
+- **Falsified:** unit/client and hosted browser CI alone satisfy this
+  `app/src/` refactor's gate. The plan had omitted the required named local
+  browser run; it now drives both shipped NFC describes before commit/push.
+- **Attacked and held:** object identity distinguishes late A from current B;
+  separate outer/pass controllers and exact interrupted-signal identity admit
+  one recovery; native FIFO and poison remain module-scoped; the direct test's
+  identity mutation bites; and the NFC diagnostic test crosses the real tag
+  producer into the real hook/owner. Desk evidence establishes application
+  ordering, not the affected phone's radio state or the incident's cause.
+
+## 2026-09-17 — Connection-entry ownership spec, Lens 1 mechanism hardening
+
+**Verdict: NOT READY.** The opaque attempt is a deep seam, but its proposed
+state machine had no Cancel-drain generation and promised replacement after
+ownership had already transferred to the session.
+
+- **Claim:** fire-and-forget Cancel may return the door immediately because the
+  lifetime hook is a synchronous safety net.
+  **Why plausible:** `cancel()` clears `connectingRef` and claims `driverRef`
+  before its first await, which fixed duplicate termination.
+  **Settled by:** holding session Cancel at asynchronous transport settlement
+  and tracing the continuation. A new B passes the
+  `connectingRef`/`driverRef` guard; A then resumes through `teardown()`,
+  increments the shared epoch, cancels current targeted discovery, resets
+  session state and reads the mutable `attemptIdRef`, allowing A to discard B's
+  authorization. The entry owner must remain `draining` and busy until the
+  captured Cancel settles; B requires a fresh press. Technique 84.
+
+- **Claim:** `begin(B)` can abandon claimed A before B becomes current.
+  **Why plausible:** entry attempts have object identity and keyed store cleanup.
+  **Settled by:** following the authority beyond the entry object. Abandonment
+  does not cancel A's session radio, `session.connect(B)` returns at A's wider
+  guard, and `ConnectAction` stages B into the store's single global slot before
+  `begin(B)` runs. There is no production producer that needs replacement.
+  Refuse B while any A is resolving, claimed, retryable or draining; only a
+  future, evidenced pre-handoff producer may replace entry-owned NFC work.
+
+- **Claim:** the lifetime hook owns every true route loss.
+  **Why plausible:** the released mount lease handles StrictMode cleanup/setup
+  replay and genuine detach.
+  **Settled by:** walking claim-to-commit ordering. Ownership transfers inside
+  `onReady`, while the lifetime effect cannot mount until a later committed
+  render; owner unmount in that interval releases no lease. `useConnectionEntry`
+  needs its own identity-checked unmount backstop in addition to the conditional
+  surface hook.
+
+- **Claim:** the attempt is bound to one existing session and concurrent connect
+  calls share one promise.
+  **Why plausible:** both production doors pass their local `MonitorSession`.
+  **Settled by:** reading the public type and session guard. Each operation may
+  receive a different session, and duplicate `session.connect()` returns a
+  separate resolved async promise. Bind the stable `connect`/`cancel` callback
+  pair on first use and gate exact attempt-level promise identity.
+
+**Held under attack:** keyed take/discard is deterministic by attempt ID;
+request, trace and ID can remain immutable across retry; repeatable trace
+completion can republish an enlarged snapshot; the lifetime adapter is deep
+because callers declare only the UI boundary and receive neither IDs nor
+cleanup callbacks. The Web Bluetooth call topology remains appropriate, though
+the cited scanning-extension source was replaced by the normative
+`requestDevice()` algorithm. React's microtask lease is an explicitly tested
+heuristic, not a vendor guarantee.
+
+## 2026-09-17 — Connection-entry ownership implementation-plan hardening
+
+**Verdict: NOT READY.** The planned seam remained deep, but the two lenses
+found authority loss before admission, two diagnostic ordering defects and two
+proof paths that bypassed the ownership being claimed.
+
+- **Claim:** refusing `begin(B)` preserves live A's staged authorization.
+  **Why plausible:** abandonment is keyed, so discarding B cannot directly
+  discard A.
+  **Settled by:** tracing the real producer before the refusal seam.
+  `ConnectAction` stages B before `onProceed(B)`, and the store's one slot has
+  already replaced A when `begin(B)` runs. The contract is now limited to the
+  supported producer, whose door is absent or disabled before staging; the
+  owner still refuses replacement but does not claim it can restore overwritten
+  authority. Technique 85.
+
+- **Claim:** published entry count identifies whether a bounded trace became
+  dirty.
+  **Why plausible:** every ordinary append increases `entries().length`.
+  **Settled by:** filling the trace to capacity. Later records evict the head
+  while length remains fixed, so the owner now tracks a monotonic record
+  generation and gates the eviction boundary. Technique 86.
+
+- **Claim:** Cancel drain and final diagnostic cleanup share one lifetime.
+  **Why plausible:** both belong to the same opaque attempt.
+  **Settled by:** separating the rower-facing barrier from retained cleanup.
+  The exact Cancel promise releases `busy` and admission; a separate
+  `Promise.allSettled` barrier waits for captured connect/Cancel work before
+  final publication. Its test includes a rejection while sibling work remains
+  held, so a `Promise.all` mutation bites.
+
+- **Claim:** identity-checked operation cleanup prevents late A from affecting
+  B.
+  **Why plausible:** React state and store writes compare object or attempt ID.
+  **Settled by:** following A's retained cleanup into the trace's unkeyed global
+  latest snapshot. Operations now receive a monotonic publication order; after
+  B publishes, late A cannot replace it. Technique 87.
+
+- **Claim:** structural attempt doubles are sufficient consumer fixtures.
+  **Why plausible:** the exported interface names only `targetName`, `connect`
+  and `cancel`.
+  **Settled by:** following the object into the lifetime hook's private
+  `WeakMap`. Owner attempts now carry a non-exported brand and foreign lookalikes
+  fail closed. Render-only tests mock the lifetime adapter explicitly; routed
+  tests obtain attempts from the real owner. Technique 88.
+
+- **Claim:** the direct drain test plus Just Row's route proves both doors.
+  **Why plausible:** both render the same `entry.busy` value.
+  **Settled by:** tracing programmed Cancel from the interstitial back to
+  Workout Detail. The plan now holds transport-write settlement across both
+  routed doors and proves neither can stage B before Cancel settles.
+
+- **Claim:** a rejected collaborator mismatch is a safe refusal.
+  **Why plausible:** neither foreign method runs.
+  **Settled by:** reading every fire-and-forget caller. The error reached no
+  readout, log or record, and Cancel could restore a door without touching the
+  radio. The attempt now stays bound and uses its original method pair; foreign
+  methods never run and no dropped error is minted.
+
+**Held under attack:** task ordering keeps every committed head buildable; the
+injected fake reaches the late Cancel continuation but makes no PM5
+acknowledgement-timing claim; stable session callbacks permit collaborator
+binding; a retained non-async wrapper can provide exact promise identity;
+manual connection remains in the press continuation; the source-boundary
+mutation targets production code; React scheduling remains a tested heuristic;
+and desk evidence remains bounded away from the original phone incident's
+cause.

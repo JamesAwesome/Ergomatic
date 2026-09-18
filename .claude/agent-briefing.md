@@ -122,15 +122,55 @@ standing rules live here so they cannot drift between dispatches.
 
 | Your diff touches                   | You must run                                                                                                                                                                                           |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| any product code under `app/src/`   | `pnpm lint` · `typecheck` · `format:check` · `test --project unit --project client` · **the named e2e specs locally against an already-booted stack, then read the e2e job on the PR for the full suite** (James tiered the gate on 2026-09-08: CI owns the full suite, you run what your change touches — not a wall-clock argument, though a full local run does cost ~1.5x under the worker cap; CLAUDE.md RF1/RF40) — and `pnpm screenshots` if a screen's layout changed (open the images and describe what you see) |
-| `app/domain/` or `app/server/` only | lint · typecheck · format:check · `test --project unit` (+ integration if Docker is available)                                                                                                         |
-| tests only                          | lint · typecheck · format:check · the covering project(s)                                                                                                                                              |
-| comments/docs only                  | lint · typecheck · format:check                                                                                                                                                                        |
+| any product code under `app/src/` | Required lint/typecheck/format checks; exact affected unit/client files and the pre-push protection union; **named e2e specs locally, then read full hosted browser CI**. Reuse applicable hook receipts; scoped captures only for layout/structure changes (TESTING.md §8). |
+| `app/domain/` or `app/server/` only | Required lint/typecheck/format checks; exact affected unit files and pre-push protection union (+ explicitly coordinated integration where relevant). |
+| tests only | Required lint/typecheck/format checks and exact covering files; pre-push retains its full protection union. |
+| plain docs only | Real pre-commit's staged conflict/parity checks; app-heavy exemption only when its conservative classifier proves it. Uncertain/code/config/native inputs retain full checks. |
 
-The final whole-branch review always runs everything regardless — these
-scopes exist for task and fix rounds, not the last gate. Leaving e2e red
-after an `app/src/` change has gated CI three times; the full-suite row is
-not negotiable.
+The controller owns serial heavy validation; reviewers consume exact-head
+evidence and request named missing checks, not duplicate full-suite runs.
+CI still owns full correctness/coverage and full browser validation. Leaving
+e2e red after an `app/src/` change is not acceptable; read that CI result.
+
+**No screenshots for text-only work**, including release notes, version
+bumps and tags (James, 2026-09-16). For actual layout/structure changes,
+name the visual question and affected views; reuse applicable captures,
+preview matching test names with Playwright `--list`, then use
+`pnpm screenshots -g "<affected test names>"`. A regex is not a narrowness
+guarantee: inspect its listed selection before capture. Full refresh needs
+James's explicit request AND `pnpm screenshots --all`; bare/empty commands
+refuse before Docker. Never refresh just for a release or run twice to
+classify noise. Open only the images needed for the review and commit only
+explained changes. This does not weaken correctness/browser test gates or
+the manual resource coordination below. See TESTING.md §8.
+
+Use the admitted package commands/hooks, and name the project plus intended
+test files. Bare and project-only local `pnpm test` refuse. Use `pnpm test:list
+--project unit <file...>` to inspect; `pnpm test --project unit <file...> -t
+'<test-name regex>'` executes exact matches. Related discovery is `pnpm
+test:related --project unit --base origin/main` (add `--list` for inspection).
+Changed package manifests, lockfiles and global test config refuse related
+mode; use explicit full verification, never an inferred empty pass.
+Full verification requires named projects: `pnpm test:full --project unit
+--project client`, or `pnpm push:full <git push arguments>` for that actual
+push hook. Never drop a failed selector to widen scope, and never repeat the
+same heavy check immediately before the hook that owns it. Status is
+`node scripts/local-work.mjs status` from `app/`; refusal or resource abort
+is not a test pass and never authorizes an automatic retry or a raw-tool
+bypass. Do not run heavy work while pressure is warning, critical or unknown.
+Only one controller launches heavy work across cooperating worktrees; a
+subagent must ask that controller for its validation slot. No census-based
+kills, global Docker changes or worker-default changes. Browser/Compose,
+integration, native, watch/dev and install lifetimes are still excluded from
+automatic ownership: coordinate them manually and report that exclusion.
+See `docs/TESTING.md` §16 for commands and the implemented boundary.
+
+Mutation now participates: `pnpm mutate --concurrency 1 --mutate <exact-file>`.
+Repeat `--mutate`; optional `--test-file <unit-file>` deliberately narrows
+witnesses. Use `--all` only for the configured full scope. Scope and outer
+concurrency are required; the actual inner Vitest context is checked at one
+isolated thread before tests. No raw Stryker bypass, CSV/glob selectors or
+implicit CPU-derived local pool. Native JSON/HTML reports stay in its receipt.
 
 ## Definition of done includes self-mutation
 

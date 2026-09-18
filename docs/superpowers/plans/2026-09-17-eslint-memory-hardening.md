@@ -89,7 +89,7 @@ and the no-growth campsite rule.
 - [ ] **Step 2: Run the focused test and verify the current config fails**
 
   Run:
-  `pnpm exec vitest run --project unit scripts/eslint-config-boundaries.test.ts`
+  `pnpm test --project unit scripts/eslint-config-boundaries.test.ts`
 
   Expected: FAIL because the iOS bundle is not ignored, JSDoc mode is unset,
   and React rules are active on `e2e/design.spec.ts`.
@@ -123,7 +123,7 @@ and the no-growth campsite rule.
   Run:
 
   ```bash
-  pnpm exec vitest run --project unit scripts/eslint-config-boundaries.test.ts
+  pnpm test --project unit scripts/eslint-config-boundaries.test.ts
   pnpm exec eslint src e2e server domain scripts shared
   ```
 
@@ -205,7 +205,7 @@ and the no-growth campsite rule.
 
 - [ ] **Step 2: Run the focused test and verify module absence is the failure**
 
-  Run: `pnpm exec vitest run --project unit scripts/lint-run.test.ts`
+  Run: `pnpm test --project unit scripts/lint-run.test.ts`
 
   Expected: FAIL because `scripts/lint-run.mjs` does not exist.
 
@@ -250,11 +250,14 @@ and the no-growth campsite rule.
 
   Implementation amendment: the production-first and combined-test layouts
   missed the cold ceiling, so the final runner uses three test slices selected
-  by measured source weight. `/usr/bin/time -l pnpm lint`, run from `app/` at
-  normal pressure on the working tree based at `b9fb6fcc` with the final Task 4
-  partition amendments and the selected cache removed, reported a
-  `1713799168`-byte maximum RSS. The warm single-sweep path removes seven
-  needless process startups without changing lint membership.
+  by measured source weight. `pnpm lint`, run from `app/` at normal pressure on
+  the merge working tree based on `origin/main` `b15b800e` with no selected
+  fingerprint cache, produced a passed local-work receipt whose maximum
+  observed child-tree RSS was `1771392` KiB (`1813905408` bytes). A following
+  `/usr/bin/time -l pnpm lint` warm run on the same tree reported `326238208`
+  bytes maximum RSS and 5.62 seconds including the unchanged census phases.
+  The warm single-sweep path removes seven needless process startups without
+  changing lint membership.
 
 - [ ] **Step 4: Implement pressure and child-process control**
 
@@ -286,35 +289,42 @@ and the no-growth campsite rule.
 **Files:**
 
 - Modify: `app/package.json:17-18`
+- Modify: `app/scripts/local-work/workloads.mjs`
+- Modify: `app/scripts/local-work/workloads.test.mjs`
 - Modify: `app/scripts/lint-run.test.ts`
 - Modify: `docs/TESTING.md:543-571`
-- Modify: `CLAUDE.md` Commands section
 
 **Interfaces:**
 
-- Consumes: Task 2's CLI and existing suppression/census scripts.
+- Consumes: Task 2's CLI, the shared local-work controller, and existing
+  suppression/census scripts.
 - Produces: `pnpm lint` as cached sequential normal mode;
   `pnpm lint:prune` as pressure-guarded native prune mode.
 
 - [ ] **Step 1: Add a failing package-wiring assertion**
 
-  Read `package.json` in the runner test and assert exact prefixes:
+  Main-integration amendment (`origin/main` at `b15b800e`): package commands
+  already route through the shared-worktree resource controller. Assert the
+  package routes and the controller's internal lint phases:
 
   ```ts
-  expect(pkg.scripts.lint).toMatch(/^node scripts\/lint-run\.mjs && /);
+  expect(pkg.scripts.lint).toBe("node scripts/local-work.mjs run lint");
   expect(pkg.scripts["lint:prune"]).toBe(
-    "node scripts/lint-run.mjs --prune && " +
-      "node scripts/eslint-suppression-census.mjs --prune",
+    "node scripts/local-work.mjs run lint-prune",
   );
   ```
 
-  Verify it fails against the direct `eslint .` scripts.
+  The workload contract expects `scripts/lint-run.mjs` and
+  `scripts/lint-run.mjs --prune` as the first internal phases. Verify it fails
+  while the controller still launches native ESLint directly.
 
 - [ ] **Step 2: Wire package scripts without changing downstream gates**
 
-  Replace only the ESLint prefix. Keep normal mode's suppression census,
-  NUL check, transport census, and mock-registration census byte-for-byte and
-  in their existing order.
+  Keep the routed package scripts. Replace only the controller's native ESLint
+  phase with the runner. Keep normal mode's suppression census, NUL check,
+  transport census, and mock-registration census byte-for-byte and in their
+  existing order. This preserves shared ownership, continuous pressure
+  sampling, signal cleanup, and receipts around every lint run.
 
 - [ ] **Step 3: Document cache, cold partitions, and exit 75**
 
@@ -325,18 +335,16 @@ and the no-growth campsite rule.
   - sequential cold slices plus final authoritative sweep;
   - one changed TS file still initializes Project Service;
   - `lint:prune` is uncached and may rewrite only native/census stale entries;
-  - local Darwin exit 75 means no ESLint child started because pressure was not
-    normal; it is neither a pass nor an OOM.
-
-  Add one compact Commands note to `CLAUDE.md` so agents do not retry an exit-75
-  lint into the same pressure window.
+  - local Darwin exit 75 means the resource controller or runner started no
+    ESLint child because pressure was not normal; it is neither a pass nor an
+    OOM.
 
 - [ ] **Step 4: Run the focused unit project and package gates**
 
   Run:
 
   ```bash
-  pnpm exec vitest run --project unit \
+  pnpm test --project unit \
     scripts/lint-run.test.ts scripts/eslint-config-boundaries.test.ts
   pnpm format:check
   pnpm typecheck
@@ -401,7 +409,7 @@ and the no-growth campsite rule.
   Run:
 
   ```bash
-  pnpm exec vitest run --project unit \
+  pnpm test --project unit \
     scripts/lint-run.test.ts \
     scripts/eslint-config-boundaries.test.ts \
     scripts/eslint-suppression-census.test.ts

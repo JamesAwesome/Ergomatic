@@ -5,6 +5,7 @@
 // UPSTREAM of every producer (RF24): a click, a native-shaped event, the
 // real bridge/parser/entry hook/session, and the fake radio behind the
 // production-composed transport, through to the free row's READY.
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -20,6 +21,7 @@ import { resetMountLeasesForTests } from "../monitor/mountLease";
 import { resetConnectionAttemptTraceForTests } from "../monitor/nfc/connectionAttemptTrace";
 import type { InjectedFakeScript } from "../monitor/transports/index";
 import type { NfcScript } from "../monitor/nfc/scriptedNfcReader";
+import { WORKOUTSTATE_WAITTOBEGIN } from "../../domain/monitor/pm5/parse.js";
 
 vi.mock("../adapters/appLifecycle", () => ({
   registerAppLifecycleListener: vi.fn(() => () => undefined),
@@ -30,14 +32,16 @@ vi.mock("../adapters/keepAwake", () => ({
 }));
 
 const FIXED_ATTEMPT = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+const NEXT_ATTEMPT = "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
 const fixture = loadPm5NfcFixture().records;
 
-async function renderDoor() {
+async function renderDoor(strictMode = false) {
   const { default: JustRow } = await import("./JustRow");
   return render(
     <MemoryRouter initialEntries={["/justrow"]}>
       <JustRow />
     </MemoryRouter>,
+    { wrapper: strictMode ? StrictMode : undefined },
   );
 }
 
@@ -170,9 +174,11 @@ describe("the connecting card on the NFC route (Gate 0, James 2026-09-06)", () =
         name: "Looking for PM5 432331249 Row",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Keep the monitor on and close by.")).toHaveClass(
-      "connected-body-line",
-    );
+    expect(
+      screen.getByText(
+        "Tag read. Move your phone away from the NFC spot and keep Ergomatic open.",
+      ),
+    ).toHaveClass("connected-body-line");
     expect(screen.queryByText("Connecting to monitor")).toBeNull();
     expect(screen.queryByText(/Wake the monitor/)).toBeNull();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
@@ -197,6 +203,150 @@ describe("the connecting card on the NFC route (Gate 0, James 2026-09-06)", () =
 });
 
 describe("THE ROUTED PROOF on Just Row: Scan NFC click → native-shaped event → real parser/entry hook/session → fake radio via the production transport → READY", () => {
+  it("retains the claimed authorization on the StrictMode route and discards it on true route detach", async () => {
+    setNfcScript({
+      capability: "supported",
+      outcome: { kind: "records", records: fixture },
+    });
+    setFakeScript({
+      program: { intervals: [] },
+      deviceName: FIXTURE_PM5_NAME,
+      targetedScan: "pending",
+    });
+    const view = await renderDoor(true);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Scan NFC" }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Looking for PM5 432331249 Row",
+      }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(window.__pm5FakeControls__!.targetedRequests()).toHaveLength(1),
+    );
+    // The real owner/session survive the pinned runtime's initial StrictMode
+    // rehearsal. Just Row claims later on this mounted screen: its lifetime
+    // Effect updates rather than mounting a new child as Workout Detail does.
+    // Hold discovery before `armed` so only abandonment can clear the receipt.
+    await act(async () => {
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+    });
+    expect(stagedRetireAttemptId()).toBe(FIXED_ATTEMPT);
+    expect(screen.queryByText("Ready when you pull")).toBeNull();
+
+    view.unmount();
+    await act(async () => {
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+    });
+    expect(stagedRetireAttemptId()).toBeNull();
+  });
+
+  it("keeps hardware entry closed through Cancel settlement; a fresh connection survives a deliberately deferred old lease callback", async () => {
+    const minted = [FIXED_ATTEMPT, NEXT_ATTEMPT];
+    let mintCount = 0;
+    setAttemptIdMintForTests(() => {
+      const attemptId = minted[mintCount];
+      mintCount += 1;
+      if (attemptId === undefined) throw new Error("unexpected third attempt");
+      return attemptId;
+    });
+    setNfcScript({ capability: "supported", outcome: { kind: "cancelled" } });
+    setFakeScript({
+      program: { intervals: [] },
+      deviceName: FIXTURE_PM5_NAME,
+      // Cancel registers its post-terminate settle after the paused local
+      // write resolves. These are later machine-status notifications, kept
+      // separate from that local transport settlement on purpose.
+      events: [5_000, 5_001, 5_002].map((atMs) => ({
+        atMs,
+        kind: "status" as const,
+        workoutState: WORKOUTSTATE_WAITTOBEGIN,
+        elapsedSeconds: 0,
+        distanceMeters: 0,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: null,
+        programIntervalIndex: 0,
+      })),
+    });
+    await renderDoor();
+    await screen.findByRole("button", { name: "Scan NFC" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(
+      await screen.findByRole(
+        "heading",
+        { name: "Ready when you pull" },
+        { timeout: 5_000 },
+      ),
+    ).toBeInTheDocument();
+
+    const oldFake = window.__pm5FakeControls__!;
+    // Deliberately defer A's real mount-lease release callback until B exists.
+    // This intercepted schedule proves conditional successor safety only;
+    // it does not establish that native microtask ordering can delay A so far.
+    const lateA: VoidFunction[] = [];
+    const queueMicrotaskSpy = vi
+      .spyOn(globalThis, "queueMicrotask")
+      .mockImplementation((callback) => lateA.push(callback));
+    oldFake.pause("write");
+    try {
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(lateA).toHaveLength(1);
+      queueMicrotaskSpy.mockRestore();
+
+      const scan = screen.getByRole("button", { name: "Scan NFC" });
+      const connect = screen.getByRole("button", { name: "Connect" });
+      expect(scan).toBeDisabled();
+      expect(connect).toBeDisabled();
+      expect(scan).toHaveAttribute("aria-busy", "true");
+      expect(connect).toHaveAttribute("aria-busy", "true");
+      expect(stagedRetireAttemptId()).toBeNull();
+
+      await userEvent.click(scan);
+      await userEvent.click(connect);
+      expect(window.__pm5FakeControls__).toBe(oldFake);
+      expect(oldFake.targetedRequests()).toStrictEqual([]);
+      expect(mintCount).toBe(1);
+      expect(stagedRetireAttemptId()).toBeNull();
+
+      await act(async () => {
+        oldFake.resume("write");
+        for (let i = 0; i < 20; i += 1) await Promise.resolve();
+        oldFake.tick(5_002);
+        for (let i = 0; i < 20; i += 1) await Promise.resolve();
+      });
+
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled(),
+      );
+      expect(screen.getByRole("button", { name: "Scan NFC" })).toBeEnabled();
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await waitFor(() => expect(window.__pm5FakeControls__).not.toBe(oldFake));
+      const nextFake = window.__pm5FakeControls__!;
+
+      await act(async () => {
+        lateA[0]!();
+        for (let i = 0; i < 20; i += 1) await Promise.resolve();
+      });
+      expect(window.__pm5FakeControls__).toBe(nextFake);
+      expect(
+        await screen.findByRole(
+          "heading",
+          { name: "Ready when you pull" },
+          { timeout: 5_000 },
+        ),
+      ).toBeInTheDocument();
+      expect(mintCount).toBe(2);
+      expect(stagedRetireAttemptId()).toBeNull();
+    } finally {
+      queueMicrotaskSpy.mockRestore();
+      oldFake.resume("write");
+    }
+  });
+
   it("reaches Ready when you pull with the exact decoded name at the scanTarget seam and the fixed attempt ID; no picker scan", async () => {
     setNfcScript({
       capability: "supported",
