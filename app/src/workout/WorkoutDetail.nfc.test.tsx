@@ -5,6 +5,7 @@
 // starts UPSTREAM of every producer (RF24): a click, a native-shaped event,
 // the real bridge/parser/detail/handoff/interstitial/session, and the fake
 // radio behind the production-composed transport, through to `armed`.
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
@@ -152,7 +153,7 @@ function mockHooks() {
   }));
 }
 
-async function renderDetail(id = "w1") {
+async function renderDetail(id = "w1", strictMode = false) {
   const { default: WorkoutDetail } = await import("./WorkoutDetail");
   let view!: ReturnType<typeof render>;
   // The mount probes NFC capability asynchronously. Keep that initial
@@ -164,6 +165,7 @@ async function renderDetail(id = "w1") {
           <Route path="/library/:id" element={<WorkoutDetail />} />
         </Routes>
       </MemoryRouter>,
+      { wrapper: strictMode ? StrictMode : undefined },
     );
   });
   return view;
@@ -481,6 +483,42 @@ describe("Scan NFC outcomes on detail (states table)", () => {
 });
 
 describe("THE ROUTED PROOF: Scan NFC click → native-shaped event → real parser/detail/handoff/interstitial/session → fake radio via the production transport → armed", () => {
+  it("retains the claimed authorization through StrictMode rehearsal and discards it on true route detach", async () => {
+    setNfcScript({
+      capability: "supported",
+      outcome: { kind: "records", records: fixture },
+    });
+    setFakeScript({
+      program: expectedProgram(LIBRARY_WORKOUT),
+      deviceName: FIXTURE_PM5_NAME,
+      targetedScan: "pending",
+    });
+    const view = await renderDetail(LIBRARY_WORKOUT.id, true);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Scan NFC" }),
+    );
+    expect(
+      await screen.findByText("Looking for PM5 432331249 Row"),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(window.__pm5FakeControls__!.targetedRequests()).toHaveLength(1),
+    );
+    // The real interstitial mounts after claim under StrictMode. Its lease
+    // survives the pinned runtime's setup/cleanup/setup before microtasks
+    // drain; the pending radio seam prevents `armed` consuming this receipt.
+    await act(async () => {
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+    });
+    expect(stagedRetireAttemptId()).toBe(FIXED_ATTEMPT);
+    expect(screen.queryByText("Ready when you pull")).toBeNull();
+
+    view.unmount();
+    await act(async () => {
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+    });
+    expect(stagedRetireAttemptId()).toBeNull();
+  });
+
   it("reaches READY with no picker, the exact decoded name at the scanTarget seam and the fixed attempt ID at the consumer", async () => {
     setNfcScript({
       capability: "supported",

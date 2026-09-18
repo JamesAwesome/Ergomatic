@@ -874,13 +874,20 @@ wrong. Phase NF adds both:
    before connection, the session's `exportLog()` window (the failure screen's
    **View connection log**) serialises the pending attempt's entries in the
    ring's own shape under the same `nfc-attempt:` prefix, ahead of any ring a
-   previous session left. **Every attempt terminal publishes the trace** — the
-   connection-entry owner handles pre-claim and abandoned claimed terminals,
-   while the session handles a targeted failure, a superseded attempt or the
-   ring-prefix copy — so the process-local latest snapshot is never a
-   pre-scan copy of a handed-off attempt (whole-branch review B3, 2026-09-06:
-   before this, only a successful connect ever published, and every failure
-   the instrument exists for discarded it). The capability probe is not an
+   previous session left. A handed-off failure before targeted-discovery or
+   GATT publication remains readable through this pending-export window while
+   the session hook exists; the global latest snapshot can still name an
+   earlier publication during that window. The connection-entry owner handles
+   pre-claim terminals and, after captured connection/Cancel work settles,
+   republishes an abandoned claimed trace only if new entries made it dirty.
+   The session retains its targeted-failure, superseded-attempt and ring-prefix
+   publication points. **Publication is conditional on entry order:** an older
+   attempt cannot replace the process-local latest snapshot after a newer
+   attempt has published; the same attempt may republish on retry or cleanup
+   (connection-entry ownership spec, 2026-09-17, “Trace ownership”).
+   Whole-branch review B3 (2026-09-06) established the historical gap: before
+   that fix, only a successful connect ever published, and failures discarded
+   the trace the instrument existed to expose. The capability probe is not an
    attempt: it publishes only while no attempt has completed in this process,
    so a rejected or timed-out probe reaches the sink on a fresh launch and
    never clobbers a real attempt's snapshot. Tests assert the production sink,

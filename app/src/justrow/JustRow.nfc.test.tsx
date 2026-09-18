@@ -5,6 +5,7 @@
 // UPSTREAM of every producer (RF24): a click, a native-shaped event, the
 // real bridge/parser/entry hook/session, and the fake radio behind the
 // production-composed transport, through to the free row's READY.
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -34,12 +35,13 @@ const FIXED_ATTEMPT = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
 const NEXT_ATTEMPT = "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
 const fixture = loadPm5NfcFixture().records;
 
-async function renderDoor() {
+async function renderDoor(strictMode = false) {
   const { default: JustRow } = await import("./JustRow");
   return render(
     <MemoryRouter initialEntries={["/justrow"]}>
       <JustRow />
     </MemoryRouter>,
+    { wrapper: strictMode ? StrictMode : undefined },
   );
 }
 
@@ -201,7 +203,46 @@ describe("the connecting card on the NFC route (Gate 0, James 2026-09-06)", () =
 });
 
 describe("THE ROUTED PROOF on Just Row: Scan NFC click → native-shaped event → real parser/entry hook/session → fake radio via the production transport → READY", () => {
-  it("keeps hardware entry closed through Cancel settlement, then admits a fresh connection", async () => {
+  it("retains the claimed authorization on the StrictMode route and discards it on true route detach", async () => {
+    setNfcScript({
+      capability: "supported",
+      outcome: { kind: "records", records: fixture },
+    });
+    setFakeScript({
+      program: { intervals: [] },
+      deviceName: FIXTURE_PM5_NAME,
+      targetedScan: "pending",
+    });
+    const view = await renderDoor(true);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Scan NFC" }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Looking for PM5 432331249 Row",
+      }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(window.__pm5FakeControls__!.targetedRequests()).toHaveLength(1),
+    );
+    // The real owner/session survive the pinned runtime's initial StrictMode
+    // rehearsal. Just Row claims later on this mounted screen: its lifetime
+    // Effect updates rather than mounting a new child as Workout Detail does.
+    // Hold discovery before `armed` so only abandonment can clear the receipt.
+    await act(async () => {
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+    });
+    expect(stagedRetireAttemptId()).toBe(FIXED_ATTEMPT);
+    expect(screen.queryByText("Ready when you pull")).toBeNull();
+
+    view.unmount();
+    await act(async () => {
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+    });
+    expect(stagedRetireAttemptId()).toBeNull();
+  });
+
+  it("keeps hardware entry closed through Cancel settlement; a fresh connection survives a deliberately deferred old lease callback", async () => {
     const minted = [FIXED_ATTEMPT, NEXT_ATTEMPT];
     let mintCount = 0;
     setAttemptIdMintForTests(() => {
@@ -242,9 +283,9 @@ describe("THE ROUTED PROOF on Just Row: Scan NFC click → native-shaped event �
     ).toBeInTheDocument();
 
     const oldFake = window.__pm5FakeControls__!;
-    // Hold A's real mount-lease release microtask. Releasing it only after B
-    // exists gives the successor-survival assertion one reachable late-A
-    // continuation rather than inventing post-settlement session cleanup.
+    // Deliberately defer A's real mount-lease release callback until B exists.
+    // This intercepted schedule proves conditional successor safety only;
+    // it does not establish that native microtask ordering can delay A so far.
     const lateA: VoidFunction[] = [];
     const queueMicrotaskSpy = vi
       .spyOn(globalThis, "queueMicrotask")

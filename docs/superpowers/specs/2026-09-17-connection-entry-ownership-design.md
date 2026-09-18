@@ -215,6 +215,21 @@ owner-level identity-checked unmount backstop. It abandons a claimed attempt if
 the owning screen disappears after `claim()` but before the conditional
 lifetime Effect ever mounts.
 
+The routed proof also requires the real session to survive the interstitial's
+initial StrictMode rehearsal. The session keeps one attachment identity per
+Effect setup and the numeric epoch whose transport creation is still pending.
+Cleanup marks that attachment detached synchronously, so every connect
+continuation fails closed before it can scan, connect GATT or install a driver.
+Only cleanup during pre-radio `createTransport` resolution defers teardown by
+one reclaimable microtask. Under the pinned runtime, rehearsal setup replaces
+the attachment identity before that microtask, preserving the shared in-flight
+connect. A true detach has no reclaim and retires the epoch at that microtask;
+even a resolver continuation already queued ahead of it observes the detached
+attachment. Once transport resolution has completed, cleanup invokes existing
+scan cancellation and radio/driver teardown synchronously. This applies the same microtask
+heuristic as the attempt mount lease, without a broader React scheduling
+claim or a change to the session's public method interface.
+
 ## Ownership transfer and data flow
 
 The manual Workout Detail path is:
@@ -343,7 +358,9 @@ screen.
 | mount lease                                       | connection-entry lifetime hook; attempt ID                        | non-null mounted attempt               | same-ID StrictMode reclaim, or committed real-detach abandonment                           |
 | Cancel drain                                      | connection-entry module; attempt object plus exact Cancel promise | first `attempt.cancel` invocation      | fulfilled or rejected Cancel settlement; keeps owner busy and refuses connect/begin        |
 | staged authorization                              | `handoffStore`; hidden attempt ID                                 | `ConnectAction` stage                  | `armed` consumes; keyed abandonment discards; mismatch is a no-op                          |
-| whole-connect epoch and in-flight transport       | `useMonitorSession`                                               | each accepted session `connect`        | current Cancel, teardown, settlement or superseding connect; unchanged                     |
+| whole-connect epoch and in-flight transport       | `useMonitorSession`                                               | each accepted session `connect`        | current Cancel, committed teardown, settlement or superseding connect; pre-radio rehearsal may reclaim |
+| session attachment identity                       | `useMonitorSession`; Effect setup identity                        | hook initialization, replaced at setup | cleanup synchronously marks detached; newer setup invalidates an older pending release     |
+| pending transport epoch                           | `useMonitorSession`; numeric connect epoch                        | before awaiting transport creation     | identity-checked resolution finally; never clears a newer resolver epoch                    |
 | targeted discovery operation                      | `TargetedDiscoveryOwner`                                          | advertised-name session connect        | current discovery settle or session Cancel/teardown; unchanged                             |
 | logical session, driver and run                   | `useMonitorSession`                                               | existing GATT/armed/first-frame points | existing terminal and teardown rules; unchanged                                            |
 
@@ -402,11 +419,16 @@ are already process-local; the new module adds no persistence or stored shape.
 - Modify `app/src/justrow/JustRow.tsx`: store one attempt, connect/retry/cancel
   through it, use the lifetime hook, and keep the door's hardware buttons
   disabled while the attempt reports a pending Cancel drain.
-- Keep `app/src/monitor/useMonitorSession.ts` behavior and interface unchanged.
+- Keep `app/src/monitor/useMonitorSession.ts`'s public method interface unchanged.
   The attempt delegates its private request/trace pair through the existing
   `connect(request, trace)` call and delegates Cancel through the existing
-  `cancel()` call. Existing session tests remain the proof for epoch, targeted
-  discovery, GATT, pending-trace export and keyed armed consumption.
+  `cancel()` call. Preserve the in-flight pre-radio connection through pinned
+  StrictMode rehearsal using the attachment identity and pending transport
+  epoch described above. Detached continuations fail closed synchronously;
+  acquired-radio and driver teardown retain their existing timing. Existing
+  session tests remain the proof for targeted discovery, GATT, pending-trace
+  export and keyed armed consumption; the routed lifetime proof and queued
+  resolver/unmount witness cover the session lifecycle correction.
 - Keep `app/src/monitor/mountLease.ts` as the private StrictMode mechanism. Its
   direct tests remain; screen wiring tests are replaced with attempt-lifetime
   outcomes through the new interface.

@@ -2134,6 +2134,16 @@ export function useMonitorSession(
    *  newer attempt's `connectingRef` claim is never cleared by an older
    *  one's `finally`. */
   const attemptRef = useRef(0);
+  /** Effect setup owns one attachment identity. Cleanup marks it detached
+   *  synchronously; StrictMode setup replaces it before the reclaim microtask
+   *  under the pinned runtime. A true detach blocks every connect continuation
+   *  even before deferred pre-radio teardown retires its numeric epoch. */
+  const attachmentRef = useRef({ attached: true });
+  /** The epoch awaiting transport creation, before any scan/GATT operation.
+   *  Set just before that await and cleared in its identity-checked finally;
+   *  a late A resolver cannot erase B's pending resolution. Neither ref
+   *  survives this hook instance or a document reload. */
+  const resolvingTransportRef = useRef<number | null>(null);
   /** The complete pre-GATT targeted operation. It owns its current
    *  controller, foreground recovery and diagnostic lifetime. This hook owns
    *  the wider connect epoch and reads the result before allowing GATT. */
@@ -2628,9 +2638,9 @@ export function useMonitorSession(
    *  nor `teardown()`'s own entry does. A linger surviving into a fresh
    *  `connect()` on the same hook instance is nonetheless impossible today,
    *  and here is why, in four reads: `teardown` has exactly two callers —
-   *  `cancel()` and the unmount effect `useEffect(() => teardown,
-   *  [teardown])`; that effect's identity is stable, so its cleanup fires
-   *  only at unmount; `cancel()` returns early on `phase === "live" ||
+   *  `cancel()` and the unmount Effect; its stable dependency prevents
+   *  mid-session cleanup, and initial StrictMode rehearsal has no ended run
+   *  to linger; `cancel()` returns early on `phase === "live" ||
    *  phase === "ended"`; and every close that can set a burst-eligible
    *  `endedBy` (`"finished"`/`"rower"`) writes `phase: "ended"` in the same
    *  synchronous body. So `cancel()` can never reach the linger-arming
@@ -3941,8 +3951,8 @@ export function useMonitorSession(
         // "does not route through `teardown()`/`stash()`". It does — not
         // synchronously, but via `update({ ...INITIAL_STATE, programDropped:
         // true })` a few lines down, which unmounts the interstitial and
-        // fires this hook's own unmount effect (`useEffect(() => teardown,
-        // [teardown])`, below), whose `stash()` is the ONLY place this
+        // fires this hook's own unmount Effect, whose synchronous teardown
+        // at this acquired-driver phase calls `stash()`, the ONLY place this
         // pre-row attempt's trace ever reaches `sessionLogHistory.ts`. Round
         // 2 cleared the id here, BEFORE that stash could run, so `stash()`'s
         // own null-id guard skipped the upsert entirely and only the legacy
@@ -4226,7 +4236,7 @@ export function useMonitorSession(
    *  nobody has terminated it yet.** `cancel()` below already does this
    *  explicitly before calling `teardown()` (and passes `alreadyTerminated:
    *  true` so this function does not repeat it) — but `teardown` is ALSO
-   *  the unmount cleanup (`useEffect(() => teardown, [teardown])` below),
+   *  called synchronously by the unmount Effect once radio work has begun,
    *  reached by every OTHER way off the interstitial: a tab-bar tap, the
    *  back gesture, an iOS process kill. Before this fix those exits left
    *  the PM5 armed holding a workout nobody was going to row — DEVIATIONS
@@ -4997,11 +5007,12 @@ export function useMonitorSession(
       attemptIdRef.current = discovery.attemptId;
       attemptTraceRef.current = trace ?? null;
       const attempt = (attemptRef.current += 1);
-      /** True once `cancel()` (or a later `connect()`) has moved on. A
-       *  superseded attempt must not write shared state, must not clear a
-       *  `connectingRef` it no longer owns, and disposes only of the
+      /** True once the hook detaches, `cancel()` runs, or a later `connect()`
+       *  has moved on. A superseded attempt must not write shared state or
+       *  clear a `connectingRef` it no longer owns, and disposes only of the
        *  transport it built itself. */
-      const superseded = (): boolean => attemptRef.current !== attempt;
+      const superseded = (): boolean =>
+        !attachmentRef.current.attached || attemptRef.current !== attempt;
       // Phase LL Task 2 review fix (task-1-report Minor, `useMonitorSession.
       // ts:1665` at the time it was filed): `livenessRef.current` used to be
       // set only after the `transport === null` check below, and never
@@ -5089,9 +5100,17 @@ export function useMonitorSession(
       // `createWebBluetoothTransport()`, and every test's own synchronous
       // `createTransport` override) resolves on the same tick, so `await`
       // costs nothing observable there.
-      const transport = await (
-        depsRef.current.createTransport ?? defaultTransport
-      )(livenessDepsRef.current);
+      resolvingTransportRef.current = attempt;
+      let transport: Transport | null;
+      try {
+        transport = await (depsRef.current.createTransport ?? defaultTransport)(
+          livenessDepsRef.current,
+        );
+      } finally {
+        if (resolvingTransportRef.current === attempt) {
+          resolvingTransportRef.current = null;
+        }
+      }
       if (superseded()) {
         // Cancelled while the transport was still resolving (the native and
         // DEV arms both `await` a dynamic import here). Nothing was built
@@ -6051,8 +6070,9 @@ export function useMonitorSession(
     // so this counter is the only thing that can stop it building one
     // after we have already returned the UI to idle. Releasing
     // `connectingRef` here (rather than leaving it to that attempt's own
-    // `finally`, which now declines to touch it) is what lets the caller
-    // press Connect again immediately.
+    // `finally`, which now declines to touch it) clears the session guard.
+    // The connection-entry owner still blocks a fresh hardware press until
+    // this Cancel promise settles, including the post-terminate resets below.
     attemptRef.current += 1;
     connectingRef.current = false;
     // Phase NF: the targeted scan's abort lives in `teardown()` (called
@@ -6067,12 +6087,12 @@ export function useMonitorSession(
     const driver = driverRef.current;
     // MEDIUM-9 (task-5 re-review), landed by the fix wave's H1: CLAIM the
     // ref synchronously, before the `await driver.terminate()` below
-    // suspends. `ConnectedInterstitial.tsx`'s `handleCancel` is
-    // fire-and-forget — `void session.cancel(); onExit();` — so the unmount
-    // runs DURING that await, and with the ref still populated (and the
-    // phase still `programming`/`ready`, since `update` has not run yet)
-    // `teardown` sent a SECOND physical terminate. Worse than the
-    // "idempotent duplicate" MEDIUM-9 pictured: `sendSequence()` opens with
+    // suspends. `ConnectedInterstitial.tsx`'s `handleCancel` delegates
+    // through `attempt.cancel(session)` and exits without awaiting it, so
+    // unmount can run DURING that await. Before this synchronous claim,
+    // the ref stayed populated (and the phase stayed `programming`/`ready`,
+    // since `update` had not run yet), so `teardown` sent a SECOND physical
+    // terminate. Worse than the "idempotent duplicate" MEDIUM-9 pictured: `sendSequence()` opens with
     // `discardStaleAcks()`, so the second send purged the `pendingAck` the
     // first was waiting on and this function's own promise never settled.
     // Previously unreachable in tests only because `fake.ts` answers a
@@ -6115,17 +6135,15 @@ export function useMonitorSession(
     // own work, with `alreadyTerminated: true` stopping the repeat, rather
     // than something left to a cleanup.
     //
-    // THE `await` HAS NO CALLER (delta pass, PR #278). An earlier version
-    // of this comment called it a CONTRACT — "cancel() has DONE it,
-    // awaited" — and no caller can observe that: all six sites are
-    // `void session.cancel()` (`JustRow.tsx` x3, `ConnectedInterstitial
-    // .tsx` x2, `JustRowObserver.tsx`). What the await genuinely buys is
-    // INTERNAL ordering — the terminate lands before this function's own
-    // `teardown(armed, driver)` hangs up — and since PR #278 the driver
-    // holds that ordering for every caller anyway (`disconnect()` waits
-    // for a terminate that still owes its write). So the await is now belt
-    // to that braces: kept because it costs nothing and reads as the
-    // sequence it is, claimed as nothing more.
+    // The connection-entry owner now observes this promise's settlement
+    // as its admission barrier (ownership spec, 2026-09-17): both hardware
+    // doors stay disabled until termination and the remaining Cancel resets
+    // finish. Screen navigation remains fire-and-forget, but a fresh press
+    // cannot overlap the old Cancel's post-await cleanup. The await also
+    // preserves internal ordering — terminate before this function's own
+    // `teardown(armed, driver)` hangs up. Since PR #278, `disconnect()` also
+    // waits for a terminate that still owes its write; that driver ordering
+    // does not replace the owner's wait for this whole Cancel promise.
     const armed =
       driver !== null && (phase === "programming" || phase === "ready");
     if (armed) {
@@ -6243,21 +6261,29 @@ export function useMonitorSession(
     });
   }, []);
 
-  // Teardown on unmount: the listener goes, the radio goes, no driver is
-  // left holding a subscription to a component that no longer exists.
-  // `teardown` reads only refs.
-  //
-  // THIS CLEANUP FIRES AT UNMOUNT AND NOWHERE ELSE, but not for the reason
-  // this comment used to give ("the effect body runs once (no deps)") — the
-  // effect HAS a dep. What actually holds it is that `teardown`'s identity
-  // is stable: its deps are `[releaseHandoff, stopSeriesFlush, nowDate]`,
-  // and each of those resolves through `useCallback`s rooted in `[]`
-  // (`releaseHandoff` -> `resolveHandoffCondition` -> `[update,
-  // verifyHandoffWritable]`, both `[]`). Anything that gives one of those
-  // a changing identity re-runs this cleanup MID-SESSION, which tears the
-  // link down under a live screen — check the chain before adding a dep to
-  // any of them.
-  useEffect(() => teardown, [teardown]);
+  // Once radio work begins, cleanup invokes teardown synchronously as before.
+  // Only transport resolution, before any scan/GATT call, permits the same
+  // microtask reclaim heuristic as mountLease.ts. StrictMode's pinned-runtime
+  // setup/cleanup/setup must not retire the in-flight promise shared by the
+  // entry owner. Detach still blocks its continuation synchronously through
+  // `attachmentRef`, including a resolver already queued before this cleanup.
+  // The identity check prevents an older release from tearing down a replay.
+  // `teardown` must retain stable identity: a changing dependency would still
+  // tear down acquired radio/driver work mid-session.
+  useEffect(() => {
+    const attachment = { attached: true };
+    attachmentRef.current = attachment;
+    return () => {
+      attachment.attached = false;
+      if (resolvingTransportRef.current === null) {
+        teardown();
+        return;
+      }
+      queueMicrotask(() => {
+        if (attachmentRef.current === attachment) teardown();
+      });
+    };
+  }, [teardown]);
 
   // Hand-off store design spec §1, plan Task 3: wires `handoffStore`'s ONE
   // observability sink to THIS hook's own diagnostic ring — "the hook
