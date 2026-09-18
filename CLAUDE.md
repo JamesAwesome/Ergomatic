@@ -67,6 +67,9 @@ requirements).
 - `pnpm dev` / `pnpm dev:server` — Vite client :5173 (proxies /api) / API :8080
 - `pnpm lint` · `pnpm format` / `pnpm format:check` · `pnpm typecheck` · `pnpm test` ·
   `pnpm test:coverage` (90% gate) · `pnpm build`
+- Local macOS `pnpm lint` exit 75 means the pressure guard started no ESLint
+  child. Do not immediately retry into the same pressure window; free memory
+  and wait for pressure to return to normal. It is neither a pass nor an OOM.
 - **`--` SCOPES NEITHER `pnpm test` NOR `pnpm e2e`, and for two DIFFERENT
   reasons** — debugging the second from the first's explanation sends you to
   the wrong layer. `pnpm e2e -- <file>` does not swallow the `--`: it forwards

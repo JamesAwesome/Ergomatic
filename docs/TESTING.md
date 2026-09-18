@@ -543,14 +543,36 @@ Two rules of craft:
 ## 14. Typed-lint ratchet
 
 `pnpm lint` first applies `app/eslint-suppressions.json` through native ESLint,
-then runs the repository's whole-file membership census. Native ESLint owns
-diagnostics, per-file rule/count ceilings, and within-file stale-suppression
-pruning; the census rejects ledger files that were deleted or newly ignored and
-therefore no longer belong to ESLint's configured population. Run
-`pnpm lint:prune` after removing grandfathered violations: native ESLint first
-removes within-file stale rule/count entries, then the census removes only its
-invalid top-level file entries. Normal lint never writes. There is deliberately
-no command that regenerates the baseline.
+then runs the repository's whole-file membership census. The ESLint pass uses a
+content cache at `app/node_modules/.cache/eslint/<sha256>.cache`. The cache
+identity includes the Node version and the contents of `pnpm-lock.yaml`,
+`eslint.config.js`, and `eslint-suppressions.json`; ESLint separately hashes
+each source file because the runner always selects `--cache-strategy content`.
+Changing any identity input selects a fresh cache instead of trusting results
+produced by a different toolchain or policy.
+
+On a cold cache, the runner lints production, app tests, server, E2E, and root
+configuration files in sequential processes so their TypeScript programs are
+not resident together. It then runs an authoritative `eslint .` sweep against
+the same populated cache: the partition list controls memory, while the final
+sweep controls membership. A warm run therefore skips unchanged files. A run
+with one changed TypeScript file still has to initialize TypeScript Project
+Service for that process; the cache avoids repeat rule work, not TypeScript's
+per-process startup cost.
+
+Native ESLint owns diagnostics, per-file rule/count ceilings, and within-file
+stale-suppression pruning; the census rejects ledger files that were deleted or
+newly ignored and therefore no longer belong to ESLint's configured population.
+Run `pnpm lint:prune` after removing grandfathered violations: it deliberately
+runs one uncached native `eslint . --prune-suppressions` pass, then the census
+removes only its invalid top-level file entries. It may rewrite only stale
+native suppression counts and stale census entries. Normal lint never writes.
+There is deliberately no command that regenerates the baseline.
+
+On local macOS, the runner checks VM pressure before creating a cache or
+starting ESLint. Exit 75 means pressure was not normal (or could not be read),
+so no ESLint child ran. It is neither a lint pass nor evidence of an OOM; stop
+other memory-heavy work and retry after pressure returns to normal.
 
 Five typed rules apply to production and tests:
 `no-floating-promises`, `no-misused-promises`, `await-thenable`,

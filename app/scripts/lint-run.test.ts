@@ -1,12 +1,14 @@
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { cacheFingerprint, lintInvocations, runLint } from "./lint-run.mjs";
 
 const cacheLocation = "/tmp/eslint/cache.cache";
+const appRoot = fileURLToPath(new URL("..", import.meta.url));
 const expectedPartitions = [
   [
     "src",
@@ -203,5 +205,19 @@ describe("runLint", () => {
       ".",
       "--prune-suppressions",
     ]);
+  });
+});
+
+describe("package scripts", () => {
+  it("routes lint and prune through the memory-safe runner", async () => {
+    const pkg = JSON.parse(
+      await readFile(path.join(appRoot, "package.json"), "utf8"),
+    ) as { scripts: Record<string, string> };
+
+    expect(pkg.scripts.lint).toMatch(/^node scripts\/lint-run\.mjs && /);
+    expect(pkg.scripts["lint:prune"]).toBe(
+      "node scripts/lint-run.mjs --prune && " +
+        "node scripts/eslint-suppression-census.mjs --prune",
+    );
   });
 });
