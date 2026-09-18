@@ -39,6 +39,7 @@ import { fmtSplit } from "../../domain/format.js";
 import { WORKOUTSTATE_INTERVALWORKTIME } from "../../domain/monitor/pm5/parse.js";
 import type {
   IntervalActual,
+  MonitorDiscoveryRequest,
   MonitorFrame,
 } from "../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
@@ -65,6 +66,7 @@ import ConnectedSurface, {
   loadLastPane,
 } from "./ConnectedSurface";
 import { withDerivedAxes, type SessionWithoutAxes } from "../test/sessionAxes";
+import type { ConnectionEntryAttempt } from "../monitor/connectionEntry";
 
 // A spy over the REAL implementation, not a stub (the same
 // `vi.importActual` idiom `ConnectedInterstitial.test.tsx` uses for
@@ -81,6 +83,13 @@ vi.mock("./connected/surfaceModel", async () => {
     typeof import("./connected/surfaceModel")
   >("./connected/surfaceModel");
   return { ...actual, buildSurfaceModel: vi.fn(actual.buildSurfaceModel) };
+});
+
+vi.mock("../monitor/connectionEntry", async () => {
+  const actual = await vi.importActual<
+    typeof import("../monitor/connectionEntry")
+  >("../monitor/connectionEntry");
+  return { ...actual, useConnectionEntryLifetime: vi.fn() };
 });
 
 const mockBuildSurfaceModel = vi.mocked(buildSurfaceModel);
@@ -191,6 +200,20 @@ function fillingLow(): {
 }
 
 const FIXTURE = fillingLow();
+
+/** Render-only unsafe adapter for the one direct interstitial construction.
+ * Routed Workout Detail tests claim branded attempts from the real owner. */
+function attemptDouble(): ConnectionEntryAttempt {
+  const request: MonitorDiscoveryRequest = {
+    kind: "picker",
+    attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+  };
+  return {
+    targetName: null,
+    connect: (session: MonitorSession) => session.connect(request),
+    cancel: (session: MonitorSession) => session.cancel(),
+  } as unknown as ConnectionEntryAttempt;
+}
 
 /** The first SPLIT-REF work phase's own resolved split — every
  *  "slower"/"faster" fixture below is built relative to the WORKOUT's
@@ -2508,10 +2531,7 @@ describe("the connected walk, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={attemptDouble()}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}

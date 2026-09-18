@@ -3,10 +3,11 @@ import { useNavigate } from "react-router-dom";
 import ConnectAction, {
   type ConnectionEntryIntent,
 } from "../monitor/ConnectAction";
-import type { MonitorDiscoveryRequest } from "../../domain/monitor/types.js";
-import { mintAttemptId } from "../monitor/nfc/attemptIdMint";
-import type { ConnectionAttemptTrace } from "../monitor/nfc/connectionAttemptTrace";
-import { useNfcEntry } from "../monitor/nfc/useNfcEntry";
+import {
+  useConnectionEntry,
+  useConnectionEntryLifetime,
+  type ConnectionEntryAttempt,
+} from "../monitor/connectionEntry";
 import {
   connectGuardStage,
   currentUnretired as currentUnretiredHandoff,
@@ -76,63 +77,33 @@ export default function JustRow() {
     () => loadReadyCard() === "skip",
   );
 
-  // Phase NF: the press's own attempt ID keys the guard's staged receipt, so
-  // it travels into `connect(request)`; Try again replays the LAST REQUEST
-  // (the same attempt on the same record, never a second authorization —
-  // and, since the follow-on, the same TARGET: a targeted failure's Try
-  // again repeats the exact name and never opens the picker, the rule the
-  // interstitial follows). Follow-on Gate 0 §1 (James, 2026-09-06): Scan
-  // NFC sits above Connect here too; the NFC attempt is `useNfcEntry`'s,
-  // shared with workout detail, and this screen only says where a decoded
-  // target goes (its own session) and where an inline outcome renders.
-  const nfc = useNfcEntry();
+  // Phase NF: one opaque connection-entry attempt retains the press's keyed
+  // authorization, target and trace. Try again reuses that same attempt, so a
+  // targeted failure repeats the exact name and never opens the picker. Scan
+  // NFC and Connect share this owner with Workout Detail; this screen only
+  // claims an offered attempt and sends it through its existing session.
+  const entry = useConnectionEntry();
   const [inlineError, setInlineError] = useState<string | null>(null);
-  // The exact name the current attempt is looking for — set by an NFC
-  // handoff, cleared by a manual press; state, not the ref, because the
-  // card reads it during render.
-  const [lookingFor, setLookingFor] = useState<string | null>(null);
-  const lastRequestRef = useRef<{
-    request: MonitorDiscoveryRequest;
-    trace?: ConnectionAttemptTrace;
-  } | null>(null);
+  const [attempt, setAttempt] = useState<ConnectionEntryAttempt | null>(null);
+  useConnectionEntryLifetime(started ? attempt : null);
   const handleProceed = useCallback(
     (intent: ConnectionEntryIntent) => {
       setInlineError(null);
-      if (intent.kind === "nfc") {
-        void nfc.run(intent.attemptId, {
-          onTarget: (request, trace) => {
-            // Kept WITH its trace: a retry records into the same trace, as
-            // the interstitial's does (whole-branch review, should-fix 3).
-            lastRequestRef.current = { request, trace };
-            setLookingFor(
-              request.kind === "advertised-name" ? request.exactName : null,
-            );
-            setStarted(true);
-            void session.connect(request, trace);
-            return true;
-          },
-          onInlineError: setInlineError,
-        });
-        return;
-      }
-      const request: MonitorDiscoveryRequest = {
-        kind: "picker",
-        attemptId: intent.attemptId,
-      };
-      lastRequestRef.current = { request };
-      setLookingFor(null);
-      setStarted(true);
-      void session.connect(request);
+      entry.begin(intent, {
+        onReady: (offer) => {
+          const next = offer.claim();
+          setAttempt(next);
+          setStarted(true);
+          void next.connect(session);
+        },
+        onInlineError: setInlineError,
+      });
     },
-    [nfc, session],
+    [entry, session],
   );
   const retryConnect = useCallback(() => {
-    const last = lastRequestRef.current ?? {
-      request: { kind: "picker" as const, attemptId: mintAttemptId() },
-    };
-    lastRequestRef.current = last;
-    void session.connect(last.request, last.trace);
-  }, [session]);
+    if (attempt !== null) void attempt.connect(session);
+  }, [attempt, session]);
 
   // AXES, NEVER `session.phase` — and the hook derives them now (Phase MD
   // PR 2), so this screen reads them rather than rebuilding the input.
@@ -155,6 +126,17 @@ export default function JustRow() {
   // refuses at "ended" too, but this component must not lean on another
   // file's guard for its own loop.
   const armedThisStart = useRef(false);
+  const cancelEntry = useCallback(() => {
+    const current = attempt;
+    const drain = current?.cancel(session) ?? Promise.resolve();
+    armedThisStart.current = false;
+    setStarted(false);
+    void drain
+      .finally(() => {
+        setAttempt((value) => (value === current ? null : value));
+      })
+      .catch(() => undefined);
+  }, [attempt, session]);
   useEffect(() => {
     if (
       started &&
@@ -225,9 +207,9 @@ export default function JustRow() {
         <div className="action-stack">
           <ConnectAction
             onProceed={handleProceed}
-            nfcCapability={nfc.capability}
-            busy={nfc.busy}
-            accepted={nfc.accepted}
+            nfcCapability={entry.capability}
+            busy={entry.busy}
+            accepted={entry.accepted}
           />
           {/* The same slot workout detail uses, in the same position:
               between the hardware pair and the next action (follow-on,
@@ -348,15 +330,7 @@ export default function JustRow() {
           >
             Try again
           </button>
-          <button
-            type="button"
-            className="button-l2"
-            onClick={() => {
-              void session.cancel();
-              armedThisStart.current = false;
-              setStarted(false);
-            }}
-          >
+          <button type="button" className="button-l2" onClick={cancelEntry}>
             Cancel
           </button>
         </div>
@@ -423,15 +397,7 @@ export default function JustRow() {
               Try again
             </button>
           )}
-          <button
-            type="button"
-            className="button-l2"
-            onClick={() => {
-              void session.cancel();
-              armedThisStart.current = false;
-              setStarted(false);
-            }}
-          >
+          <button type="button" className="button-l2" onClick={cancelEntry}>
             Cancel
           </button>
         </div>
@@ -502,15 +468,7 @@ export default function JustRow() {
               that walks away leaves the rower in front of it.
               `useMonitorSession`'s `cancel()` treats `"programming"` as
               armed for exactly this reason. */}
-          <button
-            type="button"
-            className="button-l2"
-            onClick={() => {
-              void session.cancel();
-              armedThisStart.current = false;
-              setStarted(false);
-            }}
-          >
+          <button type="button" className="button-l2" onClick={cancelEntry}>
             Cancel
           </button>
         </div>
@@ -531,14 +489,14 @@ export default function JustRow() {
         <h1 className="connected-serif-line">
           {ready
             ? "Ready when you pull"
-            : lookingFor !== null
-              ? `Looking for ${lookingFor}`
+            : attempt?.targetName !== null && attempt?.targetName !== undefined
+              ? `Looking for ${attempt.targetName}`
               : "Connecting to monitor"}
         </h1>
         <p className="connected-body-line">
           {ready
             ? "The clock starts on your first stroke."
-            : lookingFor !== null
+            : attempt?.targetName !== null && attempt?.targetName !== undefined
               ? "Tag read. Move your phone away from the NFC spot and keep Ergomatic open."
               : "Wake the monitor if its screen is dark."}
         </p>
@@ -561,17 +519,7 @@ export default function JustRow() {
             Show me the numbers
           </button>
         )}
-        <button
-          type="button"
-          className="button-l2"
-          onClick={() => {
-            void session.cancel();
-            // A fresh press is a fresh authorization: Cancel clears the
-            // once-latch so the NEXT Connect can arm again.
-            armedThisStart.current = false;
-            setStarted(false);
-          }}
-        >
+        <button type="button" className="button-l2" onClick={cancelEntry}>
           Cancel
         </button>
       </div>

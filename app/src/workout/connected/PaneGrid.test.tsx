@@ -34,6 +34,7 @@ import {
 } from "../../../domain/monitor/program.js";
 import type {
   IntervalActual,
+  MonitorDiscoveryRequest,
   MonitorFrame,
 } from "../../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../../domain/types.js";
@@ -67,6 +68,14 @@ import {
   withDerivedAxes,
   type SessionWithoutAxes,
 } from "../../test/sessionAxes";
+import type { ConnectionEntryAttempt } from "../../monitor/connectionEntry";
+
+vi.mock("../../monitor/connectionEntry", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../monitor/connectionEntry")
+  >("../../monitor/connectionEntry");
+  return { ...actual, useConnectionEntryLifetime: vi.fn() };
+});
 
 /** The active row's live cells when the machine has said nothing — enough
  *  for a caption-grammar test, which never looks at them. */
@@ -174,6 +183,19 @@ function declaredValuesOf(bodies: string[], property: string): string[] {
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
 const DEVICE = "PM5 432331249";
+
+/** Render-only unsafe adapter for this direct interstitial construction. */
+function attemptDouble(): ConnectionEntryAttempt {
+  const request: MonitorDiscoveryRequest = {
+    kind: "picker",
+    attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+  };
+  return {
+    targetName: null,
+    connect: (session: MonitorSession) => session.connect(request),
+    cancel: (session: MonitorSession) => session.cancel(),
+  } as unknown as ConnectionEntryAttempt;
+}
 
 // 7C Task 1: `RunIdentity.logSeed` is required now. This file's subject is
 // the grid's own rendering/judging, not seed content, so one placeholder
@@ -1866,10 +1888,7 @@ describe("the grid, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={attemptDouble()}
         program={FILLING_LOW.program}
         phases={FILLING_LOW.phases}
         identity={FILLING_LOW.identity}

@@ -5,6 +5,7 @@
 // starts UPSTREAM of every producer (RF24): a click, a native-shaped event,
 // the real bridge/parser/detail/handoff/interstitial/session, and the fake
 // radio behind the production-composed transport, through to `armed`.
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
@@ -26,6 +27,7 @@ import {
   commit as commitHandoff,
   currentUnretired as currentUnretiredHandoff,
   resetForTests as resetHandoffStoreForTests,
+  stageRetire,
   stagedRetireAttemptId,
 } from "../monitor/handoffStore";
 import type { MonitorRun } from "../monitor/monitorRun";
@@ -67,6 +69,15 @@ const WORKOUT: LibraryWorkout = {
   isGlobal: false,
   lastDoneDaysAgo: null,
 };
+const COMPILE_ERROR_WORKOUT: LibraryWorkout = {
+  id: "w-compile-error",
+  title: "Open Test Piece",
+  type: "AN",
+  effort: 5,
+  steps: [{ k: "test", label: "2k test" }],
+  isGlobal: false,
+  lastDoneDaysAgo: null,
+};
 /** A REAL seeded library workout with reps and rests (RF3: the routed
  *  proof must cross the seam on production-shaped data, not only the
  *  one-step fixture above). Scud Cloud: 5 × 0:30 at 2k-3, 1:30 rest. */
@@ -85,6 +96,7 @@ const LIBRARY_WORKOUT: LibraryWorkout = (() => {
 })();
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 const FIXED_ATTEMPT = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+const NEXT_ATTEMPT = "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
 const fixture = loadPm5NfcFixture().records;
 
 /** The program the fake will verify byte-for-byte: the same compile the
@@ -121,7 +133,7 @@ function mockHooks() {
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => ({
       state: "ready",
-      workouts: [WORKOUT, LIBRARY_WORKOUT],
+      workouts: [WORKOUT, LIBRARY_WORKOUT, COMPILE_ERROR_WORKOUT],
     }),
   }));
   vi.doMock("../api/useBaselines", () => ({
@@ -141,7 +153,7 @@ function mockHooks() {
   }));
 }
 
-async function renderDetail(id = "w1") {
+async function renderDetail(id = "w1", strictMode = false) {
   const { default: WorkoutDetail } = await import("./WorkoutDetail");
   let view!: ReturnType<typeof render>;
   // The mount probes NFC capability asynchronously. Keep that initial
@@ -153,6 +165,7 @@ async function renderDetail(id = "w1") {
           <Route path="/library/:id" element={<WorkoutDetail />} />
         </Routes>
       </MemoryRouter>,
+      { wrapper: strictMode ? StrictMode : undefined },
     );
   });
   return view;
@@ -373,9 +386,139 @@ describe("Scan NFC outcomes on detail (states table)", () => {
     expect(trace).toContain("abort-requested");
     expect(trace).not.toContain("handoff-accepted");
   });
+
+  it("compile rejection leaves the offered attempt unclaimed and discards that exact staged authorization", async () => {
+    let releaseRead!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    setNfcScript({
+      capability: "supported",
+      outcome: { kind: "records", records: fixture },
+      gate,
+    });
+    await renderDetail(COMPILE_ERROR_WORKOUT.id);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Scan NFC" }),
+    );
+    expect(stagedRetireAttemptId()).toBe(FIXED_ATTEMPT);
+
+    releaseRead();
+    expect(
+      await screen.findByText(
+        "An open-ended (all-out/test) interval has no fixed time or distance. The PM5 requires one to program a workout.",
+      ),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".connected-interstitial")).toBeNull();
+    expect(stagedRetireAttemptId()).toBeNull();
+    expect(screen.getByRole("button", { name: "Scan NFC" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
+  });
+
+  it("Cancel settlement is the programmed door's barrier: A's session cleanup completes before B can stage", async () => {
+    const leftoverKey = seedLeftoverHandoff();
+    const minted = [FIXED_ATTEMPT, NEXT_ATTEMPT];
+    let mintCount = 0;
+    setAttemptIdMintForTests(() => {
+      const attemptId = minted[mintCount];
+      mintCount += 1;
+      if (attemptId === undefined) throw new Error("unexpected third attempt");
+      return attemptId;
+    });
+    setNfcScript({ capability: "supported", outcome: { kind: "cancelled" } });
+    setFakeScript({
+      program: expectedProgram(),
+      deviceName: FIXTURE_PM5_NAME,
+      pausedOperation: "write",
+    });
+    await renderDetail();
+    await screen.findByRole("button", { name: "Scan NFC" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Connect anyway" }),
+    );
+    expect(await screen.findByText("Sending the workout")).toBeInTheDocument();
+    expect(stagedRetireAttemptId()).toBe(FIXED_ATTEMPT);
+
+    const controls = window.__pm5FakeControls__!;
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Scan NFC" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(stagedRetireAttemptId()).toBeNull();
+    expect(currentUnretiredHandoff()?.sessionKey).toBe(leftoverKey);
+
+    await userEvent.click(screen.getByRole("button", { name: "Scan NFC" }));
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(mintCount).toBe(1);
+    expect(stagedRetireAttemptId()).toBeNull();
+
+    // `attempt.cancel` already discarded the original A authorization. Stage
+    // an A sentinel while the held terminate write keeps `session.cancel()`
+    // suspended: its post-write continuation performs the session's own
+    // keyed authorization cleanup before returning. The entry owner clears
+    // `busy` only after that returned promise settles, so an enabled door
+    // must observe this sentinel gone before it can admit B.
+    const leftover = currentUnretiredHandoff();
+    expect(leftover).not.toBeNull();
+    stageRetire(leftover, FIXED_ATTEMPT);
+    expect(stagedRetireAttemptId()).toBe(FIXED_ATTEMPT);
+
+    await act(async () => {
+      controls.resume("write");
+      for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled(),
+    );
+    expect(stagedRetireAttemptId()).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(
+      await screen.findByRole("button", { name: "Connect anyway" }),
+    ).toBeInTheDocument();
+    expect(stagedRetireAttemptId()).toBe(NEXT_ATTEMPT);
+    expect(currentUnretiredHandoff()?.sessionKey).toBe(leftoverKey);
+  });
 });
 
 describe("THE ROUTED PROOF: Scan NFC click → native-shaped event → real parser/detail/handoff/interstitial/session → fake radio via the production transport → armed", () => {
+  it("retains the claimed authorization through StrictMode rehearsal and discards it on true route detach", async () => {
+    setNfcScript({
+      capability: "supported",
+      outcome: { kind: "records", records: fixture },
+    });
+    setFakeScript({
+      program: expectedProgram(LIBRARY_WORKOUT),
+      deviceName: FIXTURE_PM5_NAME,
+      targetedScan: "pending",
+    });
+    const view = await renderDetail(LIBRARY_WORKOUT.id, true);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Scan NFC" }),
+    );
+    expect(
+      await screen.findByText("Looking for PM5 432331249 Row"),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(window.__pm5FakeControls__!.targetedRequests()).toHaveLength(1),
+    );
+    // The real interstitial mounts after claim under StrictMode. Its lease
+    // survives the pinned runtime's setup/cleanup/setup before microtasks
+    // drain; the pending radio seam prevents `armed` consuming this receipt.
+    await act(async () => {
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+    });
+    expect(stagedRetireAttemptId()).toBe(FIXED_ATTEMPT);
+    expect(screen.queryByText("Ready when you pull")).toBeNull();
+
+    view.unmount();
+    await act(async () => {
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+    });
+    expect(stagedRetireAttemptId()).toBeNull();
+  });
+
   it("reaches READY with no picker, the exact decoded name at the scanTarget seam and the fixed attempt ID at the consumer", async () => {
     setNfcScript({
       capability: "supported",

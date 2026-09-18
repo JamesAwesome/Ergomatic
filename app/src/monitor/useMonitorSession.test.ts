@@ -658,6 +658,31 @@ beforeEach(() => {
 });
 
 describe("useMonitorSession: connect", () => {
+  it("unmount refuses an already-queued transport continuation before any scan or driver subscription", async () => {
+    const scan = vi.fn(async () => [{ id: "x", name: DEVICE_NAME }]);
+    const subscribe = vi.fn(() => () => undefined);
+    const disconnect = vi.fn(async () => undefined);
+    const transport = stubRadio({ scan, subscribe, disconnect });
+    const createTransport = vi.fn(() => transport);
+    const { result, unmount } = renderHook(() =>
+      useMonitorSession({ createTransport }),
+    );
+    let work!: Promise<void>;
+    act(() => {
+      // A synchronous resolver still queues the session's await continuation.
+      // Unmount in this turn: that continuation precedes a cleanup microtask.
+      work = result.current.connect();
+    });
+    expect(createTransport).toHaveBeenCalledTimes(1);
+    unmount();
+    await act(async () => {
+      await work;
+    });
+    expect(scan).not.toHaveBeenCalled();
+    expect(subscribe).not.toHaveBeenCalled();
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
   it("no transport on this platform: transport-missing, and no picker is opened", async () => {
     const { result } = renderHook(() =>
       useMonitorSession({ createTransport: () => null }),

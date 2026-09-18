@@ -44,7 +44,10 @@ import {
   compileProgram,
   type WorkoutProgram,
 } from "../../domain/monitor/program.js";
-import type { Transport } from "../../domain/monitor/types.js";
+import type {
+  MonitorDiscoveryRequest,
+  Transport,
+} from "../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { buildDraft } from "../session/draft";
@@ -75,6 +78,10 @@ import {
   saveLastDevice,
 } from "../monitor/lastDevice";
 import { withDerivedAxes, type SessionWithoutAxes } from "../test/sessionAxes";
+import {
+  useConnectionEntryLifetime,
+  type ConnectionEntryAttempt,
+} from "../monitor/connectionEntry";
 
 /** `index.css` with every comment stripped — the same view
  *  `ConnectedSurface.test.tsx` takes of the stylesheet, and for its reason:
@@ -105,12 +112,20 @@ vi.mock("../monitor/useMonitorSession", async () => {
   return { ...actual, useMonitorSession: vi.fn() };
 });
 
+vi.mock("../monitor/connectionEntry", async () => {
+  const actual = await vi.importActual<
+    typeof import("../monitor/connectionEntry")
+  >("../monitor/connectionEntry");
+  return { ...actual, useConnectionEntryLifetime: vi.fn() };
+});
+
 vi.mock("../adapters/appSettings", () => ({
   canOpenAppSettings: vi.fn(() => false),
   openAppSettings: vi.fn(() => Promise.resolve()),
 }));
 
 const mockUseMonitorSession = vi.mocked(useMonitorSession);
+const mockUseConnectionEntryLifetime = vi.mocked(useConnectionEntryLifetime);
 const mockCanOpenAppSettings = vi.mocked(canOpenAppSettings);
 const mockOpenAppSettings = vi.mocked(openAppSettings);
 
@@ -160,6 +175,52 @@ function fillingLow(): {
 
 const FIXTURE = fillingLow();
 
+interface AttemptDouble {
+  attempt: ConnectionEntryAttempt;
+  connect: ReturnType<typeof vi.fn>;
+  cancel: ReturnType<typeof vi.fn>;
+}
+
+/** Render-only adapter: production attempts are owner-branded and cannot be
+ * constructed. These explicit unsafe doubles keep that bypass confined to
+ * tests; routed Workout Detail coverage claims real attempts from the owner. */
+function attemptDouble({
+  targetName = null,
+  delegate = true,
+}: {
+  targetName?: string | null;
+  delegate?: boolean;
+} = {}): AttemptDouble {
+  const request: MonitorDiscoveryRequest =
+    targetName === null
+      ? {
+          kind: "picker",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+        }
+      : {
+          kind: "advertised-name",
+          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
+          exactName: targetName,
+        };
+  const connect = vi.fn(
+    (session: Pick<MonitorSession, "connect" | "cancel">): Promise<void> =>
+      delegate ? session.connect(request) : Promise.resolve(),
+  );
+  const cancel = vi.fn(
+    (session: Pick<MonitorSession, "connect" | "cancel">): Promise<void> =>
+      delegate ? session.cancel() : Promise.resolve(),
+  );
+  return {
+    attempt: {
+      targetName,
+      connect,
+      cancel,
+    } as unknown as ConnectionEntryAttempt,
+    connect,
+    cancel,
+  };
+}
+
 function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
   const { axes, linkLoss, ...rest } = overrides;
   const base: SessionWithoutAxes = {
@@ -198,6 +259,7 @@ function renderInterstitial(
     onEnded: () => void;
     nudgedCount: number;
     baselines: Baselines | null;
+    attempt: AttemptDouble;
   }> = {},
 ) {
   const current = session(overrides);
@@ -205,6 +267,7 @@ function renderInterstitial(
   const onExit = props.onExit ?? vi.fn();
   const onRowInstead = props.onRowInstead ?? vi.fn();
   const onEnded = props.onEnded ?? vi.fn();
+  const attempt = props.attempt ?? attemptDouble();
   // `MemoryRouter`, because ONE failure frame routes: the
   // `unsupported-machine` refusal renders `SupportMatrixLink`, whose
   // `useLocation()` throws "may be used only in the context of a <Router>"
@@ -213,10 +276,7 @@ function renderInterstitial(
   const view = render(
     <MemoryRouter>
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={attempt.attempt}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -228,7 +288,7 @@ function renderInterstitial(
       />
     </MemoryRouter>,
   );
-  return { ...view, session: current, onExit, onRowInstead, onEnded };
+  return { ...view, session: current, attempt, onExit, onRowInstead, onEnded };
 }
 
 function connectedError(
@@ -239,6 +299,7 @@ function connectedError(
 
 beforeEach(() => {
   mockUseMonitorSession.mockReset();
+  mockUseConnectionEntryLifetime.mockReset();
   mockCanOpenAppSettings.mockReset().mockReturnValue(false);
   mockOpenAppSettings.mockReset().mockResolvedValue(undefined);
   localStorage.clear();
@@ -334,10 +395,7 @@ describe("the refusal frame and an unrelated LAST USED", () => {
     render(
       <MemoryRouter>
         <ConnectedInterstitial
-          request={{
-            kind: "picker",
-            attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-          }}
+          attempt={attemptDouble().attempt}
           program={FIXTURE.program}
           phases={FIXTURE.phases}
           identity={FIXTURE.identity}
@@ -460,15 +518,19 @@ describe("state 4: pairing", () => {
     ).toBeInTheDocument();
   });
 
-  it("Cancel calls session.cancel() and hands back to the caller", async () => {
-    const { session: s, onExit } = renderInterstitial({
+  it("Cancel calls attempt.cancel(session) and hands back to the caller", async () => {
+    const {
+      session: s,
+      attempt,
+      onExit,
+    } = renderInterstitial({
       phase: "pairing",
       deviceName: DEVICE_NAME,
     });
 
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(s.cancel).toHaveBeenCalledTimes(1);
+    expect(attempt.cancel).toHaveBeenCalledWith(s);
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 });
@@ -519,10 +581,7 @@ describe("state 5: programming", () => {
     );
     render(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={attemptDouble().attempt}
         program={one}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -928,7 +987,11 @@ describe("state 6: failed — every ConnectedError rendered", () => {
   });
 
   it("Row on the phone timer instead cancels the session and hands off with targets intact", async () => {
-    const { session: s, onRowInstead } = renderInterstitial({
+    const {
+      session: s,
+      attempt,
+      onRowInstead,
+    } = renderInterstitial({
       phase: "failed",
       deviceName: DEVICE_NAME,
       error: connectedError({
@@ -941,7 +1004,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       screen.getByRole("button", { name: "Row on the phone timer instead" }),
     );
 
-    expect(s.cancel).toHaveBeenCalledTimes(1);
+    expect(attempt.cancel).toHaveBeenCalledWith(s);
     expect(onRowInstead).toHaveBeenCalledTimes(1);
   });
 
@@ -1600,15 +1663,19 @@ describe("state 7: ready", () => {
     ]);
   });
 
-  it("Cancel calls session.cancel() (the ready-phase terminate, DEVIATIONS row 63) and hands back to the caller", async () => {
-    const { session: s, onExit } = renderInterstitial({
+  it("Cancel calls attempt.cancel(session) (the ready-phase terminate, DEVIATIONS row 63) and hands back to the caller", async () => {
+    const {
+      session: s,
+      attempt,
+      onExit,
+    } = renderInterstitial({
       phase: "ready",
       deviceName: DEVICE_NAME,
     });
 
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(s.cancel).toHaveBeenCalledTimes(1);
+    expect(attempt.cancel).toHaveBeenCalledWith(s);
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
@@ -1644,10 +1711,7 @@ describe("state 7: ready", () => {
     );
     first.rerender(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={first.attempt.attempt}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -1699,10 +1763,7 @@ describe("RC-37 ([R5]): session.programDropped exits like Cancel, without callin
     mockUseMonitorSession.mockReturnValue(next);
     first.rerender(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={first.attempt.attempt}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -1737,10 +1798,7 @@ describe("RC-37 ([R5]): session.programDropped exits like Cancel, without callin
     mockUseMonitorSession.mockReturnValue(next);
     first.rerender(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={first.attempt.attempt}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -1911,7 +1969,11 @@ describe("phase disconnected — the fall-through this task closes", () => {
   });
 
   it("Row on the phone timer instead cancels the session and hands off with targets intact, from the no-run-open treatment too", async () => {
-    const { session: s, onRowInstead } = renderInterstitial({
+    const {
+      session: s,
+      attempt,
+      onRowInstead,
+    } = renderInterstitial({
       phase: "disconnected",
       deviceName: DEVICE_NAME,
       runOpen: false,
@@ -1919,7 +1981,7 @@ describe("phase disconnected — the fall-through this task closes", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Row on the phone timer instead" }),
     );
-    expect(s.cancel).toHaveBeenCalledTimes(1);
+    expect(attempt.cancel).toHaveBeenCalledWith(s);
     expect(onRowInstead).toHaveBeenCalledTimes(1);
   });
 });
@@ -1948,10 +2010,7 @@ describe("the interstitial walk, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={attemptDouble().attempt}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -2030,10 +2089,7 @@ describe("the interstitial walk, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={attemptDouble().attempt}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -2129,10 +2185,7 @@ describe("the interstitial walk, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={attemptDouble().attempt}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -2209,10 +2262,7 @@ describe("the interstitial walk, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={attemptDouble().attempt}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -2250,10 +2300,7 @@ describe("the interstitial walk, fake-driven", () => {
 
     render(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={attemptDouble().attempt}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -2321,10 +2368,7 @@ describe("the interstitial walk, fake-driven", () => {
     render(
       <MemoryRouter>
         <ConnectedInterstitial
-          request={{
-            kind: "picker",
-            attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-          }}
+          attempt={attemptDouble().attempt}
           program={FIXTURE.program}
           phases={FIXTURE.phases}
           identity={FIXTURE.identity}
@@ -2404,10 +2448,7 @@ describe("the interstitial walk, fake-driven", () => {
     render(
       <MemoryRouter>
         <ConnectedInterstitial
-          request={{
-            kind: "picker",
-            attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-          }}
+          attempt={attemptDouble().attempt}
           program={FIXTURE.program}
           phases={FIXTURE.phases}
           identity={FIXTURE.identity}
@@ -2452,18 +2493,14 @@ describe("the interstitial walk, fake-driven", () => {
 // ---------------------------------------------------------------------------
 // Phase NF (design spec 2026-09-03 §5): the five targeted failures render
 // their approved copy as the serif line, never the generic "End whatever is
-// showing…" sentence; two of them refuse an in-process retry; Try again
-// repeats the SAME request object (never the picker); and the mount lease
-// discards the staged receipt only on a genuine unmount.
+// showing…" sentence; two of them refuse an in-process retry; and Try again
+// invokes the SAME opaque attempt (whose owner retains the exact target).
 describe("targeted failures (Phase NF)", () => {
-  const TARGET_REQUEST = {
-    kind: "advertised-name" as const,
-    attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-    exactName: "PM5 432331249 Row",
-  };
+  const TARGET_NAME = "PM5 432331249 Row";
 
   function renderTargeted(
     overrides: Partial<MonitorSession> = {},
+    attempt = attemptDouble({ targetName: TARGET_NAME }),
   ): ReturnType<typeof renderInterstitial> {
     const current = session(overrides);
     mockUseMonitorSession.mockReturnValue(current);
@@ -2472,7 +2509,7 @@ describe("targeted failures (Phase NF)", () => {
     const onEnded = vi.fn();
     const view = render(
       <ConnectedInterstitial
-        request={TARGET_REQUEST}
+        attempt={attempt.attempt}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -2483,7 +2520,14 @@ describe("targeted failures (Phase NF)", () => {
         onEnded={onEnded}
       />,
     );
-    return { ...view, session: current, onExit, onRowInstead, onEnded };
+    return {
+      ...view,
+      session: current,
+      attempt,
+      onExit,
+      onRowInstead,
+      onEnded,
+    };
   }
 
   // RENAMED AND RE-POINTED (Phase MT close-out): this used to end
@@ -2569,8 +2613,14 @@ describe("targeted failures (Phase NF)", () => {
     },
   );
 
-  it("picking on the NFC route names the target and offers Cancel; Cancel cancels the session and exits (follow-on Gate 0 §2)", async () => {
-    const { session: s, onExit } = renderTargeted({ phase: "picking" });
+  it("picking on the NFC route names attempt.targetName and offers Cancel through the attempt", async () => {
+    const {
+      session: s,
+      attempt,
+      onExit,
+    } = renderTargeted({
+      phase: "picking",
+    });
     expect(screen.getByText("Looking for PM5 432331249 Row")).toHaveClass(
       "connected-serif-line",
     );
@@ -2583,7 +2633,7 @@ describe("targeted failures (Phase NF)", () => {
     const cancel = screen.getByRole("button", { name: "Cancel" });
     expect(cancel).toHaveClass("button-l2");
     await userEvent.click(cancel);
-    expect(s.cancel).toHaveBeenCalledTimes(1);
+    expect(attempt.cancel).toHaveBeenCalledWith(s);
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
@@ -2594,8 +2644,8 @@ describe("targeted failures (Phase NF)", () => {
     expect(screen.queryByText(/Looking for/)).toBeNull();
   });
 
-  it("mounts with connect(request) — the SAME request object — and Try again repeats it", async () => {
-    const { session: s } = renderTargeted({
+  it("mount and Try again invoke the same attempt, and lifetime ownership receives it", async () => {
+    const { session: s, attempt } = renderTargeted({
       phase: "failed",
       error: connectedError({
         reason: "target-not-advertising",
@@ -2603,23 +2653,23 @@ describe("targeted failures (Phase NF)", () => {
           "Couldn't reach PM5 999.\nCheck nothing else is connected to it, then try again.",
       }),
     });
-    expect(s.connect).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(s.connect).mock.calls[0]![0]).toBe(TARGET_REQUEST);
+    expect(attempt.connect).toHaveBeenCalledTimes(1);
+    expect(attempt.connect).toHaveBeenNthCalledWith(1, s);
+    expect(mockUseConnectionEntryLifetime).toHaveBeenCalledWith(
+      attempt.attempt,
+    );
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(s.connect).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(s.connect).mock.calls[1]![0]).toBe(TARGET_REQUEST);
+    expect(attempt.connect).toHaveBeenCalledTimes(2);
+    expect(attempt.connect).toHaveBeenNthCalledWith(2, s);
   });
 
-  it("a picker request is passed through unchanged too (manual Connect is behaviourally unchanged)", () => {
-    const request = {
-      kind: "picker" as const,
-      attemptId: "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-    };
+  it("a picker attempt keeps the chooser copy and connects through the attempt", () => {
     const current = session({ phase: "picking" });
+    const attempt = attemptDouble({ targetName: null });
     mockUseMonitorSession.mockReturnValue(current);
     render(
       <ConnectedInterstitial
-        request={request}
+        attempt={attempt.attempt}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -2630,46 +2680,19 @@ describe("targeted failures (Phase NF)", () => {
         onEnded={vi.fn()}
       />,
     );
-    expect(vi.mocked(current.connect).mock.calls[0]![0]).toBe(request);
+    expect(screen.getByText("Choosing your monitor")).toBeInTheDocument();
+    expect(attempt.connect).toHaveBeenCalledWith(current);
   });
 
-  it("mount lease: a StrictMode double-invoke keeps the staged receipt; a genuine unmount discards it (compare-by-attempt-ID)", async () => {
-    const { StrictMode } = await import("react");
-    const store = await import("../monitor/handoffStore");
-    store.resetForTests();
-    store.stageRetire(
-      { sessionKey: "2020-01-01T00:00:00.000Z", revision: 1 },
-      TARGET_REQUEST.attemptId,
-    );
-    const current = session({ phase: "picking" });
-    mockUseMonitorSession.mockReturnValue(current);
-    const view = render(
-      <StrictMode>
-        <ConnectedInterstitial
-          request={TARGET_REQUEST}
-          program={FIXTURE.program}
-          phases={FIXTURE.phases}
-          identity={FIXTURE.identity}
-          baselines={baselines}
-          nudgedCount={0}
-          onExit={vi.fn()}
-          onRowInstead={vi.fn()}
-          onEnded={vi.fn()}
-        />
-      </StrictMode>,
-    );
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    // The rehearsal (setup → cleanup → setup) did not discard.
-    expect(store.stagedRetireAttemptId()).toBe(TARGET_REQUEST.attemptId);
-    view.unmount();
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(store.stagedRetireAttemptId()).toBeNull();
+  it("never bypasses a nondelegating attempt to call session connect or cancel", async () => {
+    const attempt = attemptDouble({ targetName: TARGET_NAME, delegate: false });
+    const { session: s } = renderTargeted({ phase: "picking" }, attempt);
+    expect(attempt.connect).toHaveBeenCalledWith(s);
+    expect(s.connect).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(attempt.cancel).toHaveBeenCalledWith(s);
+    expect(s.cancel).not.toHaveBeenCalled();
   });
 });
 
@@ -2827,10 +2850,7 @@ describe("I-5: skipping the ready card changes nothing on the wire", () => {
 
     const view = render(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={attemptDouble().attempt}
         program={FIXTURE.program}
         phases={FIXTURE.phases}
         identity={FIXTURE.identity}
@@ -2948,10 +2968,7 @@ describe("I-5: skipping the ready card changes nothing on the wire", () => {
     );
     render(
       <ConnectedInterstitial
-        request={{
-          kind: "picker",
-          attemptId: "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f",
-        }}
+        attempt={attemptDouble().attempt}
         program={otherCompiled}
         phases={otherPhases}
         identity={{
