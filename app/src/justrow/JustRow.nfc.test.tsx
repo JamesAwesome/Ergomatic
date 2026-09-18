@@ -20,6 +20,7 @@ import { resetMountLeasesForTests } from "../monitor/mountLease";
 import { resetConnectionAttemptTraceForTests } from "../monitor/nfc/connectionAttemptTrace";
 import type { InjectedFakeScript } from "../monitor/transports/index";
 import type { NfcScript } from "../monitor/nfc/scriptedNfcReader";
+import { WORKOUTSTATE_WAITTOBEGIN } from "../../domain/monitor/pm5/parse.js";
 
 vi.mock("../adapters/appLifecycle", () => ({
   registerAppLifecycleListener: vi.fn(() => () => undefined),
@@ -30,6 +31,7 @@ vi.mock("../adapters/keepAwake", () => ({
 }));
 
 const FIXED_ATTEMPT = "2f1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
+const NEXT_ATTEMPT = "9d1c9d2e-8a3b-4c7d-9e1f-0a1b2c3d4e5f";
 const fixture = loadPm5NfcFixture().records;
 
 async function renderDoor() {
@@ -199,6 +201,111 @@ describe("the connecting card on the NFC route (Gate 0, James 2026-09-06)", () =
 });
 
 describe("THE ROUTED PROOF on Just Row: Scan NFC click → native-shaped event → real parser/entry hook/session → fake radio via the production transport → READY", () => {
+  it("keeps hardware entry closed through Cancel settlement, then admits a fresh connection", async () => {
+    const minted = [FIXED_ATTEMPT, NEXT_ATTEMPT];
+    let mintCount = 0;
+    setAttemptIdMintForTests(() => {
+      const attemptId = minted[mintCount];
+      mintCount += 1;
+      if (attemptId === undefined) throw new Error("unexpected third attempt");
+      return attemptId;
+    });
+    setNfcScript({ capability: "supported", outcome: { kind: "cancelled" } });
+    setFakeScript({
+      program: { intervals: [] },
+      deviceName: FIXTURE_PM5_NAME,
+      // Cancel registers its post-terminate settle after the paused local
+      // write resolves. These are later machine-status notifications, kept
+      // separate from that local transport settlement on purpose.
+      events: [5_000, 5_001, 5_002].map((atMs) => ({
+        atMs,
+        kind: "status" as const,
+        workoutState: WORKOUTSTATE_WAITTOBEGIN,
+        elapsedSeconds: 0,
+        distanceMeters: 0,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: null,
+        programIntervalIndex: 0,
+      })),
+    });
+    await renderDoor();
+    await screen.findByRole("button", { name: "Scan NFC" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(
+      await screen.findByRole(
+        "heading",
+        { name: "Ready when you pull" },
+        { timeout: 5_000 },
+      ),
+    ).toBeInTheDocument();
+
+    const oldFake = window.__pm5FakeControls__!;
+    // Hold A's real mount-lease release microtask. Releasing it only after B
+    // exists gives the successor-survival assertion one reachable late-A
+    // continuation rather than inventing post-settlement session cleanup.
+    const lateA: VoidFunction[] = [];
+    const queueMicrotaskSpy = vi
+      .spyOn(globalThis, "queueMicrotask")
+      .mockImplementation((callback) => lateA.push(callback));
+    oldFake.pause("write");
+    try {
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(lateA).toHaveLength(1);
+      queueMicrotaskSpy.mockRestore();
+
+      const scan = screen.getByRole("button", { name: "Scan NFC" });
+      const connect = screen.getByRole("button", { name: "Connect" });
+      expect(scan).toBeDisabled();
+      expect(connect).toBeDisabled();
+      expect(scan).toHaveAttribute("aria-busy", "true");
+      expect(connect).toHaveAttribute("aria-busy", "true");
+      expect(stagedRetireAttemptId()).toBeNull();
+
+      await userEvent.click(scan);
+      await userEvent.click(connect);
+      expect(window.__pm5FakeControls__).toBe(oldFake);
+      expect(oldFake.targetedRequests()).toStrictEqual([]);
+      expect(mintCount).toBe(1);
+      expect(stagedRetireAttemptId()).toBeNull();
+
+      await act(async () => {
+        oldFake.resume("write");
+        for (let i = 0; i < 20; i += 1) await Promise.resolve();
+        oldFake.tick(5_002);
+        for (let i = 0; i < 20; i += 1) await Promise.resolve();
+      });
+
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled(),
+      );
+      expect(screen.getByRole("button", { name: "Scan NFC" })).toBeEnabled();
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await waitFor(() => expect(window.__pm5FakeControls__).not.toBe(oldFake));
+      const nextFake = window.__pm5FakeControls__!;
+
+      await act(async () => {
+        lateA[0]!();
+        for (let i = 0; i < 20; i += 1) await Promise.resolve();
+      });
+      expect(window.__pm5FakeControls__).toBe(nextFake);
+      expect(
+        await screen.findByRole(
+          "heading",
+          { name: "Ready when you pull" },
+          { timeout: 5_000 },
+        ),
+      ).toBeInTheDocument();
+      expect(mintCount).toBe(2);
+      expect(stagedRetireAttemptId()).toBeNull();
+    } finally {
+      queueMicrotaskSpy.mockRestore();
+      oldFake.resume("write");
+    }
+  });
+
   it("reaches Ready when you pull with the exact decoded name at the scanTarget seam and the fixed attempt ID; no picker scan", async () => {
     setNfcScript({
       capability: "supported",
