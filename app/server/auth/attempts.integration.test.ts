@@ -520,6 +520,59 @@ describe("front-door transactions against Postgres", () => {
     // And a second discard of the same snapshot matches nothing and says so.
     await expect(scoped.discard(held)).resolves.toBe(false);
   });
+  // --- THE OTHER DIRECTION OF THE INVARIANT ------------------------------
+  //
+  // Every test above asserts a token IS revoked. This one asserts a token is
+  // NOT, and it is the direction the whole subject-keyed design exists for.
+  // `grant()` upserts on (user_id, client_id), so a rower who already holds
+  // an Apple grant and then starts a DELETE confirmation ends up with two
+  // tokens against one Apple authorization. Apple's own documentation will
+  // not say whether revoking one revokes the authorization, so we assume the
+  // broad reading and refuse to touch a credential the rower is keeping.
+  //
+  // Without this test, a change that revoked everything would pass the entire
+  // rest of this file.
+  it("does NOT revoke a cancelled delete attempt whose grant is still live", async () => {
+    const recorder = recordingRevoke();
+    const scoped = createAttempts(
+      pool,
+      createAccessPolicy("public", ""),
+      recorder.revoke,
+    );
+    await scoped.sweep();
+    const user = await seedUser({ googleSub: null, appleSub: "a-keep" });
+    await pool.query(
+      "INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'native.app','rt-LIVE')",
+      [user.id],
+    );
+    const other = await sessions.createSession(user.id);
+    const resolved = (await sessions.resolveSession(other.token))!;
+    // A delete attempt on that session, carrying its own second token issued
+    // against the SAME Apple authorization.
+    await pool.query(
+      `INSERT INTO auth_attempts(id,binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,created_at,expires_at,reauthenticated_at,verified_subject,verified_email,verified_name,apple_client_id,apple_refresh_token)
+       VALUES($1,$2,'web','delete','apple','apple','delete_ready',1,'st-keep','no-keep',$3,now(),now()+interval '5m',now(),NULL,NULL,NULL,'native.app','rt-SECOND')`,
+      [
+        "11111111-1111-4111-8111-111111111111",
+        hashToken("bs-keep"),
+        resolved.sessionId,
+      ],
+    );
+
+    await scoped.cancel(
+      "11111111-1111-4111-8111-111111111111",
+      "bs-keep",
+      "web",
+    );
+
+    // The row is gone -- cancelling still cancels.
+    expect((await pool.query("SELECT 1 FROM auth_attempts")).rowCount).toBe(0);
+    // But nothing was revoked, because the rower still signs in with Apple.
+    expect(recorder.seen).toStrictEqual([]);
+    expect(
+      (await pool.query("SELECT refresh_token FROM apple_grants")).rows,
+    ).toStrictEqual([{ refresh_token: "rt-LIVE" }]);
+  });
   it("claim and same-session replacement wait without a lock-order cycle", async () => {
     const b = await link();
     let release!: () => void;
