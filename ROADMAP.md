@@ -4826,16 +4826,16 @@ RECORD — do not cite it for a live question.
   [detail](docs/history/register-evictions-2026-09-10.md).
 - **Phase MT** — the app refuses a SkiErg, BikeErg or Dyno instead of silently
   storing its piece as a row, says so on both doors, and links the support matrix ·
-  closed 2026-09-19 · #366, #369, #370, #377, #378, #380, #NNN · released in
+  closed 2026-09-19 · #366, #369, #370, #377, #378, #380, #483 · released in
   v0.43.0, v0.44.0 and v0.45.0 · [detail](docs/history/phase-mt.md)
 - **Phase DE** — one number for how hard a workout is: difficulty removed, pain
   renamed to effort, the compat layer dropped · closed 2026-09-19 · #309, #310,
-  #400, #NNN · released in v0.39.0 and v0.46.0 · the legacy
+  #400, #483 · released in v0.39.0 and v0.46.0 · the legacy
   `title | TYPE | difficulty | pain` bulk header is still accepted ON PURPOSE
   (`app/domain/bulk.ts`) · [detail](docs/history/phase-de.md)
 - **Phase PS** — a rower can see their own career on You: lifetime and season
   totals, metres per week, time by type and the test trend · closed 2026-09-19
-  · #411, #417, #424, #NNN · released in v0.46.0 and v0.47.0 · its external
+  · #411, #417, #424, #483 · released in v0.46.0 and v0.47.0 · its external
   oracle was met by eye WITH STATED LIMITS, against the Concept2 SANDBOX, and
   owes one re-run on the live logbook ·
   [detail](docs/history/phase-ps-career-stats.md)
