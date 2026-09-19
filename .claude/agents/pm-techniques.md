@@ -384,6 +384,72 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   than a fortnight before ruling on it, and record the tree it was measured
   against.**
 
+- **A wave's row can be discharged by a PHASE in a different section, and the
+  wave's own text will still claim it.** Wave C's test-history row read "this
+  is the only read path… the app collects test results no rower can ever
+  see"; Phase PS PR 2 shipped TEST TREND (`30fd5cc0`, #424, merged 2026-09-13,
+  v0.46.0) six days before the refinement that quoted it. The sibling rule
+  above greps a row's named PR; here no PR number appears in the row at all.
+  **At every refinement, grep each row's SUBJECT against the shipped tree
+  before judging it** — one command moved this row from "build the list" to
+  "the binding on the list was already breached".
+- **A PM binding names an ARTEFACT and governs a CAPABILITY, and a different
+  artefact will walk straight past it.** #165's gate (2026-08-22) bound "the
+  list does NOT ship without a remove/void answer"; the TEST TREND *chart* is
+  a read path, shipped without one, and keeps points whose log row was deleted
+  — so a bogus test is now permanent AND drawn. **Word a binding as the
+  capability ("a rower can see these rows"), and re-read an old one that way
+  before accepting that a new surface escaped it.** Nothing else catches it:
+  the binding lived in a wave the shipping phase never read.
+- **A stranger-shaped GOAL is the same dead criterion as a stranger-shaped
+  exit.** James deferred public sign-up on 2026-09-14 ("that will be a final
+  'production' phase, don't worry about authoring it yet") and
+  `accessPolicy.ts` defaults `restricted`; Wave A's exit and Wave C's goal and
+  exit were both struck or restated on 2026-09-19 because of it. **Check the
+  goal sentence, not only the exit** — a goal written before 2026-09-14
+  containing "a stranger" describes a distribution that does not exist, and
+  the goal is what the rows were scoped against. Sort each row by who it
+  serves TODAY; what only a stranger needs is listed for the unauthored
+  production phase ("After the strangers"), never authored into it.
+- **Two phone-only zero-rowing items in one wave are ONE walk.** Each owes a
+  versioned runsheet and a PM readiness PASS; together they owe one session,
+  one install and one PASS. **At every wave-open gate, collect the rows
+  needing James's device and ask whether one sitting serves them all — then
+  order them so the earlier observation is not spoiled by the later setup** (a
+  naive cold start must precede turning VoiceOver on).
+
+- **A wave's decoupling rationale can be killed by a decision made the same
+  day, and the status line keeps quoting it.** Wave B's line read "No longer
+  releases with Wave C: the backup row protects the household's data TODAY" —
+  and James struck the backup row hours later (RDS, in a separate AWS repo).
+  The decoupling still held, for a different reason (its second PR is gated on
+  that repo). **At every refinement, read a status line's stated REASON
+  against the rows the section still contains**, not only its verdict: a
+  correct verdict resting on a dead reason is quoted as settled by the next
+  reader.
+- **Before pricing an "it tells nobody" row, ask which part of it something
+  that already exists answers for free.** Wave B's reporter row welded three
+  failure classes into one M: the server being down (`/api/health` already
+  returns `{ok, db, version}` and 503s on a failed `SELECT 1` — an external
+  checker, zero code here, and James moved it to his AWS repo), a native crash
+  (TestFlight and Xcode Organizer already collect them), and a client render
+  throw (`git log -S "ErrorBoundary" -- app/src` is EMPTY). Only the third is
+  app-side, and it is the one the row's own RF19 argument is about. **Split an
+  instrument row by failure class and check each against the deployed system
+  before sizing it.**
+- **Work gated on ANOTHER REPO goes in as a row with its own trigger, never as
+  a peer that the wave's schedule waits on.** James is building AWS in a
+  separate repo; the app-side cutover (pool TLS, a compose profile, a
+  rehearsed dump/restore, two doc sentences) is real and ownerless, so it
+  belongs in ROADMAP (RF14) — but a wave whose second row cannot start until
+  an external question is answered is the Wave D failure again. Judge the
+  wave's date on what can start today.
+- **A stale line number inside a queued row is evidence the row has not been
+  re-read.** Wave B's backup row cited `compose.yml:102` for the bare `pgdata`
+  volume; at head that line was the `web` service's `container_name`. The
+  claim still held. Treat it as a prompt to re-derive every other figure in
+  the row, not as a typo.
+
 ## Recommendations that turned out wrong
 - **2026-09-13 — the disabled-button contrast fold (#425).** I measured the
   disabled provider button at 2.16:1 (`--ink-5 #a09a8c` on `--accent #b5341f`)

@@ -740,7 +740,14 @@ export default function PostWorkoutSummary({
   saveDisabled = false,
   children,
 }: PostWorkoutSummaryProps) {
-  const { meta, heroes, rows, caption, machineRows = [] } = model;
+  const {
+    meta,
+    heroes,
+    rows,
+    caption,
+    machineRows = [],
+    intervalSpans = [],
+  } = model;
 
   // §2F: `Log against plan` carries the plan's own position information
   // (`Log against plan · SESSION n OF N`) whether it's leading or demoted —
@@ -860,7 +867,7 @@ export default function PostWorkoutSummary({
           when `series` is absent or too thin to draw (Task 2's own gate),
           so this is an unconditional render, not a second absence check
           duplicated here. */}
-      <TraceChart series={series} />
+      <TraceChart series={series} intervals={intervalSpans} />
 
       {beforeSaveSlot}
       <div className="action-stack summary-save-stack">

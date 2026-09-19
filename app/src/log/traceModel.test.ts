@@ -481,7 +481,7 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
     ]);
   });
 
-  it("does NOT break the line across a rest — a rest is data, not a gap", () => {
+  it("does NOT break the line across a rest ON THE NO-INTERVALS AXIS — there, a rest is data, not a gap (with the machine's intervals it DOES break; see the axis suite below)", () => {
     // same series: exactly ONE segment, not three
     const series = {
       samples: [
@@ -561,5 +561,411 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
     };
     const trace = buildTrace(series, "pace")!;
     expect(trace.summary).not.toContain("rest span");
+  });
+});
+
+// ---------------------------------------------------------------------
+// Gate 0B board 2, PR 3 (APPROVED 2026-09-19, candidate B): the x axis is
+// WORK + THE MACHINE'S OWN REST, never the sample's own `t`.
+//
+// `docs/design/number-provenance/gate0b/board2/BOARD2.md` is the board
+// James ruled from. Where the literals below come from, stated honestly
+// rather than claimed wholesale (RF21: a derivation checking itself
+// proves nothing, and a header saying otherwise is worse than silence):
+//
+//  - `SESSION_2_SPANS` is transcribed from the capture's own stored
+//    actuals and is genuinely independent.
+//  - The BAND WIDTHS (30 / 30 / 30) and the today-axis pins (419.5,
+//    8.5 / 7.7 / 4.0) are independent: the widths are the actuals'
+//    own rest figures, and the pins are what shipped before this change.
+//  - **487.8 IS NOT INDEPENDENT.** It is the board's measured figure for
+//    candidate B, which is this code's own output. It cannot be derived
+//    from `SESSION_2_SPANS`, whose work seconds sum to 398.4: the axis
+//    is the SERIES-derived work clock (397.8) plus the machine's 90 s of
+//    rest, not the machine's own work total plus its rest. Those two
+//    disagree by 0.6 s on this capture, which is the sampling error
+//    between a clock read at 1 Hz and a figure the machine computed —
+//    small, real, and the reason samples ride their own work clock
+//    rather than being stretched onto the stored one. Read 487.8 as a
+//    REGRESSION PIN on a number a human checked at the board, not as a
+//    proof.
+//  - The band POSITIONS (89.3 / 238.5 / 397.7) were measured off the
+//    stored fixture by a separate script; see that test.
+// ---------------------------------------------------------------------
+
+/** `session-2-wu-4unequal`'s own per-interval actuals, as the machine
+ *  reported them — `docs/design/number-provenance/gate0b/board2/fixtures/
+ *  session2-actuals.json`, produced from this same capture through the
+ *  shipped driver. Work seconds are 0x0039's own per-interval elapsed;
+ *  rest seconds are the 0x0037 READBACK (`domain/monitor/types.ts`).
+ *  Transcribed here as INDEPENDENT LITERALS so the axis assertions below
+ *  cannot be satisfied by `buildTrace` agreeing with itself. */
+const SESSION_2_SPANS = [
+  { workSeconds: 29.7, restSeconds: 0 },
+  { workSeconds: 60, restSeconds: 30 },
+  { workSeconds: 120, restSeconds: 30 },
+  { workSeconds: 128.7, restSeconds: 30 },
+  { workSeconds: 60, restSeconds: 0 },
+];
+
+describe("buildTrace — PR 3: the axis is work plus the machine's own rest", () => {
+  it("session-2-wu-4unequal: the axis runs to 487.8 s (397.8 s of work plus the machine's own 90 s of rest), where today's stops at 419.5", async () => {
+    const series = seriesFromFrames(
+      await loadCaptureFrames(
+        "walk-2026-08-16",
+        "session-2-wu-4unequal.jsonl",
+        SESSION_2_PROGRAM,
+      ),
+    );
+
+    // Today's axis, pinned so the change is visible rather than asserted:
+    // the last sample's own `t`, which is work plus however much of each
+    // rest the rower happened to keep the flywheel moving through.
+    expect(buildTrace(series, "pace")!.domainX).toStrictEqual([0, 419.5]);
+
+    const trace = buildTrace(series, "pace", SESSION_2_SPANS)!;
+    expect(trace.domainX[0]).toBe(0);
+    // Rounded to a tenth: the axis is a sum of ~420 float deltas, and
+    // the tenth is the precision the stored series itself carries.
+    expect(Number(trace.domainX[1].toFixed(1))).toBe(487.8);
+  });
+
+  it("session-2-wu-4unequal: three EQUAL 30 s rests draw three EQUAL bands, where today's draw 7.5, 6.7 and 3.0 s", async () => {
+    const series = seriesFromFrames(
+      await loadCaptureFrames(
+        "walk-2026-08-16",
+        "session-2-wu-4unequal.jsonl",
+        SESSION_2_PROGRAM,
+      ),
+    );
+
+    // Today: the band is only the part of the rest that reached the axis,
+    // so three identical rests draw three different widths — James's own
+    // 2026-08-31 complaint, reproduced from the capture. (The 0.5 s pad
+    // each side is `REST_BAND_PAD_SECONDS`, unchanged.)
+    const today = buildTrace(series, "pace")!;
+    expect(
+      today.restBands.map((b) => Number((b.endX - b.startX).toFixed(1))),
+    ).toStrictEqual([8.5, 7.7, 4.0]);
+
+    const trace = buildTrace(series, "pace", SESSION_2_SPANS)!;
+    expect(
+      trace.restBands.map((b) => Number((b.endX - b.startX).toFixed(1))),
+    ).toStrictEqual([30, 30, 30]);
+  });
+
+  it("session-2-wu-4unequal: each band STARTS where the machine says its interval ended", async () => {
+    // The widths alone cannot catch a band drawn in the wrong PLACE.
+    // These three onsets were measured off the stored fixture by a
+    // separate script, not read back out of `buildTrace`: the derived
+    // work clock stands at 89.3 / 208.5 / 337.7 s when each rest run
+    // begins, and each band then sits that far along plus the rest
+    // already inserted ahead of it (0, 30, 60).
+    const series = seriesFromFrames(
+      await loadCaptureFrames(
+        "walk-2026-08-16",
+        "session-2-wu-4unequal.jsonl",
+        SESSION_2_PROGRAM,
+      ),
+    );
+    const trace = buildTrace(series, "pace", SESSION_2_SPANS)!;
+    expect(
+      trace.restBands.map((b) => Number(b.startX.toFixed(1))),
+    ).toStrictEqual([89.3, 238.5, 397.7]);
+  });
+
+  it("a rest the rower sat still through draws its band anyway — it has no samples of its own, so the work boundary is what places it", () => {
+    // 60 s of work at 1 Hz, then the rower stops dead for the whole 30 s
+    // rest (the machine's elapsed clock freezes with the flywheel, so the
+    // recorder emits NOTHING — measured on walk-2026-08-25's own 0x0031
+    // frames, where elapsed held at 64.62 s across 12 consecutive
+    // frames, 5.58 s of wall clock, inside a rest), then 60 s more work.
+    const samples: Sample[] = [];
+    for (let i = 1; i <= 120; i++) {
+      samples.push({ t: i * 10, d: i * 40, p: 1200, spm: 24, r: undefined });
+    }
+    const trace = buildTrace({ samples }, "pace", [
+      { workSeconds: 60, restSeconds: 30 },
+      { workSeconds: 60, restSeconds: 0 },
+    ])!;
+
+    expect(trace.restBands).toStrictEqual([{ startX: 60, endX: 90 }]);
+    // The 61st second of work is the first sample AFTER the rest, so it
+    // lands beyond the band rather than inside it.
+    expect(trace.points.flat().map((p) => p.x)).toContain(91);
+    expect(trace.domainX).toStrictEqual([0, 150]);
+  });
+
+  it("a piece that ENDS in a rest draws that rest at the same width as the one before it — the axis runs to the end of the rest, not to the last sample", () => {
+    // Two 30 s intervals, each with a 60 s rest after it. The second rest
+    // has no samples of its own and nothing follows it.
+    const samples: Sample[] = [];
+    for (let i = 1; i <= 60; i++) {
+      samples.push({ t: i * 10, d: i * 40, p: 1200, spm: 24, r: undefined });
+    }
+    const trace = buildTrace({ samples }, "pace", [
+      { workSeconds: 30, restSeconds: 60 },
+      { workSeconds: 30, restSeconds: 60 },
+    ])!;
+    // 30 s of work, 60 s of rest, 30 s of work, 60 s of rest — and the
+    // axis runs the full 180, so both bands draw at 60.
+    expect(trace.restBands).toStrictEqual([
+      { startX: 30, endX: 90 },
+      { startX: 120, endX: 180 },
+    ]);
+    expect(trace.domainX).toStrictEqual([0, 180]);
+  });
+
+  it("a stray rest mark in the middle of live work does not open a band, and does not push the real rest onto the wrong interval", () => {
+    // One `r: true` inside the first interval's work — a flicker of the
+    // wire's own state byte, or a rest run split by one non-rest sample.
+    // Unguarded it inserts a full 30 s readback at that point and every
+    // later rest is drawn against the wrong interval's figure.
+    const samples: Sample[] = [];
+    for (let i = 1; i <= 121; i++) {
+      samples.push({
+        t: i * 10,
+        d: i * 40,
+        p: 1200,
+        spm: 24,
+        r: i === 30 ? true : undefined,
+      });
+    }
+    const trace = buildTrace({ samples }, "pace", [
+      { workSeconds: 60, restSeconds: 30 },
+      { workSeconds: 60, restSeconds: 0 },
+    ])!;
+    // ONE band, the real one, at its full 30 s.
+    expect(trace.restBands).toHaveLength(1);
+    const [band] = trace.restBands;
+    expect(band!.endX - band!.startX).toBeCloseTo(30, 6);
+    // The stray sample costs the axis its own second and no work, which
+    // is what the old axis did with it too.
+    expect(band!.startX).toBeCloseTo(61, 6);
+  });
+
+  it("a rest that outlasts the stored intervals keeps the axis moving FORWARDS", () => {
+    // One interval, no rest after it, and then the series carries ten
+    // rest-marked samples anyway. With nothing left to name them the
+    // axis still has to advance: crediting them to `lastX` alone let the
+    // next work sample recompute x from the work clock and walk the axis
+    // backwards by the whole rest.
+    //
+    // TWO rest runs against ONE stored interval, and WORK SAMPLES AFTER
+    // the second one. Both halves are the test: the first rest is what
+    // exhausts the interval cursor, and without work after the second
+    // one nothing recomputes x from the work clock, so the defect
+    // cannot show. Measured — crediting the advance to `lastX` alone
+    // walks x up to 100 through the second rest and then drops it back
+    // to 91.
+    const samples: Sample[] = [];
+    let d = 0;
+    for (let i = 1; i <= 120; i++) {
+      const resting = (i > 60 && i <= 70) || (i > 90 && i <= 100);
+      if (!resting) d += 40;
+      samples.push({ t: i * 10, d, p: 1200, spm: 24, r: resting || undefined });
+    }
+    const trace = buildTrace({ samples }, "pace", [
+      { workSeconds: 60, restSeconds: 0 },
+    ])!;
+    const xs = trace.points.flat().map((pt) => pt.x);
+    for (let i = 1; i < xs.length; i++) {
+      expect(xs[i]!).toBeGreaterThan(xs[i - 1]!);
+    }
+    // 100 s of work plus the 20 s the two rest runs occupied.
+    expect(trace.domainX[1]).toBeCloseTo(120, 6);
+  });
+
+  it("with no stored intervals (a free row, or a row saved before the rest readback shipped) the axis is exactly today's", async () => {
+    const series = seriesFromFrames(
+      await loadCaptureFrames(
+        "walk-2026-08-16",
+        "session-2-wu-4unequal.jsonl",
+        SESSION_2_PROGRAM,
+      ),
+    );
+    const today = buildTrace(series, "pace")!;
+    expect(today.domainX).toStrictEqual([0, 419.5]);
+    expect(today.points.flat().map((p) => p.x)).toStrictEqual(
+      series.samples.filter((s) => s.p !== 0).map((s) => s.t / 10),
+    );
+  });
+
+  it("the a11y summary counts the BANDS, so the rest nobody rowed through is still named", () => {
+    const samples: Sample[] = [];
+    for (let i = 1; i <= 120; i++) {
+      samples.push({ t: i * 10, d: i * 40, p: 1200, spm: 24, r: undefined });
+    }
+    const trace = buildTrace({ samples }, "pace", [
+      { workSeconds: 60, restSeconds: 30 },
+      { workSeconds: 60, restSeconds: 0 },
+    ])!;
+    expect(trace.summary).toContain("1 rest span marked");
+  });
+});
+
+describe("buildTrace — PR 3: a span where the machine's distance stood still while its clock ran", () => {
+  /** `docs/monitor/sessions/walk-2026-09-15-work-clock/README.md`: "Walk
+   *  Keystone (`x2` / `w 250m 6k @24`), abandoned after interval 1". */
+  const WORK_CLOCK_PROGRAM: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "distance",
+        value: 250,
+        targetSplit: 129,
+        displaySpm: 24,
+        restSeconds: 0,
+      },
+      {
+        type: "work",
+        kind: "distance",
+        value: 250,
+        targetSplit: 129,
+        displaySpm: 24,
+        restSeconds: 0,
+      },
+    ],
+  };
+
+  it("the 2026-09-15 work-clock capture's 60.5 s dead stop is marked", async () => {
+    const series = seriesFromFrames(
+      await loadCaptureFrames(
+        "walk-2026-09-15-work-clock",
+        "pm5-recording-1789471533667.jsonl.gz",
+        WORK_CLOCK_PROGRAM,
+      ),
+    );
+    const trace = buildTrace(series, "pace")!;
+    expect(trace.stops).toHaveLength(1);
+    expect(Math.round(trace.stops[0]!.seconds)).toBe(61);
+  });
+
+  it("a stop the rower never rowed out of is STILL marked — the recording ends inside it", async () => {
+    // The antagonist's case (2026-09-19): a rower who stops mid-interval
+    // and ends the session while still stopped makes the stop and the
+    // post-END sentinel tail ONE flat-distance run, so a guard phrased as
+    // "a real reading must FOLLOW the stop" throws the whole span away
+    // instead of just the tail.
+    //
+    // Built from the real capture rather than by hand: sample 76 is the
+    // last sample of its 60.5 s dead stop (indices 16-76, t 16.3 s to
+    // 76.8 s), so slicing there ends the recording inside the stop.
+    const full = seriesFromFrames(
+      await loadCaptureFrames(
+        "walk-2026-09-15-work-clock",
+        "pm5-recording-1789471533667.jsonl.gz",
+        WORK_CLOCK_PROGRAM,
+      ),
+    );
+    const endsInTheStop = { samples: full.samples.slice(0, 77) };
+    const trace = buildTrace(endsInTheStop, "pace")!;
+    expect(trace.stops).toHaveLength(1);
+    expect(Math.round(trace.stops[0]!.seconds)).toBe(61);
+  });
+
+  it("the a11y summary names the stop and how long it was — the mark itself is invisible to a screen reader", async () => {
+    const series = seriesFromFrames(
+      await loadCaptureFrames(
+        "walk-2026-09-15-work-clock",
+        "pm5-recording-1789471533667.jsonl.gz",
+        WORK_CLOCK_PROGRAM,
+      ),
+    );
+    // The `STOPPED 61s` text lives inside the chart's `role="img"`
+    // element, so this string is the whole of what that reader gets.
+    expect(buildTrace(series, "pace")!.summary).toContain(
+      "1 stopped span marked (61s)",
+    );
+  });
+
+  it("the flat tail after the rower presses END is not a stop — every sample there is a sentinel, and no real reading follows", () => {
+    // 30 s of work, then 10 s of `p === 0` sentinels at a frozen distance:
+    // the shape of a closed piece, not of a rower standing still mid-row.
+    const samples: Sample[] = [];
+    for (let i = 1; i <= 30; i++) {
+      samples.push({ t: i * 10, d: i * 40, p: 1200, spm: 24, r: undefined });
+    }
+    for (let i = 31; i <= 40; i++) {
+      samples.push({ t: i * 10, d: 30 * 40, p: 0, spm: 0, r: undefined });
+    }
+    expect(buildTrace({ samples }, "pace")!.stops).toStrictEqual([]);
+  });
+
+  it("the SAME stop is reported on every measure — a strap that drops out mid-stop must not shorten it", () => {
+    // The discriminating fixture, and it has to be built rather than
+    // replayed: on every committed capture `p`, `spm` and `hr` end
+    // together, so a stop clipped at the drawn measure's own last
+    // reading looks identical to one clipped at the machine's. Here the
+    // BELT dies 10 s into a 20 s stop, which is the case a rower
+    // actually meets.
+    const samples: Sample[] = [];
+    for (let i = 1; i <= 60; i++) {
+      const stopped = i > 20 && i <= 40;
+      samples.push({
+        t: i * 10,
+        d: (stopped ? 20 : i) * 40,
+        p: 1200,
+        spm: 24,
+        ...(i <= 30 ? { hr: 150 } : {}),
+        r: undefined,
+      });
+    }
+    const pace = buildTrace({ samples }, "pace")!.stops;
+    const hr = buildTrace({ samples }, "hr")!.stops;
+    expect(pace).toHaveLength(1);
+    expect(pace[0]!.seconds).toBeCloseTo(20, 6);
+    expect(hr).toStrictEqual(pace);
+  });
+
+  it("the threshold is a boundary, and it is pinned at 5 s from both sides", () => {
+    // Independent literals, never the module's own constant: a run of
+    // exactly 5.0 s is a stop and one of 4.9 s is not. Retuning
+    // `STOP_SECONDS` has to break this test, which is the whole reason
+    // it does not import it.
+    const build = (frozenTenths: readonly number[]) => {
+      const samples: Sample[] = [];
+      let t = 0;
+      let d = 0;
+      for (let i = 0; i < 10; i++) {
+        t += 10;
+        d += 40;
+        samples.push({ t, d, p: 1200, spm: 24, r: undefined });
+      }
+      for (const step of frozenTenths) {
+        t += step;
+        samples.push({ t, d, p: 1200, spm: 24, r: undefined });
+      }
+      for (let i = 0; i < 10; i++) {
+        t += 10;
+        d += 40;
+        samples.push({ t, d, p: 1200, spm: 24, r: undefined });
+      }
+      return buildTrace({ samples }, "pace")!.stops;
+    };
+
+    // Five 1.0 s steps after the last moving sample: the flat run spans
+    // exactly 5.0 s from its first sample to its last.
+    const atFive = build([10, 10, 10, 10, 10]);
+    expect(atFive).toHaveLength(1);
+    expect(atFive[0]!.seconds).toBeCloseTo(5, 6);
+
+    // Seven 0.7 s steps: 4.9 s, one tenth under.
+    expect(build([7, 7, 7, 7, 7, 7, 7])).toStrictEqual([]);
+  });
+
+  it("a flat run shorter than the 5 s threshold is not a stop", () => {
+    const samples: Sample[] = [];
+    for (let i = 1; i <= 30; i++) {
+      const frozen = i >= 10 && i <= 13; // 4 s, below the threshold
+      samples.push({
+        t: i * 10,
+        d: (frozen ? 9 : i) * 40,
+        p: 1200,
+        spm: 24,
+        r: undefined,
+      });
+    }
+    expect(buildTrace({ samples }, "pace")!.stops).toStrictEqual([]);
   });
 });

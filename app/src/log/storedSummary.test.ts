@@ -301,6 +301,35 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     expect(buildStoredSummary(baseRow()).machineRows).toStrictEqual([]);
   });
 
+  it("Gate 0B board 2: a stored machine row carries its intervals' work and rest seconds for the trace axis; a by-hand row and a row with no readback carry none", () => {
+    const machineRow = (machineRestSeconds?: number) =>
+      baseRow({
+        source: "pm5",
+        endedBy: "finished",
+        machineWorkSeconds: 622.5,
+        machineWorkMeters: 2400,
+        machineSummary: { avgPaceSecondsPer500m: 129.7 },
+        steps: [
+          {
+            ...measuredStep(313.5, 1200, 130.6),
+            ...(machineRestSeconds === undefined ? {} : { machineRestSeconds }),
+          },
+          { ...measuredStep(309.0, 1200, 128.8), machineRestSeconds: 0 },
+        ],
+      });
+
+    expect(buildStoredSummary(machineRow(60)).intervalSpans).toStrictEqual([
+      { workSeconds: 313.5, restSeconds: 60 },
+      { workSeconds: 309.0, restSeconds: 0 },
+    ]);
+    // One step with no rest readback (a row saved before Phase LP PR 2)
+    // stands the whole axis down rather than redrawing that rest at zero.
+    expect(buildStoredSummary(machineRow()).intervalSpans).toStrictEqual([]);
+    // A by-hand row: the axis is the machine's account of a machine row,
+    // the same gate `machineRows` carries.
+    expect(buildStoredSummary(baseRow()).intervalSpans).toStrictEqual([]);
+  });
+
   it("Phase LP (review L6): a pre-RC-1 pm5 row (no machine totals) shows neither tiles nor strip — one gate for both", () => {
     const view = buildStoredSummary(
       baseRow({

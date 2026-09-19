@@ -154,8 +154,8 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | Wave  | What it is                  | Size | Tester sees                                 |
 | ----- | --------------------------- | ---- | ------------------------------------------- |
 | **A** | The front door              | L    | Yes, immediately                            |
-| **B** | Backups and telemetry       | M    | Nothing                                     |
-| **C** | The submission surface      | L    | The most visible wave                       |
+| **B** | Error reporting, DB move    | S/M  | A readable crash screen, on a bad day       |
+| **C** | What the household opens    | L    | An icon, type words, a correctable test     |
 | **E** | The Concept2 logbook        | L    | After PR2 ships the send surface            |
 
 ## Phase MT — the app refuses a machine it cannot record
@@ -637,7 +637,9 @@ line naming it was struck by ruling 19), never corrected.
       figures as literals — lifetime 56,752 m / 3:59:39 / 13, season 43,012
       m, MACHINE 36,752 m, rest 718, cal 1,731, 176 W (RF7; the `8 OF 10`
       and `1 ROW PREDATES` lines were struck by ruling 19); PM final gate.
-- [ ] **PR 2 — the remaining charts, all designed and approved at Gate 0
+- [x] **PR 2 — MERGED #424 (`30fd5cc0`, 2026-09-13), released in v0.46.0;
+      its box sat unticked until 2026-09-19. The remaining charts, all
+      designed and approved at Gate 0
       (ruling 11): METRES PER WEEK (eight Monday-start bars ending at the
       range's last day, this week in `--ink`, the rest in `--ink-4` — Gate 0
       ruling 12 over the handoff's `#c9c3b2`, 1.73:1, recorded in
@@ -1584,30 +1586,89 @@ closed it on 2026-09-06.
 
 ---
 
-## Wave B — Don't lose their data, and know when it breaks
+## Wave B — Know when it breaks, and be ready to move the database
 
-**Status:** After A; **releases with Wave C**. **M.** Not triad.
-**Ships a tester nothing** except one privacy disclosure line.
+**Status:** After A. **S/M** — one PR that can be built now, plus one gated on
+James's AWS repo. Stays decoupled from Wave C's release, for a NEW reason: the
+old one was the backup row, struck the same day; what decouples it now is that
+its second PR cannot be scheduled from this roadmap. **A tester sees one
+thing, and only on a bad day:** a readable screen instead of a white one.
+Carries one privacy disclosure line. **Not triad** — except the split-out
+saved-row diagnostics row, which is a stored shape. · dies 2026-10-31 · one
+week after Wave C's date: if PR 1 has not opened by then the wave is being
+outvoted, and that comes back to James rather than sliding.
 
-**Goal:** the two things that are fine for a household of one and indefensible
-for a stranger — no backup, and no idea when their app breaks.
+**Goal, restated 2026-09-19 (James):** when the app breaks on one of the five
+phones already using it, someone finds out without that person having to be
+James — and the database is somewhere a restore has actually been run from.
+It used to read "fine for a household of one and indefensible for a
+stranger"; strangers were deferred on 2026-09-14, and the first half is true
+of the household today.
 
-- [ ] **A real database backup, and a restore drill that has actually been
-      run.** `docs/RELEASING.md` names a backup as the ONLY recovery from a
-      documented unrecoverable failure: rolling the API past the v0.16.0
-      seed-rename floor deletes the renamed rows and nulls every
-      `session_logs.workout_id` pointing at them. **No backup exists** —
-      `scripts/` holds `ci-changes.sh`, `deploy.sh`, `version.sh` and `wod`,
-      `pg_dump` appears in no script in the repo, and `compose.yml:102` is a
-      bare `pgdata` volume. **The restore drill is the deliverable, not the
-      dump:** an untested backup is the same shape as an ungated gate. **M**
-- [ ] **Error and crash reporting, from the shell and the client.** There is
-      none of any kind. Every defect this project has ever fixed was found by
+- **STRUCK BY JAMES, 2026-09-19 — "A real database backup, and a restore
+  drill that has actually been run."** _"i'll handle that by setting up
+  RDS"_: backup and restore belong to the AWS account he is preparing in a
+  separate repo, and are no longer this roadmap's work. **So does "is the
+  server down"** (ruled the same day): `/api/health` already returns
+  `{ok, db, version}` and a 503 when its `SELECT 1` fails
+  (`app/server/app.ts`), so the only missing piece is an external checker,
+  and a checker is infrastructure. What the strike leaves owed IN THIS REPO is
+  PR 2 below, and nothing else.
+
+### PR 1 — when the app breaks, it says so, and it says so to James too
+
+- [ ] **A crash shows a readable screen with a way out, and lands in the API's
+      log without anyone having to report it.** There is no error handling of
+      any kind above the transport seam: `git log --oneline -S "ErrorBoundary"
+      -- app/src` is EMPTY, so no React error boundary has ever existed; no
+      `window.onerror` or `unhandledrejection` handler; no Express
+      error-handling middleware (`grep -rn "ErrorRequestHandler\|app.use((err"
+      app/server` finds one comment); and no route from the client to the
+      server for an error at all. **A render throw today is a white screen that
+      tells nobody.** Every defect this project has ever fixed was found by
       James at an erg, by a walk, or by a review — instruments that all require
       being James. **This is recurring failure 19 generalised:** a defect whose
       trigger enters above every seam we own is invisible to every gate we
-      have. Carries its own privacy answer, and that answer changes what Wave C
-      declares. **M**
+      have. It is also where recurring failure 25's swallowed durability
+      failures would finally surface.
+      **RULED 2026-09-19 (James): it SENDS, first-party, and it also offers
+      COPY.** An error boundary plus global `error`/`unhandledrejection`
+      handlers render the readable frame with a way out and a COPY control (the
+      idiom You → DIAGNOSTICS already ships), and POST in the background to a
+      new `POST /api/client-errors`, which writes one line to stdout —
+      `docker logs` today, CloudWatch the day the API ever moves, with no
+      change on either side. **No third-party processor, no key in the
+      bundle.** Sentry-class tooling was the expensive answer to a five-phone
+      problem and needs a privacy policy that does not exist; COPY alone is an
+      instrument that requires the rower to notice, care and act.
+      **What is collected, and it is the privacy disclosure line:** message,
+      stack, screen, app version, platform. **The client sends NO identity** —
+      the route sits behind the existing session middleware, so the server
+      writes the user id it already has, and a signed-out crash is logged
+      unattributed. **What must never ride in a message or stack — tokens,
+      authorization codes, emails — is the spec's scrub list to write**: there
+      is no general server-side log redactor to reuse (the only redaction code
+      is the client's NFC trace), though `app/scripts/apple-auth-privacy.test.mjs`
+      already pins that an Apple `authorizationCode` never reaches a log.
+      **Costs named up front:** a client-side rate cap (a render loop can POST
+      thousands of times — dedupe by message + stack, first N per launch), and
+      the new route. `originCheck` (`server/auth/middleware.ts`) already admits
+      `capacitor://localhost`, so native needs nothing extra.
+      **Invariant:** no uncaught render error and no unhandled rejection leaves
+      the rower on a blank screen with no server-side record. One e2e leg
+      throws inside a route and asserts BOTH halves; its mutation is deleting
+      the POST and seeing the leg go red (RF21). Do not reach for the connected
+      fixture to stage it (RF41).
+      **Gates:** Gate 0 — the crash frame is a new screen state, both
+      orientations, contrast computed. Touches `app/server/`, so not fast
+      path. DBA SKIPS, said aloud: no table, no store, no bulk read. No triad
+      member, so no PM final gate unless its scope grows.
+      **Native crashes need no work here** — TestFlight and Xcode Organizer
+      already collect them, and no crash SDK is wired in `app/ios`.
+      **Absorbs the former third row, "An in-app 'something went wrong' that
+      reaches a human":** the crash frame IS that row's visible face. Its
+      other half, a support URL, is App Store material and is already listed
+      under "After the strangers". **M**
       **A worked example arrived 2026-08-28, and this item owns it.** At
       that time, the connection-log ring's live door required an undocumented
       triple-tap, and its save-screen reader required `?from=monitor`.
@@ -1618,90 +1679,123 @@ for a stranger — no backup, and no idea when their app breaks.
       DIAGNOSTICS → Monitor logs door give any of the last three connected
       sessions' logs a reader and a COPY, no gesture, no erg. The SAVED-ROW
       half is NOT: `session_logs` still has no diagnostics column, so once a
-      row's three slots are evicted its diagnostics are gone. This item's
-      remaining demand narrows to: **a rower must be able to send a SAVED
-      row's diagnostics — storage that outlives the three-slot window.**
-- [ ] **An in-app "something went wrong" that reaches a human.** Pairs with the
-      reporter above, and with the support URL the store surface will owe. **S**
+      row's three slots are evicted its diagnostics are gone. **That
+      remaining demand was SPLIT OUT on 2026-09-19** — it is the last row of
+      this wave, dated, and it is the wave's only stored shape.
 
-**Exit:** a restore has been completed from that morning's backup, and a
-deliberately thrown client error arrives somewhere a person looks.
+### PR 2 — the database can move off the box (GATED on James's AWS repo)
+
+- [ ] **The API talks to a Postgres outside its own compose network, over TLS
+      it has verified, and the one-time move has a rehearsed runbook.**
+      **RULED 2026-09-19 (James): "database only"** — the DATABASE moves to
+      RDS and the API stays where it is for now, on the current host under
+      compose and the tunnel. So
+      `scripts/deploy.sh`, image building, CI and `cloudflared` do not change.
+      **Trigger:** the RDS instance exists and James names its endpoint and
+      Postgres major. App-side requirements, each with its receipt:
+      1. **The pool configures no TLS, and RDS requires it.**
+         `app/server/db/pool.ts` is `new pg.Pool({ connectionString,
+         connectionTimeoutMillis: 3000 })` — no `ssl`, no `max`, no idle or
+         statement timeout. AWS (PRIMARY, quoted by the 2026-09-19 PM pass):
+         _"The `rds.force_ssl` parameter default value is 1 (on) for RDS for
+         PostgreSQL version 15 and later"_, and _"When you connect using SSL,
+         your client can choose whether to verify the certificate chain."_ TLS
+         is the engine's requirement; VERIFYING the server is ours.
+      2. **Pin the TLS decision in CODE, never in the connection string.**
+         `pg-connection-string`'s own warning, shipped with `pg@8.23.0`
+         (PRIMARY, same pass): _"The SSL modes 'prefer', 'require', and
+         'verify-ca' are treated as aliases for 'verify-full'. In the next
+         major version … these modes will adopt standard libpq semantics,
+         which have weaker security guarantees."_ So `sslmode=require` verifies
+         today and would stop verifying under a `pg` 9 bump. Requirement:
+         `ssl: { ca: <RDS global bundle>, rejectUnauthorized: true }` in
+         `pool.ts`.
+      3. **The app's DB role needs DDL rights**, because `migrate()` runs at
+         every boot (`app/server/index.ts`). Safe while there is one API
+         container. **If the API ever moves too, this is the first thing that
+         breaks:** drizzle's node-postgres migrator takes no lock of any kind
+         (its `pg-core/dialect.ts`, read by the same pass), so two tasks
+         booting together both run the DDL. Not this PR's work; recorded so it
+         is not rediscovered.
+      4. **The Postgres major is not a problem.** compose pins `postgres:18.4`
+         and RDS offers 18.x (AWS, per the same pass); `grep -rli
+         "uuidv7\|CREATE EXTENSION\|VIRTUAL" app/drizzle/*.sql` finds nothing,
+         so no PG18-only feature or extension is in play. Invariant: CI's
+         integration Postgres major matches the RDS major.
+      5. **compose keeps its Postgres for dev and e2e while production runs
+         without one.** `compose.yml` is also every worktree's e2e and
+         screenshots stack, and `api` `depends_on` a healthy `postgres`. The
+         mechanism is already in the file: `cloudflared` sits behind
+         `profiles: ["tunnel"]`.
+      6. **The one-time move.** Production data is in the host's `pgdata`
+         volume (`compose.yml`, the `volumes:` block). A dump-and-restore
+         runbook, REHEARSED against a throwaway instance first, with a row
+         count per table before and after shown identical.
+      7. **Two doc sentences go stale the day it lands:** `docs/deploy.md`'s
+         rollback warning ("no backup exists yet") and `docs/RELEASING.md`'s
+         "Recovery is a DB backup, not a redeploy", which owes the sentence
+         saying WHERE the backup is.
+      **Untested, and not priced:** pool `max` and timeouts for a hop that
+      leaves the docker network. **Known and deliberately not in scope:** the
+      server logs through 36 bare `console.*` calls; unstructured is fine
+      while the API stays on the host.
+      **Invariant:** the API will not serve traffic against a database whose
+      certificate it has not verified. **DBA gate REQUIRED** — `pool.ts` is
+      under `app/server/db`. **M**
+
+### Split out, dated
+
+- **A rower can send a SAVED row's diagnostics after the three-slot history
+  has rolled over.** Split out of the reporter row by James, 2026-09-19.
+  `session_logs` has no diagnostics column and the history keeps three
+  sessions (`MAX_ENTRIES = 3`, `src/monitor/sessionLogHistory.ts`), so a saved
+  row's connection log is gone once three later sessions have run. **TRIAD if
+  built as a column — a stored shape**, at roughly 10-30 KB per row: the
+  largest committed ring capture is 29,989 bytes
+  (`docs/monitor/sessions/walk-2026-08-24/lab-terminate-ring.json`), typical
+  ones 10-12 KB. The cheap intermediate is that one constant, but the iOS
+  WKWebView per-origin `localStorage` quota is UNTESTED, so raising it is not
+  priced as free. **M** · dies 2026-11-30 · a row and not a fix now because PR
+  1's reporter may answer the same need with no stored shape at all, and
+  nobody has measured whether three sessions is too short a window for a
+  defect to reach James
+
+**Exit:** a client error deliberately thrown on the TestFlight build appears in
+the deployed API's log inside a minute, attributed to the account that threw
+it, while that phone shows the readable frame and a way out. If PR 2 lands in
+this wave: production answers `/api/health` with `{ok: true, db: true}`
+against RDS, with per-table row counts from before and after the move shown
+identical.
 
 ---
 
-## Wave C — The submission surface
+## Wave C — What the household opens every day
 
-**Status:** After A — Wave D, which used to sit in front of it, was dissolved
-on 2026-09-19 ([detail](docs/history/wave-d.md)); nothing in this wave ever
-needed it. **L, two PRs** — the design-gated pair, then the sweep.
-**The most visible wave in the slate.**
+**Status:** OPEN FOR WORK 2026-09-19. "After A" was a ranking, never a
+dependency: PR 1 is `app/e2e/` work and needs nothing from Wave A. **L, three
+PRs and one phone session.** · dies 2026-10-24 · set by the wave's unblocked
+half rather than by Wave A's 2026-10-10: if PR 1 has not opened by then the
+wave is being outvoted, and that comes back to James rather than sliding.
 
-**Goal:** the build a stranger installs does not look or read like a household
-prototype.
+**Goal, restated 2026-09-19 (James):** the app the five people already using
+it open every day stops reading like a prototype — an icon we drew, four type
+codes that say what they mean, a test result a rower can correct, and the
+accessibility numbers re-made in the engine we actually ship. It was "the
+submission surface", written for a stranger's install; James deferred
+strangers on 2026-09-14 (_"that will be a final 'production' phase, don't
+worry about authoring it yet"_), and distribution is internal TestFlight on a
+restricted deployment. What only matters on the day a stranger arrives is
+listed under "After the strangers", not here.
 
-**Both design-gated items take a Gate 0** (CLAUDE.md's standing design gate):
+**The design-gated items take a Gate 0** (CLAUDE.md's standing design gate):
 James approves the RENDERED thing, at real proportions, in both orientations,
 against what it replaces, with every colour pairing's contrast ratio computed
-and stated as a number — before any implementation task starts.
+and stated as a number — before any implementation task starts. **The icon's
+gate opens first**, because it is the one thing here that waits on him.
 
-### PR 1 — the two design-gated items
+### PR 1 — the sweep (`app/e2e/` only; starts now)
 
-- [ ] **App icon redraw.** Replace the AI-generated icon with a clean SVG.
-      Checked against the asset itself
-      (`app/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`):
-      the top arc DOES read ERGOMATIC — **the rabbit's ear crosses the final C
-      and hides it**, so at icon size the wordmark loses its last letter. (An
-      earlier line claimed the arc was misspelled "ERGOMATIO"; that was wrong,
-      it propagated for weeks, and James corrected it. Nobody had opened the
-      file.) The real blockers: **the erg rail carries a third-party brand
-      wordmark and logo**, which has to come off; the icon bakes in its own
-      rounded corners and drop shadow, doubling up with iOS's mask; and the
-      whole thing is AI-generated raster art at one size. **Also found
-      2026-08-28, in `docs/design/icon-source.png`: the monitor is labelled
-      PMS, not PM5, and the Concept2 logotype is garbled** — do not treat that
-      file as a source. **This is the only item in the slate that needs a human
-      with taste.** **M**
-- [ ] **The four workout types teach themselves, or a stranger meets a bare
-      `TR`.** The verdict was NOT a rename — the research is at
-      `docs/superpowers/research/2026-08-26-intensity-vocabulary.md`, and the
-      rejected options stay rejected for their stated reasons. What ships is
-      DISCLOSURE: the app already owns plain words (`src/components/typeWords.ts`)
-      and shows them one at a time, only for the chip already selected,
-      `aria-hidden` in two of three places, with every other badge bare and
-      unnamed to a screen reader. **Leaning Option A** — chips become a 2×2
-      grid, each carrying its own word, the only shape where all four fit at a
-      legal size: four phrases in one row needs 586.8 px against the 350 px a
-      390 px phone has, a 68% overrun, and forcing it would need 5.4 px type
-      against a 10 px floor. Fold in, whichever chip shape wins: the badge STAYS
-      BARE on Library and history rows with a visually-hidden name (a visible
-      word costs 118 px of a 168 px history title, cutting every workout name to
-      about seven characters, and fails outright by 50 px on custom Library
-      rows), and the workout detail screen carries the word plus one plain
-      sentence. **No tooltips** — hover does not exist on touch, and NN/g is
-      explicit that a label needing interaction is not a label. **M**
-  - **Absorbs TL-1:** the type descriptor renders under the WRONG chip. Select
-    AN and `SPEED WORK` renders at x=20, under the **O2** chip, about 250 px
-    away, because `.type-word` is a full-width `<p>` in its own row
-    (`index.css:982-987`). It looks correct in captures only because O2 happens
-    to be first. **If Option A is close, this retires itself; if the design pass
-    slips, fix it standalone.**
-  - **~~Absorbs TL-2~~ — DONE, 2026-08-28.** Two plain-word vocabularies shipped
-    at once: `typeWords.ts` said AT = `COMFORTABLY HARD` while `PyramidFigure`
-    said `THRESHOLD`, plus `GENERAL ENDURANCE` for O2 and `SPEED` for AN, all
-    hardcoded. The figure now imports `TYPE_WORDS` and builds its `aria-label`
-    from the same source, so a second vocabulary cannot reappear; a client test
-    iterates `TYPE_WORDS` rather than pinning four strings. **This did not wait
-    for the redesign, and TL-1 still does** — it is the one of the three that
-    Option A would retire on its own.
-  - **Copy note, separable and NOT decided:** the rank breaks at position four.
-    `LOW & SLOW` → `COMFORTABLY HARD` → `HARD INTERVALS` climbs cleanly;
-    `SPEED WORK` reads as a different CATEGORY and is itself coach jargon.
-    `ALL-OUT SPRINTS` would preserve the ascent and fit every layout measured.
-    **A copy change with its own gate; do not fold it in silently.** Never reuse
-    `EASY` or `HARD` as a type word — that is the difficulty vocabulary,
-    printed on the same rows.
-
-### PR 2 — the sweep
+No Gate 0, no triad, no PM gate: nothing here changes what the app does.
 
 - [ ] **Accessibility: count what the standing gates cover, then close the
       gaps** — every target ≥ 44×44 px, all text ≥ 4.5:1 AA, computed and
@@ -1712,15 +1806,19 @@ and stated as a number — before any implementation task starts.
       orientations: `e2e/a11y.ts` runs axe `wcag2a` + `wcag2aa`, and
       `design.spec.ts` carries `assertNoA11yViolations` (77 call sites),
       `assertTapTargets` (75), the computed-contrast walk
-      `assertNoFailingInk4Labels`, and a `sweep()` running all three (25) —
+      `assertNoFailingInk4Labels`, and a `sweep()` running all three (27) —
       counted with `grep -c "<name>(" app/e2e/design.spec.ts`. What nobody has
       counted is which routes and STATES have none: `/session/confirm` and
       `/justrow/log` appear nowhere in `e2e/` by path
       (`grep -rn "session/confirm\|justrow/log" app/e2e | wc -l` → 0), though
       some of that gap is reached by navigation rather than `goto` — which is
       why the census is DERIVED from the assertion call sites, never typed out
-      from the route list. **The practical / pedantic line, ruled the same
-      day:**
+      from the route list. **ORDER, ruled 2026-09-19: the WebKit re-run goes
+      FIRST.** A wrong tap-target or contrast number on the engine the app
+      ships in is visible to the household today; which routes have no
+      assertion is release quality. Nobody in the household uses assistive
+      technology (James, 2026-09-19), so this row is P2 rather than P1. **The
+      practical / pedantic line, ruled the same day:**
       - **In:** the census and the gaps it finds (**M**); the no-animation
         gate below (**S**); the existing tap-target and contrast sweeps run a
         second time under the WebKit project `playwright.config.ts` already
@@ -1732,7 +1830,8 @@ and stated as a number — before any implementation task starts.
         live-region noise, the two things axe cannot see. It is phone-only and
         zero-rowing, which CLAUDE.md names as a hardware walk: it owes a
         versioned runsheet and a PM readiness PASS before he is asked for the
-        time (**S + the runsheet**).
+        time. **It is the second half of this wave's ONE phone session**,
+        below — not a sitting of its own.
       - **Out, as pedantic FOR THIS APP** (a landscape phone on an erg, read
         from a metre away, both hands on the handle): Dynamic Type support —
         it is inert today on any device (0 `rem`, 359 px font sizes, no
@@ -1770,7 +1869,152 @@ and stated as a number — before any implementation task starts.
       The app is at zero today, which is the cheapest moment to build the gate:
       it ships green and its whole job is to stay green. One sweep asserting no
       rendered element computes a non-`none` `animation-name` or a non-zero
-      `transition-duration`, proved able to go red first (RF21). **S**
+      `transition-duration`, proved able to go red first (RF21). **LAST in this
+      PR, said plainly:** it buys nothing on the day it lands — an instrument
+      with no pending question, the shape that dissolved Wave D — and its
+      whole value is the day someone reaches for a transition. **S**
+
+### PR 2 — tests a rower can correct (TRIAD, lands alone)
+
+- [ ] **A rower can remove a bogus test result.** RESHAPED 2026-09-19 (James)
+      from "the test-history list on You", whose central claim had gone false:
+      it said the app "collects test results no rower can ever see", and Phase
+      PS PR 2 (#424, v0.46.0) shipped TEST TREND on You → Stats —
+      `StatsScreen.tsx` calls `useTestHistory()` and `TestTrendGroup.tsx` draws
+      every 2k and 6k split over `test_history.loggedAt`. **That discharged the
+      privacy argument and BREACHED the binding this row carried.** James's
+      2026-08-22 ruling, as `pm-ledger.md` records it at the #165 gate: record
+      test results from both doors anyway, since losing a genuine phone-timer
+      test is worse than carrying a REMOVABLE bogus one — with the remove/void
+      verb a gating condition on the read path. The read path shipped without
+      it. The route file has
+      `testHistory.append` and `testHistory.list` and nothing else
+      (`grep -n "testHistory\." app/server/routes/data.ts`), and the chart keeps
+      a point whose log row was deleted, on purpose (`ON DELETE SET NULL`). So:
+      bail out of a 2K at six minutes on the phone-timer door, tap Finish, and a
+      1:30 "test result" is recorded (the same ledger entry's worked case),
+      drawn on a chart, and survives deleting the log. **This is the open question Phase PS's PR 2 row left with no
+      owner** ("no surface says so"); it has one now.
+      **What this PR is:** the remove/void verb, server and surface; and the
+      row's old second input — `POST /api/test-history` is ownership-checked
+      but takes a client-asserted distance and split, so assert they agree
+      with the linked log's own `workoutTitle` and `avgSplitSeconds`, which
+      makes the FK semantic rather than merely referential.
+      **The LIST is struck for now (James, 2026-09-19)** — the chart already
+      encodes the dates and results a list would show. It is reopened INSIDE
+      this PR's design gate and nowhere else: a void control needs somewhere
+      to live, and a chart is a poor place to tap one point. A test session is
+      identified by title (`ONBOARDING_TITLES`) or by prescription
+      (`plan_index ∈ {6,34,62}`); the design pass says which it keys on.
+      **TRIAD — a stored shape, and what a drawn number means.** Full
+      antagonist pass on its spec, DBA gate, PM final-PR gate, and a design
+      gate showing what a voided test looks like on the trend, before and
+      after. It lands alone: a stored-shape change does not ride an e2e sweep.
+      **M**
+
+### PR 3 — what the rower reads
+
+- [ ] **App icon redraw.** Replace the AI-generated icon with a clean SVG.
+      Checked against the asset itself
+      (`app/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`):
+      the top arc DOES read ERGOMATIC — **the rabbit's ear crosses the final C
+      and hides it**, so at icon size the wordmark loses its last letter. (An
+      earlier line claimed the arc was misspelled "ERGOMATIO"; that was wrong,
+      it propagated for weeks, and James corrected it. Nobody had opened the
+      file.) The real blockers: **the erg rail carries a third-party brand
+      wordmark and logo**, which has to come off; the icon bakes in its own
+      rounded corners and drop shadow, doubling up with iOS's mask; and the
+      whole thing is AI-generated raster art at one size. **The monitor is labelled
+      PMS, not PM5, in the SHIPPED icon as well as in
+      `docs/design/icon-source.png`** (both opened 2026-09-19; this row used to
+      say only the source file), and the source's Concept2 logotype is garbled
+      — do not treat that file as a source. **Which of these is a RULE and
+      which is taste, sourced 2026-09-19:** the wordmark is the rule — App
+      Review guideline 5.2.1, _"Don't use protected third-party material such
+      as trademarks, copyrighted works, or patented ideas in your app without
+      permission"_, and no permission is on record. The corners and shadow are
+      HIG guidance, not review rules (_"the system applies masking to produce
+      rounded corners"_). One 1024×1024 file is all it takes: `Contents.json`
+      is already single-size. **The household sees this icon every day; the
+      trademark only bites at a review that is not scheduled** — so this is
+      kept for how it looks, and no de-brand stopgap on the existing raster is
+      planned (two icon changes and two gates for art that stays AI raster;
+      cost untested). **This is the only item in the slate that needs a human
+      with taste, so its Gate 0 OPENS FIRST** and everything else in the wave
+      runs underneath it. The asset lands in whichever PR is open when the gate
+      clears — a one-file swap carries no risk model. **M**
+- [ ] **The four workout types teach themselves, or a stranger meets a bare
+      `TR`.** The verdict was NOT a rename — the research is at
+      `docs/superpowers/research/2026-08-26-intensity-vocabulary.md`, and the
+      rejected options stay rejected for their stated reasons. What ships is
+      DISCLOSURE: the app already owns plain words (`src/components/typeWords.ts`)
+      and shows them one at a time, only for the chip already selected,
+      `aria-hidden` in two of three places, with every other badge bare and
+      unnamed to a screen reader. **Leaning Option A** — chips become a 2×2
+      grid, each carrying its own word, the only shape where all four fit at a
+      legal size: four phrases in one row needs 586.8 px against the 350 px a
+      390 px phone has, a 68% overrun, and forcing it would need 5.4 px type
+      against a 10 px floor. Fold in, whichever chip shape wins: the badge STAYS
+      BARE on Library and history rows with a visually-hidden name (a visible
+      word costs 118 px of a 168 px history title, cutting every workout name to
+      about seven characters, and fails outright by 50 px on custom Library
+      rows), and the workout detail screen carries the word plus one plain
+      sentence. **No tooltips** — hover does not exist on touch, and NN/g is
+      explicit that a label needing interaction is not a label. **M**
+  - **SPLIT 2026-09-19 (James) — only one half waits for a Gate 0.**
+    **(a) The badge names itself to a screen reader.** `TypeBadge.tsx` renders
+    a bare `{type}` with no `aria-label` and no visually-hidden text, and it is
+    the one component behind every badge in the app. Giving it a name from
+    `TYPE_WORDS` changes no layout, so it takes a WORDING gate — the four
+    spoken strings, before and after, no render — and ships first. **S**
+    **(b) The chips carry their words**, with TL-1. Gate 0. **Option A is
+    cheaper than this row priced it:** `.type-chip-grid` is already
+    `display: grid; grid-template-columns: repeat(4, 1fr)` and is ONE rule
+    shared by Today and Library, with `.type-word-row` already mounted
+    unconditionally on both — so the redesign is a column count plus a word
+    per chip in shared rules, not a new layout. **M**
+  - **Absorbs TL-1:** the type descriptor renders under the WRONG chip. Select
+    AN and `SPEED WORK` renders at x=20, under the **O2** chip, about 250 px
+    away, because `.type-word` is a full-width `<p>` in its own row
+    (grep `.type-word {` in `index.css`). It looks correct in captures only because O2 happens
+    to be first. **If Option A is close, this retires itself; if the design pass
+    slips, fix it standalone.**
+  - **~~Absorbs TL-2~~ — DONE, 2026-08-28.** Two plain-word vocabularies shipped
+    at once: `typeWords.ts` said AT = `COMFORTABLY HARD` while `PyramidFigure`
+    said `THRESHOLD`, plus `GENERAL ENDURANCE` for O2 and `SPEED` for AN, all
+    hardcoded. The figure now imports `TYPE_WORDS` and builds its `aria-label`
+    from the same source, so a second vocabulary cannot reappear; a client test
+    iterates `TYPE_WORDS` rather than pinning four strings. **This did not wait
+    for the redesign, and TL-1 still does** — it is the one of the three that
+    Option A would retire on its own.
+  - **Copy note, separable and NOT decided:** the rank breaks at position four.
+    `LOW & SLOW` → `COMFORTABLY HARD` → `HARD INTERVALS` climbs cleanly;
+    `SPEED WORK` reads as a different CATEGORY and is itself coach jargon.
+    `ALL-OUT SPRINTS` would preserve the ascent and fit every layout measured.
+    **Shown at the chip Gate 0 as its own NAMED ruling, never folded in
+    silently** (James, 2026-09-19) — four chips each carrying its word means
+    he is approving the words anyway, and naming the change is what keeps it
+    from being silent. **The vocabulary to steer clear of has CHANGED:** this
+    note used to forbid `EASY` and `HARD` as "the difficulty vocabulary", and
+    Phase DE replaced difficulty with effort. `EFFORT_WORDS`
+    (`src/builder/builderState.ts`) is now EASY BREATH / COMFORTABLE / WORKING
+    / HURTS / BRUTAL, and the live adjacency is the builder's
+    `ClassificationCard.tsx`, which renders both vocabularies on ONE card —
+    AT's `COMFORTABLY HARD` above effort 2's `COMFORTABLE`. Both groups are
+    labelled, so it is a copy question for the same gate, not a defect.
+
+### One phone session — cold start, then VoiceOver
+
+**ONE sitting, one install, one runsheet, one PM readiness PASS** (ruled
+2026-09-19). Both halves are phone-only and zero-rowing, which CLAUDE.md names
+as a hardware walk, so nothing is asked of James until the versioned runsheet
+carries a PASS. **The order only works one way:** the cold start runs with
+VoiceOver OFF, through to a logged row by the phone-timer door — a naive first
+run cannot be observed through a screen reader — and only then VoiceOver goes
+ON, for the reading-order pass on the account that run just created. The
+session taps Connect far enough to fire the iOS Bluetooth permission prompt,
+which is a cold-start-only observable; no erg, no rowing.
+
 - [ ] **A cold-start pass on a device that has never run the app.** Every walk
       and every gate this repo has ever run started from a populated account.
       Nobody has watched a genuinely empty install reach its first logged row —
@@ -1781,55 +2025,21 @@ and stated as a number — before any implementation task starts.
       is a genuine never-run-the-app webview state, but it produces no OS
       permission prompts (no BLE at all — `capacitorBle.ts:138-145`), no
       TestFlight install flow and no Keychain first run. **A green simulator run
-      is not this item's exit.** **S**
-- [ ] **The test-history list on You.** Phase BL shipped the PRODUCER
-      (`test_history` rows, v0.19.0) and this is the only read path. Today the
-      app **collects test results no rower can ever see** — that is unfinished
-      BL work, not new work, and it is a line the privacy disclosure has to
-      answer honestly. A test session is identified by title
-      (`ONBOARDING_TITLES`) or by prescription (`plan_index ∈ {6,34,62}`); the
-      design pass says which it keys on. **BINDING (PM final-PR gate on #165,
-      2026-08-22): the list does NOT ship without a remove/void answer, decided
-      at its design pass** — the table is rower-append-only by composition
-      (decline records by ruling, rows outlive log deletion via FK SET NULL, no
-      delete API), so a test the rower considers invalid is otherwise permanent
-      and anchors the next delta. _"It stays append-only, and here is why"_ is
-      an acceptable answer; silence is not. **Second input:** POST
-      `/api/test-history` is ownership-checked but takes a client-asserted
-      distance and split, so when the history becomes visible, assert the linked
-      log's own `workoutTitle` and `avgSplitSeconds` agree — that makes the FK
-      semantic rather than merely referential. **M**
+      is not this item's exit.** **WHO it is for, corrected 2026-09-19:** a
+      stranger cannot cold-start at all — `server/auth/accessPolicy.ts`
+      defaults `ACCESS_MODE` to `restricted` — so the real case is the next
+      allowlisted household member, and that one is reachable today. **S**
+- [ ] **The VoiceOver pass** — scoped in PR 1's accessibility row above; it is
+      the second half of this sitting. **S**
 
-**Deferred out of this wave for external TestFlight** — they bind at App Store
-submission rather than Beta App Review: store metadata and the legal surface
-(privacy policy at a real URL, support URL, the App Privacy questionnaire, age
-rating, store screenshots at the required sizes).
-**THE CHECK THIS PARAGRAPH WAS WAITING ON HAS RUN (2026-09-10,
-[the binding research](docs/superpowers/research/2026-09-10-external-testflight-binding.md)),
-and it NARROWED the ground this deferral stands on rather than confirming
-it.** Guideline 2.2 makes the WHOLE guidelines document apply to a TestFlight
-build, so "beta review is a smaller rulebook" is not available as a reason.
-What survives is narrower and is about METADATA rather than guidelines: Apple's
-own pages say beta review reads _"the build and its accompanying metadata"_,
-and the metadata they name is TestFlight's (_"your beta app description and
-beta app review information are required in order to share your beta with
-external testers"_), never App Store listing metadata. **That is a claim about
-which FIELDS exist, and it was not researched field by field** — in particular
-nothing here says whether 5.1.1(i)'s privacy-policy requirement reaches a beta
-build. **Whoever opens Wave C runs that check; this is a narrowed premise, not
-a settled one.**
-· dies 2026-11-10 · filed rather than fixed now because the answer only binds
-before Wave C ships, and Wave C is two waves out; if it has not opened by then
-the quotes need re-reading anyway, so the check and its freshness expire
-together. **PWA installability is deferred on a product ground, not
-a scheduling one:** CLAUDE.md's native-first rule says the web build is test
-harness, dev loop and fallback, "never polished at the app's expense", and
-installability polishes it.
-
-**Exit:** a stranger's home screen carries an icon we drew, every type badge
-names itself to a screen reader, every target and every contrast pairing is a
-computed number in a report, and an empty install reaches a logged row without
-a hand from us.
+**Exit: STRUCK BY JAMES, 2026-09-19** — the same ruling Wave A's exit got that
+morning, for the same reason. It read: _"a stranger's home screen carries an
+icon we drew, every type badge names itself to a screen reader, every target
+and every contrast pairing is a computed number in a report, and an empty
+install reaches a logged row without a hand from us."_ Its first and last
+clauses need a stranger who cannot reach the app. **The wave has no exit
+criterion until the production phase is authored**; it closes by ruling its
+rows, against the date on its status line.
 
 ---
 
@@ -4744,7 +4954,7 @@ than back in the queue this was built to replace.
       find out. This is a FAKE-side gap only: the same fold works on real
       wire bytes, which is what `justRowReplay.test.ts` gates.
 
-- [ ] **PR 3 of the number-provenance pass — the chart's axis (M3, M6, M9).**
+- [ ] **PR 3 of the number-provenance pass — the chart's axis (M3, M6).**
       · dies 2026-10-06 · a row and not a fix now because it cannot start
       until Gate 0B board 2 is drawn and ruled, and a board is James's
       decision rather than work I can do ahead of him.
@@ -4758,10 +4968,19 @@ than back in the queue this was built to replace.
       candidate B is alive. Nothing blocks drawing the board.
       **What board 2 must show, already known:** a mid-interval stop stores
       as 250 m in 129.2 s, so a piece pulled at about 2:15 saves as roughly
-      4:18/500m with nothing on screen saying why. **S**
+      4:18/500m with nothing on screen saying why.
+      **BOARD 2 DRAWN AND RULED 2026-09-19 — candidate B, the swatch
+      legend, the stopped-span band, and I3 reworded**
+      (`docs/design/number-provenance/gate0b/board2/BOARD2.md`).
+      **M9 IS NO LONGER IN THIS PR** — the free row's 104.6 s pause leaves
+      a 1.8 s gap in the stored series and nothing else, and the wall
+      duration that would name it is not stored at all (`session_logs`
+      carries `completed_at` and no start time), so naming it is a stored
+      shape and rides PR 4's gates. **S**
 
 - [ ] **PR 4 of the number-provenance pass — live total versus stored
-      (M4, M5, M7), and it is TRIAD.** · dies 2026-10-08 · a row and not a
+      (M4, M5, M7, and as of 2026-09-19 M9 too), and it is TRIAD.**
+      · dies 2026-10-08 · a row and not a
       fix now because it moves a STORED figure, so it carries the full
       antagonist pass and a PM final gate, and it needs Gate 0B board 3 —
       which is unstarted.
@@ -4845,6 +5064,44 @@ an iceboxed item is not a phase-close requirement.
 
 Deferred, not killed. One line and one trigger each. No exits and no sizes — a
 trigger is the whole entry.
+- **What the production phase inherits from Wave C — the phase itself stays
+  UNAUTHORED (James, 2026-09-14).** Wave C used to defer "store metadata and
+  the legal surface" as binding only at App Store submission, and left one
+  check owed: which fields bind an EXTERNAL TestFlight build. **That check ran
+  on 2026-09-19** (Apple's pages fetched that day; the earlier half is
+  `docs/superpowers/research/2026-09-10-external-testflight-binding.md`), and
+  it found three blockers nobody had filed. **Trigger:** James authors the
+  production phase, or asks for an external tester group.
+  1. **No build we make can reach an external tester.**
+     `app/scripts/ios-release.sh` uploads with `testFlightInternalTestingOnly`
+     true; Apple, "Invite external testers": such builds _"can only be added to
+     internal tester groups."_
+  2. **A reviewer cannot get in.** `ACCESS_MODE` defaults to `restricted`,
+     there is no password login and no demo mode, and guideline 2.1(a) says
+     _"include demo account info (and turn on your back-end service!) if your
+     app includes a login"_.
+  3. **There is no privacy policy, in the app or on the web.** As a TestFlight
+     FIELD the URL is only "recommended", but guideline 2.2 (_"Any app
+     submitted for beta distribution via TestFlight … should comply with the
+     App Review Guidelines"_) carries 5.1.1(i) to a beta: _"All apps must
+     include a link to their privacy policy in the App Store Connect metadata
+     field and within the app in an easily accessible manner."_ Whether Beta
+     App Review enforces it is unsourced. There is no `PrivacyInfo.xcprivacy`
+     either; its effect was not researched.
+  **What external TestFlight does REQUIRE:** a Beta App Description (_"This
+  field is required"_) and Beta App Review information. **What stays deferred
+  to App Store submission, confirmed:** the App Privacy questionnaire, store
+  screenshots and the support URL. Age rating: unverified either way. The icon
+  redraw (Wave C) retires the 5.2.1 trademark exposure before any of this
+  binds, and Wave A's struck open-sign-up row is inherited alongside.
+  **PWA installability stays deferred on a product ground, not a scheduling
+  one:** CLAUDE.md's native-first rule says the web build is "never polished
+  at the app's expense", and installability polishes it.
+  · dies 2027-03-19 · a row and not a fix now because James has said not to
+  author the phase these belong to; six months is when the Apple quotes above
+  need re-reading anyway. Re-dated from 2026-11-10 on 2026-09-19 by the
+  controller, for James to confirm at that PR's hand-back: the old date
+  belonged to the check, and the check has run
 - **Post-production: deepen connection-entry ownership** (architecture review
   candidate 02; James, 2026-09-17). Concentrate ownership transfer, retry
   identity, abandonment and trace completion shared by Workout Detail and

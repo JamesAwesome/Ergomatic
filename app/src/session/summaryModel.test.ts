@@ -28,6 +28,7 @@ import {
 } from "./logDraft";
 import type { SessionRun } from "./run";
 import {
+  machineIntervalSpans,
   machineSplitRows,
   buildSpmCell,
   buildSummaryModel,
@@ -944,6 +945,95 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
     });
     expect(
       buildSummaryModel({ door: "monitor", run: justRow }).machineRows,
+    ).toStrictEqual([]);
+  });
+
+  // Gate 0B board 2 (APPROVED 2026-09-19), and the SEAM test RF24 asks
+  // for: this starts at the run's own decoded wire actuals — upstream of
+  // `machineIntervalSpans`, the producer — and asserts on what the model
+  // hands the trace chart. Both halves being well tested separately is
+  // exactly the condition that hides a broken seam.
+  it("Gate 0B board 2: the monitor model carries each interval's work and rest seconds for the trace axis", () => {
+    const run = monitorRun({
+      program: exit7Program,
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: exit7SummaryDetail,
+    });
+    expect(
+      buildSummaryModel({ door: "monitor", run }).intervalSpans,
+    ).toStrictEqual([
+      { workSeconds: 67.9, restSeconds: 60 },
+      { workSeconds: 56.1, restSeconds: 60 },
+    ]);
+  });
+
+  it("Gate 0B board 2: machineIntervalSpans FAILS CLOSED — one unusable step and the whole axis stands down", () => {
+    const usable = {
+      actualSource: "pm5" as const,
+      actualSeconds: 60,
+      machineRestSeconds: 30,
+    };
+    expect(machineIntervalSpans([usable, usable])).toStrictEqual([
+      { workSeconds: 60, restSeconds: 30 },
+      { workSeconds: 60, restSeconds: 30 },
+    ]);
+    // A step the machine never measured: its work seconds are missing
+    // from the cumulative boundary, so every LATER rest would land on
+    // the wrong part of the chart.
+    expect(
+      machineIntervalSpans([usable, { actualSource: "stopwatch" }]),
+    ).toStrictEqual([]);
+    expect(
+      machineIntervalSpans([usable, { ...usable, actualSeconds: undefined }]),
+    ).toStrictEqual([]);
+    // A real `0` (an r0 piece) is a value and is kept.
+    expect(
+      machineIntervalSpans([{ ...usable, machineRestSeconds: 0 }]),
+    ).toStrictEqual([{ workSeconds: 60, restSeconds: 0 }]);
+  });
+
+  it("Gate 0B board 2: a missing rest readback stands the axis down only when something comes AFTER it", () => {
+    const usable = {
+      actualSource: "pm5" as const,
+      actualSeconds: 60,
+      machineRestSeconds: 30,
+    };
+    const noReadback = { actualSource: "pm5" as const, actualSeconds: 60 };
+
+    // THE TAIL is survivable, and this is the population that makes it
+    // worth surviving: `monitorRun.ts` documents the synthesized-final
+    // fallback (the last split notification is dropped, so the final
+    // interval has work data and no rest data). Standing the whole axis
+    // down there would cost every EARLIER rest its correct width to
+    // protect one band at the very end.
+    expect(machineIntervalSpans([usable, noReadback])).toStrictEqual([
+      { workSeconds: 60, restSeconds: 30 },
+      { workSeconds: 60, restSeconds: 0 },
+    ]);
+
+    // THE MIDDLE is not: an unknown rest shifts every LATER interval
+    // onto the wrong part of the axis.
+    expect(machineIntervalSpans([usable, noReadback, usable])).toStrictEqual(
+      [],
+    );
+
+    // NONE AT ALL is a row with no rest data — a row saved before Phase
+    // LP PR 2. It stands down so the chart keeps the axis and the bands
+    // it had, rather than drawing every rest at zero width, which is the
+    // candidate the board rejected.
+    expect(machineIntervalSpans([noReadback, noReadback])).toStrictEqual([]);
+  });
+
+  it("Gate 0B board 2: a Just Row carries no spans, so the chart keeps the axis it had", () => {
+    const justRow = monitorRun({
+      program: { intervals: [] },
+      actuals: [],
+      endedBy: "finished",
+    });
+    expect(
+      buildSummaryModel({ door: "monitor", run: justRow }).intervalSpans,
     ).toStrictEqual([]);
   });
 

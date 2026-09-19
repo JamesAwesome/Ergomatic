@@ -438,8 +438,10 @@ QUANTITY … each is CONDITIONAL ON ROWER BEHAVIOUR DURING RESTS — a frozen
 rest contributes nothing to either axis; an advancing rest contributes all
 of itself." It sits directly under `MACHINE CONFIRMED · WORK ONLY`.
 **Agrees when** the axis is a defined quantity and the screen says which.
-**[CORRECTED]** Wall clock is one of the available options (§1.2), subject
-to the open freeze question; it is not ruled out by the machine's silence.
+**[CORRECTED, then SETTLED 2026-09-19]** Wall clock was one of the
+available options, "subject to the open freeze question" — that question
+is closed (§1.2: the 2026-09-15 walk, the clock RAN), and James ruled wall
+clock IN at board 2. The axis is now `work + the machine's own rest`.
 
 ### M4 — the same session's total is two different numbers
 
@@ -615,20 +617,29 @@ provenance vocabulary verbatim or states a deviation.
    **and the free row's frozen 104 s (M9)**, which every one of them must be
    shown against because it is invisible to all three and to today's axis.
 
-   | candidate | what the x axis is | survives the open freeze question? |
+   | candidate | what the x axis is | survives the freeze question (CLOSED 2026-09-15, §1.2) |
    | --- | --- | --- |
    | **A · work-only, named** | today's quantity, finally labelled | **yes** — recoverable from the series alone, and 0x0039 is its oracle |
-   | **B · wall clock** | `work + machineRest` | **NO** — it is exactly what a frozen work clock breaks (§1.2) |
+   | **B · wall clock** | `work + machineRest` | **[FALSIFIED 2026-09-15, then APPROVED 2026-09-19]** the row below said NO; the 2026-09-15 walk ran the freeze experiment and the work clock KEPT RUNNING through a 60.5 s dead stop. B is what shipped. |
    | **C · work-only + fixed-width rest gaps** (PM, unargued) | work-only, each rest a separator printing the interval's own rest seconds | **yes** — asserts nothing about time during a rest |
 
-   **[ADDED 2026-09-14] The open question is now a decision input, not a
-   footnote.** Since it cannot be settled at a desk (§1.2), candidate B
-   goes to the gate carrying an unquantified risk that A and C do not: if
-   elapsed freezes during work, B silently under-reports the session's real
-   duration by however long the rower stood still, and nothing on the
-   screen would say so. **C is the only candidate that both fixes M6
-   completely AND is immune** — the gap is a separator, the number is a
-   fact about the program.
+   **[ADDED 2026-09-14, SUPERSEDED 2026-09-19 — the whole of the
+   paragraph this replaces argued from a premise the walk falsified.]**
+   It read: the open question cannot be settled at a desk, so B carries an
+   unquantified risk A and C do not — if elapsed freezes during work, B
+   under-reports the session's real duration and nothing says so; C is the
+   only candidate that both fixes M6 and is immune.
+   **What actually happened.** The 2026-09-15 work-clock walk stood still
+   for 60.5 s inside a work interval and the monitor's clock kept running,
+   so the premise is false and B's unquantified risk does not exist. The
+   walk also produced the case that decided the gate: across that stop the
+   monitor holds its last pace and stroke rate, so the chart draws a flat
+   minute at 2:16.0 at 26 spm under a header reading 4:18.4/500m for a
+   piece pulled at about 2:17. **James ruled B on 2026-09-19** ("B is the
+   one I had in mind not C"), with the stopped-span mark shipping beside
+   it. C and its treatments are withdrawn; the frames stay, because the
+   contrast work they forced is what set the legend swatch's own floor
+   (`docs/design/number-provenance/gate0b/board2/BOARD2.md`).
 3. The connected live surface's total beside the stored total for the same
    session (M4, M5).
 
@@ -646,11 +657,22 @@ clause is the one that needs the receipt.
 | --- | --- | --- | --- |
 | 1 | M1, M2 | Copy on a rendered surface. No number moves. | after 0B |
 | 2 | M8 + appendix | Layout across four charts, two screens; one copy deletion. No number moves. | **LANDED** |
-| 3 | M3, M6, M9 | Changes what an axis IS. Antagonist pass. No stored data. | **PROVISIONAL** |
-| 4 | M4, M5, M7 | **TRIAD** — stored figures render differently. dba + antagonist + PM. | **PROVISIONAL** |
+| 3 | M3, M6 | Changes what an axis IS. Antagonist pass. No stored data. | **SCOPED 2026-09-19** |
+| 4 | M4, M5, M7, **M9** | **TRIAD** — stored figures render differently. dba + antagonist + PM. | **PROVISIONAL** |
 
 Grouped by risk model rather than by screen so each PR carries one kind of
 review (CLAUDE.md's grouping tie-break).
+
+**[CORRECTED 2026-09-19] M9 MOVED from PR 3 to PR 4.** This table put M3,
+M6 and M9 together on the grounds that PR 3 changes what an axis is with no
+stored data. M3 and M6 hold. M9 does not: board 2 measured the free row's
+104.6 s pause and its entire footprint in the stored series is a **1.8 s
+gap** between two consecutive samples — inside ordinary jitter, since the
+clock froze and no samples exist — and the wall duration that would name
+the missing time is not stored either, because `session_logs` carries
+`completed_at` and no start time (`server/db/schema.ts`). Naming a free
+row's missing 1:45 therefore needs a stored shape, which is TRIAD, which is
+PR 4's gates. PR 3 makes no claim about free rows it cannot keep.
 
 **[CORRECTED] PRs 3 and 4 are PROVISIONAL and cannot be settled before their
 Gate 0.** Four members' options span two risk models: M2 option B would make
@@ -679,8 +701,15 @@ the END of the pass and cannot gate PRs 1-3.**
   lossy estimate of the other and says so** — the third arm M4 needs, since
   the live total can silently lose a frameless interval entirely. Silence is
   not an option.
-- **I3.** A chart axis is a defined quantity, named in the file that builds
-  it and on the screen that draws it.
+- **I3. [REWORDED 2026-09-19, PR 3]** A chart axis is a defined quantity,
+  named in the file that builds it, and on screen either named or made
+  unambiguous by its own marks. It used to end "and on the screen that
+  draws it". James dropped the axis caption at the board ("you can drop
+  the label for x, it's obvious what it is"), which moves the screen half
+  onto the MARK: a rest drawn at its own length is what says the axis
+  counts rest, and that is the whole of what separates this axis from a
+  work-only one. The point was never the caption — it was that a reader
+  can tell which quantity they are looking at.
 - **I4. [CORRECTED] No constant reserving space for text is chosen by
   looking at a chart** — not only axis gutters. Each is derived from the
   widest formatted string its own data can produce, at its own class's
@@ -709,11 +738,15 @@ plan.
   mutation-pinned ruling, so the new gate must go red on the missing
   **EXPLANATION**, not on the arithmetic — which means it cannot be written
   until Gate 0A says what the screen will say.
-- **M3/M6/M9's gate cannot be a colour or class assertion** (RF37): Vitest
+- **M3/M6's gate cannot be a colour or class assertion** (RF37): Vitest
   imports CSS as `""` and jsdom does not resolve `var()`. Band and gap
   geometry are asserted in the browser — **and the fixture set includes a
-  free row with a frozen span (M9)**, which the first draft's gate could not
-  have failed on.
+  free row with a frozen span**, which the first draft's gate could not
+  have failed on. **[CORRECTED 2026-09-19]** With M9 moved to PR 4, the
+  free row is in PR 3's fixture set as the NEGATIVE rather than as the
+  member being fixed: candidate B collapses to today's axis on a free row
+  (no rests to widen), so a free-row leg passes whether or not B is
+  implemented, and the discriminating fixture is the rest-bearing one.
 
 ## 8. Gates
 
@@ -726,12 +759,14 @@ plan.
 - **dba — PR 4 only.** PRs 1-3 touch no `app/server/db`, no store, no bulk
   read: SKIP, said aloud.
 - **Gate 0A — required before PR 2. Gate 0B — required before PRs 1, 3, 4.**
-- **Hardware walk — [CORRECTED] none for PRs 1, 2 and 4; PR 3 may need one.**
-  Nothing in this pass reaches the wire, but §1.2's open question is NOT
-  desk-answerable after all — the corpus was swept and cannot discriminate.
-  A walk leg for it would be one programmed piece with a ~30 s mid-interval
-  stop, and it is PR 3's to propose with a PM readiness PASS, not this
-  pass's to assume.
+- **Hardware walk — [CORRECTED 2026-09-19] NONE, for any PR in this pass.**
+  This bullet used to say PR 3 may need one, because §1.2's open question
+  was not desk-answerable and the corpus could not discriminate. That walk
+  HAPPENED, on 2026-09-15: one programmed piece with a 60.5 s mid-interval
+  dead stop, `docs/monitor/sessions/walk-2026-09-15-work-clock/`. It
+  answered the question (the clock ran) and its capture is now the fixture
+  PR 3's stop-span gate is built on. Nothing in this pass reaches the wire,
+  so there is nothing left to ask an erg.
 
 ## 9. Exit criteria
 

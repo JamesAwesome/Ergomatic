@@ -11644,6 +11644,96 @@ mutation targets production code; React scheduling remains a tested heuristic;
 and desk evidence remains bounded away from the original phone incident's
 cause.
 
+## 2026-09-19 — Gate 0B board 2, PR 3 (trace axis = work + machine rest)
+
+**DELTA pass** against the phase's vetted ground. Worktree `gate0b-boards`
+/ branch `gate0b-boards23`. Probe: an esbuild bundle of the real
+`app/src/log/traceModel.ts` driven against the four committed board-2
+fixtures, plus a raw decode of `walk-2026-08-25`'s 806 0x0031 frames.
+
+**Verdict:** the mechanism holds; two defects and two prose sweeps owed.
+Both defects and all four sweeps were fixed in the same branch
+(`03dcf75c`), each with a mutation probe shown to bite.
+
+**Falsified**
+
+1. *"A stop counts only if a real reading follows it"* excludes the post-END
+   tail — and also the stop the mark exists for. The stop and the sentinel
+   tail are ONE flat-distance run, so the last-real-reading index lands
+   inside it and the whole span is dropped. Proven by deleting one sample
+   from `work-clock-series.json`: `stops = [60.5]` with one moving sample
+   after the stop, `stops = []` without. Fixed by CLIPPING the run at the
+   last real reading and then thresholding. (Technique 89.)
+2. *The mark carries the meaning on screen* — the spec's reworded I3. The
+   `<svg>` is `role="img" aria-label={trace.summary}` and `buildSummary` had
+   no stop clause, so `STOPPED 61s` had zero accessible presence. RF34's
+   shape: an invariant applied to one of the places it governs. (Technique
+   90.)
+3. *"A rest never breaks the line on its own account"* (`toSegments`) — under
+   candidate B it breaks at every rest. Measured: `rests-finished` 1 segment
+   to 3, `session-2` 2 to 4. Also stale and swept: the module header's
+   "a rest by itself never produces a gap", its "the axis-quantity question
+   is explicitly OUT of scope here" (in the file that just answered it), and
+   the summary's "a segment count is a fact about the DRAWN LINE, not a
+   claim about workout structure". (Technique 91.)
+4. The spec's dead premise survived in two places after the row that argued
+   it was rewritten: "subject to the open freeze question" in M3, and §4's
+   table COLUMN HEADER. (Technique 92.)
+5. The controller's own capture measurement in its brief and in a code
+   comment: the 08-25 freeze is **12 frames / 5.58 s** at 64.62, not three
+   seconds; the backwards step is **64.62 to 60.13** (4.49 s), not
+   64.73 to 61.67 — those two values are an ascending pair after the
+   re-base. Rest 2 carries a second, 146.01 to 140.24. Neither reaches
+   `work +=`: the recorder monotonises `t` (zero backwards steps across all
+   four fixtures, minimum `dt` 0.50 s) and both sit inside a rest.
+6. *Bands are "equal by construction, from the machine's own rest seconds."*
+   The width is `max(readback, observed advance)`. With a 20 s readback and
+   49.1 s observed the band draws 49.1. Equal on the corpus, not structural;
+   now stated at `IntervalSpan`. (Technique 93.)
+
+**Attacked and HELD — vetted ground for anything downstream**
+
+- The frozen-rest placement, the design's load-bearing claim: a
+  reconstructed frozen-rest `session-2` places three bands at
+  90.1 / 240.5 / 399.3 against expected 89.7 / 239.7 / 398.4 — one sample
+  period of error.
+- Measured slack at every real rest onset is **+0.4 to +1.2 s** in the safe
+  direction; overstating `actualSeconds` degrades gracefully (+20 s gives
+  three correct-width bands displaced 20 s).
+- Three band-misassignment inputs (leading rest sample, stray mid-work rest
+  sample, short span list) all reproduce and all lack a producer:
+  `WORKOUTSTATE_TO_STATE` reaches `"resting"` only via ordinals 3/6/7, the
+  work-clock capture's 60.5 s dead stop yields zero rest-marked samples, and
+  the only short-span producer is `buildMonitorLogSteps`'s legacy-warmup skip
+  over a pre-2026-08-22 unlogged `MonitorRun`. Hardening debt. (Technique
+  94.)
+- The `restSeconds` readback dependency. Ordinals 6/7
+  (`INTERVALRESTENDTOWORK*`) are the only candidate rest-extension mechanism
+  and are ephemeral; neither appears in the 08-25 state census, whose rest
+  walls measure 59.49 s and 59.48 s against a 60 s readback.
+- Negative corpus for the 5 s stop threshold: **1298 samples across the four
+  fixtures, longest non-stop flat run 1.0 s, zero false positives**, zero
+  flat runs inside a rest band. But the post-END tail is **5.1 s**, above the
+  threshold, so the clip is load-bearing — which is what produced finding 1.
+- Contrast, re-derived independently: band **3.22:1** (board claimed 3.21),
+  its label **4.79:1** (claimed 4.80).
+- `SeriesData.truncated` invents no trailing band. `machineIntervalSpans`
+  fails closed correctly on `0` / absent / non-pm5.
+
+**Brittleness.** Band WIDTH is deterministic (two machine-reported fields).
+Band PLACEMENT is a **heuristic** — an accumulator we build, matched against
+a boundary the machine reports, on ~0.6 s of measured slack. The
+deterministic answer exists and is discarded:
+`MonitorFrame.attributedIntervalIndex` is what `seriesRecorder` keys its
+register map on and does not store on `Sample`. Placing rests on a key change
+removes the whole misassignment class — but it is a new stored field, so it
+is TRIAD and belongs in PR 4.
+
+**Smaller:** `Math.abs(d[i] - d[from]) < 1` is exact equality, not a 0.1 m
+tolerance (`d` is integer tenths). "4 s across staging" in BOARD2.md is
+uncited and appears nowhere else in the repo; the code now cites the counted
+1.0 s instead.
+
 ## 2026-09-19 — Wave A, attempt token revocation spec (anchor/TRIAD pass)
 
 Target: `docs/superpowers/specs/2026-09-19-attempt-token-revocation-design.md`
@@ -11666,7 +11756,7 @@ before folding into revision 2 (`546a5204`).
   rower can sign out of, and a link guarantees no `apple_grants` row
   (`attempts.ts:378`), so the invariant would have said REVOKE. Neither the
   choke point (`attempts.ts` only) nor the census test can see it.
-  → technique 89.
+  → technique 95.
 - **The invariant is keyed on `(user_id, client_id)` and needs the Apple
   SUBJECT.** Two failures, opposite directions, both traced line by line: a
   grant belonging to a different Apple subject suppresses a revoke that should
@@ -11679,7 +11769,7 @@ before folding into revision 2 (`546a5204`).
   destroys a concurrently-created account's credential in the two-tab case.
   `delete` rows are the one class where `(user_id, client_id)` is right,
   because `accept()` (`:617-620`) has already proved `identity.sub` is the
-  account's own `apple_sub`. → technique 90.
+  account's own `apple_sub`. → technique 96.
 - **The prescribed `dropAttempts(): Promise<AppleGrant[]>` drops `discard()`'s
   row count.** `attempts.ts:713-735` returns `result.rowCount === 1`,
   load-bearing at `frontDoorRoutes.ts:375`, `:432`, `:483`. An empty array
@@ -11689,7 +11779,7 @@ before folding into revision 2 (`546a5204`).
   the scratchpad, appended a drizzle-builder delete, a lowercase form, a
   `public."quoted"` form, a `${T}` composed identifier and a wrapped template
   literal; `grep -c "DELETE FROM auth_attempts"` stayed at 8 (the HEAD value).
-  → technique 91.
+  → technique 97.
 - **Claim 2's reachability argument is 1-for-3.** The hazard is REAL and
   survived attack — `begin({purpose:'delete'})` requires `apple_sub` NOT NULL
   (`:381-385`), `providers.ts:222-226` sets `identity.grant` on every Apple

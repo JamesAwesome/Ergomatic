@@ -107,10 +107,12 @@ import {
   type SummaryMeta,
   type SummaryRow,
   agreedTargetSpm,
+  machineIntervalSpans,
   machineSplitRows,
   type MachineSplitRow,
   type MachineTier,
 } from "../session/summaryModel";
+import type { IntervalSpan } from "./traceModel.js";
 import {
   logbookCalPerHour,
   logbookWatts,
@@ -355,6 +357,11 @@ export interface StoredSummaryView {
    *  timer rows and on a Just Row. REST reads the step's own
    *  `machineRestMeters` (Phase LP PR 2); a dash on rows saved before it. */
   machineRows: MachineSplitRow[];
+  /** Gate 0B board 2: the machine's own per-interval work and rest
+   *  seconds, for the trace chart's x axis. Gated exactly as
+   *  `machineRows` is — the axis is the machine's account of a machine
+   *  row, so a by-hand row gets none however its steps are marked. */
+  intervalSpans: IntervalSpan[];
   caption?: string;
   readBack: StoredReadBack;
   /** §5E: `Logged to <title> · SESSION <plan_index+1> OF <sequence
@@ -1316,11 +1323,23 @@ export function buildStoredSummary(row: StoredLog): StoredSummaryView {
     row.machineWorkMeters > 0
       ? machineSplitRows(row.steps)
       : [];
+  // Gate 0B board 2: the same steps, read for the trace chart's axis —
+  // and DELIBERATELY NOT behind `machineRows`'s own gate. That gate is
+  // about the machine SUMMARY STRIP, which needs the row's whole-session
+  // totals (`machineWorkSeconds`/`machineWorkMeters`); the axis needs
+  // only each step's own work and rest, from a different characteristic,
+  // and `machineIntervalSpans` already refuses anything it cannot use.
+  // Gating on the strip made the live door and this one draw DIFFERENT
+  // AXES for the same session — the live door calls it unconditionally,
+  // so a run with actuals but no summary totals got the new axis on the
+  // post-workout screen and the old one when reopened from the log.
+  const intervalSpans = machineIntervalSpans(row.steps);
   return {
     meta,
     heroes,
     rows,
     machineRows,
+    intervalSpans,
     caption,
     readBack,
     planFooter,

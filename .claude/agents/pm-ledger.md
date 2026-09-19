@@ -7370,3 +7370,104 @@ kept Wave D row. ROADMAP's "How this file is used" records James's 2026-09-10
 ruling that a wave is stamped on its STATUS LINE; per-row stamps apply only to
 rows that leave a wave for the register, which is what happened to all five
 survivors.
+
+## 2026-09-19 — Wave C refinement (main `87511d77`)
+
+Same three questions per row as the Wave D dissolution that morning. Six rows,
+all kept: the icon, the a11y census and the no-animation gate KEEP with
+corrections, type disclosure SPLIT, cold start MERGED into one phone session
+with the VoiceOver pass, test-history SHRUNK and promoted to its own TRIAD PR.
+**James took every recommendation the same day**, and answered the one open
+fact: nobody in the household uses assistive technology, so the a11y row is P2.
+
+- **The headline was not on the dispatch's list.** The test-history row's
+  central claim ("this is the only read path… no rower can ever see") was
+  falsified by #424 (merged 2026-09-13), and that made the row's own **#165
+  binding a live breach** rather than retiring it: `data.ts` carries
+  `testHistory.append` and `testHistory.list` and no delete, while
+  `TestTrendGroup.tsx` keeps every point "whether or not its log survives.
+  Never filtered." Phase PS's PR 2 row had already recorded it as "James's
+  open question in #424's hand-back" — no owner, no date. Ruled: its own TRIAD
+  PR, built now at P1; the LIST is struck and reopened only inside that PR's
+  design gate, because a void control needs a surface.
+- **Three stale facts in the type-disclosure row, all from other phases
+  landing.** Phase DE killed the difficulty vocabulary the row's guidance
+  clause forbade reusing; the live adjacency is `ClassificationCard.tsx`,
+  which renders `TYPE_WORDS` and `EFFORT_WORDS` on ONE card (AT's
+  `COMFORTABLY HARD` above effort 2's `COMFORTABLE`). The `.type-word`
+  citation had moved ~800 lines. And Option A is cheaper than priced:
+  `.type-chip-grid` is already `display: grid` and already one rule shared by
+  Today and Library.
+- **The row's a11y half was not blocked and was being held behind a Gate 0.**
+  `TypeBadge.tsx` renders a bare `{type}` with no accessible name; naming it
+  changes no layout, so CLAUDE.md's wording-gate carve-out covers it. Split
+  out to ship first.
+- **Counts re-derived at head:** `assertNoA11yViolations(` 77, `assertTapTargets(`
+  75, `sweep(` 27 against the row's 25 (the row's own stated command counts
+  matching lines, definition included; 25 is `await sweep(`).
+- **The no-animation gate** — ruled IN that morning and not re-litigated;
+  sequenced LAST, with the Wave D precedent said aloud rather than used as a
+  kill.
+- **The deferred legal paragraph's own demand had been met** ("Whoever opens
+  Wave C runs that check"), and the answer turned up blockers nobody had
+  filed: `ios-release.sh` uploads every build `testFlightInternalTestingOnly`
+  (Apple: such builds "can only be added to internal tester groups");
+  `accessPolicy.ts` defaults `restricted`, so a reviewer cannot use the demo
+  account guideline 2.1(a) requires; and no privacy policy exists while 2.2
+  carries 5.1.1(i) to a beta. Moved to "After the strangers" as what the
+  production phase inherits; the phase stays unauthored.
+- **Shape ruled:** goal restated for the household, exit STRUCK (Wave A's
+  treatment, same day, same reason), two PRs become three plus one phone
+  session, PR 1 (the `app/e2e/` sweep) starts before Wave A closes, status
+  line stamped `dies 2026-10-24`, Wave B decoupled from C's release.
+- **Controller's corrections when landing this entry:** the report dated #424
+  to 2026-09-12 (it merged 2026-09-13), called the Wave D dissolution "seven
+  days ago" (it was that morning), and counted "five call sites" for
+  `TypeBadge` (the row now says one component, which is the fact that
+  matters). It also noted Phase PS PR 2's box was still unticked; James had it
+  ticked in the same PR.
+
+## 2026-09-19 — Wave B refinement (main `c76e93ac`)
+
+Third refinement of the day (D dissolved #476, C reshaped #477). James struck
+the backup row before the gate ran — RDS in a separate AWS repo owns backup and
+restore — and asked for Wave B's APP-SIDE requirements instead. **He ruled all
+four questions the same day:** database only; the reporter SENDS first-party
+(option b) and also offers COPY; saved-row diagnostics split out; "is the
+server down" leaves this roadmap for his AWS repo.
+
+- **The framing was attacked on one point.** "App-side AWS requirements" is
+  real, ownerless work and belongs in ROADMAP (RF14), but its deciding
+  question lived in another repo. Filed as PR 2 with its own trigger rather
+  than as a peer the wave's date waits on.
+- **Three orphans of the strike, none an argument against it:**
+  `docs/deploy.md`'s rollback warning cited "roadmap Wave B" for a backup
+  script (corrected in the same PR); `docs/RELEASING.md`'s "Recovery is a DB
+  backup" owes the sentence saying where; and the one-time move of the host's
+  `pgdata` volume touches `compose.yml` and `DATABASE_URL`.
+- **The goal was stranger-shaped** ("indefensible for a stranger") — the same
+  pattern that restated Wave A's and Wave C's that morning. Restated for the
+  household.
+- **Rows 2 and 3 merged.** "Reaches a human" IS the reporter's visible face;
+  its other half (a support URL) was already under "After the strangers".
+- **Verified, not inferred:** `git log -S "ErrorBoundary" -- app/src` EMPTY; no
+  server error middleware; no `mailto:` in `app/src`; and `POST /api/logs` is
+  the workout-log write path, NOT a telemetry sink — a hypothesis formed from
+  its 1 MB body limit and killed by grepping.
+- **The facts that decide PR 2, PRIMARY:** `rds.force_ssl` defaults to 1 for
+  PG15+ while verification is the client's choice; `pg@8.23.0` treats
+  `sslmode=require` as `verify-full` TODAY and its own warning says pg 9 will
+  weaken that, so the TLS decision is pinned in `ssl: {}`, never in the URL;
+  drizzle's `migrate()` takes no lock of any kind, invisible at one container
+  and a race at two; RDS offers PG 18.x, so `postgres:18.4` poses no downgrade
+  problem.
+- **Saved-row diagnostics split out, `dies 2026-11-30`.** The wave's only
+  TRIAD work (a `session_logs` column at 10-30 KB/row; largest committed ring
+  capture 29,989 bytes) and the only part whose demand is unmeasured. The
+  cheap intermediate is one constant (`MAX_ENTRIES`), priced with the iOS
+  per-origin quota marked UNTESTED (RF30).
+- **Controller's corrections when landing this entry:** the report's privacy
+  default leaned on "the repo already has log-redaction code"; the only
+  redaction code is the client's NFC trace, so the row makes the scrub list
+  the spec's to write. Its "36 `console.*` call sites" matches the
+  controller's re-count (the dispatch had said 35).

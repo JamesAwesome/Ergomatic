@@ -40,12 +40,18 @@ import { linearScale, decimate } from "../charts/scale.js";
 import { ADVANCE, chooseTicks, formatTick, labelRoom } from "../charts/axis.js";
 import {
   buildTrace,
+  type IntervalSpan,
   type Measure,
   type TraceModel,
-  type TracePoint,
 } from "./traceModel.js";
 
 const MEASURES: readonly Measure[] = ["pace", "rate", "hr"];
+
+/** The default `intervals`, hoisted so the doors that have none (timer,
+ *  manual, Just Row) hand the memo below a STABLE array and keep their
+ *  own traces cached across a parent render. The doors that do have
+ *  intervals do not get that — see the memo's own comment. */
+const NO_INTERVALS: readonly IntervalSpan[] = Object.freeze([]);
 
 const MEASURE_LABEL: Record<Measure, { visible: string; spoken: string }> = {
   pace: { visible: "PACE", spoken: "Pace" },
@@ -166,62 +172,48 @@ const X_TICK_COUNT = 4;
  *  never columns computed once and reused across measures. */
 const PLOT_COLUMNS = CHART_WIDTH - LEFT_PAD - RIGHT_PAD;
 
-/** trace-truth Task 2 (spec §3): half a sample-second of padding on each
- *  side of a rest run's own x-range, so a single ISOLATED rest sample
- *  (surrounded by work on both sides) still draws a visible band rather
- *  than a zero-width rect — the 1 Hz sample it came from genuinely
- *  covers about this much of the timeline either side of its own
- *  timestamp. Purely a rendering nicety; never affects `rest` itself or
- *  which points are marked. */
-const REST_BAND_PAD_SECONDS = 0.5;
+/** Gate 0B board 2, M3: the `STOPPED 61s` label's own baseline, just
+ *  inside the plot's top padding — the same "positions, not fractions"
+ *  rule the axis gutter's constants above follow. */
+const STOP_LABEL_Y = TOP_PAD + 8;
 
-interface RestBand {
-  startX: number;
-  endX: number;
-}
-
-/** Finds every contiguous run of `rest === true` points in ONE segment.
- *  Never across a segment boundary — this function is only ever called
- *  per-segment (below), so a run spanning two segments is impossible by
- *  construction of the CALL SITE, not because a rest itself can't
- *  straddle a real gap (a dropped frame mid-rest would split one across
- *  two segments same as it would any other reading; `toSegments` doesn't
- *  special-case rest either way — a rest run that DID straddle a gap
- *  would simply become two separate bands, one per segment, which this
- *  function still renders correctly). Returns each run's own x-range,
- *  padded per `REST_BAND_PAD_SECONDS`. Reads the FULL, non-decimated
- *  segment — a band's own boundary must reflect the real rest span even
- *  when `decimate` would have dropped the exact point that started or
- *  ended it. */
-function restBandsForSegment(points: readonly TracePoint[]): RestBand[] {
-  const bands: RestBand[] = [];
-  let runStart: number | null = null;
-  let runEnd = 0;
-  for (const p of points) {
-    if (p.rest) {
-      if (runStart === null) runStart = p.x;
-      runEnd = p.x;
-    } else if (runStart !== null) {
-      bands.push({
-        startX: runStart - REST_BAND_PAD_SECONDS,
-        endX: runEnd + REST_BAND_PAD_SECONDS,
-      });
-      runStart = null;
-    }
-  }
-  if (runStart !== null) {
-    bands.push({
-      startX: runStart - REST_BAND_PAD_SECONDS,
-      endX: runEnd + REST_BAND_PAD_SECONDS,
-    });
-  }
-  return bands;
+/** Keeps a centred SVG label inside the viewBox by hanging it the other
+ *  way when it would otherwise overrun an edge, DERIVED FROM THE LABEL
+ *  rather than from where it sits (invariant I4). Shared by the x-axis
+ *  ticks (Gate 0A member M8, where a tick on the plot's right edge lost
+ *  its final glyph) and by the stop label, which has the same problem
+ *  from the other direction: `STOPPED 61s` is ~59 units wide and a short
+ *  stop's own rect can be three.
+ *
+ *  THE TWO CALLERS PASS DIFFERENT BOUNDS, and that is the point. An
+ *  x-axis tick label may use the whole viewBox — it sits in the gutter,
+ *  below everything. A stop label sits INSIDE the plot, level with the
+ *  y-axis tick labels, so its bound is the plot's own left edge:
+ *  centred, a 6 s stop's label starts at x 7 and paints straight across
+ *  a `2:10` sitting at x 22. */
+function anchorFor(
+  x: number,
+  label: string,
+  min: number,
+  max: number,
+): "start" | "middle" | "end" {
+  const half = (label.length * ADVANCE.plain) / 2;
+  if (x - half < min) return "start";
+  if (x + half > max) return "end";
+  return "middle";
 }
 
 export default function TraceChart({
   series,
+  intervals = NO_INTERVALS,
 }: {
   series: SeriesData | undefined;
+  /** Gate 0B board 2 (APPROVED 2026-09-19): the machine's own
+   *  per-interval work and rest seconds, in rowed order, which is what
+   *  makes the x axis `work + rest` rather than each sample's own `t`.
+   *  Defaults to none — a free row, a timer/manual row, and a row saved
+   *  before the rest readback shipped all keep the axis they had. */
+  intervals?: readonly IntervalSpan[];
 }) {
   const [measure, setMeasure] = useState<Measure>("pace");
   // Scopes the plot clip-path to THIS component instance — React's own
@@ -230,11 +222,24 @@ export default function TraceChart({
   // one `id` and one clip-path would silently win for both).
   const plotClipId = useId();
 
+  // WHAT THIS MEMO DOES AND DOES NOT BUY, measured rather than assumed.
+  // It holds across a MEASURE TAP (`setMeasure` re-renders this
+  // component alone, with the same props), which is what it is for. It
+  // does NOT hold across a parent render: both producers of `intervals`
+  // (`buildStoredSummary`, `buildSummaryModel`) run unmemoized, so the
+  // array is a fresh object every time even when nothing in it changed,
+  // and the log-detail screen re-renders on every keystroke in its
+  // notes field. Rebuilding all three traces costs **0.070 ms** on the
+  // real 419-sample `session-2` capture (200 iterations, throwaway
+  // probe, 2026-09-19), so that is a real miss and not a real cost —
+  // stated here because the obvious fix, keying on the array's VALUES,
+  // needs either a ref read during render or an eslint suppression, and
+  // neither is worth 70 microseconds.
   const traces = useMemo(() => {
     const built = {} as Record<Measure, TraceModel | null>;
-    for (const m of MEASURES) built[m] = buildTrace(series, m);
+    for (const m of MEASURES) built[m] = buildTrace(series, m, intervals);
     return built;
-  }, [series]);
+  }, [series, intervals]);
 
   // §1's absence idiom: the DEFAULT measure alone decides whether the
   // chart exists — never a partial toggle-only shell around a broken
@@ -303,26 +308,71 @@ export default function TraceChart({
             stayed geometrically possible, "in practice" prevented only by
             `domainY`'s own padding. Moving the band out of the plot
             entirely removes that "in practice" hedge — see the constant's
-            own comment above. Computed from the FULL (non-decimated)
-            points per segment; the polyline below is decimated
-            independently and stays one continuous stroke across the
-            band's own x-range (§3: a rest is not a gap). */}
-        {trace.points.map((segment, segIndex) =>
-          restBandsForSegment(segment).map((band, bandIndex) => {
-            const x1 = xScale(Math.max(trace.domainX[0], band.startX));
-            const x2 = xScale(Math.min(trace.domainX[1], band.endX));
-            return (
+            own comment above.
+            SINCE GATE 0B BOARD 2 the bands come from `traceModel`, not
+            from these points: under the stored-interval axis a band's
+            WIDTH is the machine's own rest readback, which the points
+            cannot supply (they cover only the part of the rest the rower
+            kept moving through — that is the defect). The line no longer
+            runs continuously across a band either; it breaks, because
+            there are no readings for the part of the rest the rower sat
+            still through. Both were true before and are stated here
+            because this comment used to assert them. */}
+        {trace.restBands.map((band, index) => {
+          const x1 = xScale(band.startX);
+          const x2 = xScale(band.endX);
+          return (
+            <rect
+              key={index}
+              className="trace-rest-band"
+              x={x1}
+              y={REST_BAND_Y}
+              width={Math.max(0, x2 - x1)}
+              height={REST_BAND_HEIGHT}
+            />
+          );
+        })}
+        {/* Gate 0B board 2, M3 (APPROVED 2026-09-19): a span where the
+            machine's own distance stood still while its clock ran.
+            Drawn BENEATH the polyline on purpose — the line has to stay
+            readable across it, and it does: the stroke measures 4.80:1
+            where the band crosses it, against WCAG's 3:1 for a graphical
+            object (`board2/frames/contrast.json`). The band itself is
+            `--ink-3` at 0.68, which sits in the middle of that token's
+            own window — below 0.647 the band misses 3:1 against the
+            page, above 0.710 the 9 px label on it misses 4.5:1. Colour
+            and opacity live in `index.css`, never inline, so the window
+            is stated in one place. */}
+        {trace.stops.map((stop, index) => {
+          const x1 = xScale(stop.startX);
+          const x2 = xScale(stop.endX);
+          const label = `STOPPED ${Math.round(stop.seconds)}s`;
+          return (
+            <g key={index}>
               <rect
-                key={`${segIndex}-${bandIndex}`}
-                className="trace-rest-band"
+                className="trace-stop-span"
                 x={x1}
-                y={REST_BAND_Y}
+                y={TOP_PAD}
                 width={Math.max(0, x2 - x1)}
-                height={REST_BAND_HEIGHT}
+                height={PLOT_BOTTOM - TOP_PAD}
               />
-            );
-          }),
-        )}
+              <text
+                className="trace-tick-label trace-stop-label"
+                x={(x1 + x2) / 2}
+                y={STOP_LABEL_Y}
+                textAnchor={anchorFor(
+                  (x1 + x2) / 2,
+                  label,
+                  LEFT_PAD,
+                  CHART_WIDTH - RIGHT_PAD,
+                )}
+                dominantBaseline="hanging"
+              >
+                {label}
+              </text>
+            </g>
+          );
+        })}
         {trace.ticksY.map((tick) => {
           const y = yScale(tick);
           return (
@@ -374,9 +424,7 @@ export default function TraceChart({
           // always emits `0` — never reaches an edge at all, so anchoring
           // by index pulled labels off their own marks on every other
           // trace to prevent a clip that was not happening there.
-          const half = (label.length * ADVANCE.plain) / 2;
-          const anchor =
-            x - half < 0 ? "start" : x + half > CHART_WIDTH ? "end" : "middle";
+          const anchor = anchorFor(x, label, 0, CHART_WIDTH);
           return (
             <g key={tick}>
               <line
@@ -430,16 +478,29 @@ export default function TraceChart({
           to-explain rule is unchanged; only the precedent moved. Spec §3 forbids copy claiming the rest PACE is
           meaningful; it says nothing about naming what the mark
           itself is, so this says only that.
-          "BAND = REST", never "SHADED = REST" (review round 4, C1):
-          round 1 shipped a full-height tint — THAT was shading. Round 2
-          replaced it with a short bar on the plot floor and the word
-          never moved with the geometry, so it named the rejected
-          treatment. "Band" stays true regardless of geometry, and
-          carries no colour word on purpose — `#97692a` reads amber in
-          the PR body and bronze on the actual capture; naming a colour
-          here would just be a second thing to get wrong later. */}
-      {trace.points.some((segment) => segment.some((p) => p.rest)) && (
-        <p className="trace-legend">BAND = REST</p>
+          THE WORD "BAND" IS NOW THE MARK ITSELF (Gate 0B board 2,
+          James 2026-09-19: "if instead of the word 'band' just show a
+          [yellow] bar and then '= rest'"). The swatch is `--trace-rest`,
+          the same fill `.trace-rest-band` carries, so the legend and the
+          thing it names cannot drift; it measures 4.25:1 against the
+          page, and WCAG 1.4.11's 3:1 binds it because it carries
+          meaning. The word survives visually hidden, for a screen reader
+          that cannot see a swatch — which also keeps the old rule that
+          the copy never names a COLOUR (`#97692a` reads amber in a PR
+          body and bronze on the capture) and never claims the rest PACE
+          is meaningful (spec §3).
+          THE AXIS CAPTION IS GONE (James, same session: "you can drop
+          the label for x, it's obvious what it is"). What names the
+          quantity now is the mark: a rest drawn at its own length is
+          what says the axis counts rest, which is the whole of what
+          separates this axis from a work-only one. Invariant I3 is
+          reworded to match in the spec, in this PR's own commit. */}
+      {trace.restBands.length > 0 && (
+        <p className="trace-legend">
+          <span className="trace-legend-swatch" aria-hidden="true" />
+          <span className="visually-hidden">Band</span>
+          {" = REST"}
+        </p>
       )}
     </figure>
   );
