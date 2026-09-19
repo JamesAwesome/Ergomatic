@@ -7965,9 +7965,11 @@ async function captureAppleMethods(
     email: `screenshots-apple-${openLink ? "link" : "methods"}@e2e.test`,
     name: "Maya Chen",
   });
-  await page.goto("/you");
+  // THE LIST LIVES BEHIND THE ACCOUNT DOOR NOW (Gate 0 2026-09-15, Option
+  // A). The career hero it used to be captured beside stayed on You, so the
+  // `LIFETIME` wait went with it — this screen's own readiness is the list.
+  await page.goto("/you/account");
   await expect(page.getByRole("button", { name: "Add Apple" })).toBeVisible();
-  await expect(page.getByText(/^LIFETIME · /)).toBeVisible();
   if (openLink) {
     await page.getByRole("button", { name: "Add Apple" }).click();
     await expect(
@@ -8007,16 +8009,47 @@ async function captureAccountBlock(
     email: "screenshots-apple-remove@e2e.test",
     name: "Maya Chen",
   });
-  await page.goto("/you");
+  await page.goto("/you/account");
   await expect(
     page.getByRole("button", { name: "Remove Apple" }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Delete account" }),
   ).toBeVisible();
-  await expect(page.getByText(/^LIFETIME · /)).toBeVisible();
+  await expect(
+    page.getByText("Asks you to sign in with Apple first."),
+  ).toBeVisible();
   await page.screenshot({ path: path.join(SCREENSHOTS_DIR, fileName) });
 }
+
+/** THE OTHER HALF OF THE MOVE (Gate 0 2026-09-15, Option A): You with the
+ *  account block GONE and one ACCOUNT row at the top of the doors group.
+ *  Captured with the front door ON, because the row is drawn only where the
+ *  block would have been — an unrouted capture shows a You that looks like
+ *  this change never happened (RF7's shape: a capture of the one state that
+ *  cannot tell the feature from its absence). */
+test("you-account-door", async ({ page }) => {
+  await page.route("**/api/auth/options", (route) =>
+    route.fulfill({ status: 200, json: APPLE_AUTH_OPTIONS }),
+  );
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({ status: 200, json: { apple: true, google: true } }),
+  );
+  await signInViaBackdoor(page, {
+    email: "screenshots-account-door@e2e.test",
+    name: "Maya Chen",
+  });
+  await setBaselines(page);
+  await seedGate0Stats(page);
+  await page.clock.install({ time: new Date("2026-09-12T09:00:00") });
+  await page.goto("/you");
+  await page.getByText("LIFETIME · 56,752 M").waitFor();
+  await page.getByText("2K 1:52.0 · 6K 2:02.0").waitFor();
+  await expect(page.getByRole("link", { name: /ACCOUNT/ })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-account-door.png"),
+  });
+});
 
 test("apple-signin-methods-remove", async ({ page }) => {
   await captureAccountBlock(page, "apple-signin-methods-remove.png");

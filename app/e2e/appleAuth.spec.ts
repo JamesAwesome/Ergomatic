@@ -56,7 +56,7 @@ test("signed-in methods disable Add when either proof is unavailable and idle de
     name: "Apple Link Tester",
   });
 
-  await page.goto("/you");
+  await page.goto("/you/account");
   await expect(page.getByText("CONNECTED")).toBeVisible();
   const addApple = page.getByRole("button", { name: "Add Apple" });
   await expect(addApple).toBeDisabled();
@@ -74,8 +74,15 @@ test("signed-in methods disable Add when either proof is unavailable and idle de
   expect(disabledStyles.rowCursor).toBe("not-allowed");
   expect(disabledStyles.actionCursor).toBe("not-allowed");
 
+  // The flow-only route still redirects an idle remount to You — and You is
+  // now the door rather than the list, so the list is one tap further on.
   await page.goto("/you/sign-in-methods");
   await expect(page).toHaveURL(/\/you$/);
+  await expect(
+    page.getByRole("heading", { name: "SIGN-IN METHODS" }),
+  ).toHaveCount(0);
+  await page.getByRole("link", { name: /ACCOUNT/ }).click();
+  await expect(page).toHaveURL(/\/you\/account$/);
   await expect(
     page.getByRole("heading", { name: "SIGN-IN METHODS" }),
   ).toBeVisible();
@@ -302,7 +309,7 @@ test("linking Apple proves Google then Apple and preserves the signed-in account
   expect(created.ok, created.body).toBe(true);
 
   try {
-    await page.goto("/you");
+    await page.goto("/you/account");
     await page.getByRole("button", { name: "Add Apple" }).click();
     await expect(
       page.getByRole("heading", { name: "Add Apple" }),
@@ -429,8 +436,11 @@ test("a cancelled link return sends the rower to You once and releases ordinary 
     name: "Apple Link Tester",
   });
 
+  // THE RETURN LANDS ON THE SCREEN THAT ANSWERS IT (account-submenu spec §7):
+  // the methods list moved behind the ACCOUNT door, so a terminal link
+  // outcome routed to /you would say nothing at all.
   await page.goto("/?authResult=cancelled&authPurpose=link&authProvider=apple");
-  await expect(page).toHaveURL(/\/you$/);
+  await expect(page).toHaveURL(/\/you\/account$/);
   await expect(
     page.getByRole("heading", { name: "SIGN-IN METHODS" }),
   ).toBeVisible();
@@ -473,7 +483,7 @@ test("removing a method re-reads the list rather than trusting the screen", asyn
     name: "Remove Tester",
   });
 
-  await page.goto("/you");
+  await page.goto("/you/account");
   const removals = page.getByRole("button", { name: /^Remove / });
   await expect(removals).toHaveCount(2);
   // 44px is a hard requirement, and an inline control's own box cannot
@@ -507,7 +517,7 @@ test("a removal the server refuses says which of the three things happened", asy
     name: "Refusal Tester",
   });
 
-  await page.goto("/you");
+  await page.goto("/you/account");
   await page.getByRole("button", { name: "Remove Apple" }).click();
   await expect(page.getByRole("alert")).toHaveText(
     "This account no longer exists. Nothing was changed.",
@@ -595,7 +605,7 @@ test("a failed web delete says so instead of bouncing the rower to a silent scre
   await page.goto(
     "/?authError=invalid_proof&authPurpose=delete&authProvider=apple",
   );
-  await expect(page).toHaveURL(/\/you$/);
+  await expect(page).toHaveURL(/\/you\/account$/);
   await expect(page.getByRole("alert")).toHaveText(
     "We couldn’t confirm it was you. Nothing was deleted.",
   );
