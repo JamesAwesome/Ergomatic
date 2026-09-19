@@ -26,6 +26,16 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 
 ## Product principles (no other home)
 
+- **2026-09-19 — a cost a rower cannot SEE is indistinguishable from a
+  regression, so an accepted trade belongs in the RELEASE NOTES, not only in
+  the code comment that records the ruling.** #485 stopped provider names
+  syncing, on James's explicit ruling, accepting that a name changed at Google
+  no longer flows through. The ruling was recorded well in three code comments
+  — the right place for whoever later "fixes the missing sync" — and nowhere a
+  rower looks. **When a ruling's accepted cost is a capability a user silently
+  loses, make the notes sentence a merge condition**: the first person to hit
+  it will otherwise file a defect against a decision made on purpose.
+
 - **2026-09-13 — deletion resolves DUPLICATES; unlink resolves WRONG LINKS. They
   are not substitutes and neither raises the other's stakes.** Deleting the
   account that holds a wrong link destroys the history the recovery was for. The
@@ -322,22 +332,42 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   sweep is a string match and will hand both back to James as live work.
   Completed work belongs where completed work lives, or its stamp goes — and
   that is his ruling, never the gate's.
-- **A PR that ticks someone else's stale row while leaving its own open.** The
-  account-submenu PR (#474, 2026-09-18) ticked #453's row at `ROADMAP.md:1057`
-  with the words "the work shipped and the row stayed open, which is the
-  failure RF14 exists to prevent" — and left BOTH rows it was itself
-  delivering at `- [ ]`, one of which read "nothing has built it". **At every
-  final-PR gate, read the rows the PR CLOSES, not only the rows it files or
-  the rows now overdue.** `CLAUDE.md`'s hand-back rule has two lists and
-  neither is this one, so nothing else catches it. The cost is countable: PR
-  #422 exists for no other purpose than ticking five rows main had already
-  closed.
+- **A PR that ticks someone else's stale row while leaving its own open —
+  TWICE IN A FORTNIGHT, so check it mechanically.** #474 (2026-09-18) ticked
+  #453's row at `ROADMAP.md:1057` with the words "the work shipped and the row
+  stayed open, which is the failure RF14 exists to prevent", and left BOTH
+  rows it was itself delivering at `- [ ]`. #485 (2026-09-19) did it again: it
+  ticked #480's carried-forward revocation row, said "Proposed to add: none",
+  and left "Let a rower rename their account" — the row its whole diff
+  delivers — unticked, with a "why not now" clause still reading "the CONTROL
+  does not exist yet and needs its own design gate". **At every final-PR gate,
+  grep the ROADMAP for the PR's own SUBJECT before reading its hand-back, and
+  read the row's deferral clause rather than only its checkbox: a clause
+  arguing the work is unstarted is the tell.** `CLAUDE.md`'s hand-back rule
+  has two lists and neither is this one, so nothing else catches it. The cost
+  is countable: PR #422 exists for no other purpose than ticking five rows
+  main had already closed.
 - **Above-the-fold bullets blow the count when a bullet carries the change AND
-  its justification.** Three failures now — #228 at ~270 words, #230 at 266,
-  #474 at 290 with bullets at 56/72/50/39 against ~25. Every over-long bullet
-  in all three was a one-line outcome with the reasoning welded on. The fix is
-  mechanical and the same every time: the outcome stays above the fold, the
-  "because" moves into the Record. Say that, rather than asking for "shorter".
+  its justification.** Four failures now — #228 at ~270 words, #230 at 266,
+  #474 at 290 (bullets 56/72/50/39), and #485 at 152 (bullets
+  27/21/30/20/21/18) against a ~120 / ~25 bar. **#485 is the instructive one:
+  five of its six bullets were clean and the two that were not carried the
+  same welded shape, so the whole overage was 32 words in two places.** An
+  author working the rule gets close and still fails on the TOTAL — so quote
+  the total and the per-bullet row, hand back the rewritten fold, and never
+  ask for "shorter". The fix is unchanged every time: the outcome stays above
+  the fold, the "because" moves into the Record.
+- **The fold carries the recount the Record already fixed, because it is
+  written last and grepped by nobody.** #485 said above the fold "Three paths
+  used to copy it back from Google or Apple on every sign-in"; three paths
+  WRITE `users.name`, two copied it back, and the front door's `accept()`
+  deliberately did not. The PR's own Record, its Gate 0 pack, and the shipped
+  comment in `routes.ts` ("The two paths that used to re-copy") all had it
+  right. **At every final gate, check each integer above the fold against the
+  Record's own version of the same sentence** — the fold is the last artefact
+  written and the only one James reads, so it inherits every correction the
+  others absorbed and none of the greps. RF36 aimed at the cheapest six lines
+  in the PR.
 
 - **A wave whose goal is "the instruments another wave needs" asserts its own
   demand, and nobody checks it against the consuming wave's text.** Wave D
