@@ -3617,7 +3617,17 @@ async function postLog(
     // POST fixture through a live monitor session it was never built to
     // use.
     series?: {
-      samples: { t: number; d: number; p: number; spm: number; hr?: number }[];
+      samples: {
+        t: number;
+        d: number;
+        p: number;
+        spm: number;
+        hr?: number;
+        // Gate 0B board 2: the recorder's own rest marker. Needed by the
+        // rest-width capture below, whose whole subject is what a rest
+        // does to the axis.
+        r?: true;
+      }[];
     };
     // RC-2/RC-3 wave, PR 2 (2026-08-25): the MACHINE CONFIRMED · WORK ONLY
     // block's own trigger fields — `POST /api/logs` already accepts these
@@ -4884,6 +4894,132 @@ test("log-delete-confirm", async ({ page }) => {
 // → return null" gate (PostWorkoutSummary.tsx) — while the row and the
 // reflection read-back (`held: "held", effort: 2`, no thumbs/notes) render
 // exactly as they do for a current-shape log.
+/** Gate 0B board 2's own defect, reproduced as a seedable row: three
+ *  intervals, three IDENTICAL 30 s rests, and a rower who kept the
+ *  flywheel moving for a different amount of each one — 7.5 s, 6.7 s and
+ *  3.0 s, the advances measured off `walk-2026-08-16`'s
+ *  `session-2-wu-4unequal` capture (`BOARD2.md`).
+ *
+ *  WHY THIS FIXTURE EXISTS. The `log-detail` capture above carries two
+ *  rests the rower rowed through for their FULL 60 s, so `work + rest`
+ *  and each sample's own `t` agree to the second there and its picture
+ *  is identical either side of this change. No committed capture showed
+ *  the axis moving at all. This one does: before, these three bands drew
+ *  8.5, 7.7 and 4.0 units wide — the last at under half the first, for
+ *  three rests the machine timed identically. */
+function buildRestWidthSeries(): {
+  samples: { t: number; d: number; p: number; spm: number; r?: true }[];
+} {
+  const samples: {
+    t: number;
+    d: number;
+    p: number;
+    spm: number;
+    r?: true;
+  }[] = [];
+  let t = 0; // TENTHS of a second, the stored unit
+  let d = 0; // TENTHS of a metre, likewise
+
+  // A work interval at roughly 2:10/500m, wandering a little so the line
+  // reads as a real trace rather than a rule.
+  const work = (seconds: number): void => {
+    for (let i = 0; i < seconds; i++) {
+      t += 10;
+      d += 38;
+      samples.push({ t, d, p: 1290 + (i % 5) * 9, spm: 26 + (i % 3) });
+    }
+  };
+
+  // The part of a rest the rower kept moving through: samples at the
+  // ordinary cadence, marked as rest, coasting slowly. Their pace sits
+  // outside the WORK range, so the plot clips the line across them —
+  // which is what makes the BAND the only sign a rest happened, and the
+  // reason its width has to be honest.
+  const restAdvance = (tenths: number): void => {
+    let spent = 0;
+    while (spent < tenths) {
+      const step = Math.min(10, tenths - spent);
+      spent += step;
+      t += step;
+      d += 9;
+      samples.push({ t, d, p: 2150, spm: 17, r: true });
+    }
+  };
+
+  work(60);
+  restAdvance(75); // 7.5 s of a 30 s rest
+  work(60);
+  restAdvance(67); // 6.7 s of a 30 s rest
+  work(60);
+  restAdvance(30); // 3.0 s of a 30 s rest
+  work(60);
+  return { samples };
+}
+
+test("log-detail-rest-widths", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-rest-widths@e2e.test",
+    name: "Screenshot Tester",
+  });
+
+  const step = (index: number) => ({
+    label: "1:00 @ 6k",
+    targetSplit: 129.0,
+    actualSplit: 129.0,
+    actualSource: "pm5" as const,
+    meters: 232,
+    actualMeters: 232,
+    actualSeconds: 60,
+    spm: 26,
+    actualSpm: 26,
+    machineCalories: 14,
+    machineDragFactor: 103,
+    // The three readbacks the bands are drawn from — IDENTICAL, which is
+    // the whole subject of this capture.
+    machineRestSeconds: index <= 3 ? 30 : 0,
+    machineRestMeters: 22,
+  });
+
+  await postLog(page, {
+    workoutTitle: "Rill Wind",
+    workoutType: "AT",
+    deviceName: "PM5 432331249",
+    source: "pm5",
+    held: "held",
+    effort: 3,
+    avgSplitSeconds: 129.0,
+    timeSeconds: 330,
+    distanceMeters: 928,
+    steps: [step(1), step(2), step(3), step(4)],
+    series: buildRestWidthSeries(),
+    machineWorkSeconds: 240,
+    machineWorkMeters: 928,
+  });
+
+  await page.goto("/today/log");
+  const row = page.locator(".today-log-row").filter({ hasText: "Rill Wind" });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(page.getByRole("heading", { name: "Rill Wind" })).toBeVisible();
+  await expect(page.locator(".trace-figure")).toBeVisible();
+
+  // The capture's own subject, asserted so the image cannot quietly stop
+  // showing it (RF7's shape): three bands, all the same width. Equal to
+  // within a rendering epsilon, never "greater than zero".
+  const widths = await page.$$eval(".trace-rest-band", (els) =>
+    els.map((el) => (el as SVGGraphicsElement).getBBox().width),
+  );
+  expect(widths).toHaveLength(3);
+  expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(0.01);
+
+  await neutralizeFixedTabBarForFullPageCapture(page);
+  await scrollTraceChartIntoFrame(page);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-detail-rest-widths.png"),
+  });
+});
+
 test("log-detail-legacy", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-log-detail-legacy@e2e.test",
