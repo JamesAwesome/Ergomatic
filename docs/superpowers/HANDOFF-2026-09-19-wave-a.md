@@ -93,9 +93,12 @@ The rest, with the reason each is not next:
   and `begin()`'s pre-sweep destroying an in-flight follow-through. Small, and
   **the failed-attach notice is now unblocked** — the methods list has settled
   where its clause said it was waiting for.
-- **Confirm the `appleAuth` flake is dead** (`dies 2026-10-15`) — a job-log
-  sweep, not a code change (RF42: count from JOB LOGS, never the run list).
-  Good to pair with anything.
+- **Confirm the `appleAuth` flake is dead** — **DONE 2026-09-19, and the row
+  is ticked in this same PR.** The sweep ran over the 62 CI e2e jobs between
+  the guard's merge and this branch, every one of them a build that contains
+  the guard: zero failures, zero flakes, zero retries on the test, against a
+  pre-fix rate of two branch-events in 22 jobs. The numbers and the two
+  unrelated things the sweep turned up are in the ROADMAP row, not here.
 - **"You" naming treatment** (`dies 2026-10-12`) — copy with a design gate.
 
 ## Release state

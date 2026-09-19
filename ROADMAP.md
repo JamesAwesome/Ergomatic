@@ -1374,8 +1374,30 @@ it lands the stranger on this same denial.
       · dies 2026-10-10 · not a fix-now because the actual fix is a rename
       surface in the product, which is unscoped work; the wave's own deadline
       is the backstop.
-- [ ] **Confirm the `appleAuth` navigation flake is dead. Cause is KNOWN and
+- [x] **Confirm the `appleAuth` navigation flake is dead. Cause is KNOWN and
       the fix is in this PR; what remains is measuring the rate.**
+      **MEASURED 2026-09-19: ZERO. The row's own criterion closes it.**
+      62 CI e2e jobs ran between the guard's merge (`8536de99`, 2026-09-15
+      21:20Z) and `ca5fcde3`, and **all 62 builds contain the guard** —
+      checked with `git merge-base --is-ancestor 8536de99 <headSha>` over
+      every job's own head, not assumed from the dates. There were no
+      re-run attempts, so 62 runs is 62 attempts. Counted from the JOB LOGS
+      per RF42, never the run list. `appleAuth.spec.ts:210/:217` ("linking
+      Apple proves Google then Apple…") appears **zero** times as failed,
+      flaky or retried, and the old signature `getByLabel('Usual sign-in
+      confirmed')` absent does not occur in any of the 62 logs. Against the
+      pre-fix rate of two independent branch-events in 22 jobs, that is the
+      result the row asked for.
+      **What the sweep DID find, so it is not read as a clean suite.** Four
+      `1 flaky` jobs, all of them `sheetScroll.spec.ts:11` on
+      `webkit-sheet`, plus one job failing the same spec outright
+      (`35048629284`) — a different test with its own history. And one
+      `appleAuth` failure, `:433` in `35441531950` on `account-submenu`,
+      which is **not this mechanism**: a deterministic strict-mode
+      violation (`getByRole('button', { name: 'Cancel' })` matching both
+      `← CANCEL` and `Cancel`), red on both the attempt and its retry, and
+      fixed inside that branch before #474 merged. The row's "a different
+      screen means a second mechanism" clause does not fire on it.
       **Superseded the same day it was written** — it was filed as "a watch
       with no reproduction", and then the flake-hunting session
       (`Ergomatic - FlakeNukem`) produced the reproduction and the cause.
@@ -1409,13 +1431,11 @@ it lands the stranger on this same denial.
       `scripts/e2e.sh` never sets `CI`), so those were genuine red-or-green.
       The trigger is load — a slower, more contended runner widening the
       window.
-      **What closes this row:** FlakeNukem re-measures over the CI e2e jobs
-      after this PR merges and reports the rate. Zero closes it. A survivor
-      still showing Today means the guard is incomplete; a different screen
-      means a second mechanism. **S**
-      · dies 2026-10-15 · a row and not a fix-now because the fix already
-      shipped here and only the confirming measurement is outstanding, and it
-      needs post-merge CI jobs that do not exist yet.
+      **What closed this row:** the re-measurement above, run over the CI
+      e2e jobs after the guard merged. Zero closes it, and it was zero.
+      **S** · dies 2026-10-15 · a row and not a fix-now because the fix
+      already shipped here and only the confirming measurement was
+      outstanding, and it needed post-merge CI jobs that did not exist yet.
 - [x] **Raise the `--rule` hairline: it measures 1.47:1 on `--surface`.**
       **CLOSED 2026-09-15 BY GATE 0 RULING 5 (PR #453) — THE SWEEP THIS ROW
       DESCRIBES MUST NOT BE DONE.** The policy it was reduced to is now written
