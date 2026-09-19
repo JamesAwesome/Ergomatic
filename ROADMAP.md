@@ -1201,7 +1201,15 @@ it lands the stranger on this same denial.
       PRODUCT ruling — whether a rower should be offered "Add a provider" or
       "Delete account" at all while an attach is pending — not a SQL change,
       and the race needs a rower doing both at once on one device.
-- [ ] **Move the account block behind an ACCOUNT door on You. GATE 0 IS DONE
+- [x] **SHIPPED #474 (2026-09-19) — the account block is behind an ACCOUNT
+      door.** The sign-in methods list and the delete box moved to
+      `/you/account`, reached by one quiet row at the top of You's doors
+      group; `Delete account` goes from 0 taps and no scrolling to 1 tap and
+      no scrolling (`docs/screenshots/you-account-door.png`). Two findings
+      came out of it and are in the spec: the terminal link/delete
+      destination had to move with the list (§7), and the route must not
+      refuse while the options read is in flight (§4) — the second caught by
+      e2e, not by any client test. Was: **GATE 0 IS DONE
       AND JAMES RULED OPTION A (2026-09-15); nothing has built it.** He asked
       for it in as many words: _"I want to also move the account settings into
       a submenu because 'delete your account' is FAR too prominent."_ Measured
@@ -1230,7 +1238,12 @@ it lands the stranger on this same denial.
       is this repo's own split test. Dated to match the three copy rows below,
       because Task 7 Step 1's disclosure rides this and the four should land
       together.
-- [ ] **Delete account does not say that it will ask you to prove it is you.**
+- [x] **SHIPPED #474 (2026-09-19) — `Delete account` says the re-auth is
+      coming.** One line under the button, naming the provider `startDelete`
+      actually re-proves: "Asks you to sign in with Apple first." It rode the
+      submenu above, as ruling 3 said it would, and the confirm screen is
+      untouched. Was: **Delete account does not say that it will ask you to
+      prove it is you.**
       James, 2026-09-14, immediately after running the deletion twice on a real
       account: _"we really need to make it more obvious that the reauth is
       required to delete the account."_ The button reads `Delete account`, the
