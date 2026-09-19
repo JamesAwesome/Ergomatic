@@ -388,7 +388,7 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   wave's own text will still claim it.** Wave C's test-history row read "this
   is the only read path… the app collects test results no rower can ever
   see"; Phase PS PR 2 shipped TEST TREND (`30fd5cc0`, #424, merged 2026-09-13,
-  v0.46.0) six days before the refinement that quoted it. The sibling rule
+  v0.47.0) six days before the refinement that quoted it. The sibling rule
   above greps a row's named PR; here no PR number appears in the row at all.
   **At every refinement, grep each row's SUBJECT against the shipped tree
   before judging it** — one command moved this row from "build the list" to
@@ -449,6 +449,46 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   volume; at head that line was the `web` service's `container_name`. The
   claim still held. Treat it as a prompt to re-derive every other figure in
   the row, not as a typo.
+
+- **A wave becomes the home for everything open while it is open, and its
+  heading then prices the wrong work.** Wave E ("The Concept2 logbook",
+  refined 2026-09-19) held 17 open rows of which 6 were done and unticked and
+  only 6 were about Concept2 — the rest were PM5 driver checks, an auth
+  coverage span, two DB index rows the DBA had already measured unreachable,
+  and a docs typo across 32 files. None was filed there by a decision; the
+  heading was open. **At every refinement, sort a wave's rows by whether they
+  serve its own GOAL SENTENCE, and count.** If most do not, the wave is a
+  parking bay and its size is fiction — Wave E still read "M→L" after its L
+  half shipped.
+- **A row that names its own closing test is a command, not a question.**
+  Wave E's verification-code row ended "say whether a row outside the 50-row
+  page is genuinely unreachable. If it is, this row closes." One grep settled
+  it (`routes/concept2.ts`: `DECLARATION_PAGE_SIZE = 50`, "reads ONE page …
+  never walks `links.next`"). **Grep a row for "if it is", "this row closes",
+  "confirm whether", "ticks at merge" before pricing it** — auto-send's row
+  said "Ticks at merge" and sat unticked for thirteen days after #312 merged.
+- **A trigger that has FIRED and been measured NO is a strike receipt, and the
+  row will not say so itself.** Wave E's history-index row had its trigger
+  fire the day after filing and was then ruled "stays unowed" in
+  `dba-ledger.md`; its generated-columns sibling named "opens WITH the
+  You-stats phase", the phase opened, and the DBA measured neither reachable.
+  Both still read as live. **When a row names a trigger, check the trigger's
+  outcome in the MEASURING agent's ledger, not in the row.**
+- **A `/close-phase` freeze goes stale the moment its BUILD PRs merge, and the
+  status line keeps denying it ran.** Phase MT's `docs/closeouts/close-MT.md`
+  was frozen at `dffd5a8c` (span 136..335) and every BUILD row in it merged
+  (#377/#378/#380); eleven days later the span was 161..385 and the status
+  line read "`/close-phase` NOT yet run". **Before Phase 4 of a resumed close,
+  re-run Phase 0 and diff the new span against `close-<X>.span.txt`.** And
+  `ls docs/history/` for the archive's target filename at the close gate:
+  `phase-ps.md` was already taken by a 2026-08-28 sketch.
+- **Ask which SERVER a rower's evidence came from before quoting it as the
+  live system.** This pass wrote that production "points at the live logbook";
+  James's own screenshots an hour later showed his sends landing on
+  `log-dev.concept2.com`, and `docs/deploy.md` says `C2_BASE_URL` defaults to
+  the sandbox. "Rows reached concept2.com" had been read as the live host for
+  twelve days. A host name in a roadmap sentence is a claim; read the config
+  default and the URL bar.
 
 ## Recommendations that turned out wrong
 - **2026-09-13 — the disabled-button contrast fold (#425).** I measured the

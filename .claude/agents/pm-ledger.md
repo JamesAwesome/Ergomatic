@@ -7542,3 +7542,73 @@ Not blocking: the intersection needs a live attempt on a 60-day-expired
 session, which the 5-minute TTL all but forbids, and a deadlock needs two.
 The filed row's "pre-existing and unchanged by this PR" now says which pair
 it was measured about.
+
+## 2026-09-19 — Wave E + Phases MT / DE / PS refinement (main `972479fb` → `792ba8e8`)
+
+Fourth refinement of the day (D dissolved #476, C reshaped #477, B refined
+#479). James: "I suspect they may be more done than the roadmap says" — right,
+and understated. **He took every recommendation**, and ran Phase PS's eyeball
+check in the same sitting.
+
+**Counted.** Wave E: 17 unchecked rows. Six done and unticked (RC-10's two
+gates — `0023_married_patch.sql` + `intervals.ts`; auto-send #312, whose own
+row says "Ticks at merge"; the verification-code row, closed by its OWN
+written test — `DECLARATION_PAGE_SIZE = 50`, "reads ONE page … never walks
+`links.next`"; auto-verify #360/#363/#365; the frame-error fold #358, which
+ROADMAP never recorded; the pre-2018 code half #350). **Only 6 of 17 were
+about Concept2** — the rest were driver correctness, an auth `v8 ignore`
+span, two DB index rows and a docs typo, parked there because the heading was
+open.
+
+**Shape ruled.** Wave E got the Exit block two of its rows had promised since
+2026-08-31: RC (d) [met by its documented clause], the Phase LP parity walk —
+the wave's only external oracle (RF11), runsheet owned by the controller — the
+weight-unit desk leg, and the move to the LIVE logbook. Heading stamped
+`dies 2026-10-17`. The driver rows became a "Monitor-truth checks" register
+section (echo first); `Transport.read`, pre-2018 classification and Just Row
+auto-splits went to the Icebox with triggers. The Just Row End/TERMINATE fence:
+WIDEN, TRIAD, with the `steps: []` post measured on log-dev first.
+
+**Strikes, each with a measured receipt, ruled by James:** MT's
+`connected.spec.ts` "poisons its own origin" row (mechanism false:
+`signInViaBackdoor` fails at a server `page.request.post` made before page
+storage exists); the history-index row (trigger fired, DBA "stays unowed");
+the generated-columns row (trigger fired, DBA measured neither reachable); the
+pre-2018 row's reporter confirmation; the unbuilt debug reveal; the
+thinned-fallback row's stored boolean (the structured `c2_send` log already
+counts it). Verbatim text kept in
+`docs/history/register-evictions-2026-09-19.md`, with FLAKE 2.
+
+**Status lines wrong on main, again.** Phase MT's said `/close-phase` NOT yet
+run — `close-MT.md` existed, frozen `dffd5a8c`, all three BUILD PRs merged.
+Phase PS's and Wave C's both said #424 "released in v0.46.0" — false, and the
+controller's own error from that morning: `git merge-base --is-ancestor
+30fd5cc0 v0.46.0` exits 1; first tag v0.47.0. Wave E's status block carried
+three paragraphs pasted from Phase JR's archived body and a `dies` stamp
+stranded from the row it belonged to (`11f10079`, 2026-09-10).
+
+**PS exit criterion 6 — MET.** LIFETIME 128,660 (Concept2's not read; inferred
+equal to its season). SEASON 128,660 m / 9:27:00 / 28 here vs 91,175 m /
+7:33:09.1 / 26 on log-dev. Gap = ~49,635 m never sent, less 12,150 m by which
+Concept2's tile exceeds its own 26 listed scores (79,025) — consistent with
+counting rest metres, INFERRED. Exact agreements: this week 24,507 on both
+sides row for row; both avg-per-day figures divide by 142 days. That also
+answered PS's "work-only or work+rest" row, informationally.
+
+**Controller's corrections when landing this entry.** The report said
+production "sets `C2_BASE_URL` to the live logbook"; James's screenshots show
+his sends on `log-dev.concept2.com` and `docs/deploy.md` says the variable
+defaults to the sandbox — so the live move is OWED, and it is now Wave E exit
+item 4. The report's "Rides the next PR touching the connected surface" home
+for the stale-matrix row is a TABLE; the row went to "Small, queued" instead.
+
+**Process ruled:** this refinement lands as its own docs PR; MT, DE and PS
+then close together in ONE doc-class PR with one antagonist exit pass and one
+PM close gate — DE has zero open rows, so a full `/close-phase` session on it
+would be ceremony. None needs a tag. DE's "0029 DROPs unconfirmed" residual
+was re-priced without SSH: `migrate()` is a top-level await before listen, so
+a failed migration would have failed the deploy; one custom-workout creation
+on prod is the decisive check (`difficulty` was NOT NULL with no default).
+
+**Release, flagged:** `v0.50.6` is behind two tester-visible merges (#474
+account door, #478 trace-chart axis). Recommended v0.51.0, notes PR first.
