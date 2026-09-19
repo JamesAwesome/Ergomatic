@@ -465,12 +465,12 @@ generation):
       a top-level `await` before the server listens (`app/server/index.ts`),
       so a migration that failed would have killed the boot, failed
       `deploy.sh`'s health wait and rolled back — and that deploy passed.
-      DECISIVE, and owed: `workouts.difficulty` was `NOT NULL` with no default
-      (`drizzle/0001`) and nothing has written it since #400, so ONE
-      successful custom-workout creation on production proves the column is
-      gone. · dies 2026-10-31 · a row and not a fix now only because the
-      controller cannot create a workout on production; it is one tap for
-      James, not an SSH entry that does not exist
+      DECISIVE, and SETTLED 2026-09-19: `workouts.difficulty` was `NOT NULL`
+      with no default (`drizzle/0001`) and nothing has written it since #400,
+      so one successful custom-workout creation on production proves the
+      column is gone — and James confirms the household creates custom
+      workouts on production "all the time". The drops landed. Nothing is
+      owed here.
 **Exit:** the two phase-close greps in spec §6 (no `pain`/`difficult`; and
 `effort` means one thing) pasted into the close gate; e2e and screenshots
 green with refreshed captures; the by-hand stale-build check (a `v0.38.1`
