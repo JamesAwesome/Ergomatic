@@ -816,9 +816,17 @@ test("a rower renames themselves and the whole app agrees, including after a rel
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("SAVED")).toBeVisible();
 
-  // ACROSS THE SCREEN BOUNDARY: You reads the same user object, so it must
-  // have been told rather than left stale.
-  await page.goto("/you");
+  // ACROSS THE SCREEN BOUNDARY, IN-DOCUMENT, AND THE NAVIGATION IS THE
+  // ASSERTION (RF38). You reads the same user object, so it must have been
+  // TOLD rather than left stale — but `page.goto` cannot prove that: a full
+  // document navigation remounts the app and re-reads `/api/me` from
+  // scratch, so it passes whether or not the rename announced itself.
+  // Measured: with `App.tsx`'s `onRenamed={refetch}` replaced by a no-op,
+  // the goto version of this leg stayed GREEN. Going back through the
+  // screen's own BACK control keeps the document — and therefore the
+  // module state — so a missing callback shows up as a stale name.
+  await page.getByRole("link", { name: "← BACK" }).click();
+  await expect(page).toHaveURL(/\/you$/);
   await expect(page.getByText("Maya Chen", { exact: true })).toBeVisible();
   await expect(page.getByText("Rower", { exact: true })).toHaveCount(0);
 
