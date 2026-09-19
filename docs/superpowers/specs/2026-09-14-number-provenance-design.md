@@ -489,8 +489,46 @@ stored-tier row carrying a distance makes it visible.
 and 19 stand — the struck line was `k ROW(S) PREDATE WORK-ONLY TOTALS`,
 struck by name, and re-adding it would have been its third attempt. **So
 M7's second arm is CLOSED: the column may not say the cells differ.**
-**Agrees when** the three cells describe ONE population — which moves a
-stored figure, so M7 stays TRIAD and stays in PR 4.
+**Agrees when** the three cells describe ONE population.
+
+**NARROWED TO A GATE AND OUT OF PR 4 (James, 2026-09-19: "Narrow").**
+M7's defect is real in the code and has NO REACHABLE SUBJECT. The read,
+which the ROADMAP row said to do before scheduling the work:
+
+- A pm5 row reaches the `stored` tier only if all three rungs of
+  `domain/stats/rowContribution.ts`'s ladder fail — no `machineWork*`
+  pair `> 0`, no `work*` pair `> 0`, and either no step `actualMeters`
+  or a close `isReconstructableClose` refuses.
+- For the monitor door, the second rung fails only when `actuals` is
+  EMPTY: `src/monitor/monitorRun.ts` states the work pair is "otherwise
+  unconditional" over any non-empty actuals.
+- With `actuals` empty, `summaryModel.ts`'s `monitorHeroes` reaches
+  `tierBWorkDistanceMeters`, which sums to 0 and returns `undefined`;
+  the tier-A branch likewise returns `undefined` when the machine's own
+  totals read zero (the "0 OF 1 INTERVALS MEASURED" shape). So
+  `LogSession.tsx`'s save — which posts `model.heroes.distanceMeters` —
+  carries NO distance, and the stored row's `distanceMeters` is null.
+  In the stored tier `workMeters` IS `row.distanceMeters`, so the row
+  contributes 0 to METRES, 0 to TIME, and is excluded from AVG WATTS.
+  All three cells agree.
+- The other two producers are closed: a Just Row posts `workSeconds`/
+  `workMeters` explicitly (`src/justrow/JustRowLog.tsx`), so it lands in
+  `work-pair`; and `PATCH /api/logs/:id` accepts only held, effort,
+  thumbs and notes, so no edit can put a distance on a row without a
+  work pair.
+- That leaves LEGACY rows predating those columns as the only possible
+  subject. Production measured ZERO on 2026-09-13 (recorded above, not
+  re-measured 2026-09-19), and nothing since can have created one.
+
+**So M7 ships as a two-part GATE, not a fix, and leaves PR 4** — it
+changes no stored figure, so it is not TRIAD and needs no board.
+`summaryModel.test.ts` pins the PRODUCER half (a run with nothing
+measured offers the save no distance and no time, on either tier) and
+`domain/stats/aggregate.test.ts` pins the CONSUMER half (the asymmetry
+is real — a hypothetical distance-bearing stored-tier pm5 row WOULD move
+METRES and not AVG WATTS — and the row this build can actually produce
+moves nothing while still counting as a session). Either alone is an
+argument; together they are the gate.
 
 **Which rows reach the stored tier, measured for the ruling** (correcting
 the career-stats spec, which says a `link-lost` close lands there):
@@ -658,7 +696,8 @@ clause is the one that needs the receipt.
 | 1 | M1, M2 | Copy on a rendered surface. No number moves. | after 0B |
 | 2 | M8 + appendix | Layout across four charts, two screens; one copy deletion. No number moves. | **LANDED** |
 | 3 | M3, M6 | Changes what an axis IS. Antagonist pass. No stored data. | **SCOPED 2026-09-19** |
-| 4 | M4, M5, M7, **M9** | **TRIAD** — stored figures render differently. dba + antagonist + PM. | **PROVISIONAL** |
+| 4 | M4, M5, **M9** | **TRIAD** — stored figures render differently. dba + antagonist + PM. | **PROVISIONAL** |
+| M7's gate | M7 | Tests and prose only; no figure moves. Not TRIAD, no board. | **SCOPED 2026-09-19** |
 
 Grouped by risk model rather than by screen so each PR carries one kind of
 review (CLAUDE.md's grouping tie-break).
@@ -677,7 +716,10 @@ PR 4's gates. PR 3 makes no claim about free rows it cannot keep.
 **[CORRECTED] PRs 3 and 4 are PROVISIONAL and cannot be settled before their
 Gate 0.** Four members' options span two risk models: M2 option B would make
 PR 1 TRIAD; M7 moves to PR 2's group if Gate 0A rules it a label and stays
-in PR 4 only if it rules it a population change; M3 and M4 split ONE
+in PR 4 only if it rules it a population change (**SETTLED 2026-09-19:
+neither — Gate 0A ruled out the caption, and the population change has no
+reachable subject, so M7 left PR 4 as a two-part gate; see M7 above**);
+M3 and M4 split ONE
 mechanism (the register-map sum) across two PRs, which the plan must either
 justify or undo.
 
@@ -732,12 +774,18 @@ plan.
   last x tick landing on the domain's end. The biting mutation restores the
   hand-tuned constant; the report states what it was and what the failure
   said.
-- **M7's proposed gate already exists and is green.** `gate0Seed.ts:28` is a
-  stored-tier pm5 row carrying 6,240 m, and `StatsScreen.test.tsx:292`
+- **M7's proposed gate already exists and is green.** `gate0Seed.ts`'s R1 is
+  a stored-tier pm5 row carrying 6,240 m, and `StatsScreen.test.tsx`
   already asserts it beside `AVG WATTS —`. The exclusion is a
   mutation-pinned ruling, so the new gate must go red on the missing
   **EXPLANATION**, not on the arithmetic — which means it cannot be written
   until Gate 0A says what the screen will say.
+  **[SUPERSEDED 2026-09-19] Gate 0A ruled NO CAPTION, so there is no
+  explanation left to gate.** What ships instead is the pair above: the
+  producer half (nothing measured offers the save no distance, so the
+  subject cannot be created) and the consumer half (the asymmetry is real
+  and the rows we can create move nothing). R1 stays what it always was —
+  a SEED row, and the reason the asymmetry is visible on a board at all.
 - **M3/M6's gate cannot be a colour or class assertion** (RF37): Vitest
   imports CSS as `""` and jsdom does not resolve `var()`. Band and gap
   geometry are asserted in the browser — **and the fixture set includes a
@@ -810,7 +858,7 @@ that PR; the probe itself does not survive the branch, and neither does
 | Gate 0 split (James) | 2026-09-14 | 0A first, PR 2 ships off it |
 | Antagonist anchor | 2026-09-14 | findings folded in; vetted ground below |
 | PM open | 2026-09-14 | APPROVED with four amendments, all folded in |
-| Gate 0A | 2026-09-14 | **APPROVED as rendered** (James: "approved") — artifact `MZsVEJ1rSsxYLFQRuCrbtS` rev 1, boards at `docs/design/number-provenance/gate0a/`. Rulings 1, 3 and 4 take the option the boards rendered; **ruling 2 (the MACHINE caption) RULED C by James the same day: NO CAPTION** — rulings 18/19 stand, and M7's "or the column says they do not" arm is closed. M7 survives only as the population change, which moves a stored figure and stays TRIAD in PR 4 |
+| Gate 0A | 2026-09-14 | **APPROVED as rendered** (James: "approved") — artifact `MZsVEJ1rSsxYLFQRuCrbtS` rev 1, boards at `docs/design/number-provenance/gate0a/`. Rulings 1, 3 and 4 take the option the boards rendered; **ruling 2 (the MACHINE caption) RULED C by James the same day: NO CAPTION** — rulings 18/19 stand, and M7's "or the column says they do not" arm is closed. M7 survives only as the population change, which moves a stored figure and stays TRIAD in PR 4. **[SUPERSEDED 2026-09-19] The population change has no reachable subject — James ruled "Narrow", and M7 left PR 4 as a two-part gate that is not TRIAD; the receipt is in M7's own section** |
 | Gate 0B board 1 | 2026-09-15 | **APPROVED** (James: "go with the recommendation") — artifact `1MKF7K6zhtEK58xXuK3ofB`, boards at `docs/design/number-provenance/gate0b/`. Covers M1, M1b and M2 only; boards 2 and 3 remain unbuilt |
 | Gate 0B round 2 | 2026-09-15 | **APPROVED as rendered** (James: "approved") — artifact `TuGUWZaKj9BxiGaCR7Sb6A`, record at `gate0b/ROUND2.md`. Board 1's ruling was a DIRECTION, so round 2 drew both halves and measured them. **Ruling 1 = none of A/B/C: no mark on the tile face, an answerable drill-down instead.** **Ruling 2 = B, group the columns, DERIVED first.** Words `DERIVED` / `MEASURED` chosen by James over `COMPUTED HERE` / `REPORTED BY THE PM5` |
 | M2 (AVG HR) | 2026-09-15 | **WITHDRAWN from scope.** The recommendation proposed reopening which number the tile shows; `derivedHeartRate.ts:20-42` records James settling exactly that on 2026-09-07 as Gate 0 option A, with option C rejected on measured numbers and an explicit warning against "fixing" the tile to match the rows. RF18. What M2 actually needed was for the SCREEN to say what the code knew, which the drill-down now does |

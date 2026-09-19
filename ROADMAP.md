@@ -4887,7 +4887,7 @@ than back in the queue this was built to replace.
       shape and rides PR 4's gates. **S**
 
 - [ ] **PR 4 of the number-provenance pass — live total versus stored
-      (M4, M5, M7, and as of 2026-09-19 M9 too), and it is TRIAD.**
+      (M4, M5, and as of 2026-09-19 M9), and it is TRIAD.**
       · dies 2026-10-08 · a row and not a
       fix now because it moves a STORED figure, so it carries the full
       antagonist pass and a PM final gate, and it needs Gate 0B board 3 —
@@ -4897,15 +4897,41 @@ than back in the queue this was built to replace.
       ruled PR 4 must not be live when Wave A's `dies 2026-10-10` arrives,
       and while it sat in prose nothing enforced that. 10-08 puts it in
       front of James with two days of room.
-      **THE OPEN QUESTION, and it is NOT answered:** M7 measured ZERO on
-      production, because a stored-tier pm5 row is not what the career-stats
-      spec says it is — `monitorRun.ts` makes `workSeconds`/`workMeters`
-      unconditional over any non-empty `actuals`, so a dropped link still
-      feeds AVG WATTS. The stored tier needs a monitor row with NO measured
-      interval at all. **Until someone establishes that such a row can exist
-      in production, PR 4's headline member may have no subject.** That is
-      the read to do before scheduling the work, not during it. **M**
+      **THE OPEN QUESTION IS ANSWERED AND IT REMOVED A MEMBER
+      (2026-09-19).** The read: a monitor row reaches the stored tier only
+      with EMPTY actuals, and such a row's save carries no distance at all
+      (`monitorHeroes` returns `undefined` on both tiers when nothing was
+      measured), so it moves METRES, TIME and AVG WATTS by nothing. A Just
+      Row posts the work pair explicitly and the log PATCH cannot write a
+      distance, so the only possible subject is a legacy row — and
+      production measured zero. **James ruled "Narrow": M7 leaves PR 4 and
+      ships as a two-part gate instead** (producer: nothing measured offers
+      no distance; consumer: the asymmetry is real and the rows we can
+      create move nothing). PR 4 is M4, M5 and M9. **M**
 
+
+- [ ] **Place the trace chart's rest bands on the machine's own interval
+      index, not on our work-clock accumulator.** · dies 2026-11-14 · a row
+      and not a fix now because it adds a field to the STORED sample, which
+      makes it TRIAD, and James ordered it AFTER PR 4 (2026-09-19) so the
+      two stored-shape changes do not review as one.
+      **What it is.** A band's WIDTH already comes from the machine
+      (`machineRestSeconds`). Its PLACE does not: `buildAxis`
+      (`app/src/log/traceModel.ts`, shipped in #478) accumulates rowing
+      seconds and drops interval *i*'s rest where that total reaches the
+      stored `actualSeconds`. Two clocks compared, needing a 3 s
+      `REST_OPEN_SLACK_SECONDS` window and a near-boundary guard.
+      `driver.ts` already stamps `MonitorFrame.attributedIntervalIndex` on
+      every frame and `seriesRecorder` keys its registers on it, then drops
+      it; if `Sample` carried it, the boundary is a key change rather than
+      a comparison.
+      **What would fix it now, and why we are not:** adding the field. The
+      measured error it removes is 0.4-1.2 s, always early, and because
+      only derived samples are stored (never the wire frames) NO existing
+      row can be backfilled — so it likely ADDS a second path rather than
+      replacing one. **Brainstorm that trade before building it; "don't,
+      and write down why" is a live outcome.** James asked to be reminded
+      when PR 4 merges. **M**
 
 # Icebox
 

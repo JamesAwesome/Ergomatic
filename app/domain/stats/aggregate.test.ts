@@ -83,6 +83,83 @@ describe("summarize — the Gate 0 seed, today = 2026-09-12 (spec §8.5, invaria
     expect(timerOnly.storedTierRows).toBe(0);
   });
 
+  // M7's gate, CONSUMER HALF (number-provenance §2, narrowed by James
+  // 2026-09-19). METRES and TIME sum over every machine row; AVG WATTS
+  // skips the `stored` tier. Those are two populations, and the reason
+  // the three cells still describe ONE is that a pm5 row in the stored
+  // tier carries no distance and no time to contribute — see
+  // `summaryModel.test.ts`'s producer half for why it cannot have them.
+  //
+  // This is the half that says the asymmetry is HARMLESS; that one says
+  // it is UNREACHABLE. Either alone is an argument, not a gate.
+  it("M7: METRES would move for a stored-tier pm5 row while AVG WATTS would not — which is why the producer may never emit one that carries a distance", () => {
+    // THE ASYMMETRY ITSELF, pinned rather than described. This row is a
+    // HYPOTHETICAL: a pm5 row in the stored tier carrying a real
+    // distance. Nothing in the app can produce one — that is the
+    // producer half's job — and this assertion is what says why that
+    // matters, by showing what the column would print if one arrived.
+    const hypothetical = {
+      id: "M-hypothetical",
+      loggedAt: "2026-09-10T12:00:00.000Z",
+      date: { y: 2026, m: 9, d: 10 },
+      source: "pm5" as const,
+      workoutType: "AT" as const,
+      tier: "stored" as const,
+      workMeters: 5000,
+      workSeconds: 1200,
+      restMeters: null,
+      restSeconds: null,
+      calories: null,
+    };
+    const base = summarize(GATE0_ROWS, presetRange("all", GATE0_TODAY));
+    const withIt = summarize(
+      [...GATE0_ROWS, hypothetical],
+      presetRange("all", GATE0_TODAY),
+    );
+    // METRES and TIME take it...
+    expect(withIt.machine.meters).toBe(base.machine.meters + 5000);
+    expect(withIt.machine.seconds).toBe(base.machine.seconds + 1200);
+    // ...and AVG WATTS does not. Three cells, two populations — safe
+    // only while the row above cannot exist.
+    expect(withIt.machine.avgWatts).toBe(base.machine.avgWatts);
+  });
+
+  it("M7: the pm5 stored-tier row this build CAN produce moves nothing at all, and is still counted as a session", () => {
+    // Nothing measured, so the save carried no distance and no time.
+    const nothingMeasured = {
+      id: "M-nothing",
+      loggedAt: "2026-09-10T12:00:00.000Z",
+      date: { y: 2026, m: 9, d: 10 },
+      source: "pm5" as const,
+      workoutType: "AT" as const,
+      tier: "stored" as const,
+      workMeters: null,
+      workSeconds: null,
+      restMeters: null,
+      restSeconds: null,
+      calories: null,
+    };
+
+    const before = summarize(GATE0_ROWS, presetRange("all", GATE0_TODAY));
+    const after = summarize(
+      [...GATE0_ROWS, nothingMeasured],
+      presetRange("all", GATE0_TODAY),
+    );
+
+    // Every figure the MACHINE column prints is untouched...
+    expect(after.machine.meters).toBe(before.machine.meters);
+    expect(after.machine.seconds).toBe(before.machine.seconds);
+    expect(after.machine.avgWatts).toBe(before.machine.avgWatts);
+    expect(after.all.meters).toBe(before.all.meters);
+    expect(after.all.seconds).toBe(before.all.seconds);
+
+    // ...while the row itself is genuinely there, counted as a session
+    // and seen by the seam counter. Without this the assertions above
+    // would pass on a row the range had simply excluded.
+    expect(after.all.sessions).toBe(before.all.sessions + 1);
+    expect(after.storedTierRows).toBe(before.storedTierRows + 1);
+  });
+
   it("an empty range: every total 0, sessions 0, avg watts undefined (a dash)", () => {
     const empty = summarize(GATE0_ROWS, {
       from: { y: 2030, m: 1, d: 1 },

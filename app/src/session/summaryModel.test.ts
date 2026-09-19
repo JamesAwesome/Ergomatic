@@ -816,6 +816,53 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
     ).toBeUndefined();
   });
 
+  // M7's gate, PRODUCER HALF (number-provenance §2, narrowed by James
+  // 2026-09-19). Stats' MACHINE column sums METRES and TIME over every
+  // machine row but computes AVG WATTS only over rows outside the
+  // `stored` tier (`domain/stats/aggregate.ts`), so the three cells
+  // describe one population only while no pm5 row in that tier can carry
+  // a distance. A monitor row reaches the stored tier only with EMPTY
+  // actuals — `monitorRun.ts` states the work pair is "otherwise
+  // unconditional" over any non-empty actuals — and this is the rule
+  // that keeps such a row from carrying one: with nothing measured, the
+  // heroes the save reads (`LogSession.tsx` posts
+  // `model.heroes.distanceMeters`) are ABSENT, not zero, so the stored
+  // row's own distance is null.
+  //
+  // `monitorRun.ts` already states the invariant in prose — "A record
+  // with nothing measured gets nothing stored" — and this is the
+  // assertion that makes it go red.
+  it("M7: a monitor run with nothing measured offers the save NO distance and NO time, on either tier", () => {
+    // Tier B (no machine summary at all): the sums run over `actuals`.
+    const nothingMeasured = monitorRun({
+      program: exit7Program,
+      actuals: [],
+      endedBy: "finished",
+    });
+    const heroes = buildSummaryModel({
+      door: "monitor",
+      run: nothingMeasured,
+    }).heroes;
+    expect(heroes.distanceMeters).toBeUndefined();
+    expect(heroes.timeSeconds).toBeUndefined();
+
+    // Tier A, the "0 OF 1 INTERVALS MEASURED" hardware shape: a machine
+    // summary arrives and reads zero. Same answer, by a different branch
+    // — both are on the path to the stored tier, so both have to hold.
+    const zeroTotals = monitorRun({
+      program: exit7Program,
+      actuals: [],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 0, workDistanceMeters: 0 },
+    });
+    const zeroHeroes = buildSummaryModel({
+      door: "monitor",
+      run: zeroTotals,
+    }).heroes;
+    expect(zeroHeroes.distanceMeters).toBeUndefined();
+    expect(zeroHeroes.timeSeconds).toBeUndefined();
+  });
+
   it("Phase LP §3: machineSplitRows maps pm5 steps to the strip's rows — the INTERVALS table's own numbering, logbook watts and cal/hr off the step's seconds/metres/calories, a null belt kept as null — and skips manual steps entirely", () => {
     // 1200 m in 313.5 s → 157 W; 73 cal → floor(73×3600/313.5) = 838.
     // 1200 m in 307.4 s → round(2.80/(307.4/1200)³) = round(166.5) = 167;
