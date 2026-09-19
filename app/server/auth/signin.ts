@@ -32,7 +32,13 @@ export async function signInWithClaims(
     if (!deps.accessPolicy.allows(user.email)) {
       return { outcome: "denied", email: user.email };
     }
-    await deps.users.updateProfile(user.id, claims.name);
+    // THE PROVIDER NAMES AN ACCOUNT ONCE, AT CREATION, AND NEVER AGAIN
+    // (James, 2026-09-19). This used to be
+    // `updateProfile(user.id, claims.name)`, which re-copied Google's name
+    // over ours on EVERY sign-in — and that is what silently reverted a
+    // rename, because `/you/account` writes the same column. The rower owns
+    // their name now; a name changed at Google no longer flows through, which
+    // is the cost James accepted when he chose this over a second column.
   } else {
     if (!deps.accessPolicy.allows(claims.email)) {
       return { outcome: "denied", email: claims.email };

@@ -1025,7 +1025,14 @@ export function createAttempts(
       return transaction(async (tx) => {
         const user = (
           await tx.query<AuthUser>(
-            "INSERT INTO users(google_sub,email,name) VALUES($1,$2,$3) ON CONFLICT(google_sub) DO UPDATE SET name=excluded.name RETURNING id,email,name",
+            // `DO UPDATE SET google_sub=excluded.google_sub` is a deliberate
+            // self-assignment, not a leftover: the row must come back through
+            // RETURNING on the conflict path, and ON CONFLICT DO NOTHING
+            // returns nothing. It used to be `SET name=excluded.name`, which
+            // re-copied Google's name over ours on every sign-in and silently
+            // reverted any rename (James, 2026-09-19 — the provider names an
+            // account once, at creation, and never again).
+            "INSERT INTO users(google_sub,email,name) VALUES($1,$2,$3) ON CONFLICT(google_sub) DO UPDATE SET google_sub=excluded.google_sub RETURNING id,email,name",
             [identity.sub, identity.email, identity.name],
           )
         ).rows[0];
