@@ -70,8 +70,10 @@ running them.
 > carried (v0.16.0) stayed after the table grew five rows.** Crossing it makes the
 > seed DELETE renamed global rows and null every `session_logs.workout_id` that
 > pointed at them. That is unrecoverable link loss, and rolling forward again
-> does not bring the links back. **Recovery is a database backup, and no backup
-> script exists in this repo yet** (roadmap Wave B). Read that section before
+> does not bring the links back. **Recovery is a database backup, and NO
+> BACKUP EXISTS YET** — it is not this repo's to build any more: James is
+> moving the database to RDS from a separate AWS repo (ruled 2026-09-19;
+> ROADMAP Wave B, PR 2 owns the app side and this sentence). Read that section before
 > typing a rollback command, not after.
 
 **Automatic**, on a failed health gate: `deploy.sh` traps the error and checks

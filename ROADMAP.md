@@ -154,7 +154,7 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | Wave  | What it is                  | Size | Tester sees                                 |
 | ----- | --------------------------- | ---- | ------------------------------------------- |
 | **A** | The front door              | L    | Yes, immediately                            |
-| **B** | Backups and telemetry       | M    | Nothing                                     |
+| **B** | Error reporting, DB move    | S/M  | A readable crash screen, on a bad day       |
 | **C** | What the household opens    | L    | An icon, type words, a correctable test     |
 | **E** | The Concept2 logbook        | L    | After PR2 ships the send surface            |
 
@@ -1494,33 +1494,89 @@ closed it on 2026-09-06.
 
 ---
 
-## Wave B — Don't lose their data, and know when it breaks
+## Wave B — Know when it breaks, and be ready to move the database
 
-**Status:** After A. **M.** Not triad. **No longer releases with Wave C
-(James, 2026-09-19):** the backup row protects the household's data TODAY, and
-welding it to a wave carrying two design gates is how it slips.
-**Ships a tester nothing** except one privacy disclosure line.
+**Status:** After A. **S/M** — one PR that can be built now, plus one gated on
+James's AWS repo. Stays decoupled from Wave C's release, for a NEW reason: the
+old one was the backup row, struck the same day; what decouples it now is that
+its second PR cannot be scheduled from this roadmap. **A tester sees one
+thing, and only on a bad day:** a readable screen instead of a white one.
+Carries one privacy disclosure line. **Not triad** — except the split-out
+saved-row diagnostics row, which is a stored shape. · dies 2026-10-31 · one
+week after Wave C's date: if PR 1 has not opened by then the wave is being
+outvoted, and that comes back to James rather than sliding.
 
-**Goal:** the two things that are fine for a household of one and indefensible
-for a stranger — no backup, and no idea when their app breaks.
+**Goal, restated 2026-09-19 (James):** when the app breaks on one of the five
+phones already using it, someone finds out without that person having to be
+James — and the database is somewhere a restore has actually been run from.
+It used to read "fine for a household of one and indefensible for a
+stranger"; strangers were deferred on 2026-09-14, and the first half is true
+of the household today.
 
-- [ ] **A real database backup, and a restore drill that has actually been
-      run.** `docs/RELEASING.md` names a backup as the ONLY recovery from a
-      documented unrecoverable failure: rolling the API past the v0.16.0
-      seed-rename floor deletes the renamed rows and nulls every
-      `session_logs.workout_id` pointing at them. **No backup exists** —
-      `scripts/` holds `ci-changes.sh`, `deploy.sh`, `version.sh` and `wod`,
-      `pg_dump` appears in no script in the repo, and `compose.yml:102` is a
-      bare `pgdata` volume. **The restore drill is the deliverable, not the
-      dump:** an untested backup is the same shape as an ungated gate. **M**
-- [ ] **Error and crash reporting, from the shell and the client.** There is
-      none of any kind. Every defect this project has ever fixed was found by
+- **STRUCK BY JAMES, 2026-09-19 — "A real database backup, and a restore
+  drill that has actually been run."** _"i'll handle that by setting up
+  RDS"_: backup and restore belong to the AWS account he is preparing in a
+  separate repo, and are no longer this roadmap's work. **So does "is the
+  server down"** (ruled the same day): `/api/health` already returns
+  `{ok, db, version}` and a 503 when its `SELECT 1` fails
+  (`app/server/app.ts`), so the only missing piece is an external checker,
+  and a checker is infrastructure. What the strike leaves owed IN THIS REPO is
+  PR 2 below, and nothing else.
+
+### PR 1 — when the app breaks, it says so, and it says so to James too
+
+- [ ] **A crash shows a readable screen with a way out, and lands in the API's
+      log without anyone having to report it.** There is no error handling of
+      any kind above the transport seam: `git log --oneline -S "ErrorBoundary"
+      -- app/src` is EMPTY, so no React error boundary has ever existed; no
+      `window.onerror` or `unhandledrejection` handler; no Express
+      error-handling middleware (`grep -rn "ErrorRequestHandler\|app.use((err"
+      app/server` finds one comment); and no route from the client to the
+      server for an error at all. **A render throw today is a white screen that
+      tells nobody.** Every defect this project has ever fixed was found by
       James at an erg, by a walk, or by a review — instruments that all require
       being James. **This is recurring failure 19 generalised:** a defect whose
       trigger enters above every seam we own is invisible to every gate we
-      have. Carries its own privacy answer, and that answer changes what the
-      production phase's privacy policy declares ("After the strangers").
-      **M**
+      have. It is also where recurring failure 25's swallowed durability
+      failures would finally surface.
+      **RULED 2026-09-19 (James): it SENDS, first-party, and it also offers
+      COPY.** An error boundary plus global `error`/`unhandledrejection`
+      handlers render the readable frame with a way out and a COPY control (the
+      idiom You → DIAGNOSTICS already ships), and POST in the background to a
+      new `POST /api/client-errors`, which writes one line to stdout —
+      `docker logs` today, CloudWatch the day the API ever moves, with no
+      change on either side. **No third-party processor, no key in the
+      bundle.** Sentry-class tooling was the expensive answer to a five-phone
+      problem and needs a privacy policy that does not exist; COPY alone is an
+      instrument that requires the rower to notice, care and act.
+      **What is collected, and it is the privacy disclosure line:** message,
+      stack, screen, app version, platform. **The client sends NO identity** —
+      the route sits behind the existing session middleware, so the server
+      writes the user id it already has, and a signed-out crash is logged
+      unattributed. **What must never ride in a message or stack — tokens,
+      authorization codes, emails — is the spec's scrub list to write**: there
+      is no general server-side log redactor to reuse (the only redaction code
+      is the client's NFC trace), though `app/scripts/apple-auth-privacy.test.mjs`
+      already pins that an Apple `authorizationCode` never reaches a log.
+      **Costs named up front:** a client-side rate cap (a render loop can POST
+      thousands of times — dedupe by message + stack, first N per launch), and
+      the new route. `originCheck` (`server/auth/middleware.ts`) already admits
+      `capacitor://localhost`, so native needs nothing extra.
+      **Invariant:** no uncaught render error and no unhandled rejection leaves
+      the rower on a blank screen with no server-side record. One e2e leg
+      throws inside a route and asserts BOTH halves; its mutation is deleting
+      the POST and seeing the leg go red (RF21). Do not reach for the connected
+      fixture to stage it (RF41).
+      **Gates:** Gate 0 — the crash frame is a new screen state, both
+      orientations, contrast computed. Touches `app/server/`, so not fast
+      path. DBA SKIPS, said aloud: no table, no store, no bulk read. No triad
+      member, so no PM final gate unless its scope grows.
+      **Native crashes need no work here** — TestFlight and Xcode Organizer
+      already collect them, and no crash SDK is wired in `app/ios`.
+      **Absorbs the former third row, "An in-app 'something went wrong' that
+      reaches a human":** the crash frame IS that row's visible face. Its
+      other half, a support URL, is App Store material and is already listed
+      under "After the strangers". **M**
       **A worked example arrived 2026-08-28, and this item owns it.** At
       that time, the connection-log ring's live door required an undocumented
       triple-tap, and its save-screen reader required `?from=monitor`.
@@ -1531,14 +1587,93 @@ for a stranger — no backup, and no idea when their app breaks.
       DIAGNOSTICS → Monitor logs door give any of the last three connected
       sessions' logs a reader and a COPY, no gesture, no erg. The SAVED-ROW
       half is NOT: `session_logs` still has no diagnostics column, so once a
-      row's three slots are evicted its diagnostics are gone. This item's
-      remaining demand narrows to: **a rower must be able to send a SAVED
-      row's diagnostics — storage that outlives the three-slot window.**
-- [ ] **An in-app "something went wrong" that reaches a human.** Pairs with the
-      reporter above, and with the support URL the store surface will owe. **S**
+      row's three slots are evicted its diagnostics are gone. **That
+      remaining demand was SPLIT OUT on 2026-09-19** — it is the last row of
+      this wave, dated, and it is the wave's only stored shape.
 
-**Exit:** a restore has been completed from that morning's backup, and a
-deliberately thrown client error arrives somewhere a person looks.
+### PR 2 — the database can move off the box (GATED on James's AWS repo)
+
+- [ ] **The API talks to a Postgres outside its own compose network, over TLS
+      it has verified, and the one-time move has a rehearsed runbook.**
+      **RULED 2026-09-19 (James): "database only"** — the DATABASE moves to
+      RDS and the API stays where it is for now, on the current host under
+      compose and the tunnel. So
+      `scripts/deploy.sh`, image building, CI and `cloudflared` do not change.
+      **Trigger:** the RDS instance exists and James names its endpoint and
+      Postgres major. App-side requirements, each with its receipt:
+      1. **The pool configures no TLS, and RDS requires it.**
+         `app/server/db/pool.ts` is `new pg.Pool({ connectionString,
+         connectionTimeoutMillis: 3000 })` — no `ssl`, no `max`, no idle or
+         statement timeout. AWS (PRIMARY, quoted by the 2026-09-19 PM pass):
+         _"The `rds.force_ssl` parameter default value is 1 (on) for RDS for
+         PostgreSQL version 15 and later"_, and _"When you connect using SSL,
+         your client can choose whether to verify the certificate chain."_ TLS
+         is the engine's requirement; VERIFYING the server is ours.
+      2. **Pin the TLS decision in CODE, never in the connection string.**
+         `pg-connection-string`'s own warning, shipped with `pg@8.23.0`
+         (PRIMARY, same pass): _"The SSL modes 'prefer', 'require', and
+         'verify-ca' are treated as aliases for 'verify-full'. In the next
+         major version … these modes will adopt standard libpq semantics,
+         which have weaker security guarantees."_ So `sslmode=require` verifies
+         today and would stop verifying under a `pg` 9 bump. Requirement:
+         `ssl: { ca: <RDS global bundle>, rejectUnauthorized: true }` in
+         `pool.ts`.
+      3. **The app's DB role needs DDL rights**, because `migrate()` runs at
+         every boot (`app/server/index.ts`). Safe while there is one API
+         container. **If the API ever moves too, this is the first thing that
+         breaks:** drizzle's node-postgres migrator takes no lock of any kind
+         (its `pg-core/dialect.ts`, read by the same pass), so two tasks
+         booting together both run the DDL. Not this PR's work; recorded so it
+         is not rediscovered.
+      4. **The Postgres major is not a problem.** compose pins `postgres:18.4`
+         and RDS offers 18.x (AWS, per the same pass); `grep -rli
+         "uuidv7\|CREATE EXTENSION\|VIRTUAL" app/drizzle/*.sql` finds nothing,
+         so no PG18-only feature or extension is in play. Invariant: CI's
+         integration Postgres major matches the RDS major.
+      5. **compose keeps its Postgres for dev and e2e while production runs
+         without one.** `compose.yml` is also every worktree's e2e and
+         screenshots stack, and `api` `depends_on` a healthy `postgres`. The
+         mechanism is already in the file: `cloudflared` sits behind
+         `profiles: ["tunnel"]`.
+      6. **The one-time move.** Production data is in the host's `pgdata`
+         volume (`compose.yml`, the `volumes:` block). A dump-and-restore
+         runbook, REHEARSED against a throwaway instance first, with a row
+         count per table before and after shown identical.
+      7. **Two doc sentences go stale the day it lands:** `docs/deploy.md`'s
+         rollback warning ("no backup exists yet") and `docs/RELEASING.md`'s
+         "Recovery is a DB backup, not a redeploy", which owes the sentence
+         saying WHERE the backup is.
+      **Untested, and not priced:** pool `max` and timeouts for a hop that
+      leaves the docker network. **Known and deliberately not in scope:** the
+      server logs through 36 bare `console.*` calls; unstructured is fine
+      while the API stays on the host.
+      **Invariant:** the API will not serve traffic against a database whose
+      certificate it has not verified. **DBA gate REQUIRED** — `pool.ts` is
+      under `app/server/db`. **M**
+
+### Split out, dated
+
+- **A rower can send a SAVED row's diagnostics after the three-slot history
+  has rolled over.** Split out of the reporter row by James, 2026-09-19.
+  `session_logs` has no diagnostics column and the history keeps three
+  sessions (`MAX_ENTRIES = 3`, `src/monitor/sessionLogHistory.ts`), so a saved
+  row's connection log is gone once three later sessions have run. **TRIAD if
+  built as a column — a stored shape**, at roughly 10-30 KB per row: the
+  largest committed ring capture is 29,989 bytes
+  (`docs/monitor/sessions/walk-2026-08-24/lab-terminate-ring.json`), typical
+  ones 10-12 KB. The cheap intermediate is that one constant, but the iOS
+  WKWebView per-origin `localStorage` quota is UNTESTED, so raising it is not
+  priced as free. **M** · dies 2026-11-30 · a row and not a fix now because PR
+  1's reporter may answer the same need with no stored shape at all, and
+  nobody has measured whether three sessions is too short a window for a
+  defect to reach James
+
+**Exit:** a client error deliberately thrown on the TestFlight build appears in
+the deployed API's log inside a minute, attributed to the account that threw
+it, while that phone shows the readable frame and a way out. If PR 2 lands in
+this wave: production answers `/api/health` with `{ok: true, db: true}`
+against RDS, with per-table row counts from before and after the move shown
+identical.
 
 ---
 
