@@ -421,7 +421,7 @@ test("a lost finalize response reports uncertainty without claiming failure or s
   ).toHaveAttribute("aria-current", "page");
 });
 
-test("a cancelled link return sends the rower to You once and releases ordinary navigation", async ({
+test("a cancelled link return sends the rower to the account screen once and releases ordinary navigation", async ({
   page,
 }, testInfo) => {
   await enableFrontDoor(page);
