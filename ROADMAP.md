@@ -1454,11 +1454,21 @@ it lands the stranger on this same denial.
       every screen consumes, which cannot ride a PR about account deletion
       without making that PR's own gate harder to run.
 
-**Exit:** a stranger installs from TestFlight, signs in with Apple or Google,
-gets an empty working account, rows a row (the "rows a row" clause is closed
-by Phase RW, opened 2026-09-06: a no-baseline account can Start any workout;
-this wave verifies it once, on the stranger's account, not twice), and
-deletes the account and all of its data from inside the app.
+**Exit: STRUCK BY JAMES, 2026-09-19.** It read: _"a stranger installs from
+TestFlight, signs in with Apple or Google, gets an empty working account,
+rows a row … and deletes the account and all of its data from inside the
+app."_ **It describes public sign-up, which James deferred out of this wave
+on 2026-09-14** — _"we're not going public in staging, you can strike that
+for now. That will be a final 'production' phase, don't worry about
+authoring it yet."_ — so the criterion left with the work it depended on and
+has been unmeetable ever since. The PM flagged it at the 2026-09-18 gate as
+needing James's own ruling rather than a quiet rewrite; this is that ruling.
+
+**The wave has no exit criterion until the production phase is authored.**
+Its remaining rows stand on their own `dies` dates, and the wave closes when
+they are ruled rather than against a stranger who cannot yet reach the app.
+The "rows a row" half was never this wave's to verify anyway — Phase RW
+closed it on 2026-09-06.
 
 ---
 
