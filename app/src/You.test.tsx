@@ -436,19 +436,25 @@ describe("You: the ACCOUNT door", () => {
         />
       </MemoryRouter>,
     );
-    // A POSITIVE observable first (RF: a negative async assertion waits for
-    // readiness): the door itself, which only renders once the controller
-    // has been read.
+    // POSITIVE OBSERVABLES FIRST, and they have to be the right ones: every
+    // assertion below is a negative, and the block renders ASYNCHRONOUSLY
+    // (its list waits on `/api/auth/methods`), so a "no heading yet" check
+    // run at mount passes whether or not the block is there. Measured with
+    // the block restored: the heading and button checks stayed green and
+    // only the read assertion bit. So the screen is settled first — the
+    // door drawn, another mount-time read resolved — and the read is the
+    // load-bearing line.
     expect(screen.getByRole("link", { name: /ACCOUNT/ })).toBeVisible();
+    await waitFor(() =>
+      expect(vi.mocked(api)).toHaveBeenCalledWith("/api/concept2/link"),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(vi.mocked(api)).not.toHaveBeenCalledWith("/api/auth/methods");
     expect(
       screen.queryByRole("heading", { name: "SIGN-IN METHODS" }),
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete account" })).toBeNull();
     expect(document.querySelector(".auth-account-block")).toBeNull();
-    // And the block's own read never happens, because the component is not
-    // mounted here at all.
-    await new Promise((r) => setTimeout(r, 0));
-    expect(vi.mocked(api)).not.toHaveBeenCalledWith("/api/auth/methods");
   });
 
   it.each([
