@@ -29,7 +29,18 @@ that actually recurs here is a site nobody remembered.
 ## What is broken, measured
 
 Every path that destroys an `auth_attempts` row, at `87511d77` — the eight
-statements, plus the cascade that reaches rows no statement names:
+statements, plus the cascade that reaches rows no statement names.
+
+**The line numbers below go stale the moment implementation edits this file,
+so the table is a snapshot of what this command returns, not the authority:**
+
+```
+grep -n "DELETE FROM auth_attempts" app/server/auth/attempts.ts   # 8 at 87511d77
+grep -n "onDelete" app/server/db/schema.ts | grep auth_attempts -A2
+```
+
+Re-run the first before trusting any row; the COUNT is the part the
+enforcement test in §2 pins, and it is 8 today.
 
 | # | Line | Site | Revokes? | Why |
 |---|------|------|----------|-----|
@@ -108,6 +119,12 @@ async function dropAttempts(
 and `cancel()` run on `pool` directly, while the rest run inside a
 `transaction()` callback on a `pg.PoolClient`. Both expose `query`, so the
 union is enough and no new abstraction is needed.
+
+Every name in that signature was checked to exist rather than assumed:
+`attempts.ts:2` is `import type pg from "pg"` (type-only, which is all this
+annotation needs), and `AppleGrant` is exported from
+`appleRevoke.ts:3`. It is a signature sketch, not prescribed
+implementation — the plan owns the real block and its paste-test.
 
 It runs `DELETE FROM auth_attempts WHERE <where> RETURNING apple_client_id,
 apple_refresh_token, original_session_id`, and returns the credentials that
