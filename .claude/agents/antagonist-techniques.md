@@ -846,3 +846,51 @@ is exactly what happened: every section in this file stopped growing on
     foreign lookalike. Throwing breaks prescribed fixtures; returning quietly
     makes route loss fail open. Brand owner-created objects and mock the
     boundary only in tests that deliberately do not exercise ownership.
+89. **A guard that excludes a sentinel tail can swallow the real span it is
+    attached to.** Claimed: "a stop counts only if a real reading FOLLOWS
+    it, which excludes the post-END tail." Believed because the tail and the
+    threshold were the only two cases anyone drew. Settled by DELETING ONE
+    SAMPLE from the real capture: with one moving sample after a 60.5 s stop
+    the mark fires, with the recording ending inside the stop it returns
+    `[]` — the stop and the tail are ONE flat run. For any guard phrased as
+    "X only counts if Y follows it", build the case where X runs to the end
+    of the data, and ask whether the fix is to DROP X or to CLIP X at Y.
+90. **An SVG chart is one `role="img"`, and everything drawn inside it is
+    invisible to a screen reader.** Believed safe because the same file had
+    already added an accessible clause for an earlier mark, on the reasoning
+    that the mark "has no accessible presence of its own" — and then shipped
+    a second mark under the same `aria-label` with no clause. Settled by
+    reading the `<svg>`'s own attributes and printing the built summary
+    string. When a change adds a MARK to a chart, grep the figure for
+    `role="img"`/`aria-label` and print what the label resolves to; every
+    mark not named in that string does not exist for half the readers.
+91. **A change that inserts WIDTH into an axis falsifies every "readings
+    never land far apart" comment in the module.** A `toSegments` doc
+    comment said a rest can never break the line "on its own account"; the
+    same PR's headline cost was "4 segments, not 2". Settled by running the
+    module with and without the new input and diffing the segment count
+    (1 to 3 on one capture). When a change re-maps what an axis coordinate
+    MEANS, re-read every comment that reasons about DISTANCES in that
+    coordinate — they were written about the old quantity.
+92. **Grep the spec for the dead premise's QUESTION, not just its answer.** A
+    PR rewrote a falsified table ROW and left the table's own COLUMN HEADER
+    ("survives the open freeze question?") and a later section's "subject to
+    the open freeze question" standing in the present tense. When a walk
+    closes an open question, grep for "open question", "subject to", "not
+    desk-answerable" and the question's own noun — the places that USED the
+    premise outnumber the one place that ARGUED it.
+93. **"Equal by construction" is worth testing with UNEQUAL inputs.** A band
+    documented as "the machine's own rest seconds" was actually
+    `max(readback, observed)`; on the corpus observed is always the smaller,
+    so equal bands looked structural. Settled by setting one readback to 20 s
+    against an observed 49.1 s and watching the band draw 49.1. When a fix
+    claims a property "by construction", feed it inputs where the two clauses
+    of its own `max`/`min` swap order.
+94. **A hostile input that reproduces is not a defect until you name the
+    state byte that can produce it.** Three constructed inputs each
+    mis-assigned every rest band in a chart; all three died on
+    `WORKOUTSTATE_TO_STATE`, which reaches `"resting"` only from three
+    interval-rest ordinals, and on a capture where a 60.5 s dead stop
+    produced ZERO rest-marked samples. For a flag derived from a wire enum,
+    read the enum's full mapping table and find a capture of the state you
+    claim can set it wrongly, before promoting the reproduction.
