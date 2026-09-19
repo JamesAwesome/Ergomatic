@@ -438,8 +438,10 @@ QUANTITY … each is CONDITIONAL ON ROWER BEHAVIOUR DURING RESTS — a frozen
 rest contributes nothing to either axis; an advancing rest contributes all
 of itself." It sits directly under `MACHINE CONFIRMED · WORK ONLY`.
 **Agrees when** the axis is a defined quantity and the screen says which.
-**[CORRECTED]** Wall clock is one of the available options (§1.2), subject
-to the open freeze question; it is not ruled out by the machine's silence.
+**[CORRECTED, then SETTLED 2026-09-19]** Wall clock was one of the
+available options, "subject to the open freeze question" — that question
+is closed (§1.2: the 2026-09-15 walk, the clock RAN), and James ruled wall
+clock IN at board 2. The axis is now `work + the machine's own rest`.
 
 ### M4 — the same session's total is two different numbers
 
@@ -615,7 +617,7 @@ provenance vocabulary verbatim or states a deviation.
    **and the free row's frozen 104 s (M9)**, which every one of them must be
    shown against because it is invisible to all three and to today's axis.
 
-   | candidate | what the x axis is | survives the open freeze question? |
+   | candidate | what the x axis is | survives the freeze question (CLOSED 2026-09-15, §1.2) |
    | --- | --- | --- |
    | **A · work-only, named** | today's quantity, finally labelled | **yes** — recoverable from the series alone, and 0x0039 is its oracle |
    | **B · wall clock** | `work + machineRest` | **[FALSIFIED 2026-09-15, then APPROVED 2026-09-19]** the row below said NO; the 2026-09-15 walk ran the freeze experiment and the work clock KEPT RUNNING through a 60.5 s dead stop. B is what shipped. |

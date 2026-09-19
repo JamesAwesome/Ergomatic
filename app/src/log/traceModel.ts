@@ -61,10 +61,25 @@
 // missing-hr stretch" behavior §2 already describes for HR's own
 // absence.
 //
-// The axis-quantity question (should the chart use a true work-only
-// clock instead?) is explicitly OUT of scope here and queued in ROADMAP
-// (series-truth spec §D) — changing what an axis MEANS is its own
-// number-meaning decision, not a docs fix.
+// THE AXIS-QUANTITY QUESTION IS ANSWERED, IN THIS FILE (Gate 0B board 2,
+// James 2026-09-19 — candidate B). This paragraph used to say the
+// question was "explicitly OUT of scope here and queued in ROADMAP
+// (series-truth spec §D)", on the grounds that changing what an axis
+// MEANS is its own number-meaning decision. It is, and it was made: the
+// axis is now `work + the machine's own rest` whenever the caller can
+// supply the machine's per-interval figures, and each sample's own `t`
+// only when it cannot. `buildAxis` below owns the mapping. Everything
+// above this line is still true OF `t`; what changed is that `t` is no
+// longer what the chart draws against.
+//
+// TWO CONSEQUENCES OF THAT, both of which contradict the paragraph above
+// if you read it as being about the DRAWN axis rather than about `t`:
+// under the new axis a rest DOES break the line (the band inserts up to
+// its full length between two consecutive readings, well past
+// `GAP_BREAK_SECONDS`), and the segment count therefore becomes a
+// function of how many rests the piece had. Measured on the committed
+// captures: `rests-finished` goes 1 segment to 3, `session-2` 2 to 4.
+// The board records that as candidate B's own cost, accepted.
 //
 // RESTS ARE DRAWN BUT DO NOT SET THE VERTICAL SCALE (2026-08-20 ruling,
 // from a real photographed session where they did): a rest excursion
@@ -118,7 +133,19 @@ export interface TracePoint extends ChartPoint {
  *  BOARD2.md). That is a stated dependency of this axis, not a proof.
  *
  *  `workSeconds` is 0x0039's own per-interval elapsed — WORK ONLY, which
- *  is why it can place a rest the series itself never recorded. */
+ *  is why it can place a rest the series itself never recorded.
+ *
+ *  AND THE BAND IS NOT QUITE THIS FIELD: `buildAxis` draws each band at
+ *  `max(restSeconds, the elapsed the rower actually advanced inside the
+ *  rest)`, because clamping DOWN would stack several real samples on one
+ *  x. On every committed capture the observed advance is the smaller of
+ *  the two — 49.6 s against a 60 s readback at the widest, and all three
+ *  of `session-2`'s bands land at exactly 30.0 — so "three equal rests
+ *  draw three equal bands" holds EMPIRICALLY rather than by
+ *  construction. If a readback ever came back shorter than the elapsed
+ *  the rower rowed through it, that band would draw the longer figure
+ *  and M6 would be back for that row (antagonist, 2026-09-19, by setting
+ *  a readback to 20 s against 49.1 s observed). */
 export interface IntervalSpan {
   workSeconds: number;
   /** The rest that FOLLOWS this interval. `0` for the last one, and for
@@ -172,7 +199,11 @@ export interface TraceModel {
    *  cuts interval boundary marks from this spec entirely, and this
    *  module has no step data to name one honestly even if it wanted to. A
    *  segment count (when the line actually breaks) is a fact about the
-   *  DRAWN LINE, not a claim about workout structure. */
+   *  DRAWN LINE — though since Gate 0B board 2 that line breaks at every
+   *  rest, so on a stored-interval axis the count is now ONE MORE than
+   *  the number of rests plus real gaps. It still names no interval and
+   *  claims no structure; it is no longer independent of structure
+   *  either. */
   summary: string;
   /** Gate 0B board 2 (APPROVED 2026-09-19, candidate B): every rest span
    *  to draw, in the axis's own x units. The renderer never re-derives
@@ -255,17 +286,24 @@ function realReadings(
   return out;
 }
 
-/** Splits `readings` into segments wherever consecutive real readings are
- *  more than `GAP_BREAK_SECONDS` apart (§3). A rest never trips this on
- *  its own — not because it "freezes" (it doesn't always: a rest whose
- *  wire keeps advancing produces samples at the ordinary ~1s cadence,
- *  same as work, folded straight into `t` — series-truth spec §D, this
- *  file's own header above: `t` is not a work-only quantity either), but
- *  because either way — frozen (zero samples, nothing to skip over) or
- *  advancing (samples at the ordinary cadence, no abnormal gap between
- *  them) — consecutive real readings never land far enough apart on
- *  their own account. A real gap (a dropped frame, a rejected reset
- *  candidate, or a long sentinel run) does. */
+/** Splits `readings` into segments wherever consecutive readings are more
+ *  than `GAP_BREAK_SECONDS` apart ON THE AXIS (§3) — which since Gate 0B
+ *  board 2 is not the same thing as apart in `t`.
+ *
+ *  A REST NOW BREAKS THE LINE, and that is the point. Under the stored-
+ *  interval axis the band occupies the machine's own rest seconds, so the
+ *  part of a rest the rower sat still through is width with no readings
+ *  in it, and the line breaks across exactly that width — measured,
+ *  `rests-finished` 1 segment to 3 and `session-2` 2 to 4. This comment
+ *  used to say the opposite ("a rest never trips this on its own"), which
+ *  was true when the axis was each sample's own `t`: frozen (zero
+ *  samples, nothing to skip over) or advancing (samples at the ordinary
+ *  cadence), consecutive readings never landed far enough apart by
+ *  themselves. That still holds with NO stored intervals, which is the
+ *  fallback axis.
+ *
+ *  A real gap (a dropped frame, a rejected reset candidate, or a long
+ *  sentinel run) breaks the line under either axis. */
 function toSegments(readings: readonly Reading[]): TracePoint[][] {
   const segments: TracePoint[][] = [];
   let current: TracePoint[] = [];
@@ -315,6 +353,7 @@ function formatValue(measure: Measure, value: number): string {
 function buildSummary(
   measure: Measure,
   restBands: readonly RestBand[],
+  stops: readonly StopSpan[],
   readings: readonly Reading[],
   segments: readonly ChartPoint[][],
 ): string {
@@ -340,19 +379,45 @@ function buildSummary(
     restRuns > 0
       ? `, ${restRuns} rest ${restRuns === 1 ? "span" : "spans"} marked`
       : "";
+  // Gate 0B board 2, and the same reasoning the rest clause above was
+  // added on (F-3): the `STOPPED 61s` mark is an SVG `<text>` INSIDE a
+  // `role="img"` element, so it has no accessible presence of its own —
+  // this clause is the only way a screen-reader user learns the rower
+  // stood still at all, and the duration is the whole point of the mark
+  // (a 60 s stop is why a 250 m piece stored a 4:18 split). Without it
+  // the spec's reworded I3 — "on screen either named or made
+  // unambiguous by its own marks" — would be false for that reader,
+  // which is RF34's shape: an invariant applied to one of the places it
+  // governs. Found by the antagonist, 2026-09-19.
+  const stopClause =
+    stops.length > 0
+      ? `, ${stops.length} stopped ${stops.length === 1 ? "span" : "spans"} marked (${stops
+          .map((stop) => `${Math.round(stop.seconds)}s`)
+          .join(", ")})`
+      : "";
 
   return (
     `${MEASURE_LABEL[measure]}, ${formatValue(measure, first)} at the start ` +
     `to ${formatValue(measure, last)} at the end, ` +
-    `${extremeLabel} ${formatValue(measure, extreme)}${segmentClause}${restClause}`
+    `${extremeLabel} ${formatValue(measure, extreme)}${segmentClause}${restClause}${stopClause}`
   );
 }
 
 /** Gate 0B board 2, M3: the shortest flat-distance run this treats as the
- *  rower standing still. It sits above every non-stop flat run this repo
- *  has measured (4 s across staging; 3.0 s, 1.0 s and 0.00 s on the three
- *  committed captures BOARD2.md names) and below the one real stop, at
- *  60.5 s. */
+ *  rower standing still.
+ *
+ *  THE NEGATIVE CORPUS, counted rather than asserted (antagonist,
+ *  2026-09-19, over the four committed board-2 fixtures): 1298 samples,
+ *  longest non-stop flat run **1.0 s**, zero flat runs of any length
+ *  inside a rest band, zero false positives at this threshold. The one
+ *  real stop is 60.5 s. BOARD2.md also cites "4 s across staging"; that
+ *  number has no measurement behind it anywhere in this repo, so the
+ *  1.0 s above is the bound to argue from.
+ *
+ *  The nearest real flat run that is NOT a stop is the 5.1 s post-END
+ *  sentinel tail — ABOVE this threshold. It is excluded by clipping the
+ *  run at the last real reading (`findStopSpans`), not by the threshold,
+ *  which is why that clip is load-bearing rather than tidy. */
 const STOP_SECONDS = 5;
 
 /** trace-truth Task 2 (spec §3): half a sample-second of padding on each
@@ -387,8 +452,15 @@ interface Axis {
  *  WHY THE WORK BOUNDARY PLACES THE REST, rather than the rest-marked
  *  samples. A rest the rower sits still through emits NO samples at all:
  *  0x0031's elapsed advances only while the flywheel turns (measured on
- *  `walk-2026-08-25`'s own frames — elapsed held at 64.62 s across three
- *  still seconds inside a rest), and the recorder buckets on that clock.
+ *  `walk-2026-08-25`'s own frames — inside one rest, elapsed held at
+ *  64.62 s across 12 consecutive frames, 5.58 s of wall clock, every one
+ *  of them rowing-state 0), and the recorder buckets on that clock, so
+ *  those 12 frames collapse to one sample. The same rest also steps
+ *  elapsed BACKWARDS once, 64.62 to 60.13; it cannot reach the work
+ *  clock here, because `seriesRecorder` monotonises `t` before this
+ *  module ever sees it (zero backwards steps across all four board-2
+ *  fixtures, minimum inter-sample dt 0.50 s) and because both backwards
+ *  steps sit inside a rest, whose samples add no work by construction.
  *  Keying the band off the rest RUNS would therefore lose such a rest
  *  entirely AND shift every later one onto the wrong interval. The work
  *  clock is what both kinds of rest have in common: interval `i`'s rest
@@ -541,11 +613,18 @@ function restBandsForSegment(points: readonly TracePoint[]): RestBand[] {
  *  chart does not merely fail to show the stop: it asserts the rower was
  *  pulling.
  *
- *  THE TAIL IS NOT A STOP. Every sample after the rower presses END is a
- *  `p === 0` sentinel at a frozen distance (measured at 5.1 s on that same
- *  capture), so a stop counts only when a REAL reading for the drawn
- *  measure follows it — otherwise the mark would land on the moment the
- *  piece ended. */
+ *  THE TAIL IS NOT A STOP, BUT IT IS PART OF THE SAME RUN. Every sample
+ *  after the rower presses END is a `p === 0` sentinel at a frozen
+ *  distance (measured at 5.1 s on that capture — ABOVE this threshold,
+ *  which is what makes the exclusion load-bearing rather than
+ *  incidental). The distance froze when the rower stopped and never
+ *  moved again, so a stop the rower never rowed out of and the tail
+ *  after END are ONE flat run. The run is therefore CLIPPED at the last
+ *  real reading and then measured — never discarded because its last
+ *  sample is a sentinel. Discarding it was the first draft's rule and it
+ *  dropped the 60.5 s stop outright whenever the recording ended inside
+ *  it (antagonist, 2026-09-19, by deleting one sample from the capture:
+ *  `[60.5]` with one moving sample after the stop, `[]` without). */
 function findStopSpans(
   samples: readonly Sample[],
   xs: readonly number[],
@@ -560,13 +639,23 @@ function findStopSpans(
   const out: StopSpan[] = [];
   let from = 0;
   for (let i = 1; i <= samples.length; i++) {
-    // `d` is stored in TENTHS of a metre, so `< 1` is "under 0.1 m".
+    // `d` is an INTEGER count of tenths of a metre, so `< 1` is exact
+    // equality, not a tolerance — the machine's own distance has to be
+    // byte-identical (it is, for all 61 samples of the real stop). The
+    // conservative direction: a stop that drifts by a tenth is missed,
+    // never invented.
     const same =
       i < samples.length && Math.abs(samples[i]!.d - samples[from]!.d) < 1;
     if (same) continue;
-    const seconds = (samples[i - 1]!.t - samples[from]!.t) / 10;
-    if (seconds >= STOP_SECONDS && i - 1 < lastReal) {
-      out.push({ startX: xs[from]!, endX: xs[i - 1]!, seconds });
+    // Clip the run at the last real reading (see the header): a run that
+    // ends in the post-END sentinel tail is still a stop up to the point
+    // the readings stop being real.
+    const end = Math.min(i - 1, lastReal);
+    if (end > from) {
+      const seconds = (samples[end]!.t - samples[from]!.t) / 10;
+      if (seconds >= STOP_SECONDS) {
+        out.push({ startX: xs[from]!, endX: xs[end]!, seconds });
+      }
     }
     from = i;
   }
@@ -631,7 +720,7 @@ export function buildTrace(
   const stops = findStopSpans(series.samples, axis.xs, measure);
   const ticksY = chooseTicks(domainY, TICK_COUNT);
   const invert = measure === "pace";
-  const summary = buildSummary(measure, restBands, readings, segments);
+  const summary = buildSummary(measure, restBands, stops, readings, segments);
 
   return {
     points: segments,

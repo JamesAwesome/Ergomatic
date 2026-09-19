@@ -640,8 +640,8 @@ describe("buildTrace — PR 3: the axis is work plus the machine's own rest", ()
     // 60 s of work at 1 Hz, then the rower stops dead for the whole 30 s
     // rest (the machine's elapsed clock freezes with the flywheel, so the
     // recorder emits NOTHING — measured on walk-2026-08-25's own 0x0031
-    // frames, where elapsed held at 64.62 s across three still seconds
-    // inside a rest), then 60 s more work.
+    // frames, where elapsed held at 64.62 s across 12 consecutive
+    // frames, 5.58 s of wall clock, inside a rest), then 60 s more work.
     const samples: Sample[] = [];
     for (let i = 1; i <= 120; i++) {
       samples.push({
@@ -759,6 +759,44 @@ describe("buildTrace — PR 3: a span where the machine's distance stood still w
     const trace = buildTrace(series, "pace")!;
     expect(trace.stops).toHaveLength(1);
     expect(Math.round(trace.stops[0]!.seconds)).toBe(61);
+  });
+
+  it("a stop the rower never rowed out of is STILL marked — the recording ends inside it", async () => {
+    // The antagonist's case (2026-09-19): a rower who stops mid-interval
+    // and ends the session while still stopped makes the stop and the
+    // post-END sentinel tail ONE flat-distance run, so a guard phrased as
+    // "a real reading must FOLLOW the stop" throws the whole span away
+    // instead of just the tail.
+    //
+    // Built from the real capture rather than by hand: sample 76 is the
+    // last sample of its 60.5 s dead stop (indices 16-76, t 16.3 s to
+    // 76.8 s), so slicing there ends the recording inside the stop.
+    const full = seriesFromFrames(
+      await loadCaptureFrames(
+        "walk-2026-09-15-work-clock",
+        "pm5-recording-1789471533667.jsonl.gz",
+        WORK_CLOCK_PROGRAM,
+      ),
+    );
+    const endsInTheStop = { samples: full.samples.slice(0, 77) };
+    const trace = buildTrace(endsInTheStop, "pace")!;
+    expect(trace.stops).toHaveLength(1);
+    expect(Math.round(trace.stops[0]!.seconds)).toBe(61);
+  });
+
+  it("the a11y summary names the stop and how long it was — the mark itself is invisible to a screen reader", async () => {
+    const series = seriesFromFrames(
+      await loadCaptureFrames(
+        "walk-2026-09-15-work-clock",
+        "pm5-recording-1789471533667.jsonl.gz",
+        WORK_CLOCK_PROGRAM,
+      ),
+    );
+    // The `STOPPED 61s` text lives inside the chart's `role="img"`
+    // element, so this string is the whole of what that reader gets.
+    expect(buildTrace(series, "pace")!.summary).toContain(
+      "1 stopped span marked (61s)",
+    );
   });
 
   it("the flat tail after the rower presses END is not a stop — every sample there is a sentinel, and no real reading follows", () => {
