@@ -12,7 +12,7 @@ import { recordingRevoke } from "../testing/fakes.js";
 import { createAttempts, type Attempts } from "./attempts.js";
 import type { RevokeApple } from "./appleRevoke.js";
 import { createFrontDoor } from "./frontDoor.js";
-import { createSessionStore } from "./sessions.js";
+import { createSessionStore, noRevoke } from "./sessions.js";
 import { createUserStore } from "./users.js";
 import { createAccessPolicy } from "./accessPolicy.js";
 import type { ProviderConfig } from "./providers.js";
@@ -31,7 +31,7 @@ describe("unlinking a sign-in method against Postgres and through the mounted ro
     pool = c.pool;
     await migrate(c.db, { migrationsFolder: "drizzle" });
     const accessPolicy = createAccessPolicy("public", "");
-    sessions = createSessionStore(c.db, accessPolicy);
+    sessions = createSessionStore(c.db, accessPolicy, noRevoke);
     const users = createUserStore(c.db);
     const ec = await generateKeyPair("ES256");
     const config: ProviderConfig = {

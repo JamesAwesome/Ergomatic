@@ -6,7 +6,12 @@ import { eq } from "drizzle-orm";
 import type pg from "pg";
 import { createDb, type Db } from "../db/index.js";
 import { sessions, users } from "../db/schema.js";
-import { SESSION_TTL_MS, createSessionStore, hashToken } from "./sessions.js";
+import {
+  SESSION_TTL_MS,
+  createSessionStore,
+  hashToken,
+  noRevoke,
+} from "./sessions.js";
 import { createAccessPolicy } from "./accessPolicy.js";
 
 describe("session lifecycle against real Postgres", () => {
@@ -20,7 +25,7 @@ describe("session lifecycle against real Postgres", () => {
     container = await startPostgres();
     ({ pool, db } = createDb(container.getConnectionUri()));
     await migrate(db, { migrationsFolder: "drizzle" });
-    store = createSessionStore(db, createAccessPolicy("public", ""));
+    store = createSessionStore(db, createAccessPolicy("public", ""), noRevoke);
     const [u] = await db
       .insert(users)
       .values({ googleSub: "sub-1", email: "a@x.com", name: "A" })
@@ -113,6 +118,7 @@ describe("session lifecycle against real Postgres", () => {
     const denied = createSessionStore(
       db,
       createAccessPolicy("restricted", "someone-else@x.com"),
+      noRevoke,
     );
     expect(await denied.resolveSession(token)).toBeNull();
     const retained = await db
@@ -127,6 +133,7 @@ describe("session lifecycle against real Postgres", () => {
     const reallowed = createSessionStore(
       db,
       createAccessPolicy("restricted", " A@X.COM "),
+      noRevoke,
     );
     expect((await reallowed.resolveSession(token))?.refreshed).toBe(true);
   });

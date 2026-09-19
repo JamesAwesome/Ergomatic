@@ -7,7 +7,7 @@ import type pg from "pg";
 import { createApp } from "../app.js";
 import { baseDeps, TEST_ACCESS_POLICY } from "../testDeps.js";
 import { createDb, type Db } from "../db/index.js";
-import { createSessionStore } from "../auth/sessions.js";
+import { createSessionStore, noRevoke } from "../auth/sessions.js";
 import { createUserStore } from "../auth/users.js";
 import { createArticleReadsStore } from "../stores/articleReads.js";
 import { createBaselinesStore } from "../stores/baselines.js";
@@ -48,7 +48,7 @@ describe("POST/GET /api/logs: the machine's summary round-trips through real Pos
 
     app = createApp(
       baseDeps({
-        sessions: createSessionStore(db, TEST_ACCESS_POLICY),
+        sessions: createSessionStore(db, TEST_ACCESS_POLICY, noRevoke),
         users: createUserStore(db),
         nativeVerifier: async () => ({
           sub: "machinesummary-sub",

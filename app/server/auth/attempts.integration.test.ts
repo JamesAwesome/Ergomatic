@@ -5,7 +5,7 @@ import pg from "pg";
 import { createDb } from "../db/index.js";
 import { startPostgres } from "../testing/postgres.js";
 import { createAttempts } from "./attempts.js";
-import { createSessionStore, hashToken } from "./sessions.js";
+import { createSessionStore, hashToken, noRevoke } from "./sessions.js";
 import { createUserStore } from "./users.js";
 import { createAccessPolicy } from "./accessPolicy.js";
 import { recordingRevoke } from "../testing/fakes.js";
@@ -15,6 +15,7 @@ import type { AuthProvider } from "../../shared/auth.js";
 describe("front-door transactions against Postgres", () => {
   let container: StartedPostgreSqlContainer;
   let pool: pg.Pool;
+  let db: ReturnType<typeof createDb>["db"];
   let store: ReturnType<typeof createAttempts>;
   let sessions: ReturnType<typeof createSessionStore>;
   let users: ReturnType<typeof createUserStore>;
@@ -22,10 +23,11 @@ describe("front-door transactions against Postgres", () => {
     container = await startPostgres();
     const c = createDb(container.getConnectionUri());
     pool = c.pool;
+    db = c.db;
     await migrate(c.db, { migrationsFolder: "drizzle" });
     const publicAccess = createAccessPolicy("public", "");
     store = createAttempts(pool, publicAccess, recordingRevoke().revoke);
-    sessions = createSessionStore(c.db, publicAccess);
+    sessions = createSessionStore(c.db, publicAccess, noRevoke);
     users = createUserStore(c.db);
     await store.sweep();
   });
@@ -342,13 +344,22 @@ describe("front-door transactions against Postgres", () => {
       createAccessPolicy("public", ""),
       recorder.revoke,
     );
+    // The SESSION store is the one under test: the revocation happens where
+    // the cascade originates, not in `attempts.ts`. A scoped attempts store
+    // alone would sign out through the suite's shared store and record
+    // nothing -- which is exactly what this test did on its first run.
+    const scopedSessions = createSessionStore(
+      db,
+      createAccessPolicy("public", ""),
+      recorder.revoke,
+    );
     const user = await users.createUser({
       googleSub: "google",
       email: "original@test",
       name: "Original",
     });
-    const credential = await sessions.createSession(user.id);
-    const resolved = await sessions.resolveSession(credential.token);
+    const credential = await scopedSessions.createSession(user.id);
+    const resolved = await scopedSessions.resolveSession(credential.token);
     const begun = await scoped.begin({
       surface: "native",
       purpose: "link",
@@ -378,7 +389,7 @@ describe("front-door transactions against Postgres", () => {
     ]);
     expect((await pool.query("SELECT 1 FROM apple_grants")).rowCount).toBe(0);
 
-    await sessions.deleteSession(credential.token);
+    await scopedSessions.deleteSession(credential.token);
 
     // The row is gone by cascade either way -- that is not the assertion.
     expect((await pool.query("SELECT 1 FROM auth_attempts")).rowCount).toBe(0);
