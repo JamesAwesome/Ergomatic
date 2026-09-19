@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Ergomatic · Rename Gate 0</title>
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/newsreader/400.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/newsreader/500.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/archivo/400.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/archivo/500.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/archivo/600.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/ibm-plex-mono/400.css">
+  <link rel="stylesheet" href="../../../app/node_modules/@fontsource/ibm-plex-mono/500.css">
+  <style>
+    /* Tokens verbatim from app/src/theme/tokens.css. */
+    :root {
+      --page: #f4f1e8; --surface: #fffdf7; --surface-sunken: #efeade;
+      --ink: #1b1a17; --ink-2: #3f3c35; --ink-3: #57544c; --ink-4: #6f6a5f;
+      --rule: #d8d3c4; --rule-2: #ded8c9;
+      --accent: #b5341f; --accent-hover: #9c2c19;
+      --on-color: #fffdf7; --success: #49624f;
+      --radius: 2px;
+      --font-serif: "Newsreader", Georgia, serif;
+      --font-sans: "Archivo", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body { background: #ddd8cc; color: var(--ink); font-family: var(--font-sans); font-size: 15px; }
+    input, textarea, select { font-size: 16px; }
+    button, input { border-radius: var(--radius); }
+
+    /* ---- app rules, lifted verbatim from app/src/index.css ---- */
+    .screen { max-width: 480px; margin: 0 auto; padding: 6px 20px 20px; }
+    .screen-title { font-family: var(--font-serif); font-weight: 500; font-size: 31px; margin: 0 0 4px; }
+    .auth-methods { margin-top: 16px; }
+    .auth-methods h2 { margin: 0 2px 7px; color: var(--ink-3); font-family: var(--font-mono);
+      font-size: 11px; font-weight: 500; letter-spacing: .12em; }
+    .auth-method-list { border-top: 1px solid var(--rule); }
+    .auth-method-row { display: flex; width: 100%; min-height: 54px; align-items: center;
+      justify-content: space-between; gap: 12px; padding: 0 2px; border: 0;
+      border-bottom: 1px solid var(--rule); background: transparent; color: var(--ink);
+      font: inherit; text-align: left; }
+    .auth-method-name { font-weight: 500; }
+    .auth-method-tail { display: flex; align-items: center; gap: 10px; }
+    .auth-method-connected { color: var(--success); font-family: var(--font-mono);
+      font-size: 10px; font-weight: 500; letter-spacing: .1em; }
+    .auth-method-remove { display: inline-flex; min-width: 44px; min-height: 44px;
+      align-items: center; justify-content: center; padding: 0 12px;
+      border: 1px solid var(--accent); border-radius: var(--radius); background: transparent;
+      color: var(--accent); font: inherit; font-size: 14px; font-weight: 500; }
+    .auth-danger-zone { display: flex; flex-direction: column; align-items: flex-start;
+      margin-top: 24px; padding: 14px 16px 16px; border: 1px solid var(--accent);
+      border-radius: var(--radius); background: var(--surface-sunken); gap: 12px; }
+    .auth-danger-zone h2 { margin: 0; color: var(--accent); font-family: var(--font-mono);
+      font-size: 11px; font-weight: 500; letter-spacing: .12em; }
+    .auth-delete-account { display: inline-flex; min-height: 44px; align-items: center;
+      justify-content: center; padding: 0 18px; border: 1px solid var(--accent);
+      border-radius: var(--radius); background: transparent; color: var(--accent);
+      font: inherit; font-weight: 500; }
+    .back-link { display: inline-flex; min-height: 44px; align-items: center;
+      color: var(--ink-3); font-family: var(--font-mono); font-size: 11px;
+      font-weight: 500; letter-spacing: .12em; border: 0; background: transparent; padding: 0 2px; }
+
+    /* ---- PROPOSED, and nothing here exists in the app yet ---- */
+    .auth-name { margin-top: 16px; }
+    .auth-name h2 { margin: 0 2px 7px; color: var(--ink-3); font-family: var(--font-mono);
+      font-size: 11px; font-weight: 500; letter-spacing: .12em; }
+    .auth-name-row { display: flex; align-items: center; gap: 10px;
+      border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+      min-height: 54px; padding: 0 2px; }
+    /* THE HOUSE FIELD TREATMENT, not an invention: `.baseline-field` is
+       `background: var(--surface)` inside `border: 1px solid var(--ink)`,
+       and its focus state swaps the border to --accent with a 1px inset
+       outline so nothing shifts. Copied rather than re-designed. */
+    .auth-name-input { flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 0 10px;
+      border: 1px solid var(--ink); background: var(--surface); color: var(--ink);
+      font: inherit; font-size: 16px; }
+    .auth-name-input:focus-visible { border-color: var(--accent);
+      outline: 1px solid var(--accent); outline-offset: -1px; }
+    .auth-name-save { display: inline-flex; min-width: 44px; min-height: 44px;
+      align-items: center; justify-content: center; padding: 0 14px;
+      border: 1px solid var(--ink); background: transparent; color: var(--ink);
+      font: inherit; font-size: 14px; font-weight: 500; }
+    .auth-name-save[disabled] { border-color: var(--ink-4); color: var(--ink-4); }
+    .auth-name-note { margin: 7px 2px 0; color: var(--ink-3); font-size: 13px; }
+    .auth-name-note.is-error { color: var(--accent); }
+    .auth-name-saved { color: var(--success); font-family: var(--font-mono);
+      font-size: 10px; font-weight: 500; letter-spacing: .1em; }
+
+    /* ---- pack chrome (never shipped) ---- */
+    .rail { position: fixed; inset: 0 auto 0 0; width: 190px; overflow: auto;
+      background: #2a2823; color: #e9e4d6; padding: 14px 10px; font-size: 12px; }
+    .rail b { display: block; margin: 12px 0 5px; color: #b9b0a0; font-family: var(--font-mono);
+      font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+    .rail button { display: block; width: 100%; margin: 0 0 3px; padding: 6px 8px; border: 0;
+      background: #3a3730; color: #e9e4d6; font: inherit; text-align: left; cursor: pointer; }
+    .rail button[aria-current="true"] { background: #b5341f; }
+    .stage { margin-left: 190px; padding: 18px; display: flex; gap: 18px; flex-wrap: wrap;
+      align-items: flex-start; }
+    .board { display: none; }
+    .board[data-on="1"] { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+    .phone { width: 390px; height: 844px; overflow: hidden; background: var(--page);
+      border: 1px solid #b6ae9c; box-shadow: 0 1px 0 #cfc7b5; }
+    .phone.land { width: 844px; height: 390px; }
+    .cap { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em;
+      color: #6b6355; margin: 0 0 6px; text-transform: uppercase; }
+    .col { display: flex; flex-direction: column; }
+    .note { max-width: 430px; font-size: 13px; line-height: 1.5; color: #3a3730; }
+    .note code { font-family: var(--font-mono); font-size: 12px; }
+  </style>
+</head>
+<body>
+<nav class="rail">
+  <b>Today</b>
+  <button data-go="now">Account, as it ships</button>
+  <b>Proposed</b>
+  <button data-go="a">A · name above methods</button>
+  <button data-go="b">B · name below methods</button>
+  <button data-go="compare">A vs B, side by side</button>
+  <b>States (option A)</b>
+  <button data-go="states">idle / editing / saved / error</button>
+  <b>Landscape</b>
+  <button data-go="now-l">Today</button>
+  <button data-go="a-l">Option A</button>
+  <button data-go="b-l">Option B</button>
+</nav>
+<main class="stage" id="stage"></main>
+
+<script>
+// One source of markup for every board, so a board cannot drift from the
+// screen it claims to show. `parts.methods` and `parts.danger` are the
+// SHIPPED structure (src/you/SignInMethods.tsx); `parts.name(...)` is the
+// only thing this pack proposes.
+const parts = {
+  head: `<button class="back-link">&larr; BACK</button>
+         <h1 class="screen-title">Account</h1>`,
+  methods: `<section class="auth-methods">
+      <h2>SIGN-IN METHODS</h2>
+      <div class="auth-method-list">
+        <div class="auth-method-row"><span class="auth-method-name">Apple</span>
+          <span class="auth-method-tail"><span class="auth-method-connected">CONNECTED</span>
+          <button class="auth-method-remove">Remove</button></span></div>
+        <div class="auth-method-row"><span class="auth-method-name">Google</span>
+          <span class="auth-method-tail"><span class="auth-method-connected">CONNECTED</span>
+          <button class="auth-method-remove">Remove</button></span></div>
+      </div>
+    </section>`,
+  danger: `<section class="auth-danger-zone">
+      <h2>DELETE ACCOUNT</h2>
+      <p style="margin:0;font-size:14px;color:var(--ink-2)">This removes your account and every
+      workout, baseline and plan on it. It cannot be undone.</p>
+      <button class="auth-delete-account">Delete account</button>
+    </section>`,
+  name(opts = {}) {
+    const v = opts.value === undefined ? "James" : opts.value;
+    const dis = opts.dirty ? "" : " disabled";
+    const ring = opts.focus ? ' style="border-color:var(--accent);outline:1px solid var(--accent);outline-offset:-1px"' : "";
+    const tail = opts.saved
+      ? `<span class="auth-name-saved">SAVED</span>`
+      : `<button class="auth-name-save"${dis}>Save</button>`;
+    const note = opts.note
+      ? `<p class="auth-name-note${opts.error ? " is-error" : ""}">${opts.note}</p>` : "";
+    return `<section class="auth-name">
+      <h2>NAME</h2>
+      <div class="auth-name-row">
+        <input class="auth-name-input" value="${v}" aria-label="Your name"${ring}>
+        ${tail}
+      </div>${note}
+    </section>`;
+  },
+};
+const screen = (inner) => `<main class="screen">${parts.head}${inner}</main>`;
+const now   = screen(parts.methods + parts.danger);
+const optA  = (o) => screen(parts.name(o) + parts.methods + parts.danger);
+const optB  = (o) => screen(parts.methods + parts.name(o) + parts.danger);
+
+const phone = (html, land) => `<div class="phone${land ? " land" : ""}">${html}</div>`;
+const col = (cap, html) => `<div class="col"><p class="cap">${cap}</p>${html}</div>`;
+
+const boards = {
+  now: col("Today · /you/account · 390x844", phone(now)) +
+    `<p class="note"><b>What ships today.</b> Back link, title, SIGN-IN METHODS, the delete box.
+     There is no name anywhere on this screen — a rower cannot see their own name here, let
+     alone change it.</p>`,
+  a: col("Option A · name above methods", phone(optA())) +
+    `<p class="note"><b>A puts NAME first.</b> It reads top-down as identity &rarr; how you get in
+     &rarr; how you leave, and the field is the first thing under the title, so a rower who came
+     here to fix &ldquo;Rower&rdquo; sees it without scrolling. Cost: it pushes SIGN-IN METHODS
+     down by ~90px.</p>`,
+  b: col("Option B · name below methods", phone(optB())) +
+    `<p class="note"><b>B keeps the screen as it is</b> and adds NAME underneath, above the delete
+     box. Nothing existing moves. Cost: the rower who came to rename has to look past the
+     sign-in list to find it, and it sits closer to the red box.</p>`,
+  compare: col("A (left) vs B (right)",
+    `<div style="display:flex;gap:18px">${phone(optA())}${phone(optB())}</div>`) +
+    `<p class="note">Same screen, same content, one ordering difference. Both are one section of
+     three; neither introduces a new screen or a new route.</p>`,
+  states: `<div style="display:flex;gap:18px">` +
+    col("idle", phone(optA())) +
+    col("editing", phone(optA({ value: "James A", dirty: true, focus: true }))) +
+    col("saved", phone(optA({ saved: true }))) +
+    col("refused (empty)", phone(optA({ value: "", dirty: true,
+      note: "A name cannot be empty.", error: true }))) + `</div>`,
+  "now-l": col("Today · landscape 844x390", phone(now, true)),
+  "a-l": col("Option A · landscape", phone(optA(), true)),
+  "b-l": col("Option B · landscape", phone(optB(), true)),
+};
+
+const stage = document.getElementById("stage");
+function go(k) {
+  stage.innerHTML = `<div class="board" data-on="1">${boards[k]}</div>`;
+  document.querySelectorAll(".rail button").forEach((b) =>
+    b.setAttribute("aria-current", String(b.dataset.go === k)));
+  location.hash = k;
+}
+document.querySelectorAll(".rail button").forEach((b) =>
+  b.addEventListener("click", () => go(b.dataset.go)));
+go(location.hash.slice(1) in boards ? location.hash.slice(1) : "now");
+window.__go = go;
+</script>
+</body>
+</html>

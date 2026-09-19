@@ -1308,8 +1308,23 @@ it lands the stranger on this same denial.
       revocation call this PR's scope never included and Concept2's own API
       surface for it is unresearched; the wave's own deadline is the
       backstop.
-- [ ] **A cancelled or discarded attempt's `auth_attempts.apple_refresh_token`
-      is never revoked at Apple.** The third of the three live credentials the
+- [x] **A cancelled or discarded attempt's `auth_attempts.apple_refresh_token`
+      is never revoked at Apple.**
+      **TICKED BY JAMES, 2026-09-19, WITH A CAVEAT HE ASKED TO BE READABLE
+      HERE RATHER THAN ONLY IN THE SPEC.** PR #480 (`349dfdf1`) closed it:
+      every one of the ELEVEN paths that destroy an attempt row now attempts
+      revocation, including two this row never knew about — sign-out and the
+      60-second session sweep, which reach these rows by `ON DELETE cascade`
+      from `sessions.ts` and so were invisible to the choke point the fix is
+      built around.
+      **THE CAVEAT: "never revoked" became "revoked BEST EFFORT, NO RETRY" —
+      not "revoked".** If Apple is unreachable at that moment the token stays
+      live and nothing tries again. That is James's own 2026-09-13 ruling
+      withdrawing the `apple_revocations` outbox, not an unfinished edge, and
+      it is written here so the narrower win is legible without opening the
+      spec. What makes the residue survivable is the rename surface below:
+      the damage a failed revoke does is permanent only because an account
+      cannot be renamed. The third of the three live credentials the
       account-management spec names in §"The other two live credentials"; the
       other two got rows and this one did not. `attempts.begin` stores a
       refresh token on the attempt row, and every path that ends an attempt
