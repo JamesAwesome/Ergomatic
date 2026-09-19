@@ -573,6 +573,64 @@ describe("front-door transactions against Postgres", () => {
       (await pool.query("SELECT refresh_token FROM apple_grants")).rows,
     ).toStrictEqual([{ refresh_token: "rt-LIVE" }]);
   });
+  // --- Census row 11: sessions.sweepExpired ------------------------------
+  //
+  // THE PRODUCER THE PM GATE FOUND UNTESTED. Row 10 (sign-out) and row 11
+  // (the 60s session sweep) reach `auth_attempts` through the same cascade
+  // but with DIFFERENT where-clauses — `token_hash=$1` against
+  // `expires_at<$1` — so row 10's test cannot exercise row 11's fragment.
+  // Without this, deleting the collection from `sweepExpired` leaves every
+  // gate in the suite green (RF21).
+  it("the session sweep revokes the Apple token on the sessions it expires", async () => {
+    const recorder = recordingRevoke();
+    const scoped = createAttempts(
+      pool,
+      createAccessPolicy("public", ""),
+      recorder.revoke,
+    );
+    const scopedSessions = createSessionStore(
+      db,
+      createAccessPolicy("public", ""),
+      recorder.revoke,
+    );
+    const user = await users.createUser({
+      googleSub: "google",
+      email: "sweep@test",
+      name: "Original",
+    });
+    const credential = await scopedSessions.createSession(user.id);
+    const resolved = (await scopedSessions.resolveSession(credential.token))!;
+    const begun = await scoped.begin({
+      surface: "native",
+      purpose: "link",
+      targetProvider: "apple",
+      originalSessionId: resolved.sessionId,
+    });
+    const target = (
+      await scoped.accept(await scoped.claim(begun.attempt), {
+        sub: "google",
+        email: "",
+        emailVerified: false,
+        name: "Rower",
+      })
+    ).attempt!;
+    await scoped.accept(await scoped.claim(target), apple);
+    expect(
+      (await pool.query("SELECT apple_refresh_token FROM auth_attempts")).rows,
+    ).toStrictEqual([{ apple_refresh_token: "secret" }]);
+
+    // Expire the SESSION the way time would. The sweep's own predicate is
+    // what must find it, and it is a different predicate from sign-out's.
+    await pool.query("UPDATE sessions SET expires_at=now()-interval '1s'");
+
+    await scopedSessions.sweepExpired();
+
+    expect((await pool.query("SELECT 1 FROM sessions")).rowCount).toBe(0);
+    expect((await pool.query("SELECT 1 FROM auth_attempts")).rowCount).toBe(0);
+    expect(recorder.seen).toStrictEqual([
+      { clientId: "native.app", refreshToken: "secret" },
+    ]);
+  });
   it("claim and same-session replacement wait without a lock-order cycle", async () => {
     const b = await link();
     let release!: () => void;

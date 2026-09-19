@@ -1357,21 +1357,35 @@ it lands the stranger on this same denial.
       SAYS (measured 2026-09-19).** `attempts.ts:884-892` pushes the deleting
       attempt's own credential onto `held` before `DELETE FROM users`, with a
       comment naming this exact cascade. What is still open is every OTHER
-      path: of the eight statements that destroy an `auth_attempts` row, six
-      revoke nothing (`sweep()` TTL at :333, `begin()`'s three sweeps at :352,
-      :387 and :393, `discard()` at :715, `cancel()` at :738), plus a SIBLING
-      attempt on another session, which cascades away through
-      `sessions` untouched. Two more (:326, :706) are safe because `grant()`
+      path — and the unit is PRODUCERS, not statements, which is what the
+      antagonist pass corrected: **ELEVEN paths destroy an `auth_attempts`
+      row and eight revoke nothing.** Six are statements in `attempts.ts`
+      (`sweep()` TTL at :333, `begin()`'s three sweeps at :352, :387 and
+      :393, `discard()` at :715, `cancel()` at :738); one is a SIBLING
+      attempt on another session cascading through `sessions`; and **two are
+      not statements at all** — `sessions.ts:74` (sign-out) and `:78` (the
+      60-second session sweep) destroy these rows by `ON DELETE cascade`,
+      from another file, returning no rows, where nothing in `attempts.ts`
+      could ever see them. Two more (:326, :706) are safe because `grant()`
       copies the token to `apple_grants` first. **And the fix is not "revoke
       them all":** `grant()`'s `ON CONFLICT DO UPDATE` means a rower holding a
       live grant can also hold an attempt token against the SAME Apple
       authorization, so a blind revoke can destroy a relationship the rower
       is keeping. Design:
       `docs/superpowers/specs/2026-09-19-attempt-token-revocation-design.md`.
-      **NOT DONE IN THIS WAVE ON JAMES'S
-      RULING (whole-branch review, 2026-09-14): changing that transaction is
-      auth-shaped TRIAD work — a stored credential's lifetime — and belongs to
-      him, not to a fix round closing review findings.** **S**
+      **THAT RULING HAS BEEN OVERTAKEN AND THIS SENTENCE IS NOW FALSE TWICE
+      OVER, so it is corrected rather than left standing.** It read: "NOT DONE
+      IN THIS WAVE ON JAMES'S RULING (whole-branch review, 2026-09-14):
+      changing that transaction is auth-shaped TRIAD work — a stored
+      credential's lifetime — and belongs to him, not to a fix round closing
+      review findings." It IS being done in this wave, and it arrived WITH
+      both gates the ruling demanded — the full antagonist pass and the DBA
+      gate — because James started it deliberately on 2026-09-19 rather than
+      letting a fix round pick it up. **PR #480 discharges this row: every one
+      of the eleven producers now attempts revocation.** The row is put in
+      front of James as a CLOSE CANDIDATE rather than struck, because striking
+      is his call — and the honest wording of what replaces it is "revoked
+      best effort, no retry", not "revoked". **S**
       · dies 2026-10-14 · a row and not a fix now because the fix edits the
       deletion transaction, which is the one change in this PR that carries
       both the stored-shape and the auth members of the triad, and it would
@@ -1449,9 +1463,9 @@ it lands the stranger on this same denial.
       name from Apple is PERMANENT rather than merely annoying. That is the
       only reason the row above is a defect at all, and it is why the Apple
       revocation work is worth doing at the cheap end rather than with a
-      durable retry queue: **a rename retires the damage on all seven leaking
-      paths at once, and on the delete-then-re-register case, without touching
-      auth or a stored credential.** Today `providers.ts` falls back to
+      durable retry queue: **a rename retires the damage on every one of the
+      eleven producers at once, and on the delete-then-re-register case,
+      without touching auth or a stored credential.** Today `providers.ts` falls back to
       `"Rower"` and the rower is stuck with it.
       **Filed on James's word, 2026-09-19**, while specifying the attempt
       token revocation, so the expensive fix and the cheap one are on the
@@ -1465,9 +1479,10 @@ it lands the stranger on this same denial.
       route is genuinely small, but it is a rower-facing surface, so it takes
       Gate 0 before any implementation, and bundling that gate into a
       revocation PR would make both harder to review. **S**
-      · dies 2026-10-17 · a row and not a fix now because it needs its own
-      design gate on a screen that does not exist yet, and the revocation work
-      it unblocks is specified and ready to build without it.
+      · dies 2026-10-17 · a row and not a fix now because the CONTROL does not
+      exist yet and needs its own design gate — the screen to put it on does,
+      since #474 shipped the ACCOUNT door — and the revocation work it unblocks
+      is specified and ready to build without it.
 - [x] **Confirm the `appleAuth` navigation flake is dead. Cause is KNOWN and
       the fix is in this PR; what remains is measuring the rate.**
       **MEASURED 2026-09-19: ZERO. The row's own criterion closes it.**
