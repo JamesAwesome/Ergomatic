@@ -67,6 +67,28 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   further away is a product cost, and they arrive in the same change. State
   both.
 
+- **2026-09-19 — accessibility is judged against how THIS app is used: a
+  landscape phone on an erg, read from a metre away, both hands on the
+  handle.** James: "I do want accessibility but I'd also like to understand
+  what accessibility is practical vs what is overly pedantic." Ruled IN:
+  counting which routes and states the standing Playwright gates (axe, 44 px
+  targets, computed contrast) do not cover; a no-animation gate; the same
+  sweeps under the existing WebKit project; and one VoiceOver pass on his
+  phone, once — which is phone-only and zero-rowing, so it IS a hardware walk
+  and owes a runsheet and a readiness PASS. Ruled OUT as pedantic here:
+  Dynamic Type (inert today — 0 `rem`, 359 px sizes — and a redesign to
+  adopt), a simulator a11y instrument (Apple: VoiceOver is not on Simulator),
+  VoiceOver mid-piece, standalone focus-order tests, early Nutrition Labels.
+  **Count the coverage before buying an instrument.**
+- **2026-09-05 (James; recorded 2026-09-19) — five users is not a
+  population.** "We have like five users let's just schedule the work." A
+  measurement gate built for a five-person household cohort is ceremony and is
+  often unsatisfiable by construction (Phase DE's compat-drop trigger needed
+  zero log lines over a ≥7-day container lifetime while `deploy.sh` recreates
+  the container most days). **State the population before designing a
+  measurement gate; at household scale a date plus a tripwire to grep is the
+  proportionate answer.**
+
 ## Precedents
 
 - **Notes before the tag.** v0.8.0 and v0.9.0 both merged the in-app release
@@ -316,6 +338,51 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   in all three was a one-line outcome with the reasoning welded on. The fix is
   mechanical and the same every time: the outcome stays above the fold, the
   "because" moves into the Record. Say that, rather than asking for "shorter".
+
+- **A wave whose goal is "the instruments another wave needs" asserts its own
+  demand, and nobody checks it against the consuming wave's text.** Wave D
+  (dissolved 2026-09-19) claimed two Wave C dependencies. Wave C's
+  accessibility row asked only for 44×44 targets and 4.5:1 contrast; its
+  cold-start row said in its own words "A green simulator run is not this
+  item's exit"; and no Wave C row reached a connected screen. Both
+  dependencies were written in the INSTRUMENT wave and only echoed in the
+  consumer, and Wave B and Wave C read "After D" for three weeks because of
+  it. **At every phase/wave OPEN gate, quote the CONSUMING row's own text and
+  check that it asks for what the instrument row offers.** And price the
+  instrument against the questions it would settle: grep the roadmap for
+  them. An instrument with no pending question is a capability, not a
+  deliverable — the simulator's one unique capability, real WebKit safe
+  areas, had zero open questions.
+- **A flake row is a MEASUREMENT, and measurements expire; the newest sweep is
+  the record and the older row is a stale copy.** Wave D's three flake rows
+  ran to 343 of its 472 lines while a 1,036-log audit (#457, 2026-09-16) sat
+  in `docs/superpowers/research/` refuting the runner inference the longest
+  row leaned on. **Before reading any flake row, `ls
+  docs/superpowers/research/` for a dated hunt, then re-derive the count — and
+  say which oracle each half of an "it's dead" claim rests on.** Vitest has no
+  `retry`, so red jobs are a COMPLETE census of its flakes; Playwright retries
+  once in CI, so its flakes hide in GREEN logs (RF42) and only a per-log sweep
+  counts them. **Then check the fix log before filing what the sweep finds:**
+  the 2026-09-19 sweep turned up two flakes no row named
+  (`sheetScroll.spec.ts`, `mutation.test.mjs`), the report proposed filing
+  both, and both had been fixed within hours of their last sighting
+  (`252a482f` in #463; #466) — found by the controller with `git log` on the
+  two files, which the sweep never ran.
+- **A row filed against a defect can be fixed by its own sibling PR within
+  days, and nothing re-reads it.** Wave D's wire-gap-witness row blamed #140
+  for losing a witness; #141 — the very next PR — restored it
+  (`traceModel.test.ts`, a committed capture's real >3 s gap asserted to split
+  the trace in two), and the row claimed the gap open for thirty days. Its
+  sibling, the REST-fixture row, was met the same way. **At every gate on a
+  row that names a PR number, `git log -S` the row's own subject before
+  believing it is still open.**
+- **A cost attached to a QUEUED item goes stale in weeks, and always in the
+  same direction.** The type-hardening row's diagnostic counts (2026-08-29:
+  71 + 7 and 242 + 405) were re-measured on 2026-09-19 at 145 + 57 and
+  248 + 767 — roughly 2x, because the tree grew underneath them. RF30 says a
+  cost is a factual claim; this is its half-life. **Re-measure any cost older
+  than a fortnight before ruling on it, and record the tree it was measured
+  against.**
 
 ## Recommendations that turned out wrong
 - **2026-09-13 — the disabled-button contrast fold (#425).** I measured the

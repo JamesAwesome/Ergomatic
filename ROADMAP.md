@@ -61,9 +61,10 @@ James 2026-09-10).** A wave's rows are the scope of one sequenced piece of work
 and they all die together when it closes, so dating them individually writes
 the same clause five times — which is the tell that the row is the wrong unit.
 The wave carries one date, and it answers the question that actually rots: has
-this wave OPENED. Wave D's simulator row records its own subject as "two waves
-out and on no calendar", which is the furniture failure at wave size and is
-what the heading stamp catches. The final PR of any piece of work puts two lists in front of James
+this wave OPENED. Wave D's simulator row recorded its own subject as "two waves
+out and on no calendar" — the furniture failure at wave size, which is what the
+heading stamp catches; the wave was dissolved unopened on 2026-09-19
+([detail](docs/history/wave-d.md)). The final PR of any piece of work puts two lists in front of James
 before anything is filed: what it proposes to add, and every row anywhere whose
 date has passed. Nothing is struck without him.
 
@@ -153,7 +154,6 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 | Wave  | What it is                  | Size | Tester sees                                 |
 | ----- | --------------------------- | ---- | ------------------------------------------- |
 | **A** | The front door              | L    | Yes, immediately                            |
-| **D** | The toolbox                 | M    | Nothing                                     |
 | **B** | Backups and telemetry       | M    | Nothing                                     |
 | **C** | The submission surface      | L    | The most visible wave                       |
 | **E** | The Concept2 logbook        | L    | After PR2 ships the send surface            |
@@ -1492,481 +1492,9 @@ closed it on 2026-09-06.
 
 ---
 
-## Wave D — The toolbox
-
-**Status:** After A; **releases with Wave C**, never alone. **M.**
-**Ships a tester nothing** — but two items are Wave C dependencies: simulator
-coverage and native-fake reachability for connected surfaces.
-
-**Goal:** the instruments Wave C's audit needs, and the standing traps retired
-while we are in here.
-
-- [ ] **Stand the iOS simulator up as a standing instrument.** James,
-      2026-08-20: _"make sure to consider the iOS simulator."_ It is used
-      nowhere — `grep -ri simulator` across the repo returns only the fake
-      transport's own prose. **Wave C's accessibility audit depends on this:**
-      real Dynamic Type, VoiceOver and Reduce Motion cannot be produced by
-      desktop Chrome. Carries a corrected mechanism note worth keeping —
-      safe-area insets DO transfer to Safari-in-simulator (webkit.org/blog/7929,
-      PRIMARY), but the height model does not, because Safari's chrome collapses
-      on scroll, so Safari-in-simulator is **never authoritative for a `100dvh`
-      question**. **S**
-      **OPEN QUESTION (Phase OD, 2026-09-09): this row's own receipt is STALE,
-      and the receipt is the only thing saying the order is undone.** The row
-      claims `grep -ri simulator` "returns only the fake transport's own
-      prose"; re-run 2026-09-09 it returns 15 hits across
-      `domain/monitor/pm5/ergMachine.ts`, `intervalIndex.ts`,
-      `transports/capacitorBle.ts`, `adapters/nfcReader.ts`, `fake.ts` and six
-      test files (`grep -ric simulator app`).
-      The ORDER is still undone. **The receipt, with its output NAMED rather
-      than summarised:** `grep -rn simulator app/scripts` returns nothing — no
-      harness, no script. `grep -rn simulator .github` returns exactly ONE hit,
-      `.github/workflows/ci.yml:73`, and **it does not count**: it is prose
-      inside a `dist:grep` comment about `fake.ts`'s simulator, not a job. So no
-      simulator instrument exists. The first draft of this row claimed the
-      combined grep "returns nothing" and was wrong on the day it was written —
-      which is the rule, not an anecdote: **a "grep finds nothing" sentence
-      pastes its actual output and names every hit that does not count.**
-      **Trigger note:** bound to Wave D, which follows Wave A, which is
-      unopened — so its subject is two waves out and on no calendar.
-- [ ] **Let a build flag reach the fake transport on NATIVE.** One line in
-      `src/adapters/monitorTransport.ts`. Today `isNative()` sends the simulator
-      down the Capacitor arm, `initialize()` rejects `BLE unsupported`, and the
-      armed screen is unreachable (`capacitorBle.ts:138-145`; Apple TN2295 — the
-      Simulator has no Bluetooth). **This is the same defect recurring failure
-      13 records**, so fixing it retires a standing trap rather than adding a
-      feature. Dev and debug builds only, proven absent from the production
-      bundle by `dist-grep.sh` in both directions per recurring failure 12. **S**
-- [x] **Pre-Wave-D enabling slice — the lint/type ratchet and `e2e/`
-      typecheck.** James explicitly pulled this one slice forward on
-      2026-08-29. Every linted TS/TSX file now has typed project ownership,
-      `pnpm typecheck` covers `e2e/`, the selected typed rules use a
-      prune-aware no-growth ceiling, and pre-commit is fail-fast. This did
-      **not** open Wave D, advance its other work, or alter D's release-with-C
-      sequencing. Detailed contract and proof:
-      `docs/superpowers/specs/2026-08-29-lint-type-ratchet-design.md`. **M**
-- [ ] **Finish the ordered type-hardening follow-on.** Clear and globally
-      enable `exactOptionalPropertyTypes`, then `noUncheckedIndexedAccess`,
-      then validate unsafe server-test response bodies before reconsidering
-      the four unsafe-`any` rules there. Do not queue
-      `noPropertyAccessFromIndexSignature` without a real failure class; its
-      current volume is mostly access style. **M**
-- [ ] **THREE order-dependent flakes now — two seen during Phase JC's release
-      (2026-09-08/09), both filed here rather than shrugged at.** · dies
-      2026-11-14 · dated on the way past (campsite rule) by the 2026-09-14
-      flake hunt, which refuted (a)'s stated mechanism but did not reproduce
-      any of the three; the trigger below is real but a trigger is not a
-      schedule. Neither
-      reproduced alone or on a re-run of the same command, so both are
-      ORDER-dependent rather than broken tests, and both were observed by
-      different agents in different worktrees.
-      (a) `e2e/connected.spec.ts`'s genuine-`QuotaExceededError` leg failed
-      once in a full run (550/551), passed alone, then passed 551/551 twice.
-      **Its stated mechanism is REFUTED, measured 2026-09-14.** This row
-      said the test "fills origin storage to a real quota error, which is
-      exactly the shape that makes a suite order-sensitive — a neighbour
-      that writes to the same origin afterwards would see a full store".
-      A neighbour cannot: `playwright.config.ts` sets no `storageState` and
-      reuses no context, so every test gets a fresh one and localStorage is
-      partitioned per test. Proved with a throwaway two-test probe in one
-      serial file — A wrote `zz.probe.key` and read it back (so the write
-      genuinely happened), B on the next test read `null`. Whatever is
-      order-dependent about this leg, **it is not the origin store it
-      fills**, and a hunt that starts from leaked localStorage starts in the
-      wrong place.
-      **A real robustness gap it did surface, FIXED in the same pass:**
-      `fillOriginStorage` was called OUTSIDE the `try` whose `finally` cleans
-      the junk up, so a throw in the headroom-freeing block between them left
-      the store full with no cleanup at all. The fill and the freeing now sit
-      inside the `try`, with `added` declared above it so the `finally` can
-      still see it.
-      (c) **A THIRD, unit project, seen 2026-09-14** in this branch's pre-push:
-      `server/routes/data.test.ts` > "Phase LP: rejects a malformed per-split
-      machine field {machineDragFactor:256}, naming it" asserted 400 and got
-      **401**. Same signature as (a) and (b): it passed alone immediately after
-      (387/387, `--project unit server/routes/data.test.ts`), the same suite had
-      passed in full two commits earlier on the same branch, and the commit that
-      hit it changes `ROADMAP.md` and nothing else — so it cannot be a
-      regression. Not a signal death either (RF40): exit 1 with a real
-      assertion diff and a complete `Test Files` summary, not 137/134 and no
-      `Allocation failed`. **INFERENCE, not measured:** 401 is the auth
-      middleware refusing, and this test's subject is body validation that never
-      runs if auth rejects first — so the leak is most likely a neighbour
-      resetting or replacing the auth stub, which makes it a MOCK-lifetime
-      question rather than a storage one. That is a different mechanism from
-      (a)'s refuted origin-storage theory and from (b)'s client-only shape, so
-      the three may not share a cause at all.
-      (b) `src/news/Releases.test.tsx`'s "renders each release's version,
-      date, and every item" failed once in a full `--project client --project
-      unit` run and passed both alone (6/6) and on an immediate full re-run
-      (286 files, 7937). Client-project only, so unrelated to (a)'s origin
-      storage.
-      **SIGHTED A SECOND TIME 2026-09-14** (PR #434's `app` job, run
-      `34845000865` attempt 1, head `08eac824`) — **the trigger this row
-      names has now FIRED.** Same file, same test. The branch touched ZERO
-      files under `app/src/` (its diff is e2e specs and markdown), so it
-      cannot be a regression, and there is no signal-death signature in the
-      log: no `Allocation failed`, no 137/134 (RF40 checked before the
-      re-run, not after).
-      **THE NEW FACT, and it narrows the hunt more than the second sighting
-      does: the failure is `Test timed out in 5000ms` on a SYNCHRONOUS
-      test.** `Releases.test.tsx:32` is `it("…", () => {` with no `async`
-      and a plain `renderReleases()` — there is nothing in it to await. A
-      synchronous render exceeding five seconds is not a statement about
-      the test's logic; it is the worker not being scheduled. The run's own
-      numbers agree: 8,940 tests, `Duration 292.55s` of which
-      `environment 210.12s`.
-      **SIGHTED A THIRD AND FOURTH TIME 2026-09-15** (PR #452's `app` job, run
-      `34973719187`, head `da58d1b9`, under `pnpm test:coverage`). Same
-      file, same test, same `Test timed out in 5000ms` on the synchronous
-      test. The branch touches `driver.ts`, `eventLog.ts`, `ergMachine.ts`
-      and their tests — **nothing `Releases.test.tsx` reads**, so again it
-      cannot be a regression. RF40 checked BEFORE the re-run: zero
-      `Allocation failed`, zero 137/134, and vitest printed a full summary
-      (9,083 passed of 9,085), so this is its own 5 s timeout and not a
-      kill. `Duration 320.77s`, `environment 223.87s` against the second
-      sighting's 292.55/210.12, and this run carried coverage
-      instrumentation, which is the slowest shape the suite runs in.
-      **THE FOURTH CAME THE SAME MORNING, on the very commit that
-      recorded the third** (run `34975109761`, head `f3b5a2f9`, whose only
-      diff from the last green head is this ROADMAP row — so the fourth
-      sighting is as close to a pure re-run as the record gets). Same file,
-      same test, same 5 s timeout; RF40 clean again (zero `Allocation
-      failed`, exit 1, full summary of 9,083 passed of 9,085).
-      **AND ITS DURATION WAS NOT WORSE: `297.66s` / `environment 210.26s`,
-      within a second of the second sighting's 210.12.** The third
-      sighting's write-up above originally read those numbers as a
-      worsening trend; that clause has been REMOVED rather than appended
-      to, because the fourth falsifies it. Slow runs and flaking runs are
-      not the same population, so duration is a correlate at best and
-      cannot be used to predict a sighting or to excuse one. Four sightings, all four under a full-suite run,
-      none ever alone.
-      **That makes (b) evidence for FLAKE 2's runner hypothesis rather than
-      a separate puzzle** — and unlike (a), whose stated mechanism was
-      refuted, this one has a mechanism nobody has argued against yet.
-      **AND IT PASSED ON A WHOLE-SUITE RE-RUN OF THE IDENTICAL COMMIT** —
-      run `34845000865` attempt 2, all seven jobs green at head
-      `08eac824`. Stated with the attempt named, because RF42's whole point
-      is that "green on re-run" is a claim about a specific attempt or it
-      is nothing; and re-run in the WHOLE-SUITE form, never
-      `gh run rerun --failed`, which would have run a different population
-      and could not have answered the question (the trap FLAKES 1-3 share).
-      **SIGHTED A THIRD AND FOURTH TIME 2026-09-14, and this is the
-      escalation: both were MAIN's own post-merge runs, eleven minutes
-      apart.** Same file, same test, same `Test timed out in 5000ms`, `app`
-      job, attempt 1 each time. Run `34876650602` at head `8486a349`
-      (17:45 UTC, the 13-package Dependabot bump, #440) and run
-      `34877745107` at head `b6ede012` (17:56 UTC, TD-5's capture, #442).
-      **`b6ede012` touched ZERO files under `app/src/`** — one e2e spec,
-      `ROADMAP.md` and one PNG — so it cannot be a regression, and its
-      whole-run re-run (attempt 2, all seven jobs including `deploy`) went
-      green on the identical commit. `8486a349` is the one sighting that is
-      NOT diff-innocent, since it moved 13 packages; what clears it is
-      `a3292ba2` (#441), which CONTAINS that bump and passed at 17:51
-      between the two failures. Numbers from `b6ede012` attempt 1, for the
-      runner hypothesis: 356 files, 9,033 passed, `Duration 298.85s` of
-      which `environment 210.82s`.
-      **Why the escalation matters more than the count:** sightings 1-2 were
-      branch runs, where someone is watching. These two are RF28's exact
-      shape — main red after a merge, with nothing but the post-merge ritual
-      standing between that and eleven hours of nobody reading it. Twice in
-      fifteen minutes on the same afternoon.
-      So (b) is now: four sightings, two sourced whole-run re-runs, and a
-      mechanism — and with (d) below, the family has its first LOCAL
-      occurrence, which is what makes "starved scheduler" rather than
-      "uncapped pool" the shape worth instrumenting.
-      **THE OPEN QUESTION, scheduled before the order (Phase OD's rule),
-      and it took one read to find:** `vitest.config.ts:11` is
-      `maxWorkers: isCI() ? undefined : workerCap(…, 4)`. The cap that
-      exists to protect a laptop is **INERT IN CI BY DESIGN** — vitest
-      falls back to its CPU-derived default there. Combine that with the
-      fact already recorded under the integration-flake row below (the
-      `maxWorkers` key sits on the ROOT `test` block, so unit, client and
-      integration files share ONE pool, and each integration file starts
-      its own `PostgreSqlContainer`) and CI runs its default pool against
-      containers, under v8 coverage instrumentation (`pnpm test:coverage`),
-      with all three projects in one invocation.
-      **"UNCAPPED" WAS WRONG, MEASURED 2026-09-15, and the word is removed
-      rather than softened.** `undefined` does not mean unbounded: vitest's
-      own `getDefaultThreadsCount`
-      (`node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:2354`) returns
-      `Math.max(availableParallelism - 1, 1)` off watch — **3 workers on a
-      4-core `ubuntu-latest`, which leaves a core free and is more
-      conservative than the local cap of 4.** So the contention in CI is
-      real but it comes from the containers and the coverage
-      instrumentation, not from a worker count nobody capped, and there is
-      nothing here to cap: picking a number now would be RF30.
-      **THE ACTUAL MECHANISM, FOUND 2026-09-15, and it is the test's own
-      cost.** `Releases.test.tsx:32` was QUADRATIC in the length of
-      `RELEASE_NOTES` — one `screen.getByText` per release and per item,
-      each scanning the whole rendered tree, so cost = queries x tree size
-      and BOTH halves grow per release. Measured on truncated copies of the
-      real list: 13 releases 35.3ms, 26 releases 83.1ms, 39 releases
-      174.7ms, 52 releases 361.3ms — **4.3x for 2x the list.** And the list
-      grew underneath it: **31 entries on 2026-09-01, 52 on 2026-09-14**
-      (`git show <sha>:app/src/news/content/releaseNotes.ts | grep -c
-      'version:'` walked back over its history), so the test's cost roughly
-      TRIPLED across the fortnight in which this flake went from one
-      sighting to four. **Why this test out of 6,254:** ranked by duration
-      with each `it(` classified sync or async, it was the SLOWEST
-      SYNCHRONOUS client test by 3.1x over the runner-up (541ms against
-      175ms). A synchronous test's whole duration is CPU on its worker, so
-      it is exactly the population that stretches under contention — at
-      541ms it needed a **9.2x** stretch to miss the deadline where every
-      other synchronous test needed 28x or more.
-      **FIXED in #452 (`8db5c58d`, test file only): the test now walks the
-      rendered section list once instead of querying the tree 256 times.
-      541ms -> 106ms, and linear, so it stops degrading per release.** It
-      also asserts strictly MORE than the version it replaces — restoring
-      the old body, a mutant reversing section order and a mutant dropping
-      the date both PASSED against it, so the test's own title had promised
-      a date it never checked.
-      **WHAT THIS DOES NOT PROVE, and the falsifiable prediction that
-      settles it:** the flake has hit ZERO times locally and only ever
-      under CI load, so no local green is evidence of a fix — it was never
-      reproduced and cannot be. **If this test times out again after
-      `8db5c58d`, the quadratic cost was NOT the cause**, and this row goes
-      back to the contention lead with that result recorded. Margin is now
-      51x rather than 9.2x.
-      **`test-run.sh`'s capacity banner prints the runner's real core count
-      on every CI run and nobody has read one yet** — capture that reading
-      next time regardless of whether the flake returns; it is the one
-      number this whole hunt kept assuming.
-      **CORRECTION, 2026-09-14, same day it was filed:** this row first
-      said "a two-core runner". **That was never measured** — it was the
-      shape of an explanation, which is exactly what RF16 forbids. The
-      repo is PUBLIC, and GitHub's standard `ubuntu-latest` for public
-      repositories is documented as larger than two cores, so the number
-      was probably wrong as well as unsourced. **Nothing in CI prints the
-      runner's core count or vitest's resolved worker count today**, so
-      neither figure can be recovered from the logs we already have.
-      **THE FIRST THING THIS ROW OWES IS THEREFORE THE INSTRUMENT, NOT THE
-      EXPERIMENT** — print `os.availableParallelism()` and the worker count
-      vitest actually resolved, so the next red run carries its own
-      explanation. A before/after on a capped pool is the SECOND step and
-      is meaningless before the first: capping to a number we have not
-      measured against a baseline we cannot see is guessing twice.
-      **Deliberately NOT changed in #434.** Capping CI workers is a cost
-      nobody has measured (RF30) and would slow every run.
-      **(d) THE FIRST LOCAL SIGHTING, 2026-09-15, and it is evidence FOR the
-      runner hypothesis rather than against it.** During Wave A PR2's Task 1,
-      `attempts.integration.test.ts`'s neighbour
-      `"refuses a contradiction — manual with a deviceName — with a 400
-      naming the field, and persists nothing"` failed once in a full
-      `--project integration` run and passed on the next TWO runs of the
-      identical command and tree.
-      **And a SECOND local test, same day, same shape:**
-      `frontDoorRoutes.integration.test.ts`'s `"anonymous start request 121
-      is rejected after 120 shared admissions"` failed twice in separate
-      probe runs and passed on two consecutive re-runs of the identical tree
-      (532/532 both times). **Ruled out as a budget collision, not assumed:**
-      it lives in a different file from the work in flight, builds its own
-      app in `beforeEach`, and TRUNCATEs — so a neighbouring file's `begin()`
-      calls cannot consume its 120 admissions. Different tests, different
-      projects from (b); same shape.
-      **Why it matters more than a fifth tally mark:** every prior sighting
-      was in CI, where the hypothesis is an UNCAPPED worker pool
-      (`vitest.config.ts:11` makes the cap CI-inert). This one ran with
-      `ERGOMATIC_TEST_WORKERS=2` on a laptop the same session had just
-      measured at **58 MB of free pages, 3.1 GB inactive, Docker's VM at
-      1.1 GB RSS**, with a background task KILLED for low memory minutes
-      earlier. So the common factor across CI and local is not the worker
-      COUNT, which differed by an order of magnitude — it is a starved
-      scheduler. **That narrows the instrument this row already owes:**
-      printing `os.availableParallelism()` and vitest's resolved worker
-      count is still step one, but memory pressure at the moment of failure
-      belongs beside them, or the local half of this evidence stays
-      unexplainable.
-      **RF40 check, stated because it is the trap here:** this was NOT a
-      signal death. Exit was a normal vitest failure with a `Test Files`
-      summary and no `Allocation failed` on stderr, so it is a test result
-      and re-running it was legitimate.
-      (c) A third, on the SAME release run: `pnpm e2e` returned `553 passed`
-      with exit 1, and the two immediately following full runs both returned
-      `554 passed`. **Which test failed was not captured** — the tail showed
-      only the progress line — so this one is logged as an occurrence rather
-      than a suspect, deliberately: guessing the test from a progress line is
-      how a flake hunt chases the wrong file.
-      **Trigger:** the flake hunt below, or a further sighting of any of the
-      three. **S**
-- [ ] **Hunt the e2e flakes.** James, 2026-08-20: _"post release lets hunt down
-      the flake."_ Its trigger ("immediately after v0.15.0 ships") fired
-      2026-08-20. **STRUCK 2026-09-09 — the manual-door tap-target flake
-      (399/401, then 401/401 twice) is DONE**, fixed in `1602248e` (#150) two
-      days after this order was given; the finding is below and the strike is
-      applied HERE rather than left to a NEXT, because a row that carries its
-      own correction twenty lines below its claim is the contradiction, not
-      the record of one. **ONE named flake remains unresolved:**
-      `design.spec.ts`'s `stableBoundingBox` flake (`e2e/helpers.ts:89`). #152
-      landed evidence capture for a _third_ flake and produced
-      `docs/superpowers/research/2026-08-22-e2e-readiness-gate-flake.md`.
-      **The `stableBoundingBox` flake was sighted again on 2026-09-08**
-      (Phase MT, filed as its own row at first and folded in here — a new
-      datapoint, not a new flake): `design.spec.ts:3541`, "picking a effort
-      level does not shift the chips below it", failed once in a 547-test
-      parallel run, then passed in isolation immediately after AND on a full
-      re-run of the same tree. It compares a chip's `y` before and after a
-      click through that same helper, so the suspicion is LOAD rather than
-      the assertion. CI retries once, so it costs a red PR check at worst.
-      **M**
-      **TRIGGER ALREADY FIRED — 2026-08-20, and 20 days have passed.** The row
-      says so itself. This is the order that falsified "passive triggers are
-      the problem": it had an ACTIVE trigger, the trigger FIRED, and nothing
-      happened, because the question underneath it had no owner.
-      **ANSWERED 2026-09-09 — it is THREE live producers, not four, and one of
-      the four was already fixed.** The shared-producer read that this row's own
-      NEXT called for has run; findings, each with the evidence that settled it:
-      - **The manual-door tap-target flake is DONE, and has been since
-        2026-08-22.** Both halves landed in `1602248e` ("The warm-up leaves
-        (Phase WU)", #150): the `h1.summary-title` waits in `design.spec.ts` and
-        the atomic `$$eval` in `assertTapTargets`. Measured 114/120 early gates
-        before, 0/120 after — the figures come from
-        `docs/superpowers/research/2026-08-22-e2e-readiness-gate-flake.md`,
-        NOT from `git log -S`, which this row used to cite for them and which
-        does not produce a rate. **It was fixed two days after this
-        order was given and this row has claimed it open for the eighteen days
-        since** — which is the row's own lesson about itself.
-      - **Phase JC's `connected.spec.ts` origin-poisoning row is the SAME TEST
-        as Wave D's (a)** — both are the S3 genuine-`QuotaExceededError` leg and
-        its `fillOriginStorage` halving fill. Merge them; nobody would hunt them
-        as two. **And its stated mechanism is FALSE:**
-        `grep -rn "storageState\|launchPersistentContext\|userDataDir" e2e/
-        playwright.config.ts` returns NOTHING, so every test gets a fresh
-        context and origin partition and browser storage cannot survive into a
-        later run. Whatever fails a warm-stack sign-in, it is not this test's
-        leftover `localStorage`. Same RF16 shape as SR-13's falsified premise.
-        **MEASURED 2026-09-14, not just grepped** — a throwaway two-test
-        serial probe wrote a key in A and read `null` in B — and the (a) row
-        above now carries that receipt, so nobody re-derives this a third
-        time. That pass also moved `fillOriginStorage` inside its own `try`.
-      - **`stableBoundingBox` stands alone.** It polls the real box and throws
-        after 20 rAF, so it has no proxy-signal defect; what fails is its settle
-        budget against genuine layout work. Load is an amplifier, not a
-        producer — the research doc's §4 measured the same unchanged build at
-        73% then 95%, moving the metric the WRONG way.
-        **HUNTED 2026-09-14 AND NOT SOLVED, said plainly rather than
-        closed.** The sighted test (`design.spec.ts`, "picking a effort level
-        does not shift the chips below it") was read end to end and its
-        screen's async inputs enumerated: `Builder.tsx` early-returns on
-        `baselinesState` loading, so the chips do not exist until baselines
-        are ready, and the only other async input, `useWorkouts`, feeds AUTO
-        NAME alone and moves no layout. **No late-arriving element above the
-        chips was found**, which is what a settle-budget story needs. That
-        leaves the mechanism unestablished, and fixing it on a guess is how
-        the wrong layer gets chased.
-        **What DID land: the helper now throws with the whole frame-by-frame
-        trajectory, not only the last box.** A box still travelling in one
-        direction is layout that had not finished; one that jumped once and
-        held is a different bug. The instrument was proved to fire both ways
-        (a zero-frame budget reports 1 entry, a never-satisfied settle
-        condition reports 21) — so the next sighting names the mechanism
-        instead of adding a datapoint. **The row stays open until it does.**
-      - **The integration/container-contention class stands alone.** Different
-        runner, different pool: `vitest.config.ts`'s `maxWorkers` sits on the
-        ROOT `test` block, so unit and client files share one pool with the
-        integration files that each start their own `PostgreSqlContainer`.
-      **A candidate for SR-13, tagged INFERENCE and NOT acted on:**
-      `LogSession.tsx` reads `workoutIsGlobal` from React state, and that file's
-      own comment describes the reported symptom — while the library is still
-      loading at save time it "honestly reads 'not the designated test' and the
-      save navigates exactly as before", i.e. straight to Today. A network
-      response resolving in Playwright is not the instant a fetch callback's
-      `setState` commits. **What this does NOT explain is SR-13's `down -v`
-      correlation** — a colder stack should make a race worse, not better — so
-      either that correlation is an n=2 artifact or there is a second mechanism.
-      Do not fix on this until the correlation is explained.
-      **NEXT (≤0.25): fold Phase JC's row into Wave D's (a).** The manual-door
-      strike is DONE (applied at the head of this row, 2026-09-09). After the
-      fold this row is two producers, not four, and `stableBoundingBox` is the
-      only one with no diagnosis.
-- [ ] **A THIRD flake class: integration, under container contention.**
-      `server/routes/isolation.integration.test.ts` failed once with
-      `expected 401 to be 400` on 2026-09-01, and a second run of the same
-      full sweep failed a different test
-      (`server/routes/data.test.ts`'s baseline-delete case) instead. Neither
-      reproduced: the unit project passed 3/3 alone, integration 301/301
-      alone. It appears only when `--project unit --project client --project
-      integration` run together and several Postgres containers start at
-      once, so the working theory is resource starvation rather than test
-      pollution — but nothing has been measured and the auth-boundary
-      symptom (401 where a 400 was expected) deserves better than a shrug.
-      Distinct from the e2e flakes above and from the two unit-project ones
-      further down; filed at the PM gate on #255 rather than left in a PR
-      comment (recurring failure 14). CI runs the projects separately and
-      has stayed green throughout. **S**
-- [ ] **The burst-handoff tests race their own timeout, so a failure there
-      cannot say what failed.** The four ~2.3s tests in
-      `app/src/workout/WorkoutDetail.postReleaseCommit.test.tsx` each wait out
-      `BURST_HANDOFF_HOLD_MS` (2000ms) on the real wall clock, and each sets
-      its `waitFor` budget to `BURST_HANDOFF_HOLD_MS + 3000` = **5000ms,
-      exactly equal to vitest's `testTimeout`**. The two clocks are tied, so
-      under any slowdown the TEST timeout can win the race and report a bare
-      `Test timed out in 5000ms` with no assertion detail — the same
-      uninformative signature the `Releases.test.tsx` hunt spent two days
-      reading, on a different file. **No sighting yet**; found by ranking
-      every client test by duration while chasing that flake, where these
-      four are the top four at ~2.3s against a 541ms runner-up. Their time is
-      a deliberate sleep, not CPU, so they are a DIFFERENT class from the
-      quadratic cost fixed in #452 and a cap would not touch them.
-      **What would fix it now:** give those `waitFor` calls a budget strictly
-      below `testTimeout`, or raise `testTimeout` for that file alone, so a
-      failure names the assertion that never settled. **Not doing it here
-      because** it is a different file and a different mechanism from the one
-      #452 was opened for, it has no sighting behind it, and that file's own
-      comments say fake timers are unusable in this stack — so changing a
-      timing constant there needs its own reading rather than riding a
-      news-screen test fix. James ruled KEEP at #452's hand-back,
-      2026-09-15. **S** · dies 2026-10-15 · a latent timeout race in another
-      file with no sighting yet; folding it into a news-screen fix would put
-      two unrelated risk models in one review
-- [ ] **Settle the mutation-testing gate, one way or the other.**
-      `docs/TESTING.md` explicitly demoted the full `pnpm mutate` run from an
-      unrun phase gate to an on-demand probe; its only baseline is still
-      2026-07-29 and covers 7 domain modules against today's 29. Either make
-      a current full run a real enforced gate with an owned cadence, or keep
-      it on-demand and retire the stale baseline as evidence. **S/M**
-- [ ] **The 23 dangling `.superpowers/` citations across 14 tracked files.**
-      That directory is git-excluded and unreachable to anyone but the session
-      that wrote it. _"A dangling citation is worse than no citation, because it
-      reads as evidence."_ Affected: `app/src/monitor/driver.test.ts`,
-      `docs/monitor/pm5-interface-notes.md`, and twelve files under
-      `docs/superpowers/` (seven plans, four specs, one research note).
-      **Do NOT create `docs/superpowers/sdd/` to make the paths resolve.** **S**
-      **Counted 2026-09-04, not carried** — the citation count was right and
-      the FILE count read 11 and was wrong:
-      `git grep -ln "\.superpowers/[A-Za-z0-9]" 2f258006 -- . ':!*.html'
-      ':!CLAUDE.md' ':!ROADMAP.md' ':!.claude/agents/pm-ledger.md'` lists the
-      fourteen, and the same grep without `-l` counts the twenty-three. Two
-      choices in that command are what make the number mean what the row says:
-      the pattern requires a character AFTER the slash, so a bare mention of
-      the directory is not counted as a citation into it; and the three
-      excluded files DISCUSS this debt rather than cite into it. `docs/TESTING.md`
-      and two `docs/history/` files mention the directory and are therefore
-      NOT in the fourteen — an earlier version of this row named the first of
-      them. The per-user-gate branch briefly took the count to 27 and
-      re-pointed its own four at a tracked spec before merge, so that work
-      leaves the debt unchanged.
-- [ ] **An e2e fixture that exercises a REST.** The `est-left` spec's criterion
-      6 is HALF MET: no fixture drives `state: "resting"` with a scripted rest
-      value. **S**
-- [ ] **A real capture witness for a wire gap.** #140 removed three tests and
-      lost the witness for a genuine >3 s gap breaking the trace line. It is
-      **un-bound from the hardware walk:** `adapters/monitorTransport.ts:70`
-      composes the recorder on the WEB arm only, so the laptop leg had the
-      recorder and no gaps while the phone leg had gaps and no recorder. New
-      home: a deliberate web-leg capture, or extend the recorder to native. **S**
-
-**Exit:** the accessibility audit can run on real assistive technology; the
-simulator reaches a connected screen; the lint/type slice remains green; no
-tracked file cites a path that does not exist; and the named flakes,
-mutation-gate decision, REST-bearing fixture, wire-gap witness, and ordered
-type-hardening follow-on are each completed or explicitly disposed.
-
----
-
 ## Wave B — Don't lose their data, and know when it breaks
 
-**Status:** After D; **releases with Wave C**. **M.** Not triad.
+**Status:** After A; **releases with Wave C**. **M.** Not triad.
 **Ships a tester nothing** except one privacy disclosure line.
 
 **Goal:** the two things that are fine for a household of one and indefensible
@@ -2011,7 +1539,9 @@ deliberately thrown client error arrives somewhere a person looks.
 
 ## Wave C — The submission surface
 
-**Status:** After D. **L, two PRs** — the design-gated pair, then the sweep.
+**Status:** After A — Wave D, which used to sit in front of it, was dissolved
+on 2026-09-19 ([detail](docs/history/wave-d.md)); nothing in this wave ever
+needed it. **L, two PRs** — the design-gated pair, then the sweep.
 **The most visible wave in the slate.**
 
 **Goal:** the build a stranger installs does not look or read like a household
@@ -2081,12 +1611,48 @@ and stated as a number — before any implementation task starts.
 
 ### PR 2 — the sweep
 
-- [ ] **Accessibility audit against the handoff's hard rules** — every target
-      ≥ 44×44 px, all text ≥ 4.5:1 AA, computed and reported as numbers rather
-      than judged by eye (recurring failure 6). Moved out of Phase 10 because it
-      is a release gate, not household polish, and every phase that has shipped
-      since has added surfaces it has never covered. **Depends on Wave D's
-      simulator.** **M**
+- [ ] **Accessibility: count what the standing gates cover, then close the
+      gaps** — every target ≥ 44×44 px, all text ≥ 4.5:1 AA, computed and
+      reported as numbers rather than judged by eye (recurring failure 6).
+      **RESHAPED 2026-09-19 (James), when Wave D was dissolved: this is a
+      COVERAGE CENSUS, not a fresh audit, and it never needed a simulator.**
+      The gates it describes already stand, in Playwright, in both
+      orientations: `e2e/a11y.ts` runs axe `wcag2a` + `wcag2aa`, and
+      `design.spec.ts` carries `assertNoA11yViolations` (77 call sites),
+      `assertTapTargets` (75), the computed-contrast walk
+      `assertNoFailingInk4Labels`, and a `sweep()` running all three (25) —
+      counted with `grep -c "<name>(" app/e2e/design.spec.ts`. What nobody has
+      counted is which routes and STATES have none: `/session/confirm` and
+      `/justrow/log` appear nowhere in `e2e/` by path
+      (`grep -rn "session/confirm\|justrow/log" app/e2e | wc -l` → 0), though
+      some of that gap is reached by navigation rather than `goto` — which is
+      why the census is DERIVED from the assertion call sites, never typed out
+      from the route list. **The practical / pedantic line, ruled the same
+      day:**
+      - **In:** the census and the gaps it finds (**M**); the no-animation
+        gate below (**S**); the existing tap-target and contrast sweeps run a
+        second time under the WebKit project `playwright.config.ts` already
+        has (`webkit-sheet`, `devices["Desktop Safari"]`) — every a11y number
+        today is a Blink box on an app that ships in WebKit, and this is a
+        config block, not an instrument; honest limit, Playwright's WebKit is
+        not iOS Safari (**S**); and **ONE VoiceOver pass on James's phone,
+        once** — sign-in → Today → start → Log — for reading order and
+        live-region noise, the two things axe cannot see. It is phone-only and
+        zero-rowing, which CLAUDE.md names as a hardware walk: it owes a
+        versioned runsheet and a PM readiness PASS before he is asked for the
+        time (**S + the runsheet**).
+      - **Out, as pedantic FOR THIS APP** (a landscape phone on an erg, read
+        from a metre away, both hands on the handle): Dynamic Type support —
+        it is inert today on any device (0 `rem`, 359 px font sizes, no
+        `text-size-adjust`) and adopting it means re-typing the whole scale
+        against fixed landscape budgets and 128 px numerals; a standing
+        simulator instrument for accessibility (Apple, "Performing
+        accessibility testing for your app": _"Install your app on a physical
+        device, since VoiceOver isn't available on Simulator."_); VoiceOver
+        mid-piece; standalone focus-order tests on a keyboard-less app (swipe
+        order is covered by the VoiceOver pass); and Accessibility Nutrition
+        Labels before Apple requires them. App Review's guidelines name
+        neither VoiceOver nor Dynamic Type.
   - **~~Absorbs TL-3~~ — DONE, 2026-08-28**, and its sizing claim was WRONG.
     The words did render at 7.44 px against the house 10 px floor. But this
     entry's _"the tightest band has about five units of slack, so
@@ -2104,9 +1670,15 @@ and stated as a number — before any implementation task starts.
     "fits" has to be measured against the shape at the label's ink top, not its
     baseline.** Guarded by `design.spec.ts`'s two pyramid tests (rendered px in
     both orientations, and each word measured against its own band's edges).
-- [ ] **Calm-motion pass** — no animation beyond the timer tick and the progress
-      bars. `prefers-reduced-motion` is an accessibility expectation, not a
-      nicety. **S**
+- [ ] **A no-animation gate, replacing the calm-motion pass.** The design's
+      rule is `docs/design/README.md:393` — _"No animations beyond the 1 s timer
+      tick and progress-bar width changes; keep it calm"_ — and NOTHING enforces
+      it. There is no pass to run: `grep -cE "@keyframes|animation:|transition:"
+      app/src/index.css` → 0, so `prefers-reduced-motion` has nothing to act on.
+      The app is at zero today, which is the cheapest moment to build the gate:
+      it ships green and its whole job is to stay green. One sweep asserting no
+      rendered element computes a non-`none` `animation-name` or a non-zero
+      `transition-duration`, proved able to go red first (RF21). **S**
 - [ ] **A cold-start pass on a device that has never run the app.** Every walk
       and every gate this repo has ever run started from a populated account.
       Nobody has watched a genuinely empty install reach its first logged row —
@@ -3187,6 +2759,52 @@ fixed.
   (§AUD-006, §V4).
 ## Tooling
 
+- **Let a build flag reach the fake transport on NATIVE.** Today no build of
+  any kind can put a fake PM5 in front of a connected surface on iOS:
+  `src/adapters/monitorTransport.ts`'s `defaultTransport` takes the Capacitor
+  arm whenever `isNative()`, and the `VITE_ENABLE_FAKE_MONITOR` gate lives
+  behind the WEB arm only. **That is the defect recurring failure 13
+  records** — James built with the flag, tapped Connect and found nothing —
+  so this retires a standing trap rather than adding a feature. **What it
+  buys:** a connected-surface change can be rehearsed on the real phone with
+  no erg, and the iOS 26 `100dvh` row ("Rides the next PR touching the
+  connected surface") becomes answerable at a desk. Dev and debug builds only.
+  **Not the "one line" its first filing claimed:** `isNative()` is a RUNTIME
+  check, so the fake's branch must sit behind the BUILD-TIME constant
+  `transports/index.ts` already folds on, and `dist-grep.sh` must prove the
+  fake absent from a production bundle in both directions (recurring failure
+  12). The one row of Wave D that survived its dissolution
+  ([detail](docs/history/wave-d.md)). **S** · dies 2026-10-31 · a row and not
+  a fix now because the fold has to be proved against a real `pnpm build` in
+  both directions, which is its own PR and its own gate
+
+- **Eight citations in LIVE reference material point into `.superpowers/`,
+  and nothing stops a ninth.** That directory is git-excluded and unreachable
+  to anyone but the session that wrote it; _"a dangling citation is worse than
+  no citation, because it reads as evidence"_ (recurring failure 16).
+  **Re-counted 2026-09-19 and RE-SCOPED (James):** `git grep -n
+  "\.superpowers/[A-Za-z0-9]" -- . ':!*.html' ':!CLAUDE.md' ':!ROADMAP.md'
+  ':!.claude/agents/pm-ledger.md'`
+  returns **50 across 29 files**, up from 23 across 14 on 2026-09-04 — it
+  doubled in fifteen days, so the producer is live. **42 of the 50 sit in
+  dated plans, specs, research notes and session records and STAY:** they are
+  a record of what a session cited on its day, and rewriting history to tidy
+  it is worse than leaving it. **The work is the other eight** — one in
+  `app/src/monitor/driver.test.ts` and seven in
+  `docs/monitor/pm5-interface-notes.md`, the wire notes every monitor agent
+  reads. One of those is not cosmetic: the notes' source table cites session
+  1's "raw trace in `.superpowers/sdd/…/progress.md`" while
+  `docs/monitor/sessions/README.md` says session 1 has no raw capture. Fix
+  each by re-pointing it at a committed capture or marking it unrecoverable
+  in words, and add a `scripts/` check to CI's always-run `scripts` job,
+  beside `conflict-markers.sh`, that fails on a NEW `.superpowers/` citation
+  outside the dated-record directories. **Do NOT create
+  `docs/superpowers/sdd/` to make the paths resolve.** **S** · dies
+  2026-10-31 · a row and not a fix now because the gate is a new CI script
+  with its own both-directions proof, and the session-1 contradiction has to
+  be resolved against the capture directory before its citation can be
+  rewritten
+
 - **A `scripts/dist-grep.sh` needle is a fourth retyping of a literal, tied to
   nothing mechanical.** Each needle restates a string that also lives in
   product source, its unit test, and sometimes an e2e helper. A rename that
@@ -3539,7 +3157,7 @@ in both orientations.**
 | **The fake's rest-distance lag**           | `restDistanceMeters` resets with no roughly three-frame lag, unlike the real wire                                                                                                                                                                                                                                                                                                                                                                              | `phase-cm.md`                |
 | **`MONITOR_SPM_MIN = 0`**                  | Re-parked at CR2's close, re-owned by LT spec 1                                                                                                                                                                                                                                                                                                                                                                                                                | `phase-cr2.md`               |
 | **The landscape gutter**                   | The phone timer's landscape gutter absorbs no left inset                                                                                                                                                                                                                                                                                                                                                                                                       | `phase-cr2.md`               |
-| **iOS 26 `100dvh`**                        | Under `viewport-fit=cover`. Wave D's native fake flag is what makes this answerable at a desk                                                                                                                                                                                                                                                                                                                                                                  | `phase-cr2.md`               |
+| **iOS 26 `100dvh`**                        | Under `viewport-fit=cover`. The native fake flag (Tooling) is what makes this answerable at a desk                                                                                                                                                                                                                                                                                                                                                                     | `phase-cr2.md`               |
 | **Reconnect's three preconditions**        | Constraints on the deferred Correct Resume entry, not separate scheduled work. #183's gate requires a reconnect design to reset or quarantine `lastContinuityRef`'s count axis across a re-subscribe; preserving the old baseline without that policy is unresolved. | Correct Resume research, "Status: deferred, not an implementation contract" |
 | **Two declined CR questions**              | Projected finish split; distance intervals with a rate cap. Each waits on a hardware fact. Reconnect belongs to the deferred Correct Resume entry, not this row; its research does not authorize backfill or a MISSED writer. | `phase-cr.md`                |
 | **LL-F4**                                  | The `disconnected` handler records no liveness snapshot where `fail()` does, so a retry's ring has one fewer data point                                                                                                                                                                                                                                                                                                                                        | `phase-ll.md`                |
@@ -3789,6 +3407,62 @@ Each needs erg time or a deliberate recording session.
   "off Connect Device". (`phase-nf.md`)
 
 ## Small, queued, rides the next PR in its area
+
+- **The burst-handoff tests race their own timeout, so a failure there
+  cannot say what failed.** The four ~2.3s tests in
+  `app/src/workout/WorkoutDetail.postReleaseCommit.test.tsx` each wait out
+  `BURST_HANDOFF_HOLD_MS` (2000ms) on the real wall clock, and each sets
+  its `waitFor` budget to `BURST_HANDOFF_HOLD_MS + 3000` = **5000ms,
+  exactly equal to vitest's `testTimeout`**. The two clocks are tied, so
+  under any slowdown the TEST timeout can win the race and report a bare
+  `Test timed out in 5000ms` with no assertion detail — the same
+  uninformative signature the `Releases.test.tsx` hunt spent two days
+  reading, on a different file. **No sighting yet**; found by ranking
+  every client test by duration while chasing that flake, where these
+  four are the top four at ~2.3s against a 541ms runner-up. Their time is
+  a deliberate sleep, not CPU, so they are a DIFFERENT class from the
+  quadratic cost fixed in #452 and a cap would not touch them.
+  **What would fix it now:** give those `waitFor` calls a budget strictly
+  below `testTimeout`, or raise `testTimeout` for that file alone, so a
+  failure names the assertion that never settled. **Not doing it here
+  because** it is a different file and a different mechanism from the one
+  #452 was opened for, it has no sighting behind it, and that file's own
+  comments say fake timers are unusable in this stack — so changing a
+  timing constant there needs its own reading rather than riding a
+  news-screen test fix. James ruled KEEP at #452's hand-back,
+  2026-09-15; moved here unchanged when Wave D was dissolved, 2026-09-19.
+  **S** · dies 2026-10-15 · a latent timeout race in another
+  file with no sighting yet; folding it into a news-screen fix would put
+  two unrelated risk models in one review
+
+- **Archive the stale mutation baseline.** Wave D asked to "settle the
+  mutation-testing gate, one way or the other", and it is settled:
+  `docs/TESTING.md` §3 already says in its own words that the full run is an
+  on-demand probe and not a phase gate, and `pnpm mutate` is now admitted and
+  bounded (#465). What is left is §3.1's table — a 2026-07-29 baseline over 7
+  domain modules, the only full score this repo has and no longer a
+  description of it. Move the table to `docs/history/` with a dated pointer,
+  so it survives as a record instead of reading as current evidence. **Not a
+  plain cut:** §3.1 also holds the equivalent-mutant examples that §3 cites as
+  live guidance ("document why, per the examples in §3.1"), so the scores
+  leave and the examples stay. **S** · dies 2026-10-31 · a row and not a fix
+  now because splitting live guidance from a stale table inside the testing
+  policy is an instruction-corpus edit, and the PR that dissolved Wave D was
+  already carrying a whole-wave restructure
+
+- **`domain/monitor/types.ts` warns agents off `exactOptionalPropertyTypes`
+  on a claim nobody compiled.** Its `Sample.r` comment (grep
+  `exactOptionalPropertyTypes` in that file) says that if the flag is ever
+  enabled "the producer line stops compiling", and
+  `docs/superpowers/plans/2026-09-12-phase-md-pr3-one-sample-shape.md` repeats
+  it. **Reported false, NOT yet verified by the controller:** the PM's
+  2026-09-19 refinement pass reports that `tsc --exactOptionalPropertyTypes`
+  emits no diagnostic naming `r`, because the flag constrains OPTIONAL
+  properties and `readonly r: true | undefined` is a required key. Compile it
+  before editing the comment — a correction resting on an unverified report
+  is the same defect one step along. Rides the next PR touching that file.
+  **S** · dies 2026-10-31 · a row and not a fix now because the comment lives
+  under `app/domain/`, which a docs-only PR must not touch
 
 - **The log's machine type is a raw byte, and naming it is a vendor-enum
   transcription rather than a lookup.** James, 2026-09-15: *"I want to be
@@ -4269,6 +3943,12 @@ Each needs erg time or a deliberate recording session.
 - **FLAKE 2 — one CI run failed four tests across four unrelated specs at
   once.** · dies 2026-10-14 · a row and not a fix now because a single run
   is an anecdote; what it needs first is a COUNT, and nothing collects one.
+  **DONE 2026-09-16 — #457 (`653bd5ea`) took the count and repaired all three
+  of this run's remaining failures** (the NFC status, the pairing locator and
+  the axe timeout; the fourth was FLAKE 4's). Each had its own cause and none
+  was the runner — FLAKE 5 below carries the detail. Proposed for eviction at
+  the 2026-09-19 hand-back; left here until James rules, since nothing is
+  struck without him. Original filing follows.
   **2026-09-13, PR #423's run `34737876236`:** three failed plus one flaky
   out of 569 — `connected.spec.ts:2236` (the NFC scan's `✓ Monitor found`
   never appeared), `design.spec.ts:7601` (a pairing locator),
@@ -4459,12 +4139,49 @@ Each needs erg time or a deliberate recording session.
   each happened once ever. **That is the honest status of "flakes dead":
   the named ones are dead, and what remains is either somebody else's, too
   rare to hunt, or not a flake at all.**
-  **The real remaining work is therefore the MULTI-FAILURE RUNS, not any
-  single test** — three jobs in the corpus failed four tests at once
-  (`103829038779`, `103672406399`, `101506257739`), which is FLAKE 2's
-  territory and a runner question. That is exactly what the capacity
-  banner in `test-run.sh` was added to make answerable, and why it came
-  before any attempt to cap workers. **S**
+  **The multi-failure runs were NOT a runner question — #457 settled it
+  (`653bd5ea`, 2026-09-16;
+  `docs/superpowers/research/2026-09-15-flake-hunt/residual-dispositions.md`).**
+  Of the three jobs that failed four tests at once, `103829038779` was three
+  consumers of one export-envelope change and `101506257739` was four tests
+  missing the same Bluetooth capability fixture — deterministic drift, each
+  fixed by a named follow-up commit. Only `103672406399` held real residuals,
+  three unrelated shapes (an NFC status observed too late, a PAIRING state
+  whose fixed 1.2 s lifetime expired inside its own 2.5 s axe sweep, and an
+  axe `page.evaluate` that spent the whole 30 s budget), and #457 repaired all
+  three with fail-first proofs. Across that audit's 1,036 job logs, 20 of 23
+  unclassified events were deterministic, not flakes.
+  **THE SWEEP SINCE, 2026-09-19, both oracles named.** 63 CI runs from
+  2026-09-16, every one at attempt 1, 60 `app` and 60 `e2e` job logs read.
+  Vitest sets no `retry`, so its red jobs are a complete census; Playwright
+  retries once in CI, so its count is the `N flaky` summary line in every
+  log, green ones included (RF42). Result: no `Test timed out`, no
+  integration-project failure, no `stableBoundingBox` trajectory, and
+  `Releases.test.tsx` green in all 57 `app` jobs that ran it — the falsifiable
+  prediction #452 wrote for itself has held. Two flakes DID appear in that
+  window, and both were already closed by the time anyone counted them:
+  - `sheetScroll.spec.ts` (`webkit-sheet` project), 5 jobs on 2026-09-16 —
+    three on the spec's own birth branch, one retry-saved on `main`
+    (`713569e9`), the last at `59a94e98`, 12:07Z. Fixed 37 minutes later by
+    `252a482f` inside #463 ("Prepare WebKit scroll fixtures before the first
+    document load" — the session and log are now created over the API
+    instead of loading Today and navigating away from its in-flight startup
+    requests). None of the 35 completed `e2e` jobs since carries a `flaky`
+    line of any kind.
+  - `scripts/local-work/native/mutation.test.mjs`, once, on `main` at
+    `7462a18f` (run `35134632013`: cleanup `'unresolved'`, expected
+    `'verified'`), which left main red until #466 merged 1 h 12 min later.
+    #466 names that run, reproduced an immediate-census race with a real
+    orphaned child, and says plainly that it cannot prove the race was the
+    historical cause. Zero recurrences in the 24 completed `app` jobs since.
+  **What is left of the flake family is ONE unexplained test with no
+  sightings:** `design.spec.ts`'s `stableBoundingBox` settle (last seen
+  2026-09-08, "picking a effort level does not shift the chips below it").
+  Its helper now throws with the whole frame-by-frame trajectory, so the next
+  sighting names its mechanism; no async input that could move those chips
+  was found when it was hunted on 2026-09-14. The Wave D rows that carried
+  the rest of this history were struck when that wave was dissolved
+  ([detail](docs/history/wave-d.md)). **S**
 
 - **FLAKE 4 — the read-after-write class, censused and CLOSED 2026-09-14.**
   · dies 2026-10-14 · a row and not a fix now only as bookkeeping: the two
@@ -4976,6 +4693,26 @@ than back in the queue this was built to replace.
 Not scheduled in any wave. Reconsider only when the recorded trigger fires;
 an iceboxed item is not a phase-close requirement.
 
+- **Global `exactOptionalPropertyTypes`, then `noUncheckedIndexedAccess` —
+  iceboxed by James, 2026-09-19, out of the dissolved Wave D.** **Trigger:**
+  a shipped defect that either flag would have caught, named in this row.
+  The 2026-08-29 lint/type ratchet
+  (`docs/superpowers/specs/2026-08-29-lint-type-ratchet-design.md`) left
+  these two as an ordered follow-on, then validating unsafe server-test
+  response bodies before reconsidering the four unsafe-`any` rules there. No
+  defect class is on record for either: the PM's refinement pass searched
+  RF1-43, `docs/history/` and the three agent ledgers and found no shipped
+  bug either flag would have caught. **Cost, as reported by that pass and NOT
+  re-run by the controller** (typecheck is admission-controlled): 145 app + 57
+  server diagnostics for the first flag and 248 + 767 for the second, at
+  `aa2be8a2` on tsc 6.0.3 — roughly twice the spec's 2026-08-29 counts of
+  71 + 7 and 242 + 405, so re-measure before acting on either figure. **This
+  is the standard the original row already applied to a third flag** — _"Do
+  not queue `noPropertyAccessFromIndexSignature` without a real failure
+  class"_ — applied to its own two. · dies 2027-03-19 · iceboxed on a
+  zero-incident search; six months is when "no incident yet" stops being
+  current and the search is owed again
+
 - **Ask for the account picker only when the rower asked to switch — James,
   2026-09-07.** **Trigger:** the extra tap actually annoys someone. #356 sends
   `prompt=select_account` on EVERY web sign-in, which fixes signing out and
@@ -5210,6 +4947,12 @@ RECORD — do not cite it for a live question.
   every heading and a `dies` stamp on every row was the wrong answer to it.
   The 26 rows that had already finished were evicted by hand instead —
   [detail](docs/history/register-evictions-2026-09-10.md).
+- **Wave D — The toolbox** · DISSOLVED 2026-09-19, unopened ·
+  [detail](docs/history/wave-d.md). It existed to build instruments Wave C
+  turned out not to need. Of twelve rows: three already done, three flake rows
+  struck as superseded, one killed, and five rehomed — the native fake flag and the live dangling
+  citations to Tooling, the burst-handoff race and the stale mutation
+  baseline to "Small, queued", type hardening to the Icebox.
 - **The unlogged-session door** — a rower who did not want to lose an unlogged
   row now has a move · archived 2026-09-10, all six criteria ticked ·
   [detail](docs/history/unlogged-session-door.md)
@@ -5303,6 +5046,7 @@ re-litigated by accident.
 
 **Phase PROD was not killed — it was redistributed.** Its eleven items became
 Wave A (Apple sign-in), Wave C (icon, type disclosure, accessibility, calm
-motion, cold start), Wave D (simulator, native fake flag, e2e typecheck) and the
+motion, cold start), Wave D (simulator, native fake flag, e2e typecheck —
+itself dissolved unopened on 2026-09-19, [detail](docs/history/wave-d.md)) and the
 deferred section (store metadata, PWA installability). The phase itself is gone
 because it was named for an outcome its item list did not cover.
