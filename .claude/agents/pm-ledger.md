@@ -7471,3 +7471,74 @@ server down" leaves this roadmap for his AWS repo.
   redaction code is the client's NFC trace, so the row makes the scrub list
   the spec's to write. Its "36 `console.*` call sites" matches the
   controller's re-count (the dispatch had said 35).
+
+## 2026-09-19 — PR #480, attempt token revocation (TRIAD final-PR gate)
+
+**PASS WITH CONDITIONS** at head `fe094b9b` (CI proven at that SHA, run
+`35452133946`, seven jobs, e2e green, deploy skipped). Spec
+`2026-09-19-attempt-token-revocation-design.md` rev 2. TRIAD twice: a stored
+credential's lifetime, and auth.
+
+**Three conditions, none of them code behaviour. All three were met before
+the PR went to James.**
+
+1. **Presentation FAIL, fourth occurrence of one shape.** 256 words above the
+   fold, bullets 68/44/34/23/36/32 against ~120/~25 — after #228 (~270),
+   #230 (266), #474 (290). Every over-long bullet was an outcome with its
+   "because" welded on. Replaced at 145 words, every bullet ≤25.
+2. **Census row 11 (`sessions.sweepExpired`) had no revoke test** while the
+   Record claimed one per producer. Six of eleven had one.
+   `sessions.integration.test.ts` builds its store with `noRevoke`, so it
+   cannot observe a revoke; deleting the collection from `sweepExpired` left
+   every gate green. Row 10's clause is `token_hash=$1`, row 11's is
+   `original_session_id IN (SELECT id FROM sessions WHERE expires_at<$1)` — a
+   different fragment. **The test was added rather than the sentence
+   softened**, and the Record now names rows 3-5 as the genuinely untested
+   ones instead of claiming full coverage.
+3. **The row the PR CLOSES was not in the hand-back.** The opening row still
+   read **"NOT DONE IN THIS WAVE ON JAMES'S RULING … it would arrive without
+   the antagonist pass and DBA gate those force"** — false twice over at
+   head. The #474 pattern, second occurrence. Corrected in place and added to
+   the hand-back as a CLOSE CANDIDATE, not struck.
+
+Plus two one-clause corrections, both landed: the superseded statement-era
+count ("all seven leaking paths", and a whole paragraph of the same vintage),
+and the rename row's `dies` clause claiming "a screen that does not exist
+yet" when #474 shipped the ACCOUNT door the day before — the CONTROL does not
+exist, the screen does.
+
+**Scope ruled CORRECT.** Fixing the two `sessions.ts` cascades here rather
+than filing them is one risk model reaching two tables through one imported
+predicate; splitting would have shipped "every producer revokes" while the
+two largest producers still leaked — revision 1's defect with a PR boundary
+through it. **And it was already James's call**: `dba-ledger.md` records
+"Being fixed in this same PR rather than filed, on James's approval." The PR
+body's "Deliberately not filed" read as overruling a measurement lens;
+corrected.
+
+**Tester impact: nothing visible, honestly stated, one omission now landed.**
+Zero files under `app/src/`, so no captures and no Gate 0. Omitted and now in
+the Record: sign-out AND sign-in can each gain up to ~3 s when Apple is slow
+(`AbortSignal.timeout(3000)` over `Promise.allSettled`, a parallel cap). It
+bites the exact rower the second bullet describes.
+
+**Census verified complete at head:** `auth_attempts` carries exactly one FK
+(→ `sessions`, cascade), none from `users`; production code has exactly two
+`delete(sessions)` sites, both collected.
+
+**Release: NOT NEEDED, and this PR can never need one.** Zero client files —
+its value ships on the continuous server deploy, so a TestFlight build would
+carry none of it. When James is ready: 7 commits behind `v0.50.6`, two
+tester-visible (#474 ACCOUNT door, #478 trace-chart time axis) → **v0.51.0**,
+and this PR contributes no note line; say so in the notes PR so the next
+reader does not read it as an omission. Standing flag: two tester-visible
+fixes have been behind the tag for a day. Fine for a day, rots at a week.
+
+**Could not establish:** the lock geometry of the two NEW `sessions.ts`
+statements. `frontDoor.ts:82` now runs both 60 s sweeps in one `Promise.all`,
+each taking locks on `auth_attempts` in plausibly opposite scan orders — the
+DBA's probe measured `deleteAccount` vs `attempts.sweep()`, a different pair.
+Not blocking: the intersection needs a live attempt on a 60-day-expired
+session, which the 5-minute TTL all but forbids, and a deadlock needs two.
+The filed row's "pre-existing and unchanged by this PR" now says which pair
+it was measured about.

@@ -894,3 +894,39 @@ is exactly what happened: every section in this file stopped growing on
     produced ZERO rest-marked samples. For a flag derived from a wire enum,
     read the enum's full mapping table and find a capture of the state you
     claim can set it wrongly, before promoting the reproduction.
+95. **A census of "every path that destroys row X" is a census of CASCADES,
+    not of statements — grep every `DELETE` of the PARENT table before
+    believing it.** The attempt-revocation spec enumerated eight
+    `DELETE FROM auth_attempts` statements plus one cascade
+    (`DELETE FROM users`) and called it nine paths.
+    `auth_attempts.original_session_id` is `ON DELETE cascade` on `sessions`
+    (`app/drizzle/0031_apple_front_door.sql:41`), and `sessions.ts:74`/`:78`
+    delete sessions on SIGN-OUT (`routes.ts:169-175`, reachable from
+    `You.tsx:76`) and on a 60-second sweep (`frontDoor.ts:84-86`) — both
+    through drizzle's builder, in another file, invisible to a choke point
+    and to a source-text census test. The producers to enumerate are every
+    writer of every ancestor table: one
+    `grep -rn "delete(<parent>)\|DELETE FROM <parent>"` per FK hop.
+96. **A guard keyed on a CONTAINER identity when the question is about a
+    SUBJECT identity fails in both directions — write the
+    two-different-subjects row out before believing it.** "Revoke the attempt
+    token only when no live `apple_grants` row exists for that
+    `(user_id, client_id)`" skips the revoke when the grant belongs to a
+    DIFFERENT Apple subject (reachable: an existing `apple_sub=X` account, a
+    signin with a second Apple ID Y, follow-through by the other provider,
+    `finalize` refusing with `account_conflict`, cancel) and revokes when it
+    should not (the null-session rows, where the spec claimed "no user to
+    check against" — false: `consistent()` REQUIRES `verified_subject` at
+    every stage those rows can occupy, so the subject is always on the row).
+    Ask which column ANSWERS the question, then check whether the design
+    reads it.
+97. **A "this literal appears exactly once" census test is a spelling pin —
+    append five bypasses to a copy of the file and re-run the grep before
+    crediting it.** Measured on `attempts.ts`: the drizzle builder
+    (`db.delete(authAttempts)`), lowercase, `public."quoted"`, a composed
+    identifier `${T}`, and a template literal wrapping after `DELETE` all
+    left the count at 8. RF26's strongest-conclusion rule: it proves a byte
+    sequence is unique in one file's source text, never that a choke point is
+    the only path. It also goes RED spuriously, because a source-text count
+    counts the comments (technique 11) and this file quotes SQL in comments
+    constantly.

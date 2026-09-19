@@ -7,7 +7,7 @@ import type pg from "pg";
 import { createApp } from "../app.js";
 import { baseDeps } from "../testDeps.js";
 import { createDb, type Db } from "../db/index.js";
-import { createSessionStore } from "./sessions.js";
+import { createSessionStore, noRevoke } from "./sessions.js";
 import { createUserStore } from "./users.js";
 import { createAccessPolicy } from "./accessPolicy.js";
 
@@ -24,7 +24,7 @@ describe("native sign-in lifecycle against real Postgres", () => {
     const accessPolicy = createAccessPolicy("restricted", "n@x.com");
     app = createApp(
       baseDeps({
-        sessions: createSessionStore(db, accessPolicy),
+        sessions: createSessionStore(db, accessPolicy, noRevoke),
         users: createUserStore(db),
         accessPolicy,
         nativeVerifier: async () => ({

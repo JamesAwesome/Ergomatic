@@ -6,7 +6,8 @@ import { createAccessPolicy } from "./auth/accessPolicy.js";
 import { parseAllowlist } from "./auth/allowlist.js";
 import { createGoogleProvider, type OAuthProvider } from "./auth/google.js";
 import { createNativeVerifier } from "./auth/nativeVerify.js";
-import { createSessionStore } from "./auth/sessions.js";
+import { createSessionStore, noRevoke } from "./auth/sessions.js";
+import { createAppleRevoke } from "./auth/appleRevoke.js";
 import { createUserStore } from "./auth/users.js";
 import { c2Gate } from "./concept2/availability.js";
 import { createC2Client } from "./concept2/client.js";
@@ -260,8 +261,22 @@ const concept2 = {
 };
 
 const port = Number(process.env.PORT ?? 8080);
-const sessionStore = createSessionStore(db, accessPolicy);
+// ORDER MATTERS, AND IT CHANGED. `frontDoorConfig` is resolved BEFORE the
+// session store, because the store now needs the Apple revoker: ending a
+// session cascades to `auth_attempts`, and a pending link's Apple refresh
+// token goes with it. Building the store first and attaching the revoker
+// afterwards would need mutable state whose window — every request served
+// between the two — is exactly the lifetime bug this repo keeps paying for,
+// so the dependency is resolved by ordering instead.
 const frontConfig = await frontDoorConfig(process.env, siteUrl);
+const sessionStore = createSessionStore(
+  db,
+  accessPolicy,
+  // `noRevoke` is a statement, not a fallback: with no Apple front door
+  // configured, no Apple exchange ever happens, so no attempt row can carry
+  // a token for this store to destroy.
+  frontConfig ? createAppleRevoke(frontConfig) : noRevoke,
+);
 const frontDoor = frontConfig
   ? await createFrontDoor(pool, sessionStore, frontConfig, accessPolicy)
   : null;

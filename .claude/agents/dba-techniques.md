@@ -413,3 +413,67 @@ every entry to BOTH files** — an entry only in the record is invisible here.
   `schema: "./server/db/schema.ts", out: "./drizzle"` — the schema and the
   migrations live in different trees, and a plan naming
   `app/server/db/migrations/` names a directory that does not exist.
+
+- **(2026-09-19) A transaction that already CASCADES to a child table takes no
+  new lock by deleting that child explicitly first — only earlier.** `pg_locks`
+  for `deleteAccount`'s backend at pre-COMMIT was **58 entries in both shapes,
+  zero difference either way**, and `FOR UPDATE NOWAIT` probes from a third
+  connection read `HELD` for the sibling attempt, the current attempt and the
+  sibling session in both. The delta is visible only BEFORE `DELETE FROM users`
+  (21 vs 26 entries). **Census the lock set at pre-COMMIT, not mid-transaction**
+  — mid-transaction answers "when", pre-COMMIT answers "what", and only the
+  second decides whether a cycle is new.
+- **(2026-09-19) Two multi-row DELETEs over one table deadlock when their SCAN
+  ORDERS differ, and `EXPLAIN` tells you the order.** `auth_attempts`'s TTL
+  sweep is a `Bitmap Heap Scan` (physical BLOCK order); a delete keyed on
+  `original_session_id` is a `Merge Join` + `Index Scan using
+  auth_attempts_link_session_unique` (INDEX-KEY order). Held-row construction:
+  hold the row the first statement reaches first, start it (it stalls holding
+  nothing), start the second (it locks its own first row and queues), release —
+  the FIFO wait queue does the rest. `40P01` 3/3 in one sibling arrangement,
+  0/3 in the other, **identically for the shipped cascade and the proposed
+  explicit statement**. Determine a statement's order empirically: hold row X,
+  run it, probe row Y with `FOR UPDATE NOWAIT` — `55P03` means it passed Y.
+- **(2026-09-19) A "separate transaction, just before the delete" is a HANG if
+  the delete's transaction is already open.** `deleteAccount` holds the current
+  attempt row `FOR UPDATE` via `bound()`→`load()`; a second connection deleting
+  the same row waited **15,002 ms and was still blocked** under the production
+  `lock_timeout=0`, finishing only when the holder rolled back (`55P03` at an
+  injected 6 s timeout). Strictly BEFORE the transaction opens, it is clean.
+  **When a design says "a separate transaction", ask which side of `BEGIN`.**
+- **(2026-09-19) A per-row lookup from Node costs ~0.135 ms of round trip, so
+  the join is 13x.** 83 deleted rows / 100k users: one statement with the
+  anti-join **0.901 ms**, `RETURNING` + one `SELECT` per row **12.088 ms**
+  (medians of 5, real `pg.Pool`). `users.apple_sub` carries
+  `users_apple_sub_unique` (Index Only Scan, `Heap Fetches: 0`, 5,296 kB at
+  100k users), so the loop is not slow for lack of an index — it is slow for
+  lack of one statement.
+- **(2026-09-19) `DELETE ... RETURNING` costs ~0.19 us/row; a correlated
+  `NOT EXISTS` in the RETURNING LIST costs ~2.4 us/row.** `auth_attempts` TTL
+  sweep, interleaved over 2 rounds: 536 rows 0.18-0.23 / 0.31-0.36 /
+  0.84-0.89 ms (plain / RETURNING / with the live-grant predicate); 140k rows
+  31-33 / 60-62 / 386-393 ms. The predicate runs THREE indexed lookups per
+  returned row (`users_apple_sub_unique`, `sessions_pkey`, `apple_grants_pkey`
+  via `BitmapOr`) — all indexed, none missing.
+  `auth_attempts_expires_at_idx` already serves the sweep at every scale; no
+  new index is owed. **The CTE tuplestore spills at 1M** (`Storage: Disk
+  Maximum Storage: 95704kB`) and is 22 kB in memory at the cap.
+- **(2026-09-19) A revocation predicate keyed on the SUBJECT is order-dependent
+  inside `deleteAccount`, and the wrong order fails SILENTLY.** A bare
+  `LEFT JOIN users ON u.apple_sub = d.verified_subject … WHERE u.id IS NULL`,
+  placed before `DELETE FROM users`, returns **empty** for the deleting rower's
+  own attempt token — the row `attempts.ts:888` exists to push. The
+  `NOT EXISTS (… apple_grants …)` form is correct only because
+  `DELETE FROM apple_grants` runs FIRST: measured `revocable = t` with that
+  order and `revocable = f` without. **Name the statement order as an
+  invariant and make its mutation "swap the two statements".**
+- **(2026-09-19) A CASCADE cannot be routed through a choke point, because it
+  returns no rows.** `sessions.ts:74` (sign-out) and `:78` (60 s sweep) delete
+  `sessions`, which cascades to `auth_attempts`; a census test asserting
+  "`DELETE FROM auth_attempts` appears once in `attempts.ts`" is blind to both
+  by construction. Covering them with an explicit pre-delete measured
+  **+0.05 ms** for sign-out at 25 and at 100k sessions (one partial-index
+  probe) and **19.4-20.1 → 31.1-35.8 ms** for the session sweep at 100k
+  sessions / 10k expired. **When a design claims to have enumerated every
+  deleter, grep the FK definitions for `ON DELETE cascade`, then grep every
+  file that deletes the parent.**

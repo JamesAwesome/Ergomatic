@@ -5,7 +5,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import type pg from "pg";
 import { createDb, type Db } from "../db/index.js";
 import { createUserStore } from "./users.js";
-import { createSessionStore } from "./sessions.js";
+import { createSessionStore, noRevoke } from "./sessions.js";
 import { createAccessPolicy } from "./accessPolicy.js";
 
 describe("user store against real Postgres", () => {
@@ -79,6 +79,7 @@ describe("user store against real Postgres", () => {
     const sessionStore = createSessionStore(
       db,
       createAccessPolicy("public", ""),
+      noRevoke,
     );
     const { token } = await sessionStore.createSession(created.id);
     const resolved = await sessionStore.resolveSession(token);

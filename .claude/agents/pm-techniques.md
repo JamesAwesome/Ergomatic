@@ -597,3 +597,31 @@ is exactly what happened: every section in this file stopped growing on
   identity, successful cleanup, observed foreground return, one retry, and
   containing-operation cancellation. Keep GATT, programming, active workouts
   and a second interruption terminal.
+
+- **A spec that changes the UNIT of its census must re-derive every count that
+  used the old unit — and the one that survives is always in the row, not the
+  spec.** #480 (2026-09-19) re-cut its census from eight DELETE STATEMENTS to
+  eleven PRODUCERS after the antagonist found the `ON DELETE cascade`,
+  corrected the spec, the PR body and the opening ROADMAP row's argument — and
+  left `ROADMAP.md` reading "a rename retires the damage on all seven leaking
+  paths", the six-statements-plus-sibling figure from before the recut, plus a
+  whole paragraph still describing the statement-era census. **At any gate on
+  a PR that recounts something, grep the number words
+  (`seven|eight|nine|eleven`) across every artefact the PR touched, not just
+  the one where the recount is argued.** RF36 with an integer.
+- **"One test per producer" is a census claim, and it is checked by counting
+  the tests that ASSERT the observable, never the producers that route through
+  the shared helper.** #480's Record claimed a test per census row; six of
+  eleven had one, and the miss was row 11 (`sessions.sweepExpired`) — a
+  headline producer whose collector clause is a DIFFERENT SQL fragment from
+  the tested one, in a file whose store is built with `noRevoke` and so cannot
+  observe a revoke by construction. **Grep the recorder/spy constructor per
+  test file and count its assertion sites; a producer that only shares a
+  helper with a tested one is untested (RF21).**
+- **A PM condition on a TRIAD PR is usually about the record, not the code,
+  and that is not a reason to soften it.** #480's design survived two kill
+  shots and a DBA gate; all three merge conditions were a word count, a
+  missing test, and a row left saying "NOT DONE IN THIS WAVE" about the work
+  in the diff. **Do not discount a presentation or hand-back failure because
+  the engineering is strong — strong engineering is exactly where a false
+  record is believed longest.**
