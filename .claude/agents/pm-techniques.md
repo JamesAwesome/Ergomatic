@@ -384,6 +384,40 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   than a fortnight before ruling on it, and record the tree it was measured
   against.**
 
+- **A wave's row can be discharged by a PHASE in a different section, and the
+  wave's own text will still claim it.** Wave C's test-history row read "this
+  is the only read path… the app collects test results no rower can ever
+  see"; Phase PS PR 2 shipped TEST TREND (`30fd5cc0`, #424, merged 2026-09-13,
+  v0.46.0) six days before the refinement that quoted it. The sibling rule
+  above greps a row's named PR; here no PR number appears in the row at all.
+  **At every refinement, grep each row's SUBJECT against the shipped tree
+  before judging it** — one command moved this row from "build the list" to
+  "the binding on the list was already breached".
+- **A PM binding names an ARTEFACT and governs a CAPABILITY, and a different
+  artefact will walk straight past it.** #165's gate (2026-08-22) bound "the
+  list does NOT ship without a remove/void answer"; the TEST TREND *chart* is
+  a read path, shipped without one, and keeps points whose log row was deleted
+  — so a bogus test is now permanent AND drawn. **Word a binding as the
+  capability ("a rower can see these rows"), and re-read an old one that way
+  before accepting that a new surface escaped it.** Nothing else catches it:
+  the binding lived in a wave the shipping phase never read.
+- **A stranger-shaped GOAL is the same dead criterion as a stranger-shaped
+  exit.** James deferred public sign-up on 2026-09-14 ("that will be a final
+  'production' phase, don't worry about authoring it yet") and
+  `accessPolicy.ts` defaults `restricted`; Wave A's exit and Wave C's goal and
+  exit were both struck or restated on 2026-09-19 because of it. **Check the
+  goal sentence, not only the exit** — a goal written before 2026-09-14
+  containing "a stranger" describes a distribution that does not exist, and
+  the goal is what the rows were scoped against. Sort each row by who it
+  serves TODAY; what only a stranger needs is listed for the unauthored
+  production phase ("After the strangers"), never authored into it.
+- **Two phone-only zero-rowing items in one wave are ONE walk.** Each owes a
+  versioned runsheet and a PM readiness PASS; together they owe one session,
+  one install and one PASS. **At every wave-open gate, collect the rows
+  needing James's device and ask whether one sitting serves them all — then
+  order them so the earlier observation is not spoiled by the later setup** (a
+  naive cold start must precede turning VoiceOver on).
+
 ## Recommendations that turned out wrong
 - **2026-09-13 — the disabled-button contrast fold (#425).** I measured the
   disabled provider button at 2.16:1 (`--ink-5 #a09a8c` on `--accent #b5341f`)
