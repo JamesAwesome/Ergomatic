@@ -7370,3 +7370,59 @@ kept Wave D row. ROADMAP's "How this file is used" records James's 2026-09-10
 ruling that a wave is stamped on its STATUS LINE; per-row stamps apply only to
 rows that leave a wave for the register, which is what happened to all five
 survivors.
+
+## 2026-09-19 — Wave C refinement (main `87511d77`)
+
+Same three questions per row as the Wave D dissolution that morning. Six rows,
+all kept: the icon, the a11y census and the no-animation gate KEEP with
+corrections, type disclosure SPLIT, cold start MERGED into one phone session
+with the VoiceOver pass, test-history SHRUNK and promoted to its own TRIAD PR.
+**James took every recommendation the same day**, and answered the one open
+fact: nobody in the household uses assistive technology, so the a11y row is P2.
+
+- **The headline was not on the dispatch's list.** The test-history row's
+  central claim ("this is the only read path… no rower can ever see") was
+  falsified by #424 (merged 2026-09-13), and that made the row's own **#165
+  binding a live breach** rather than retiring it: `data.ts` carries
+  `testHistory.append` and `testHistory.list` and no delete, while
+  `TestTrendGroup.tsx` keeps every point "whether or not its log survives.
+  Never filtered." Phase PS's PR 2 row had already recorded it as "James's
+  open question in #424's hand-back" — no owner, no date. Ruled: its own TRIAD
+  PR, built now at P1; the LIST is struck and reopened only inside that PR's
+  design gate, because a void control needs a surface.
+- **Three stale facts in the type-disclosure row, all from other phases
+  landing.** Phase DE killed the difficulty vocabulary the row's guidance
+  clause forbade reusing; the live adjacency is `ClassificationCard.tsx`,
+  which renders `TYPE_WORDS` and `EFFORT_WORDS` on ONE card (AT's
+  `COMFORTABLY HARD` above effort 2's `COMFORTABLE`). The `.type-word`
+  citation had moved ~800 lines. And Option A is cheaper than priced:
+  `.type-chip-grid` is already `display: grid` and already one rule shared by
+  Today and Library.
+- **The row's a11y half was not blocked and was being held behind a Gate 0.**
+  `TypeBadge.tsx` renders a bare `{type}` with no accessible name; naming it
+  changes no layout, so CLAUDE.md's wording-gate carve-out covers it. Split
+  out to ship first.
+- **Counts re-derived at head:** `assertNoA11yViolations(` 77, `assertTapTargets(`
+  75, `sweep(` 27 against the row's 25 (the row's own stated command counts
+  matching lines, definition included; 25 is `await sweep(`).
+- **The no-animation gate** — ruled IN that morning and not re-litigated;
+  sequenced LAST, with the Wave D precedent said aloud rather than used as a
+  kill.
+- **The deferred legal paragraph's own demand had been met** ("Whoever opens
+  Wave C runs that check"), and the answer turned up blockers nobody had
+  filed: `ios-release.sh` uploads every build `testFlightInternalTestingOnly`
+  (Apple: such builds "can only be added to internal tester groups");
+  `accessPolicy.ts` defaults `restricted`, so a reviewer cannot use the demo
+  account guideline 2.1(a) requires; and no privacy policy exists while 2.2
+  carries 5.1.1(i) to a beta. Moved to "After the strangers" as what the
+  production phase inherits; the phase stays unauthored.
+- **Shape ruled:** goal restated for the household, exit STRUCK (Wave A's
+  treatment, same day, same reason), two PRs become three plus one phone
+  session, PR 1 (the `app/e2e/` sweep) starts before Wave A closes, status
+  line stamped `dies 2026-10-24`, Wave B decoupled from C's release.
+- **Controller's corrections when landing this entry:** the report dated #424
+  to 2026-09-12 (it merged 2026-09-13), called the Wave D dissolution "seven
+  days ago" (it was that morning), and counted "five call sites" for
+  `TypeBadge` (the row now says one component, which is the fact that
+  matters). It also noted Phase PS PR 2's box was still unticked; James had it
+  ticked in the same PR.
