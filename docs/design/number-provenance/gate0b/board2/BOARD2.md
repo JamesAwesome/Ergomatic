@@ -60,6 +60,20 @@ contrast work they forced is what set the swatch's own floor: the 25 % wash
 measured 1.36:1, the full-height band at 0.83 measured 3.19:1, and the
 gutter band B keeps measures 4.25:1 (`frames/contrast.json`).
 
+### The three open questions, ruled 2026-09-19
+
+| question | ruling |
+| --- | --- |
+| Does the stopped-span mark ship? | **YES, in PR 3, as a band.** Threshold 5 s. It marks a span where the machine's distance stood still while its clock ran; it cannot fire on a free row. |
+| M9 — PR 4, or narrowed into PR 3? | **PR 4.** PR 3 makes no claim about free rows it cannot keep; the stored start that would name the missing time is a stored shape and rides PR 4's gates. |
+| Board 3 (M4, M5) — next, or after? | **After PR 3 lands.** Board 3 needs a fixture decision of its own, and bundling an axis change with a stored-figure change would put two risk models in one review. |
+
+**So PR 3 is scoped and unblocked:** candidate B's axis, the `▬ = REST`
+legend with no axis caption, the stopped-span band, and I3's rewording.
+It carries no stored-shape change, so it is not TRIAD — but it does change
+what an axis IS, so it takes the antagonist pass §8 already requires.
+
+
 ---
 
 ## 1. What today's chart does, on three real rows
