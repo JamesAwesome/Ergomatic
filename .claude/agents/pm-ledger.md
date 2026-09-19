@@ -5,6 +5,69 @@ engagement. **Not read up front** — the bounded, always-read half is
 `pm-techniques.md`, and an entry is proposed to both. Grep this file for the
 detail behind a ruling, or for the history of a phase you are about to judge.
 
+## 2026-09-18 — Account submenu final-PR gate (#474, Gate 0 Option A): SHIP WITH CHANGES (4)
+
+Verdict on branch `account-submenu` over base `531edbf0`. **Function PASSED.**
+All four blocking items were record, presentation or a missed copy site; none
+was architectural. Judged by reading only — the machine was under memory
+pressure and a concurrent session held the work controller, so no gate in the
+PR's Verification block was independently re-run.
+
+**The headline finding.** The PR ticked `ROADMAP.md:1057` (#453's row) with the
+words "the work shipped and the row stayed open, which is the failure RF14
+exists to prevent", and left BOTH rows it was itself delivering at `- [ ]`:
+the submenu row ("GATE 0 IS DONE … nothing has built it") and the delete
+disclosure. Merging would have made both sentences false on main. Counted the
+precedent: of the last 25 ROADMAP-touching commits, feature PRs tick their own
+rows (#453 ticked 2, #444 six, #454 one) and #422 exists solely to tick five
+that main had already closed. Promoted to `pm-techniques.md` as a standing
+gate check, because `CLAUDE.md`'s hand-back rule carries "proposed to add" and
+"now overdue" and no third list for rows a PR CLOSES.
+
+**Presentation failed by the counting rule, third instance.** 290 words above
+the fold against ~120; bullets at 56 / 72 / 50 / 39 against ~25 — worse than
+#228 (270) and #230 (266). Same shape in all three: each long bullet welds the
+justification onto the outcome.
+
+**One copy site missed.** `app/src/SignIn.tsx`'s create-account line still read
+"add {provider} from You" four lines below a sentence the same PR changed to
+"delete it from You under ACCOUNT". The withdrawn-claim sweep corrected where
+the claim was ARGUED and left it where it was USED — the JC pattern with a
+different screen. My own sweep of live copy found no other; the dated release
+notes stand as history.
+
+**Hand-back absent.** Ran the `tr`-form sweep myself: nothing overdue, no rows
+proposed. `ROADMAP.md` carried `dies 2026-09-19` on a row whose own status line
+read "DONE — fixed and merged in #402"; handed to James as
+kill-the-stamp-or-strike-the-row, and **he struck the row** (2026-09-18).
+
+**Scope calls, both endorsed.** (a) Leaving the failed-provider-attach row out
+is right: `confirmAttach` swallows the failure, so surfacing it needs new
+carried state — a different risk model that would pull an antagonist pass onto
+a navigation change. Noted that its clause has now been rewritten twice; a
+clause rewritten a third time is a row being maintained rather than done.
+(b) The `destinationFor` edit is NOT creep — a pure view→route table with its
+own unit tests, and it is the navigation half of a navigation change. The
+spec's own tripwire ("stop if this reaches the auth state machine") was applied
+rather than waved.
+
+**Product cost nobody had stated:** delete moves from 0 taps to 1, and the
+row's own text names App Review as the party that requires it be findable. The
+answer was already in the Gate 0 pack (`04-option-a-you`,
+`contentBelowFoldPx: 0`) and belongs above the fold. Landed as a product
+principle.
+
+**Release:** recommended, minor, **v0.51.0** (tag at the gate was v0.50.6;
+main carried only #473 since). Notes PR first, and the note must say where
+deletion now lives.
+
+**What followed the gate, for the next reader.** All four items were fixed, and
+a branch review then found the defect the PM gate could not: the shared
+predicate covered the OPTIONS read and not the METHODS read, so a failed
+`/api/auth/methods` left the new screen blank behind a door promising content.
+Fixed with a test in the same PR. CI green on `eaf5f886`, 607 e2e passed with
+no flaky line.
+
 ## 2026-09-13 — Phase PS close gate + PR 2 final gate (#424): PASS WITH CONDITIONS (6), phase does NOT close
 
 Verdict on `9e5ac4bc`, base `60ee51b9`. **Function PASSED**; all six conditions

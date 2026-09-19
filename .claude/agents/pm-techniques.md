@@ -55,6 +55,17 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   scoped as the close-out of CR rather than a fresh phase, and Phase CP was
   folded into it rather than kept as a second home for the same work. Pairs with
   the filing-as-deferral pattern below.
+- **2026-09-18 — a change that moves a control further from the rower prices
+  the new distance, in taps and scrolls, against whoever requires it be
+  findable.** The account submenu (#474) moved `Delete account` from 0 taps
+  and no scrolling to 1 tap, and the row driving the work says in its own text
+  that deletion "is the one flow App Review requires be easy to find and
+  complete". Neither the spec nor the PR stated the after-figure, though the
+  Gate 0 pack had already measured it
+  (`docs/design/account-submenu-gate0/renders/layout-audit.json`,
+  `04-option-a-you`: `contentBelowFoldPx: 0`). Quieter is a design win;
+  further away is a product cost, and they arrive in the same change. State
+  both.
 
 ## Precedents
 
@@ -289,6 +300,22 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   sweep is a string match and will hand both back to James as live work.
   Completed work belongs where completed work lives, or its stamp goes — and
   that is his ruling, never the gate's.
+- **A PR that ticks someone else's stale row while leaving its own open.** The
+  account-submenu PR (#474, 2026-09-18) ticked #453's row at `ROADMAP.md:1057`
+  with the words "the work shipped and the row stayed open, which is the
+  failure RF14 exists to prevent" — and left BOTH rows it was itself
+  delivering at `- [ ]`, one of which read "nothing has built it". **At every
+  final-PR gate, read the rows the PR CLOSES, not only the rows it files or
+  the rows now overdue.** `CLAUDE.md`'s hand-back rule has two lists and
+  neither is this one, so nothing else catches it. The cost is countable: PR
+  #422 exists for no other purpose than ticking five rows main had already
+  closed.
+- **Above-the-fold bullets blow the count when a bullet carries the change AND
+  its justification.** Three failures now — #228 at ~270 words, #230 at 266,
+  #474 at 290 with bullets at 56/72/50/39 against ~25. Every over-long bullet
+  in all three was a one-line outcome with the reasoning welded on. The fix is
+  mechanical and the same every time: the outcome stays above the fold, the
+  "because" moves into the Record. Say that, rather than asking for "shorter".
 
 ## Recommendations that turned out wrong
 - **2026-09-13 — the disabled-button contrast fold (#425).** I measured the
