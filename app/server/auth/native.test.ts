@@ -73,7 +73,13 @@ describe("POST /api/auth/native", () => {
     );
     const res = await post(d);
     expect(res.status).toBe(200);
-    expect(d.users.updateProfile).toHaveBeenCalledWith("u1", "A");
+    // INVERTED (James, 2026-09-19). Native sign-in goes through
+    // `signInWithClaims` like the web path, so it carried the same name
+    // re-sync — and that is what would have silently reverted a rename made
+    // on `/you/account`. The provider names an account once, at creation,
+    // and never again. Kept pointing at the same seam rather than deleted,
+    // so the behaviour change reads as a change instead of lost coverage.
+    expect(d.users.updateProfile).not.toHaveBeenCalled();
   });
 
   it("403s an existing subject whose saved email is no longer allowed", async () => {
