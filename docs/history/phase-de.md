@@ -12,7 +12,7 @@ record, with all six of the spec's exit criteria and the pasted greps:
   `title | TYPE | difficulty | pain` is still accepted and ignored
   (`app/domain/bulk.ts`, `HEADER_MESSAGE` and the field-count comment).
 - **Spec §6.5's "this spec's body moves to `docs/history/`" was DELIBERATELY
-  NOT DONE.** No closed phase has ever moved its spec (159 files in
+  NOT DONE — ruled by James, 2026-09-19: "Leave it."** No closed phase has ever moved its spec (159 files in
   `docs/superpowers/specs/`, none in `docs/history/`), and moving this one
   would dangle five citations, two of them in tracked SQL
   (`0024_pain_to_effort.sql`, `0029_drop_difficulty_compat.sql`). The spec

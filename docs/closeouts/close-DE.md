@@ -55,7 +55,9 @@ releasing-0029-tag   | DONE | RELEASING.md said 0029 was untagged      | closed 
    closed phase has ever moved one; moving it would dangle five citations, two
    in tracked SQL (`app/drizzle/0024_pain_to_effort.sql`,
    `0029_drop_difficulty_compat.sql`) and two in the PR 1 / PR 2 plans. It is
-   a spec criterion, so it is put to James in the close PR's hand-back.
+   a spec criterion, so it was put to James in the close PR's hand-back.
+   **RULED 2026-09-19 (James): "Leave it."** The spec stays in
+   `docs/superpowers/specs/`.
 6. Release note in rower words — `releaseNotes.ts`, v0.39.0. MET.
 
 ### The greps, run at `708bfa8d`
