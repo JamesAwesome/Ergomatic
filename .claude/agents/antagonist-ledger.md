@@ -11643,3 +11643,103 @@ manual connection remains in the press continuation; the source-boundary
 mutation targets production code; React scheduling remains a tested heuristic;
 and desk evidence remains bounded away from the original phone incident's
 cause.
+
+## 2026-09-19 — Wave A, attempt token revocation spec (anchor/TRIAD pass)
+
+Target: `docs/superpowers/specs/2026-09-19-attempt-token-revocation-design.md`
+at `4bee1d6d`, off main `87511d77`. TRIAD twice (stored credential lifetime,
+auth), so a full pass. Verdict: NOT CLEAN — 4 blocking, 2 major, 2 moderate.
+All blocking findings were re-verified by the controller against the code
+before folding into revision 2 (`546a5204`).
+
+**Broken:**
+
+- **The census is a statement census, not a producer census.** Eight
+  `DELETE FROM auth_attempts` statements verified correct (`grep -c` = 8, all
+  line numbers check out), and sites 1/6 verified safe (`grant()` at
+  `:323`/`:705` precedes the DELETE in the same transaction). But
+  `original_session_id` is `ON DELETE cascade` on `sessions`
+  (`app/drizzle/0031_apple_front_door.sql:41`) and `sessions.ts:74`/`:78` are
+  two further production producers — sign-out (`routes.ts:169-175`) and a
+  60-second session sweep (`frontDoor.ts:84-86`). A `link_ready` attempt holds
+  an Apple token for up to `ttl` (`attempts.ts:55`) bound to the session the
+  rower can sign out of, and a link guarantees no `apple_grants` row
+  (`attempts.ts:378`), so the invariant would have said REVOKE. Neither the
+  choke point (`attempts.ts` only) nor the census test can see it.
+  → technique 89.
+- **The invariant is keyed on `(user_id, client_id)` and needs the Apple
+  SUBJECT.** Two failures, opposite directions, both traced line by line: a
+  grant belonging to a different Apple subject suppresses a revoke that should
+  happen (existing `apple_sub=X`, signin with Y, `followThrough()` never
+  consults `apple_sub`, `finalize()` refuses with `account_conflict`, cancel);
+  and "attempts with no `original_session_id` have no user to check against"
+  is FALSE — `consistent()` (`:102-105`) requires `verified_subject` at
+  `confirm`, `reauth_authorize` and `reauth_exchanging`, the only stages a
+  null-session row can hold a token at. The "always revoked" rule then
+  destroys a concurrently-created account's credential in the two-tab case.
+  `delete` rows are the one class where `(user_id, client_id)` is right,
+  because `accept()` (`:617-620`) has already proved `identity.sub` is the
+  account's own `apple_sub`. → technique 90.
+- **The prescribed `dropAttempts(): Promise<AppleGrant[]>` drops `discard()`'s
+  row count.** `attempts.ts:713-735` returns `result.rowCount === 1`,
+  load-bearing at `frontDoorRoutes.ts:375`, `:432`, `:483`. An empty array
+  cannot distinguish "matched nothing" from "matched, no credential". Needs
+  `{ rowCount, credentials }`.
+- **The census test defeated five ways in one probe.** Copied `attempts.ts` to
+  the scratchpad, appended a drizzle-builder delete, a lowercase form, a
+  `public."quoted"` form, a `${T}` composed identifier and a wrapped template
+  literal; `grep -c "DELETE FROM auth_attempts"` stayed at 8 (the HEAD value).
+  → technique 91.
+- **Claim 2's reachability argument is 1-for-3.** The hazard is REAL and
+  survived attack — `begin({purpose:'delete'})` requires `apple_sub` NOT NULL
+  (`:381-385`), `providers.ts:222-226` sets `identity.grant` on every Apple
+  exchange, `accept()` assigns it (`:560-562`) and saves to `delete_ready`
+  (`:625-632`). But "a fresh sign-in on the same surface" cannot produce it
+  (`finishSignin` at `:318-327` grants and deletes in one transaction) and "a
+  re-link" cannot either (`begin()` `:378` refuses, and `unlink` `:770-796`
+  deletes every grant in the transaction that nulls `apple_sub`).
+- **Open Question 1 named the wrong lock relation.** Deleting a child takes no
+  parent lock, so "child of `sessions`, already `FOR UPDATE`" does not govern.
+  `DELETE FROM users` (`:893`) already cascades to these rows in this
+  transaction, so the locks are not new — the change is their POSITION and
+  SCAN ORDER (`auth_attempts_link_session_unique`, session order) versus
+  `sweep()`'s (`auth_attempts_expires_at_idx`, expiry order), on a 60-second
+  timer. The fallback ("revoke siblings in a separate transaction before the
+  delete") commits a destructive change in anticipation of a deletion that can
+  still fail, and sits against the spec's own ordering principle.
+- **The invariant's grant read is unlocked**, and `attempts.ts:859-866`
+  already documents why that is unsound (`ON CONFLICT DO UPDATE` leaves the FK
+  column unchanged → no RI check → no parent lock; technique 53, measured on
+  postgres:18.4). `sweep`, `discard` and `cancel` run on `pool` with no
+  transaction at all.
+
+**Attacked and NOT broken:**
+
+- **Both Apple quotes, verified against the live doc** (DocC JSON,
+  `revoke-tokens.json`, fetched 2026-09-19). The RF16 risk — quotes carried
+  from the predecessor and never re-verified — did NOT materialise. **A third
+  PRIMARY sentence neither spec quoted tilts the ambiguity toward the broad
+  reading and was added in revision 2:** the Discussion's "In order to revoke
+  authorization for a user, you must obtain a valid refresh token or access
+  token."
+- **Open Question 3 is a NOTHING FOUND, and the search has now been run.**
+  Apple's REST API documentation states no refresh-token lifetime —
+  `revoke-tokens` and `generate-and-validate-tokens` both fetched as DocC
+  JSON, neither mentions expiry. Only developer-forum threads claim "no
+  time-based expiry" (SECONDARY). "Permanently" stays uncitable, and revision
+  2 no longer asserts it.
+- "No stored shape" is correct; the DBA's stored-shape override does not fire.
+- Sites 1 and 6 are genuinely safe, and the eight statement line numbers are
+  all accurate.
+
+**Brittleness classification (standing check):** choke point DETERMINISTIC for
+statements within `attempts.ts`; census test HEURISTIC (five measured false
+negatives, one constructable false positive via a comment); live-grant
+invariant HEURISTIC as revision 1 specified it (proxy identity + unlocked
+read), made deterministic in revision 2 by keying on `verified_subject` and
+moving the read inside the deleting transaction.
+
+**Vetted ground for Wave A's remaining specs:** the eight-statement census
+inside `attempts.ts` and its line numbers; sites 1/6 safety via `grant()`
+ordering; the delete-confirmation double-token sequence; all three Apple
+revoke quotes as PRIMARY; "no stored shape"; after-commit revoke ordering.
