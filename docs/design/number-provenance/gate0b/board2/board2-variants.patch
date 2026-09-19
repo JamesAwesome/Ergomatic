@@ -1,9 +1,9 @@
 diff --git a/app/e2e/gate0b-board2.spec.ts b/app/e2e/gate0b-board2.spec.ts
 new file mode 100644
-index 00000000..7a739806
+index 00000000..830dfaa2
 --- /dev/null
 +++ b/app/e2e/gate0b-board2.spec.ts
-@@ -0,0 +1,547 @@
+@@ -0,0 +1,619 @@
 +// GATE 0B CAPTURE HARNESS — board 2 (members M3, M6, M9).
 +//
 +// Renders the trace chart's FOUR x-axis treatments against THREE committed
@@ -234,7 +234,7 @@ index 00000000..7a739806
 +      const passes: {
 +        axis: (typeof AXES)[number];
 +        stops: string;
-+        mark: "fill" | "rules";
++        mark: "fill" | "rules" | "band" | "gutter";
 +        suffix: string;
 +      }[] = [
 +        ...AXES.map((axis) => ({
@@ -255,6 +255,21 @@ index 00000000..7a739806
 +                mark: "rules" as const,
 +                suffix: "-rules",
 +              },
++              // James ruled C with a BAND rather than rules (2026-09-19).
++              // Two band treatments that actually clear AA, since the
++              // 25 % wash does not.
++              {
++                axis: "breaks" as const,
++                stops: "0",
++                mark: "band" as const,
++                suffix: "-band",
++              },
++              {
++                axis: "breaks" as const,
++                stops: "0",
++                mark: "gutter" as const,
++                suffix: "-gutter",
++              },
 +            ]
 +          : []),
 +        ...(f.key === "mid-stop" || f.key === "free-row"
@@ -270,6 +285,12 @@ index 00000000..7a739806
 +                stops: "5",
 +                mark: "rules" as const,
 +                suffix: "-stopmark-rules",
++              },
++              {
++                axis: "today" as const,
++                stops: "5",
++                mark: "band" as const,
++                suffix: "-stopmark-band",
 +              },
 +            ]
 +          : []),
@@ -446,6 +467,20 @@ index 00000000..7a739806
 +        ratio: ratio(parse(st.color), page),
 +      });
 +    }
++    // The legend's swatch — a graphical object standing in for the word
++    // BAND, so it carries meaning and is held to 1.4.11's 3:1.
++    const swatch = document.querySelector(".trace-legend-swatch");
++    if (swatch === null) {
++      out.push({ element: ".trace-legend-swatch", MISSING: true });
++    } else {
++      const ss = getComputedStyle(swatch);
++      out.push({
++        element: ".trace-legend-swatch",
++        fill: ss.backgroundColor,
++        size: `${ss.width} x ${ss.height}`,
++        vsPage: ratio(parse(ss.backgroundColor), page),
++      });
++    }
 +    // The two marks: fill vs page (a graphical object, AA 3:1), and the
 +    // label sitting ON that composited fill (text, AA 4.5:1).
 +    for (const [sel, label] of [
@@ -477,12 +512,21 @@ index 00000000..7a739806
 +      const text = rect.parentElement?.querySelector("text");
 +      if (text !== null && text !== undefined) {
 +        const ts = getComputedStyle(text);
-+        // Under the RULES treatment the label sits on the page, not on a
-+        // fill — compositing it over the rule's own colour would measure
-+        // a background it never has.
-+        const behind = isRule ? page : composited;
++        // The label is only ON the mark when the mark actually sits
++        // behind it. Under RULES the mark is a zero-width line, and under
++        // the GUTTER treatment it is a short bar below the plot while the
++        // label sits at the plot's top — in both the background is the
++        // page, and compositing over the mark would measure a background
++        // the text never has.
++        const markBox = rect.getBoundingClientRect();
++        const textBox = text.getBoundingClientRect();
++        const onTheMark =
++          !isRule &&
++          textBox.top >= markBox.top - 1 &&
++          textBox.bottom <= markBox.bottom + 1;
++        const behind = onTheMark ? composited : page;
 +        out.push({
-+          element: `${sel} label (${isRule ? "rules" : "wash"})`,
++          element: `${sel} label (on ${onTheMark ? "the mark" : "the page"})`,
 +          sample: text.textContent,
 +          fg: ts.color,
 +          fontPx: ts.fontSize,
@@ -509,6 +553,18 @@ index 00000000..7a739806
 +  );
 +  await expect(page.locator(".trace-figure")).toBeVisible();
 +  const ruleRows = (await page.evaluate(measure)) as { element: string }[];
++  // James ruled C with a band (2026-09-19). Both band treatments that
++  // clear AA, measured from the live cascade rather than computed.
++  await page.goto(
++    `/today/log/${id}?axis=breaks&rest=30,30,30&stops=5&mark=band&alpha=0.83`,
++  );
++  await expect(page.locator(".trace-figure")).toBeVisible();
++  const bandRows = (await page.evaluate(measure)) as { element: string }[];
++  await page.goto(
++    `/today/log/${id}?axis=breaks&rest=30,30,30&stops=5&mark=gutter`,
++  );
++  await expect(page.locator(".trace-figure")).toBeVisible();
++  const gutterRows = (await page.evaluate(measure)) as { element: string }[];
 +  // The stop mark does not exist on a fixture with no stop, so it is
 +  // measured on the capture that HAS one — the same run, a second row.
 +  const stopId = await seed(
@@ -526,6 +582,9 @@ index 00000000..7a739806
 +  // however plainly it is on screen.
 +  await expect(page.locator(".trace-stop-span").first()).toBeAttached();
 +  const stopRows = (await page.evaluate(measure)) as { element: string }[];
++  await page.goto(`/today/log/${stopId}?axis=today&stops=5&mark=band`);
++  await expect(page.locator(".trace-stop-span").first()).toBeAttached();
++  const stopBandRows = (await page.evaluate(measure)) as { element: string }[];
 +  await page.goto(`/today/log/${stopId}?axis=today&stops=5&mark=rules`);
 +  // ATTACHED, not visible: the rules treatment paints a zero-width
 +  // `<line>`, which has no bounding box and so is "hidden" to Playwright
@@ -536,9 +595,22 @@ index 00000000..7a739806
 +    ...(rows as { element: string; MISSING?: boolean }[]).filter(
 +      (r) => !r.element.startsWith(".trace-stop-span"),
 +    ),
-+    ...ruleRows.filter((r) => r.element.startsWith(".trace-rest-band")),
++    ...ruleRows
++      .filter((r) => r.element.startsWith(".trace-rest-band"))
++      .map((r) => ({ ...r, treatment: "rules" })),
++    ...bandRows
++      .filter((r) => r.element.startsWith(".trace-rest-band"))
++      .map((r) => ({ ...r, treatment: "band 0.83" })),
++    ...gutterRows
++      .filter((r) => r.element.startsWith(".trace-rest-band"))
++      .map((r) => ({ ...r, treatment: "gutter, full strength" })),
 +    ...stopRows.filter((r) => r.element.startsWith(".trace-stop-span")),
-+    ...stopRuleRows.filter((r) => r.element.startsWith(".trace-stop-span")),
++    ...stopBandRows
++      .filter((r) => r.element.startsWith(".trace-stop-span"))
++      .map((r) => ({ ...r, treatment: "band 0.68" })),
++    ...stopRuleRows
++      .filter((r) => r.element.startsWith(".trace-stop-span"))
++      .map((r) => ({ ...r, treatment: "rules" })),
 +  ];
 +  const missing = (all as { element: string; MISSING?: boolean }[])
 +    .filter((r) => r.MISSING === true)
@@ -551,11 +623,37 @@ index 00000000..7a739806
 +  );
 +  process.stdout.write(`${JSON.stringify(all, null, 2)}\n`);
 +});
+diff --git a/app/src/index.css b/app/src/index.css
+index 8cdfd505..926068d2 100644
+--- a/app/src/index.css
++++ b/app/src/index.css
+@@ -11047,6 +11047,21 @@ section:not(.news-pinned) .news-row:last-of-type {
+   text-align: center;
+ }
+ 
++/* BOARD 2 PROTOTYPE: the swatch that replaces the word BAND in the
++   legend (James, 2026-09-19). Sized to the band it stands for —
++   `REST_BAND_HEIGHT` is 8 SVG units in a 320-unit viewBox, so at the
++   legend's own 10px type an 18x8 bar reads as the same object rather
++   than as a bullet. Full-strength `--trace-rest`, the same fill
++   `.trace-rest-band` carries, so the two cannot drift. */
++.trace-legend-swatch {
++  display: inline-block;
++  width: 18px;
++  height: 8px;
++  background: var(--trace-rest);
++  vertical-align: baseline;
++  margin-right: 0.35em;
++}
++
+ .trace-tick-mark {
+   stroke: var(--rule-3);
+   stroke-width: 1;
 diff --git a/app/src/log/TraceChart.tsx b/app/src/log/TraceChart.tsx
-index ee7db6c5..a81e849a 100644
+index ee7db6c5..86179938 100644
 --- a/app/src/log/TraceChart.tsx
 +++ b/app/src/log/TraceChart.tsx
-@@ -37,14 +37,47 @@
+@@ -37,14 +37,69 @@
  import { useId, useMemo, useState } from "react";
  import type { SeriesData } from "../monitor/seriesRecorder.js";
  import { linearScale, decimate } from "../charts/scale.js";
@@ -576,35 +674,57 @@ index ee7db6c5..a81e849a 100644
 +  mode: AxisMode;
 +  rest: number[];
 +  stops: number;
-+  mark: "fill" | "rules";
++  mark: "fill" | "rules" | "band" | "gutter";
++  alpha: number;
 +} {
 +  if (typeof window === "undefined")
-+    return { mode: "today", rest: [], stops: 0, mark: "fill" };
++    return { mode: "today", rest: [], stops: 0, mark: "fill", alpha: 0.83 };
 +  const q = new URLSearchParams(window.location.search);
 +  const raw = q.get("axis");
 +  const mode: AxisMode =
 +    raw === "work" || raw === "wall" || raw === "breaks" ? raw : "today";
 +  const stops = Number(q.get("stops") ?? "0");
-+  const mark = q.get("mark") === "rules" ? "rules" : "fill";
++  const rawMark = q.get("mark");
++  const mark =
++    rawMark === "rules" || rawMark === "band" || rawMark === "gutter"
++      ? rawMark
++      : "fill";
++  const alphaRaw = Number(q.get("alpha") ?? "");
++  const alpha = Number.isFinite(alphaRaw) && alphaRaw > 0 ? alphaRaw : 0.83;
 +  const rest = (q.get("rest") ?? "")
 +    .split(",")
 +    .map((v) => Number(v))
 +    .filter((v) => Number.isFinite(v));
-+  return { mode, rest, stops: Number.isFinite(stops) ? stops : 0, mark };
++  return {
++    mode,
++    rest,
++    stops: Number.isFinite(stops) ? stops : 0,
++    mark,
++    alpha,
++  };
 +}
 +
 +const AXIS_LEGEND: Record<AxisMode, string | null> = {
 +  today: null,
 +  work: "X = WORK TIME · RESTS NOT SHOWN",
-+  wall: "X = TIME AT THE ERG · BAND = REST",
-+  breaks: "X = WORK TIME · BREAK = REST",
++  // The mark names itself: a swatch of the real band colour stands where
++  // the word BAND used to (James, 2026-09-19). The word survives for a
++  // screen reader, which cannot see a swatch.
++  //
++  // AND THE AXIS NAMES ITSELF TOO (James, 2026-09-19: "you can drop the
++  // label for x — it's obvious what it is"). The legend used to open
++  // `X = TIME AT THE ERG ·`. What carries the quantity now is the band:
++  // a rest drawn at its own length says the axis counts rest, which is
++  // exactly what distinguishes this axis from the work-only one.
++  wall: "",
++  breaks: "",
 +};
 +// ===== END BOARD 2 PROTOTYPE =====
 +
  const MEASURES: readonly Measure[] = ["pace", "rate", "hr"];
  
  const MEASURE_LABEL: Record<Measure, { visible: string; spoken: string }> = {
-@@ -156,6 +189,7 @@ const X_TICK_LABEL_Y = X_TICK_MARK_Y2 + 4;
+@@ -156,6 +211,7 @@ const X_TICK_LABEL_Y = X_TICK_MARK_Y2 + 4;
   *  in spec §4 pins a count, and this keeps a narrow SVG legible without
   *  crowding `chooseTicks`'s own round-number selection. */
  const X_TICK_COUNT = 4;
@@ -612,7 +732,7 @@ index ee7db6c5..a81e849a 100644
  
  /** Decimation's own `columns` argument (Task 1's `decimate`, §3's "~2
   *  points per horizontal pixel"). An inline SVG has no fixed device-pixel
-@@ -230,10 +264,13 @@ export default function TraceChart({
+@@ -230,10 +286,13 @@ export default function TraceChart({
    // one `id` and one clip-path would silently win for both).
    const plotClipId = useId();
  
@@ -627,7 +747,7 @@ index ee7db6c5..a81e849a 100644
    }, [series]);
  
    // §1's absence idiom: the DEFAULT measure alone decides whether the
-@@ -257,7 +294,7 @@ export default function TraceChart({
+@@ -257,7 +316,7 @@ export default function TraceChart({
    // trace-truth Task 3 (spec §4): `chooseTicks` reused unchanged, over
    // the SAME `domainX` the polyline/x-scale already use — the axis spans
    // exactly the trace's own duration, never a re-derived one.
@@ -636,7 +756,7 @@ index ee7db6c5..a81e849a 100644
  
    return (
      <figure className="trace-figure">
-@@ -307,13 +344,19 @@ export default function TraceChart({
+@@ -307,13 +366,19 @@ export default function TraceChart({
              points per segment; the polyline below is decimated
              independently and stays one continuous stroke across the
              band's own x-range (§3: a rest is not a gap). */}
@@ -661,7 +781,7 @@ index ee7db6c5..a81e849a 100644
                  className="trace-rest-band"
                  x={x1}
                  y={REST_BAND_Y}
-@@ -321,8 +364,131 @@ export default function TraceChart({
+@@ -321,8 +386,174 @@ export default function TraceChart({
                  height={REST_BAND_HEIGHT}
                />
              );
@@ -693,7 +813,23 @@ index ee7db6c5..a81e849a 100644
 +          const x2 = xScale(stop.endX);
 +          return (
 +            <g key={`stop-${i}`}>
-+              {board.mark === "rules" ? (
++              {board.mark === "band" || board.mark === "gutter" ? (
++                /* The stop mark follows the same rule the break does: a
++                   band, at an opacity where it is a graphical object in
++                   its own right AND still carries a legible label.
++                   `--ink-3` has its own window — below 0.647 the band
++                   misses 3:1, above 0.710 the 9 px label misses 4.5:1 —
++                   so 0.68 sits in the middle. */
++                <rect
++                  className="trace-stop-span"
++                  x={x1}
++                  y={TOP_PAD}
++                  width={Math.max(0, x2 - x1)}
++                  height={PLOT_BOTTOM - TOP_PAD}
++                  fill="var(--ink-3)"
++                  opacity={0.68}
++                />
++              ) : board.mark === "rules" ? (
 +                <>
 +                  {/* Two FULL-STRENGTH rules instead of a wash. A fill
 +                      pale enough not to read as "something is blocking
@@ -752,7 +888,34 @@ index ee7db6c5..a81e849a 100644
 +            const x2 = xScale(span.endX);
 +            return (
 +              <g key={`break-${i}`}>
-+                {board.mark === "rules" ? (
++                {board.mark === "gutter" ? (
++                  /* The band the chart ALREADY ships, in the gutter, at
++                     full strength (4.25:1 vs the page) — the plot keeps a
++                     clean empty gap and the label sits on the page above
++                     it at 15.41:1. */
++                  <rect
++                    className="trace-rest-band"
++                    x={x1}
++                    y={REST_BAND_Y}
++                    width={Math.max(0, x2 - x1)}
++                    height={REST_BAND_HEIGHT}
++                  />
++                ) : board.mark === "band" ? (
++                  /* A full-height band strong enough to be a graphical
++                     object in its own right. The bronze token has a narrow
++                     window: below 0.793 the band misses WCAG 1.4.11's 3:1
++                     against the page, above 0.873 the 9px label on it
++                     misses 4.5:1. 0.83 sits in the middle at 3.20 and
++                     4.81. */
++                  <rect
++                    className="trace-rest-band"
++                    x={x1}
++                    y={TOP_PAD}
++                    width={Math.max(0, x2 - x1)}
++                    height={PLOT_BOTTOM - TOP_PAD}
++                    opacity={board.alpha}
++                  />
++                ) : board.mark === "rules" ? (
 +                  <>
 +                    <line
 +                      className="trace-rest-band"
@@ -795,7 +958,7 @@ index ee7db6c5..a81e849a 100644
          {trace.ticksY.map((tick) => {
            const y = yScale(tick);
            return (
-@@ -358,8 +524,8 @@ export default function TraceChart({
+@@ -358,8 +589,8 @@ export default function TraceChart({
              class alone can't distinguish an x-label from a y-label now
              that both exist. */}
          {ticksX.map((tick) => {
@@ -806,7 +969,7 @@ index ee7db6c5..a81e849a 100644
            // Gate 0A, member M8: a tick sitting ON the plot's right edge
            // carries a CENTRED label that overhangs the viewBox by 2.80
            // units and loses its final glyph (`0:4(` — measured 2026-09-14,
-@@ -378,7 +544,7 @@ export default function TraceChart({
+@@ -378,7 +609,7 @@ export default function TraceChart({
            const anchor =
              x - half < 0 ? "start" : x + half > CHART_WIDTH ? "end" : "middle";
            return (
@@ -815,14 +978,23 @@ index ee7db6c5..a81e849a 100644
                <line
                  className="trace-tick-mark"
                  x1={x}
-@@ -438,8 +604,12 @@ export default function TraceChart({
+@@ -438,8 +669,21 @@ export default function TraceChart({
            carries no colour word on purpose — `#97692a` reads amber in
            the PR body and bronze on the actual capture; naming a colour
            here would just be a second thing to get wrong later. */}
 -      {trace.points.some((segment) => segment.some((p) => p.rest)) && (
 -        <p className="trace-legend">BAND = REST</p>
 +      {AXIS_LEGEND[trace.axisMode] !== null ? (
-+        <p className="trace-legend">{AXIS_LEGEND[trace.axisMode]}</p>
++        <p className="trace-legend">
++          {AXIS_LEGEND[trace.axisMode]}
++          {(trace.axisMode === "wall" || trace.axisMode === "breaks") && (
++            <>
++              <span className="trace-legend-swatch" aria-hidden="true" />
++              <span className="visually-hidden">band</span>
++              {" = REST"}
++            </>
++          )}
++        </p>
 +      ) : (
 +        trace.points.some((segment) => segment.some((p) => p.rest)) && (
 +          <p className="trace-legend">BAND = REST</p>

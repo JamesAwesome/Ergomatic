@@ -96,7 +96,7 @@
       "3:20",
       "6:40"
     ],
-    "legend": "X = TIME AT THE ERG · BAND = REST",
+    "legend": "band = REST",
     "texts": [
       "1:40",
       "2:30",
@@ -136,7 +136,7 @@
       "3:20",
       "5:00"
     ],
-    "legend": "X = WORK TIME · BREAK = REST",
+    "legend": "band = REST",
     "texts": [
       "30s",
       "30s",
@@ -180,7 +180,95 @@
       "3:20",
       "5:00"
     ],
-    "legend": "X = WORK TIME · BREAK = REST",
+    "legend": "band = REST",
+    "texts": [
+      "30s",
+      "30s",
+      "30s",
+      "1:40",
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "equal-rests",
+    "axis": "breaks-band",
+    "orientation": "landscape",
+    "viewBox": "0 0 320 174",
+    "polylines": 4,
+    "bands": [
+      {
+        "x": 85.66530241018637,
+        "width": 9.040472942246467,
+        "height": 120
+      },
+      {
+        "x": 171.67894497498838,
+        "width": 9.040472942246453,
+        "height": 120
+      },
+      {
+        "x": 264.1500682128239,
+        "width": 9.040472942246481,
+        "height": 120
+      }
+    ],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": "band = REST",
+    "texts": [
+      "30s",
+      "30s",
+      "30s",
+      "1:40",
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "equal-rests",
+    "axis": "breaks-gutter",
+    "orientation": "landscape",
+    "viewBox": "0 0 320 174",
+    "polylines": 4,
+    "bands": [
+      {
+        "x": 85.66530241018637,
+        "width": 9.040472942246467,
+        "height": 8
+      },
+      {
+        "x": 171.67894497498838,
+        "width": 9.040472942246453,
+        "height": 8
+      },
+      {
+        "x": 264.1500682128239,
+        "width": 9.040472942246481,
+        "height": 8
+      }
+    ],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": "band = REST",
     "texts": [
       "30s",
       "30s",
@@ -251,7 +339,7 @@
       "0:50",
       "1:40"
     ],
-    "legend": "X = TIME AT THE ERG · BAND = REST",
+    "legend": "band = REST",
     "texts": [
       "2:30",
       "3:20",
@@ -273,7 +361,7 @@
       "0:50",
       "1:40"
     ],
-    "legend": "X = WORK TIME · BREAK = REST",
+    "legend": "band = REST",
     "texts": [
       "2:30",
       "3:20",
@@ -339,6 +427,34 @@
     ]
   },
   {
+    "key": "mid-stop",
+    "axis": "today-stopmark-band",
+    "orientation": "landscape",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [
+      {
+        "x": 62.70164917541229,
+        "width": 128.80059970014992
+      }
+    ],
+    "ticks": [
+      "0:00",
+      "0:50",
+      "1:40"
+    ],
+    "legend": null,
+    "texts": [
+      "STOPPED 61s",
+      "2:30",
+      "3:20",
+      "0:00",
+      "0:50",
+      "1:40"
+    ]
+  },
+  {
     "key": "free-row",
     "axis": "today",
     "orientation": "landscape",
@@ -400,7 +516,7 @@
       "3:20",
       "5:00"
     ],
-    "legend": "X = TIME AT THE ERG · BAND = REST",
+    "legend": "band = REST",
     "texts": [
       "2:30",
       "3:20",
@@ -424,7 +540,7 @@
       "3:20",
       "5:00"
     ],
-    "legend": "X = WORK TIME · BREAK = REST",
+    "legend": "band = REST",
     "texts": [
       "2:30",
       "3:20",
@@ -461,6 +577,30 @@
   {
     "key": "free-row",
     "axis": "today-stopmark-rules",
+    "orientation": "landscape",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": null,
+    "texts": [
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "free-row",
+    "axis": "today-stopmark-band",
     "orientation": "landscape",
     "viewBox": "0 0 320 174",
     "polylines": 1,

@@ -11,6 +11,57 @@ through the shipped recorder** — never hand-built (`fixtures/README.md`).
 
 ---
 
+## APPROVED 2026-09-19 — candidate B, and the legend names its own mark
+
+**James: "B is the one I had in mind not C"** (marked up on the board's own
+frame), and **"if instead of the word 'band' just show a [yellow] bar and
+then '= rest'"**.
+
+So the axis is **work plus the machine's own rest** — `wall = work +
+machineRest`, the arithmetic the 2026-09-15 walk kept alive. Rests keep the
+band the chart already ships, in the gutter, at full strength.
+
+**The legend changed twice.** `BAND = REST` first became a swatch of the
+real band colour where the word BAND stood, under a named axis; then
+James dropped the axis name as well — *"you can drop the label for x, it's
+obvious what it is"*. What ships is:
+
+> `▬ = REST`
+
+The swatch is the same `--trace-rest` fill `.trace-rest-band` carries, so
+the two cannot drift, and it is 18×8 px against the band's own 8-unit
+height. Measured **4.25:1** against the page — it carries meaning, so
+WCAG 1.4.11's 3:1 binds it. A visually-hidden "band" keeps the sentence
+intact for a screen reader, which cannot see a swatch.
+
+`equal-rests-wall-{portrait,landscape}.png`
+
+**This amends invariant I3, and PR 3 owes the rewording.** I3 says a chart
+axis is "a defined quantity, named in the file that builds it AND on the
+screen that draws it". The screen half is now carried by the MARK rather
+than by a caption: a rest drawn at its own length is what says the axis
+counts rest, which is the whole of what separates this axis from the
+work-only one. I3 should read "named in the file that builds it, and on
+screen either named or made unambiguous by its own marks" — the point was
+never the caption, it was that a reader can tell which quantity they are
+looking at.
+
+### What B costs, restated because it is now what ships
+
+| | |
+| --- | --- |
+| Bands | **17.47 / 17.47 / 17.47 u** — equal, from the machine's own rest seconds |
+| Domain | 487.8 s, against today's 419.5 s |
+| Line | **4 segments, not 2** — it breaks across the part of each rest the rower sat still, because no readings exist there |
+| The field it rests on | `IntervalActual.restSeconds` is a **readback, not a measurement** (`domain/monitor/types.ts:345`); its arithmetic closed on one capture, 374.76 s wall against work 254.8 + rest 120 |
+
+**C and its treatments are withdrawn** but the frames stay, because the
+contrast work they forced is what set the swatch's own floor: the 25 % wash
+measured 1.36:1, the full-height band at 0.83 measured 3.19:1, and the
+gutter band B keeps measures 4.25:1 (`frames/contrast.json`).
+
+---
+
 ## 1. What today's chart does, on three real rows
 
 ### Three equal rests draw three different widths (M6)

@@ -1,7 +1,7 @@
 [
   {
     "element": ".trace-legend",
-    "sample": "X = WORK TIM",
+    "sample": "band = REST",
     "fg": "rgb(87, 84, 76)",
     "bg": "rgb(244, 241, 232)",
     "fontPx": "10px",
@@ -24,6 +24,12 @@
     "ratio": 15.41
   },
   {
+    "element": ".trace-legend-swatch",
+    "fill": "rgb(151, 105, 42)",
+    "size": "18px x 8px",
+    "vsPage": 4.25
+  },
+  {
     "element": ".trace-rest-band (break fill, wash)",
     "fill": "rgb(151, 105, 42)",
     "opacity": 0.25,
@@ -31,7 +37,7 @@
     "vsPage": 1.36
   },
   {
-    "element": ".trace-rest-band label (wash)",
+    "element": ".trace-rest-band label (on the mark)",
     "sample": "30s",
     "fg": "rgb(27, 26, 23)",
     "fontPx": "9px",
@@ -48,15 +54,51 @@
     "fill": "rgb(151, 105, 42)",
     "opacity": 1,
     "composited": "rgb(151, 105, 42)",
-    "vsPage": 4.25
+    "vsPage": 4.25,
+    "treatment": "rules"
   },
   {
-    "element": ".trace-rest-band label (rules)",
+    "element": ".trace-rest-band label (on the page)",
     "sample": "30s",
     "fg": "rgb(27, 26, 23)",
     "fontPx": "9px",
     "bg": "rgb(244, 241, 232)",
-    "ratio": 15.41
+    "ratio": 15.41,
+    "treatment": "rules"
+  },
+  {
+    "element": ".trace-rest-band (break fill, wash)",
+    "fill": "rgb(151, 105, 42)",
+    "opacity": 0.83,
+    "composited": "rgb(167, 128, 74)",
+    "vsPage": 3.19,
+    "treatment": "band 0.83"
+  },
+  {
+    "element": ".trace-rest-band label (on the mark)",
+    "sample": "30s",
+    "fg": "rgb(27, 26, 23)",
+    "fontPx": "9px",
+    "bg": "rgb(167, 128, 74)",
+    "ratio": 4.83,
+    "treatment": "band 0.83"
+  },
+  {
+    "element": ".trace-rest-band (break fill, wash)",
+    "fill": "rgb(151, 105, 42)",
+    "opacity": 1,
+    "composited": "rgb(151, 105, 42)",
+    "vsPage": 4.25,
+    "treatment": "gutter, full strength"
+  },
+  {
+    "element": ".trace-rest-band label (on the page)",
+    "sample": "30s",
+    "fg": "rgb(27, 26, 23)",
+    "fontPx": "9px",
+    "bg": "rgb(244, 241, 232)",
+    "ratio": 15.41,
+    "treatment": "gutter, full strength"
   },
   {
     "element": ".trace-stop-span (stop fill, wash)",
@@ -66,7 +108,7 @@
     "vsPage": 1.3
   },
   {
-    "element": ".trace-stop-span label (wash)",
+    "element": ".trace-stop-span label (on the mark)",
     "sample": "STOPPED 61s",
     "fg": "rgb(27, 26, 23)",
     "fontPx": "9px",
@@ -74,18 +116,37 @@
     "ratio": 11.83
   },
   {
+    "element": ".trace-stop-span (stop fill, wash)",
+    "fill": "rgb(87, 84, 76)",
+    "opacity": 0.68,
+    "composited": "rgb(137, 134, 126)",
+    "vsPage": 3.21,
+    "treatment": "band 0.68"
+  },
+  {
+    "element": ".trace-stop-span label (on the mark)",
+    "sample": "STOPPED 61s",
+    "fg": "rgb(27, 26, 23)",
+    "fontPx": "9px",
+    "bg": "rgb(137, 134, 126)",
+    "ratio": 4.8,
+    "treatment": "band 0.68"
+  },
+  {
     "element": ".trace-stop-span (stop fill, rules)",
     "fill": "rgb(87, 84, 76)",
     "opacity": 1,
     "composited": "rgb(87, 84, 76)",
-    "vsPage": 6.69
+    "vsPage": 6.69,
+    "treatment": "rules"
   },
   {
-    "element": ".trace-stop-span label (rules)",
+    "element": ".trace-stop-span label (on the page)",
     "sample": "STOPPED 61s",
     "fg": "rgb(27, 26, 23)",
     "fontPx": "9px",
     "bg": "rgb(244, 241, 232)",
-    "ratio": 15.41
+    "ratio": 15.41,
+    "treatment": "rules"
   }
 ]
