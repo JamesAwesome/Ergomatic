@@ -735,3 +735,85 @@ was `save()`'s UPDATE text. (4) Task 0 Step 4 still read "all four cases hold"
 while Step 1 enumerates seven — and Step 4 is the step that reads the gate.
 
 **Which scale ruled:** none. Decided at one row, by correctness, like revision 2.
+
+## 2026-09-19 — Attempt token revocation spec (SPEC gate, no stored shape)
+
+**PASS WITH ROWS.** Target
+`docs/superpowers/specs/2026-09-19-attempt-token-revocation-design.md` @
+`4bee1d6d`, worktree `attempt-revocation`; the in-flight
+`app/server/auth/attemptCredentials.ts` re-measured because it prescribes a
+THIRD query shape the spec does not describe. **No migration, no column, no
+index, no changed jsonb key set — the stored-shape override does not fire.**
+Household scale (5 users / 25 sessions / 536 attempts) decided every cost
+finding.
+
+| Environment | Value |
+|---|---|
+| Container / PG | `erg-dba-pg`, `postgres:18.4` → `PostgreSQL 18.4 (Debian 18.4-1.pgdg13+1)` aarch64 |
+| Host | Apple M5, 10 CPU, 16 GiB; Docker Desktop 29.4.1 |
+| Schema | all 34 `app/drizzle/*.sql` via `psql -v ON_ERROR_STOP=1` |
+| Settings | `work_mem=4096kB`, `shared_buffers=163848kB`, `jit=off`, `max_parallel_workers_per_gather=0` per session, `statement_timeout=0`, `lock_timeout=0`, `deadlock_timeout=1000ms` |
+| Sampling | 6 runs / one psql session / discard run 1 / median of 5; every comparison interleaved over 2 rounds |
+| Scales | 536 (the structural cap), 100,025, 140,000, 1,000,025 attempts; 25 and 100,000 sessions |
+
+**Open Question 1 — answered NO, twice over.** `pg_locks` at pre-COMMIT is
+**58 entries in both shapes, zero difference**; row probes read
+`{A1:HELD, A2:HELD, S2:HELD}` in both. `DELETE FROM users` already cascades to
+the same rows, so the proposed statement moves the acquisition one statement
+earlier and adds no lock. Against the real competitor — `sweep()`'s
+`DELETE … WHERE expires_at<=now()`, fired on a 60 s `setInterval`
+(`frontDoor.ts:85`) and inside every signin `begin()` (`attempts.ts:352`) — a
+deterministic held-row construction produced `40P01` **3/3 in one sibling
+arrangement and 0/3 in the other, identically for the SHIPPED cascade and the
+PROPOSED statement**. The control (two txns, opposite order, same two rows)
+printed `40P01`, so the probe bites. Scan orders genuinely differ
+(`Bitmap Heap Scan` = block order vs `Merge Join` + `Index Scan using
+auth_attempts_link_session_unique` = index order); `ORDER BY ctid FOR UPDATE`
+gave 0/6, reported as an absence and not prescribed.
+
+**The spec's fallback is unsafe in one of its two readings.** A separate
+transaction issued while `deleteAccount`'s transaction is open self-blocks on
+the attempt row `bound()`→`load()` holds: **still blocked at 15,002 ms** with
+the production `lock_timeout=0`, `55P03` at an injected 6 s. Strictly before
+the transaction opens: clean.
+
+**Costs, interleaved (plain / RETURNING / shipped `NOT EXISTS` predicate).**
+536 rows all expired: 0.184-0.231 / 0.312-0.363 / 0.838-0.894 ms. 140k:
+31.3-32.7 / 60.5-62.5 / 386.0-392.6 ms. 100k: 18.9-20.3 / 37.6-38.2 / —. 1M:
+294-300 / 483-501 / —. RETURNING ~0.19 µs/row; the predicate ~2.4 µs/row
+(three indexed lookups each). `auth_attempts_expires_at_idx` serves the sweep
+at every scale — **no new index**. CTE tuplestore: 22 kB in memory at the cap,
+`Disk 95704kB` at 1M. TTL 300 s vs a 60 s sweep means one sweep deletes one
+minute's cohort — usually zero rows at household.
+
+**Live-grant shape.** One statement 0.901 ms vs per-row 12.088 ms (83 rows /
+100k users, through the real `pg.Pool`) — **13.4x**, ~0.135 ms/round trip.
+`users.apple_sub` carries `users_apple_sub_unique` (Index Only Scan,
+`Heap Fetches: 0`, 5,296 kB at 100k users). **A subject-only anti-join placed
+before `DELETE FROM users` returns EMPTY for the deleting rower's own token**;
+the shipped `NOT EXISTS (… apple_grants …)` form is correct **only because
+`DELETE FROM apple_grants` runs first** (`revocable = t` with that order, `f`
+without). Predicate bites: 527 revocable / 9 held back over 536 rows.
+
+**Census gap.** `sessions.ts:74` (sign-out) and `:78` (60 s sweep, plus
+`signin.ts:50`, `testSignin.ts:62`) cascade to `auth_attempts` and return no
+rows, so no choke point and no "appears exactly once in `attempts.ts`" test
+can see them. Covering: sign-out +0.05 ms at 25 and at 100k sessions; session
+sweep 19.4-20.1 → 31.1-35.8 ms at 100k sessions / 10k expired; within noise at
+25/5. **Being fixed in this same PR rather than filed, on James's approval.**
+
+**Footprint.** 536 rows = 360 kB total / 208 kB heap after `VACUUM FULL`
+(`state_unique` 72, `pkey` 40, `expires_at_idx` 16, `link_session_unique`
+16 kB). Structurally capped: 512 live signin rows + one attempt per live
+session. This design adds no row, column or index.
+
+**Which scale ruled:** household. The 140k and 1M rounds ruled nothing and are
+recorded as the ceiling.
+
+**Unmeasured:** production host CPU/RAM; production row counts for
+`auth_attempts`/`sessions`/`apple_grants` (no prod access — the ledger's
+2026-09-13 "these tables have never held one" predates the Apple front door
+shipping); whether two concurrent `deleteAccount`s for one user can cycle
+(INFERENCE: they serialise on `SELECT id FROM sessions … ORDER BY id FOR
+UPDATE`); whether `ORDER BY ctid` survives HOT updates; Apple's revoke
+semantics and refresh-token lifetime (not database questions).

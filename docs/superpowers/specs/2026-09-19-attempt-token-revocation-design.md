@@ -252,7 +252,21 @@ revoke calls at once, so they fire without being awaited, bounded by
 
 The sibling gap closes by sweeping every attempt on every session of the user
 through `dropAttempts` before `DELETE FROM users`, replacing the hand-push at
-`:888`. See Open Question 1 — this is the one part carrying real risk.
+`:888`. Open Question 1 measured this and cleared it.
+
+**ONE ORDERING INVARIANT, LOAD-BEARING AND MEASURED.** `DELETE FROM
+apple_grants` must run **before** the attempts delete. The rower being deleted
+still holds their own grant until that statement runs, so the reversed order
+makes the live-grant predicate read the rower's own grant and mark their own
+attempt token NON-revocable — silently, with every test green. Measured:
+`revocable = t` with grants first, `f` without. **Its gate is a test whose
+mutation is swapping the two statements**, and the invariant is written beside
+the predicate in `attemptCredentials.ts`.
+
+The same measurement killed an alternative this spec might otherwise have
+reached for: a **subject-only** anti-join returns EMPTY for the deleting rower,
+because their `apple_sub` is still present at that point. The `NOT EXISTS` over
+`apple_grants` is the form that survives.
 
 ## Stored shape
 
@@ -284,22 +298,25 @@ ROADMAP row in this PR, and it is what makes this defect permanent.
 
 ## Open questions
 
-1. **Does the sibling sweep inside `deleteAccount` deadlock? [A8]** Revision 1
-   asked whether the statement adds new locks. It does not — `DELETE FROM
-   users` already cascades to these rows in this transaction. What changes is
-   their **position and scan order**. The shape to measure is two multi-row
-   `DELETE`s over an overlapping row set in different index orders: the
-   sibling sweep on `auth_attempts_link_session_unique` (session order) versus
-   `sweep()`'s on `auth_attempts_expires_at_idx` (expiry order), on a 60 s
-   timer. **The DBA measures this. It is not settled by reasoning, because
-   reasoning lost here once already.**
-   **The fallback carries a cost revision 1 did not state:** "revoke siblings
-   in a separate transaction first" commits a destructive change — rows
-   destroyed, tokens revoked at Apple — in anticipation of a deletion that can
-   still fail on `attempt_expired` or `account_changed`, leaving a rower whose
-   deletion failed with an in-flight link silently destroyed on another
-   device. If the measurement goes badly, prefer one transaction sweeping
-   siblings by the same index the cascade uses.
+1. **CLOSED — the sibling sweep does NOT deadlock. Measured by the DBA gate,
+   2026-09-19, verdict PASS WITH ROWS.** `pg_locks` for `deleteAccount`'s
+   backend at pre-COMMIT is **58 entries in both shapes, zero difference
+   either way**, because `DELETE FROM users` already cascades to exactly those
+   rows — the proposed statement moves the acquisition one statement earlier
+   and adds no lock. Against the real competitor, `sweep()` on a 60 s timer, a
+   deterministic held-row construction (not a race) produced `40P01` **3/3 in
+   one sibling arrangement and 0/3 in the other, identically for the shipped
+   cascade and the proposed statement**, with a control that bit. **The
+   deadlock is PRE-EXISTING and this change neither introduces nor worsens
+   it**; it is filed as its own ROADMAP row rather than fixed here, because
+   fixing it means changing how the TTL sweep scans.
+   **And the fallback this spec proposed is unsafe in one of its two
+   readings**, which is now moot but worth recording: a separate transaction
+   issued *while* `deleteAccount`'s transaction is open self-blocks on the
+   attempt row `bound()`→`load()` holds — **still blocked at 15,002 ms** under
+   the production `lock_timeout=0`. Only "strictly before the transaction
+   opens" is clean. A design that says "a separate transaction" must say which
+   side of `BEGIN` it means.
 2. **Per-token or per-authorization?** Unresolvable from Apple's docs, which
    contradict themselves. The design is built for the broad reading.
 3. **Refresh-token lifetime: NOTHING FOUND, and that is the result [A3].**

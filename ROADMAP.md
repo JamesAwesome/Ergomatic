@@ -1374,6 +1374,46 @@ it lands the stranger on this same denial.
       deletion transaction, which is the one change in this PR that carries
       both the stored-shape and the auth members of the triad, and it would
       arrive without the antagonist pass and DBA gate those force.
+- [ ] **`sweep()` and the account-delete cascade deadlock on `auth_attempts`,
+      and a losing sweep refuses sign-in.** `sweep()` scans in physical BLOCK
+      order (`Bitmap Heap Scan` on `auth_attempts_expires_at_idx`); the
+      account delete reaches the same rows in INDEX-KEY order
+      (`auth_attempts_link_session_unique`). A deterministic held-row probe —
+      not a race — produced `40P01` **3 of 3** in one sibling arrangement and
+      0 of 3 in the other, with a control that bit, **against the SHIPPED
+      code**. When the sweep is the victim, `attempts.ts:335` sets
+      `healthy=false` and `begin()` then refuses every `signin` until the next
+      successful sweep, up to 60 s. Needs two of one rower's sessions to carry
+      expired attempts at the moment of the delete.
+      **Measured by the DBA gate, 2026-09-19**, while clearing the attempt
+      token revocation spec's Open Question 1 — which is how a pre-existing
+      defect surfaced from a change that does not cause it (the proposed
+      statement deadlocks identically, neither introducing nor worsening it).
+      **What would fix it now, and why not now:** an `ORDER BY ctid FOR UPDATE`
+      sub-select on the sibling delete (measured 0/6 deadlocks) or retrying
+      `transaction()` on `40P01`. Both change code the revocation work does not
+      otherwise touch, and shipping an unrelated locking change inside an auth
+      PR is the two-risk-models split this file says to avoid. **S**
+      · dies 2026-11-30 · a row and not a fix now because it is pre-existing
+      and unchanged by the PR that found it, and fixing it means changing how
+      the TTL sweep scans — a bigger change than the one under review.
+- [ ] **A tripwire, not a defect: the live-grant predicate costs ~2.4 µs per
+      deleted row, and only the 512 cap makes that free.** The attempt
+      revocation helper's `NOT EXISTS` runs three indexed lookups per returned
+      row (`users_apple_sub_unique`, `sessions_pkey`, `apple_grants_pkey` via
+      `BitmapOr`): **0.84-0.89 ms at 536 rows but 386-393 ms at 140k**, 12x a
+      plain DELETE and 6.3x a plain `RETURNING`. Harmless only because
+      `begin()` caps `purpose='signin'` at 512 and
+      `auth_attempts_link_session_unique` allows one row per live session, so
+      one 60 s sweep deletes at most one minute's expiries — usually zero at a
+      household. Every lookup is indexed; **nothing is missing and there is
+      nothing to fix at any reachable scale.**
+      **This row exists so that raising or removing the 512 cap is not done
+      without re-reading that number.** Measured by the DBA gate 2026-09-19;
+      full numbers in `dba-ledger.md`. **S**
+      · dies 2027-03-19 · a row and not a fix now because there is nothing
+      wrong today — it is a tripwire on a constant, and it dies when someone
+      confirms the cap is still in force.
 - [ ] **The re-registration name defect now has no retry in front of it.**
       TN3194, verbatim: "If the manual token revocation isn't completed, the
       next time the user authenticates with your client using Sign in with
