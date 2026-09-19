@@ -162,6 +162,35 @@ rule is a browser question, so this is settled by a capture, not by reading.
 No rule is MOVED in `index.css` by this change; any new rule is appended in
 its own block.
 
+### 7. The terminal destination moves with the list, and that is a finding
+
+**Found during implementation; Gate 0 assumed it away.** The ruling says the
+You-initiated link "starts and ends inside that one component and its success
+notice follows it". It does not: the return is routed by
+`destinationFor` (`src/adapters/authFlow.ts:206`), which sends `linked`, and
+`cancelled`/`error` on the `link` and `delete` purposes, to **`/you`** — with
+its own comment saying why ("the only screen that renders either notice", and
+finding I1 as the cost of getting it wrong).
+
+Move the list to `/you/account` and leave that line alone, and every one of
+those notices lands on a screen that cannot render it: the success line, the
+`account_conflict` four-step recovery, the "We couldn't confirm it was you"
+after a failed delete re-auth. **That is finding I1 exactly, arriving by a new
+route.** So the destination becomes `/you/account` for those views, and the
+comment says the route and the notice are one fact.
+
+**Priced, not waved through.** The spec's own tripwire says to stop if the
+implementation reaches into the auth state machine. This is `destinationFor`,
+a pure view → route table with its own unit tests — no stage, no attempt, no
+`consistent()` invariant, nothing stored. It is the navigation half of the
+change, which is what the change IS. Still: it is the one edit in this PR
+inside `adapters/authFlow.ts`, and the PR says so above the fold.
+
+Two client tests reached `Remove` by rendering `You`
+(`adapters/authFlow.test.tsx`, the RF24 re-read seam and the double-tap
+guard). They now render `AccountScreen` — the same real component, the same
+real write and re-read, on the surface that holds it.
+
 ## Tests, failing first
 
 **Unit / client** (`pnpm test --project client <file>`):
@@ -174,7 +203,13 @@ its own block.
 - `you/accountDoor.test.ts` — the predicate over every `options` state.
 - `shell/AppRoutes.test.tsx` — `/you/account` renders the screen; redirects to
   `/you` when the predicate is false (D1's other half).
-- `shell/backNavigationChain.test.tsx` — the new door joins the chain.
+- `shell/backNavigationChain.test.tsx` — a You -> ACCOUNT -> BACK round trip
+  through the real routed screens, starting upstream of the row that writes
+  `state.from` (RF24). Its limit, stated: `BackLink`'s fallback is `/you`
+  too, so this leg cannot go red on a MISSING `from` — the route and the
+  back link are what it gates.
+- `adapters/authFlow.test.tsx` — `destinationFor` sends every terminal link
+  and delete outcome to `/you/account` (§7).
 - `you/SignInMethods.test.tsx` — the disclosure names the provider
   `startDelete` is called with; is absent when the button is disabled; is the
   button's accessible description.
