@@ -103,6 +103,19 @@ table that never failed anything is not evidence that it ran (RF6).
 `Save` is disabled until the value differs from what is stored, so the
 control cannot post a no-op.
 
+## Where the pack was NOT faithful, checked against the real capture
+
+The NAME section rendered here matches what shipped. The rest of the mock did
+not, in one place: this pack draws the quarantine box with the heading
+`DELETE ACCOUNT` and its own body copy, where the real screen reads `ACCOUNT`
+and adds "Asks you to sign in with Google first."
+(`docs/screenshots/apple-signin-methods.png`, captured after implementation).
+
+It changed no decision — the box was context, and the gate was about where
+`NAME` goes — but a pack that claims to be the shipped structure should say
+which part of it was approximated rather than let a later reader assume all
+of it was verbatim.
+
 ## What this pack does NOT decide
 
 - **The route and the write.** A `PATCH` on the existing account surface,
