@@ -5025,8 +5025,7 @@ than back in the queue this was built to replace.
       shape and rides PR 4's gates. **S**
 
 - [ ] **PR 4 of the number-provenance pass — live total versus stored
-      (M4, M5, and as of 2026-09-19 M9), and it is TRIAD.**
-      · dies 2026-10-08 · a row and not a
+      (M4 and M5), and it is TRIAD.** · dies 2026-10-08 · a row and not a
       fix now because it moves a STORED figure, so it carries the full
       antagonist pass and a PM final gate, and it needs Gate 0B board 3 —
       which is unstarted.
@@ -5045,8 +5044,33 @@ than back in the queue this was built to replace.
       production measured zero. **James ruled "Narrow": M7 leaves PR 4 and
       ships as a two-part gate instead** (producer: nothing measured offers
       no distance; consumer: the asymmetry is real and the rows we can
-      create move nothing). PR 4 is M4, M5 and M9. **M**
+      create move nothing). **M9 SPLIT OUT to PR 5 the same day** (James:
+      "Okay split out M9") — it needs a stored column and a migration,
+      and PR 4 renders figures the record already holds, so grouping them
+      would put a schema change and a caption in one TRIAD review.
+      **Gate 0B board 3 APPROVED 2026-09-19 — treatment C**
+      (`docs/design/number-provenance/gate0b/board3/BOARD3.md`): the saved
+      row keeps its heroes and the prose total line becomes named REST and
+      OVERALL figures, dashed when the record declines to claim them. PR 4
+      is M4 and M5. **M**
 
+
+- [ ] **PR 5 of the number-provenance pass — name the time a free row did
+      not count (M9), and it is TRIAD.** · dies 2026-10-22 · a row and not
+      a fix now because it needs a STORED COLUMN that does not exist: a
+      free row's pause leaves a 1.8 s gap in the series and nothing else,
+      and `session_logs` carries `completed_at` with no start time
+      (`server/db/schema.ts`), so there is no way to say "the monitor
+      counted 6:34 of an 8:20 session" without one. Migration, backfill
+      decision, DBA gate.
+      **SPLIT OUT OF PR 4 on 2026-09-19** (James: "Okay split out M9") so
+      one TRIAD review does not have to hold a schema change and a
+      rendering change at once. Two weeks after PR 4's own date, which is
+      the earliest it could sensibly start.
+      **THE OPEN QUESTION, scheduled before the order:** what a backfilled
+      row shows. Every existing row has no start time, so the figure is
+      unavailable for the entire history — decide whether those rows say
+      nothing or say why, BEFORE designing the column. **M**
 
 - [ ] **Place the trace chart's rest bands on the machine's own interval
       index, not on our work-clock accumulator.** · dies 2026-11-14 · a row

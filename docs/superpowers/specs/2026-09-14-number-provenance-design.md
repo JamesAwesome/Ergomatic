@@ -787,13 +787,21 @@ clause is the one that needs the receipt.
 | 1 | M1, M2 | Copy on a rendered surface. No number moves. | after 0B |
 | 2 | M8 + appendix | Layout across four charts, two screens; one copy deletion. No number moves. | **LANDED** |
 | 3 | M3, M6 | Changes what an axis IS. Antagonist pass. No stored data. | **SCOPED 2026-09-19** |
-| 4 | M4, M5, **M9** | **TRIAD** — stored figures render differently. dba + antagonist + PM. | **SCOPED 2026-09-19 — board 3 approved** |
+| 4 | M4, M5 | **TRIAD** — a stored figure renders differently. antagonist + PM; **dba SKIPS** (no db, no store, no bulk read). | **SCOPED 2026-09-19 — board 3 approved** |
+| 5 | M9 | **TRIAD** — a new STORED COLUMN (the session's start), so a migration and a backfill question. dba + antagonist + PM. | **SPLIT OUT 2026-09-19** |
 | M7's gate | M7 | Tests and prose only; no figure moves. Not TRIAD, no board. | **SCOPED 2026-09-19** |
 
 Grouped by risk model rather than by screen so each PR carries one kind of
 review (CLAUDE.md's grouping tie-break).
 
-**[CORRECTED 2026-09-19] M9 MOVED from PR 3 to PR 4.** This table put M3,
+**[CORRECTED 2026-09-19, TWICE] M9 moved from PR 3 to PR 4, then OUT of
+PR 4 into its own PR 5** (James: "Okay split out M9"). M4 and M5 render
+figures the record already holds; M9 needs a new stored column, a
+migration and a backfill decision. Grouping them would make one TRIAD
+review hold two unrelated risk models — "did we name the right figures
+on screen" and "is this schema change safe" — which is the condition
+CLAUDE.md's grouping tie-break says to split on. The original move off
+PR 3 stands and its reasoning is unchanged: This table put M3,
 M6 and M9 together on the grounds that PR 3 changes what an axis is with no
 stored data. M3 and M6 hold. M9 does not: board 2 measured the free row's
 104.6 s pause and its entire footprint in the stored series is a **1.8 s
