@@ -1,9 +1,17 @@
 # Attempt token revocation — design
 
-**Status:** draft for James's review. **Date:** 2026-09-19.
+**Status:** revision 2, draft for James's review. **Date:** 2026-09-19.
 **Wave:** A. **Triad:** yes, twice — a stored credential's lifetime, and auth.
 **Predecessor:** `2026-09-13-account-management-design.md`, whose
 "The other two live credentials" section names this gap and leaves it open.
+
+**Revision 2 folds the antagonist's TRIAD pass on revision 1 (`4bee1d6d`),
+which returned NOT CLEAN with four blocking findings.** Two were kill shots:
+the census counted statements when the thing that destroys these rows is a
+cascade from another table, and the invariant was keyed on an identity that
+answers a different question. Both changed the design, not its wording. Each
+fold is marked **[A1]**…**[A8]** so a reader can see what revision 1 got
+wrong without reading it.
 
 ## What and why
 
@@ -11,236 +19,312 @@ When a rower signs in with Apple, Apple issues us a refresh token partway
 through — before the rower has confirmed anything on our side. We park it on
 the `auth_attempts` row. If the rower then finishes, we copy it to
 `apple_grants` and it becomes the account's credential. If the rower does not
-finish — closes the tab, times out, taps back, cancels — we delete the attempt
-row and the token goes with it, still live at Apple.
+finish — closes the tab, times out, taps back, cancels, **or simply signs
+out** — we destroy the attempt row and the token goes with it, still live at
+Apple.
 
 The consequence is not a security hole; the token is only spendable with our
-own client secret. It is that **Ergomatic stays listed in that rower's Apple ID
-settings for a relationship they never completed**, and — the part that costs
-them something — Apple will not show them the name-and-email consent screen
-again. `providers.ts` then falls back to `"Rower"`, permanently, because nothing
-in the product can rename an account.
+own client secret. It is that **Ergomatic stays listed in that rower's Apple
+ID settings for a relationship they never completed**, and — the part that
+costs them something — Apple will not show them the name-and-email consent
+screen again. `providers.ts` then falls back to `"Rower"`, permanently,
+because nothing in the product can rename an account. That permanence is the
+whole severity, and it is filed separately as "Let a rower rename their
+account".
 
-Nine paths destroy an attempt row. Two are safe by construction, one is half
-covered, and **six revoke nothing at all**. This design closes them, and does
-it with a choke point rather than seven scattered calls, because the defect
-that actually recurs here is a site nobody remembered.
+Eleven paths destroy an attempt row. Two are safe by construction, one is
+half covered, and **eight revoke nothing at all**.
 
-## What is broken, measured
+## What is broken — a PRODUCER census, not a statement census **[A1]**
 
-Every path that destroys an `auth_attempts` row, at `87511d77` — the eight
-statements, plus the cascade that reaches rows no statement names.
+**Revision 1 enumerated the eight `DELETE FROM auth_attempts` statements and
+called the job done. That was the wrong unit.**
+`auth_attempts.original_session_id` is `ON DELETE cascade` on `sessions`
+(`app/drizzle/0031_apple_front_door.sql:41`), so **every deletion of a
+session destroys that session's bound attempts** — from another file, through
+a different API, with no `auth_attempts` statement in sight.
 
-**The line numbers below go stale the moment implementation edits this file,
-so the table is a snapshot of what this command returns, not the authority:**
+Reproduce the census. The line numbers below go stale the moment
+implementation edits these files, so these commands are the authority and the
+table is a snapshot:
 
 ```
-grep -n "DELETE FROM auth_attempts" app/server/auth/attempts.ts   # 8 at 87511d77
-grep -n "onDelete" app/server/db/schema.ts | grep auth_attempts -A2
+grep -n "DELETE FROM auth_attempts" app/server/auth/attempts.ts  # 8 at 87511d77
+grep -rn "delete(sessions)" app/server                           # 2 at 87511d77
+grep -n "original_session_id" app/drizzle/0031_apple_front_door.sql
 ```
 
-Re-run the first before trusting any row; the COUNT is the part the
-enforcement test in §2 pins, and it is 8 today.
+| # | Site | Revokes? | Why |
+|---|------|----------|-----|
+| 1 | `attempts.ts:326` signin accept | n/a | `grant()` at 323 promotes the token first, same transaction |
+| 2 | `attempts.ts:333` `sweep()` TTL | **no** | no rower, no request |
+| 3 | `attempts.ts:352` `begin()` signin pre-sweep | **no** | expired rows, any may hold a token |
+| 4 | `attempts.ts:387` `begin()` session sweep | **no** | deletes any attempt on the session |
+| 5 | `attempts.ts:393` `begin()` `replace` | **no** | the rower's own prior attempt |
+| 6 | `attempts.ts:706` link accept | n/a | `grant()` at 705 promotes the token first |
+| 7 | `attempts.ts:715` `discard()` | **no** | callback failure cleanup |
+| 8 | `attempts.ts:738` `cancel()` | **no** | explicit holder cancel |
+| 9 | `attempts.ts:893` `DELETE FROM users` → sessions → attempts | **partly** | `:888` pushes *the deleting attempt's* token; a **sibling** on another session cascades unrevoked |
+| 10 | **`sessions.ts:74` `deleteSession`** → cascade | **no** | **sign-out**, `routes.ts:169-175`, `POST /api/auth/signout` |
+| 11 | **`sessions.ts:78` `sweepExpired`** → cascade | **no** | **every 60 s**, `frontDoor.ts:84-86` `setInterval`, plus boot |
 
-| # | Line | Site | Revokes? | Why |
-|---|------|------|----------|-----|
-| 1 | `attempts.ts:326` | signin accept | n/a | `grant()` at 323 copies the token to `apple_grants` first |
-| 2 | `attempts.ts:333` | `sweep()` TTL expiry | **no** | no rower, no request |
-| 3 | `attempts.ts:352` | `begin()` signin pre-sweep | **no** | expired rows, any may hold a token |
-| 4 | `attempts.ts:387` | `begin()` link/delete session sweep | **no** | deletes any attempt on the session |
-| 5 | `attempts.ts:393` | `begin()` `replace` | **no** | the rower's own prior attempt |
-| 6 | `attempts.ts:706` | link accept | n/a | `grant()` at 705 copies the token first |
-| 7 | `attempts.ts:715` | `discard()` | **no** | callback failure cleanup |
-| 8 | `attempts.ts:738` | `cancel()` | **no** | explicit holder cancel |
-| 9 | cascade | `DELETE FROM users` → `sessions` → `auth_attempts` | **partly** | `attempts.ts:888` pushes *the deleting attempt's* token; a **sibling** attempt on another session cascades away unrevoked |
+**Rows 10 and 11 are the finding.** A link or signin follow-through sits at
+`link_ready` holding `apple_refresh_token`, bound to the rower's current
+session, for up to `ttl` (`attempts.ts:55`). The rower taps Sign out. The
+token is gone and unrevoked — and this is exactly the case where revocation is
+unambiguously correct, because `begin()` refuses a link unless
+`users.apple_sub` is NULL (`attempts.ts:378`), so no grant can exist.
 
-`schema.ts:737` is what makes row 9 true: `original_session_id` references
-`sessions.id` with `onDelete: "cascade"`.
+**The ROADMAP row that opened this work proposed a fix that already shipped.**
+"Revoke held attempt tokens inside `deleteAccount`'s transaction" is
+`attempts.ts:884-892`. The row is corrected in the same PR as this spec.
 
-So: **six leaking statements plus one leaking cascade, and one site covered.**
+## The hazard that shapes the design
 
-**The ROADMAP row that opened this work is out of date and its fix is already
-shipped.** It proposes "revoke held attempt tokens inside `deleteAccount`'s
-transaction, the same shape `apple_grants` already uses there" — that is
-`attempts.ts:884-892` and it landed with the account-management work. The row's
-real remaining content is rows 2-5, 7, 8 and the sibling half of 9. The row is
-corrected in the same PR as this spec.
+**Revoking every attempt token is wrong, and would destroy live
+relationships.**
 
-## The hazard that shapes the design — NEW, and it inverts the obvious fix
+`grant()` (`attempts.ts:287-292`) upserts with
+`ON CONFLICT(user_id,client_id) DO UPDATE SET refresh_token=excluded.refresh_token`,
+so a rower can hold a live `apple_grants` row *and* an attempt token at once.
+If both back one Apple authorization, revoking the attempt's token may kill
+the grant.
 
-**Revoking every attempt token is wrong, and would destroy live relationships.**
+**The one producer that reaches this state [A2]** — revision 1 named three
+and two were wrong. `begin({purpose:'delete', targetProvider:'apple'})`
+requires `users.apple_sub` NOT NULL (`attempts.ts:381-385`), so the rower
+already holds a grant; `providers.ts:222-226` sets `identity.grant` on every
+Apple exchange; `accept()` assigns it (`:560-562`) and saves to `delete_ready`
+(`:625-632`). Cancel or expiry then meets two live tokens on one
+`(user_id, client_id)`. **The delete confirmation is the producer.** A fresh
+sign-in is not (`finishSignin` grants and deletes in one transaction); a
+re-link is not (`begin()` refuses at `:378`, and `unlink` deletes every grant
+in the transaction that nulls `apple_sub`).
 
-`grant()` (`attempts.ts:287-292`) writes with
-`ON CONFLICT(user_id,client_id) DO UPDATE SET refresh_token=excluded.refresh_token`.
-So a rower who already holds an Apple grant and then starts *any* new Apple
-attempt on the same client — a delete confirmation, a re-link, a fresh sign-in
-on the same surface — ends up with **two tokens issued against one Apple
-authorization**: the live one in `apple_grants`, and the attempt's own.
+Apple will not settle whether revoke is per-token or per-authorization. All
+three sentences below were verified against the live DocC JSON for
+`revoke-tokens` on 2026-09-19, not carried over from the predecessor:
 
-If that rower cancels, the naive fix revokes the attempt's token. Whether that
-also kills the grant depends on something **Apple does not state consistently**:
+- Abstract, plural: *"Invalidate the tokens and associated user
+  authorizations for a user when they are no longer associated with your
+  app."*
+- `token` parameter, singular: *"The user refresh token or access token
+  intended to be revoked. The user session associated with the token provided
+  is revoked if the request is successful."*
+- **Discussion, which neither spec quoted and which tilts it [A3]:** *"In
+  order to revoke authorization for a user, you must obtain a valid refresh
+  token or access token."* The endpoint describes its own purpose as revoking
+  **authorization for a user**, with the token as the means — the broad
+  reading.
 
-- The revoke endpoint's abstract is plural — "Invalidate the tokens and
-  associated user authorizations".
-- Its `token` field is singular — "The user session associated with the token
-  provided is revoked".
+So the design must be correct under the broad reading.
 
-The predecessor spec already flagged this ambiguity and chose the narrow
-reading for `revokeApple()`'s call shape. **It did not face the case where the
-narrow reading being wrong would destroy a credential we intend to keep**,
-because on the deletion path the account is going away anyway. Here it is not.
+## The invariant, keyed on the SUBJECT **[A4]**
 
-**We do not need Apple to answer.** The invariant is derivable from our own
-data: revoke an attempt's token only when the rower holds **no live
-`apple_grants` row for that `(user_id, client_id)`**. If a grant exists, the
-authorization is legitimately live — Ergomatic *should* be listed in their Apple
-ID settings — and we leave it alone. This is fail-safe under either reading of
-Apple's wording, which is the property that matters.
+**Revision 1 keyed this on `(user_id, client_id)`, which is the wrong
+identity in both directions.** The question is "does this token back a
+relationship the rower is keeping?", and what answers it is the Apple
+**subject**, not the account-and-client pair a grant happens to be filed
+under.
 
-Attempts with no `original_session_id` (a signin that never bound to a session)
-have no user to check against, so they carry no such risk and are always
-revoked.
+- **It suppressed revokes it should allow.** An account with `apple_sub = X`
+  holds a grant on the web client. The rower signs in with a *second* Apple
+  ID, sub Y; `accept()` saves Y's token at `confirm`; `followThrough()`
+  reauths with Google and never consults `apple_sub`; `finalize()` refuses
+  with `account_conflict`. On cancel a grant exists for that
+  `(user_id, client_id)` — **X's** — so revision 1 skipped the revoke and
+  **Y's token leaked permanently**.
+- **It allowed revokes it should suppress.** Revision 1 said attempts with no
+  `original_session_id` have "no user to check against, so they carry no such
+  risk and are always revoked". **That is false.** Every stage such a row can
+  occupy while holding a token — `confirm`, `reauth_authorize`,
+  `reauth_exchanging` — is one where `consistent()` (`attempts.ts:102-105`)
+  *requires* `verified_subject`. The subject is always on the row. And the
+  reason no user existed when the row was minted stops being true the moment
+  a concurrent attempt completes: two tabs, A abandoned at `confirm`, B
+  completes and creates the account; `sweep()` destroys A and "always revoke"
+  destroys B's brand-new credential under the broad reading. **Revision 1's
+  own headline harm, arriving through the rule it exempted.**
+
+**The rule:**
+
+| Row class | Decide by |
+|---|---|
+| `verified_subject` present (signin and link rows) | revoke **unless** `SELECT 1 FROM users WHERE apple_sub = verified_subject` finds a row **and** that user holds an `apple_grants` row for the attempt's `apple_client_id` |
+| `purpose='delete'` (`verified_subject` legitimately NULL) | revoke **unless** a grant exists for (`original_session_id`'s user, `apple_client_id`) |
+
+`delete` rows are the one class where the container identity is right, because
+`accept()`'s reauth branch (`attempts.ts:617-620`) has already proved
+`identity.sub` is that account's own `apple_sub`. `users.apple_sub` carries a
+unique index (`schema.ts:28`, `users_apple_sub_unique`), so the lookup is a
+single index probe.
+
+### The read is not safe outside a transaction **[A5]**
+
+`attempts.ts:859-866` already documents why, for this exact table: `grant()`'s
+`ON CONFLICT DO UPDATE` leaves the FK column unchanged, so Postgres runs no RI
+check and takes **no lock on the parent** — a plain read can be stale. Three
+sites (`sweep`, `discard`, `cancel`) run on `pool` with no transaction at all,
+so their check has no snapshot relationship to their own delete. The direction
+that bites: check says "no grant" → we revoke → a concurrent `grant()` commits
+→ the broad reading destroys it.
+
+**Decision: the check and the delete happen in ONE transaction at every
+site.** `sweep()`, `discard()` and `cancel()` gain a transaction they do not
+have today. That is the cost of the invariant being true rather than usually
+true, and its price is the DBA's to measure.
 
 ## The design
 
-### 1. One choke point
+### 1. Two collectors, because there are two tables **[A1]**
 
-A single helper owns every deletion of an `auth_attempts` row:
+A choke point in `attempts.ts` cannot see rows 10 and 11 — those are
+`sessions.ts` deleting through drizzle's builder. So the invariant is owned
+per table:
 
 ```
+// attempts.ts
 async function dropAttempts(
-  q: pg.Pool | pg.PoolClient,
+  q: pg.PoolClient,
   where: string,
   params: unknown[],
-): Promise<AppleGrant[]>
+): Promise<{ rowCount: number; credentials: AppleGrant[] }>
 ```
 
-`pg.Pool | pg.PoolClient` because the sites are split: `sweep()`, `discard()`
-and `cancel()` run on `pool` directly, while the rest run inside a
-`transaction()` callback on a `pg.PoolClient`. Both expose `query`, so the
-union is enough and no new abstraction is needed.
+**It returns the row count, not just credentials [A6].** `discard()`
+(`attempts.ts:713-735`) returns `result.rowCount === 1`, and that boolean is
+load-bearing at `frontDoorRoutes.ts:375`, `:432` and `:483` — an empty
+credential array cannot distinguish "matched nothing" from "matched, held no
+credential". Revision 1's signature would have broken that flow silently.
 
-Every name in that signature was checked to exist rather than assumed:
-`attempts.ts:2` is `import type pg from "pg"` (type-only, which is all this
-annotation needs), and `AppleGrant` is exported from
-`appleRevoke.ts:3`. It is a signature sketch, not prescribed
-implementation — the plan owns the real block and its paste-test.
+`sessions.ts` gets the mirror: before deleting sessions, collect the
+credentials of the attempts about to cascade, by the same rule, in the same
+transaction. `createSessionStore` takes an injected `RevokeApple` the way
+`createAttempts` already does.
 
-It runs `DELETE FROM auth_attempts WHERE <where> RETURNING apple_client_id,
-apple_refresh_token, original_session_id`, and returns the credentials that
-are (a) non-null on both fields and (b) not backed by a live grant, per the
-invariant above. Every one of the eight statement sites calls it. Callers
-collect the returned credentials and pass them to `revokeApple()` **after**
-their transaction commits.
+Names checked rather than assumed: `attempts.ts:2` is
+`import type pg from "pg"`, and `AppleGrant` is exported from
+`appleRevoke.ts:3`.
 
-Sites 1 and 6 will return an empty list in practice, because `grant()` has
-already promoted the token — but they go through the helper anyway, so the rule
-is "all of them" rather than "the ones we judged risky".
+### 2. Enforcement, honestly scoped **[A7]**
 
-### 2. Enforcement, so site nine cannot be forgotten
+Revision 1 called a "this literal appears exactly once" test *"the gate the
+whole design rests on"*. **The antagonist defeated it five ways in one probe**
+— the drizzle builder, lowercase, `public."quoted"`, a composed identifier,
+and a template literal wrapping after `DELETE` — each leaving the count at 8.
+It can also go red spuriously, because a source-text count counts SQL quoted
+in comments, which this file does constantly.
 
-The choke point is only real if nothing bypasses it. A unit test asserts that
-the literal `DELETE FROM auth_attempts` appears in `attempts.ts` **exactly
-once**, inside `dropAttempts`. It goes red the moment anyone writes a ninth raw
-statement.
+Per RF26 the strongest conclusion it supports is: *no second occurrence of
+that exact byte sequence exists in this file's source text.* It stays as a
+**cheap spelling pin**, is described as one, and carries nothing.
 
-This is the gate the whole design rests on, so per RF21 it ships with a
-mutation that makes it fail — add a raw `DELETE FROM auth_attempts` elsewhere in
-the file and the test must go red — and the plan records what the failure said.
+What carries the weight is a **per-producer test** — one per row of the
+census, each starting upstream of the producer (RF24) and asserting the
+credential reached the revoker. **Said plainly: no automated gate proves the
+census is complete.** A twelfth producer is caught by review and by the census
+commands above. Claiming otherwise is what revision 1 did.
 
-### 3. Failure posture, per path
+### 3. Failure posture
 
-Best-effort everywhere, after the commit, exactly as `unlink` and
-`deleteAccount` already do. The ordering reason is the predecessor spec's and is
-unchanged: our write can roll back, Apple's cannot, so the external call must
-follow the commit or a failed commit leaves a credential destroyed at Apple for
-an account that still exists.
-
-What differs per path is only **who is told**:
+Best-effort everywhere, after the commit, as `unlink` and `deleteAccount`
+already do. The ordering reason is the predecessor's and is unchanged: our
+write can roll back, Apple's cannot.
 
 | Path | Told? |
 |---|---|
 | `deleteAccount`, including siblings | yes — the existing `appleRevoked` boolean and `SignIn.tsx:39`'s notice, unchanged |
 | everything else | log only — `apple_revoke_failed` / `apple_revoke_threw` |
 
-**Why log-only is honest for the other six, and not a shrug.** Apple's duty is
-"should", not must; a rower who abandons a sign-up and keeps using Ergomatic is
-*correctly* listed in their Apple ID settings anyway under the invariant above;
-and for the cases where they are not, Apple's own documented remedy is for the
-rower to remove it in Apple ID settings, which they can do at any time without
-being told by us. The one path where the state is both wrong and terminal —
-deletion — already has the notice.
+Log-only is honest for the rest: Apple's duty is "should", not must; the rower
+can remove us in Apple ID settings at any time, which is Apple's own
+prescribed remedy; and the one path where the state is both wrong and terminal
+already has the notice.
 
-### 4. `deleteAccount` gets simpler, not more complex
+**Two outbound-HTTP-on-a-timer concerns the plan must settle [A8].** `sweep()`
+sets `healthy`, and `begin()` refuses every signin when it is false
+(`attempts.ts:329-341`), so **a revoke failure must never flip `healthy`** —
+only a database failure may. And both 60-second sweeps can now produce many
+revoke calls at once, so they fire without being awaited, bounded by
+`revokeApple`'s existing 3 s per-call timeout; the timer is never blocked.
 
-The sibling-attempt gap closes by sweeping every attempt on every session of the
-user through `dropAttempts`, before `DELETE FROM users`, instead of pushing one
-attempt's credential by hand at line 888. The special case then goes away: the
-deleting attempt is itself an attempt on one of those sessions.
+### 4. `deleteAccount`
 
-**This is the one part of the design carrying real risk, and it is an open
-question rather than a decision — see below.** `deleteAccount` carries a
-lock-order comment bought with a measured deadlock, and adding a statement
-inside that transaction is exactly the kind of change it warns about.
+The sibling gap closes by sweeping every attempt on every session of the user
+through `dropAttempts` before `DELETE FROM users`, replacing the hand-push at
+`:888`. See Open Question 1 — this is the one part carrying real risk.
 
 ## Stored shape
 
-**None.** No migration, no new table, no column, no changed jsonb key set. The
-`apple_revocations` outbox is **not** being revived; James withdrew it on
-2026-09-13 and the reasoning in "Revocation is synchronous and best effort"
-still holds. This design adds durability nowhere — it adds *coverage*, which is
-what was actually missing.
-
-This matters for the gates: the DBA's stored-shape override does not fire. The
-DBA still runs, because `deleteAccount`'s transaction changes shape and its lock
-behaviour is the open question below.
+**None.** No migration, no column, no index, no changed jsonb key set. The
+`apple_revocations` outbox is **not** revived; James withdrew it on
+2026-09-13 and that reasoning holds. This design adds coverage, not
+durability. The DBA's stored-shape override does not fire; the DBA still runs,
+because three sites gain a transaction and `deleteAccount` changes shape.
 
 ## Testing
 
-- **Unit, per site:** each of the eight statement sites, with an attempt carrying a
-  token, asserting the credential reaches the revoker — and with a live grant
-  present, asserting it does **not**.
-- **The choke-point census test** above, with its biting mutation.
-- **Integration (real Postgres):** the sibling-attempt case — two sessions, an
-  attempt with a token on the second, delete through the first, assert the
-  second's credential reached the revoker before the cascade could eat it.
-  Per RF24 this test must start **upstream** of the producer: it creates the
-  sibling attempt through `begin()`, not by inserting a row.
-- **A failed revoke never fails the operation** — inject a rejecting revoker on
-  each path and assert the outcome is unchanged.
+- **Per producer** — one test per census row, starting upstream of it (RF24).
+  Rows 10 and 11 enter through `POST /api/auth/signout` and through the sweep,
+  never by inserting rows.
+- **Both invariant directions** — the two-Apple-subjects sequence must revoke;
+  the delete-confirmation double-token case must not.
+- **Concurrency held, not raced** (RF21): hold a conflicting row in an open
+  transaction on one connection while the other runs, and verify the pool has
+  ≥ 2 connections. `attempts.integration.test.ts` already carries
+  `waitForLock()` and `makeAttempts(revoke)` for exactly this.
+- **A failed revoke never fails the operation**, on every path.
+- **The spelling pin**, with its stated narrow conclusion.
 
 ## Out of scope, said aloud
 
-- **The outbox / any retry.** Withdrawn 2026-09-13, not revisited.
-- **The re-registration race** (predecessor's Open Question 1). Unchanged by
-  this work; still narrowed-not-closed.
-- **Renaming an account.** This is what actually makes the defect permanent, and
-  it is filed as its own ROADMAP row in this PR rather than smuggled in here.
+The outbox and any retry (withdrawn 2026-09-13). The re-registration race
+(predecessor's Open Question 1). Renaming an account — filed as its own
+ROADMAP row in this PR, and it is what makes this defect permanent.
 
 ## Open questions
 
-1. **Does adding a `DELETE FROM auth_attempts` inside `deleteAccount`'s
-   transaction change its lock behaviour?** `auth_attempts` is a child of
-   `sessions`, which the transaction already holds `FOR UPDATE` in a
-   deterministic order — so the expectation is no new cycle, but that is
-   INFERENCE and the existing comment exists because a real deadlock was
-   measured here once. **The DBA gate must measure this, not reason about it.**
-   If it does deadlock, the fallback is to keep line 888's hand-push and revoke
-   siblings in a separate transaction before the delete.
-2. **Does Apple's revoke endpoint invalidate one token or the whole
-   authorization?** Unresolved and probably unresolvable from docs. The design
-   is built to be correct either way, which is why this is a question and not a
-   blocker — but if it is ever answered, the live-grant check could be
-   relaxed.
-3. **How long does an unrevoked Apple refresh token stay live?** The
-   predecessor spec says "permanently"; I found no citation and am not
-   asserting it. It bounds how bad the leak is, so it is worth one search
-   before implementation.
+1. **Does the sibling sweep inside `deleteAccount` deadlock? [A8]** Revision 1
+   asked whether the statement adds new locks. It does not — `DELETE FROM
+   users` already cascades to these rows in this transaction. What changes is
+   their **position and scan order**. The shape to measure is two multi-row
+   `DELETE`s over an overlapping row set in different index orders: the
+   sibling sweep on `auth_attempts_link_session_unique` (session order) versus
+   `sweep()`'s on `auth_attempts_expires_at_idx` (expiry order), on a 60 s
+   timer. **The DBA measures this. It is not settled by reasoning, because
+   reasoning lost here once already.**
+   **The fallback carries a cost revision 1 did not state:** "revoke siblings
+   in a separate transaction first" commits a destructive change — rows
+   destroyed, tokens revoked at Apple — in anticipation of a deletion that can
+   still fail on `attempt_expired` or `account_changed`, leaving a rower whose
+   deletion failed with an in-flight link silently destroyed on another
+   device. If the measurement goes badly, prefer one transaction sweeping
+   siblings by the same index the cascade uses.
+2. **Per-token or per-authorization?** Unresolvable from Apple's docs, which
+   contradict themselves. The design is built for the broad reading.
+3. **Refresh-token lifetime: NOTHING FOUND, and that is the result [A3].**
+   Apple's REST API documentation states no refresh-token lifetime —
+   `revoke-tokens` and `generate-and-validate-tokens` both fetched as DocC
+   JSON on 2026-09-19, neither mentions expiry. Only developer-forum threads
+   claim "no time-based expiry", with no Apple-staff sentence extractable.
+   **"Permanently" is uncitable and this spec does not assert it.**
+4. **`dropAttempts` takes a raw SQL fragment.** Every caller passes a literal,
+   so this is shape risk rather than a defect — but a choke point whose safety
+   depends on callers never interpolating is weaker than a typed predicate,
+   and neither the spelling pin nor review sees interpolation reliably. The
+   plan should prefer a small typed predicate union if it costs little.
 
 ## What this does not claim
 
-It does not claim we never hold a credential for a relationship the rower
-ended. Best-effort with no retry cannot support that sentence, and only the
-withdrawn outbox could. The claim is narrower and true: **every path that
-destroys an attempt now attempts revocation, exactly one place decides how, and
-a test fails if a ninth path appears.**
+Not that we never hold a credential for a relationship the rower ended —
+best-effort with no retry cannot support that, and only the withdrawn outbox
+could.
+
+Not that a test fails if a twelfth producer appears — the spelling pin cannot
+see another file, another API, or another spelling, and revision 1 claimed
+otherwise.
+
+**What it does claim:** every producer in the census attempts revocation; the
+decision to revoke is made in one place per table, from the subject that
+actually answers the question, inside the transaction that does the deleting;
+and each producer has a test that starts upstream of it.
