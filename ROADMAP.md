@@ -162,11 +162,18 @@ register or ride the next relevant PR; no unchecked work lives in this overlay.
 
 **Status: all three PRs merged — PR 1 (#366, `a476cbc6`) 2026-09-08 shipped in
 v0.43.0; the two design gates (#369) and the landscape budget (#370) in
-v0.44.0. Phase functionally done; `/close-phase` NOT yet run, and the
-residuals below stay open** — including the hardcoded `type: "rower"` at
-`app/server/concept2/mapping.ts:578`, which is the one a rower could still be
-bitten by. Corrected 2026-09-13 (James): this line read "in flight" for five
-days with zero open PRs. Shape approved by James 2026-09-08:
+v0.44.0. READY TO CLOSE as of 2026-09-19: no open row is left in this
+section.** `/close-phase` HAS run — `docs/closeouts/close-MT.md` was frozen at
+`dffd5a8c` on 2026-09-08 and its three BUILD PRs all merged (#377, #378,
+#380) — though this line said otherwise until 2026-09-19. Of the seven
+residuals, one was ticked as a ruled record, one was struck (its mechanism
+measured false), and five left with dates: the published matrix to "Small,
+queued", the MultiErg case to "Accepted, pinned", the ungated refusal guard
+to Tooling, the hardcoded `type: "rower"` to Wave E, and pre-2018
+classification to the Icebox. What remains is the close itself: re-freeze the
+worklist (the span has moved since 2026-09-08), one antagonist exit pass, the
+PM close gate, the archive and a ledger row. Corrected 2026-09-13 (James):
+this line read "in flight" for five days with zero open PRs. Shape approved by James 2026-09-08:
 **Option A (refuse the sitting) with a DENYLIST**. Spec:
 [docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md](docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md).
 
@@ -199,7 +206,7 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
 
 ### Owed by this phase, filed here rather than in a PR body
 
-- [ ] **A refused sitting on the FREE-ROW door can still retire a record.**
+- [x] **A refused sitting on the FREE-ROW door can still retire a record.**
       `beginFreeRow()` emits `armed` on the CSAFE ack — the same ack that
       releases the status subscriptions — so on that door `armed` precedes the
       first classifiable frame structurally (449 ms, measured in
@@ -211,18 +218,10 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       Just Row ~449 ms forever to protect against a machine nobody owns. The
       handler's comment is corrected in the same PR; this row is the residual.
       **S**
-- [ ] **The published matrix goes stale silently.** It is a claim in the app's
-      own voice, the same class as a shipped release note (RF9's drift class).
-      Changing `mapping.ts`'s hardcoded `type` or the denylist reconciles the
-      middle tier of `connect-the-monitor` and recounts the registry `minutes`.
-      The trigger is also recorded in the article's own source comment. **S**
-- [ ] **A MultiErg reporting a STATIC ski or bike value would be refused
-      outright.** The
-      vendor sentence that would exclude this — "this will be the one of the
-      MultiErg Machine Types" — is footnote 23, on `0x003C`, the one carrier we
-      do not subscribe. The two we read (footnotes 7 and 11) say only "the
-      Machine Type of the current interval". No capture and no vendor sentence
-      settles what a real MultiErg reports on 0x0032. Unowned, accepted. **S**
+      **TICKED 2026-09-19 — a ruled record, not work.** James ruled ACCEPT on
+      2026-09-08 and the corrected comment is in the tree
+      (`useMonitorSession.ts`, the `beginFreeRow` block); that also meets spec
+      exit criterion 7.
 - [x] **`permission-denied` already ships a five-button action stack, and it
       leaves a 10px body in landscape.** CLOSED by the landscape budget fix
       (Gate 0 approved 2026-09-08): the failure frames' action stack now pairs
@@ -332,28 +331,6 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       from a browser, and `design.spec.ts`'s five-button case gates it
       directly, so this frame's copy stays a dormant tripwire rather than the
       only home of the claim. **S**
-- [ ] **The refusal-survives-its-own-consequences guard is UNGATED.** `fail()`
-      refuses to let a standing `unsupported-machine` error be overwritten by
-      the `program()` rejection the refusal itself caused — without it the
-      rower watches the machine message become a generic failure screen a beat
-      later. The guard is correct on its face and NO TEST CAN MAKE IT FAIL.
-      Three routes were tried and all three go green with the guard deleted:
-      `deaf` starves the terminate's own settle so nothing rejects;
-      `failNextProgramFrame` rejects before the status subscriptions release,
-      so the refusal never fires; `lagStructureOneTick` produces no second
-      `fail()` at all. **What it needs is a fake control that withholds 0x0031
-      for a bounded number of ticks without starving the CSAFE ack path.** On
-      hardware the window is the measured 544 ms between the first 0x0032 and
-      `armed`. Found by the whole-branch review, finding 1. **S**
-- [ ] **`connected.spec.ts:1703` poisons its own origin for a later run.** The
-      QuotaExceededError leg fills origin storage until `setItem` genuinely
-      throws; its own title says "junk cleaned up after", but a SECOND run
-      against the same already-booted stack fails at `signInViaBackdoor`,
-      before any assertion. Seen 2026-09-08 during Phase MT: full `pnpm e2e`
-      passed 545/545 on a fresh stack, and re-running that one test against the
-      surviving stack failed. Either the cleanup misses something or the
-      failure is in the harness's own storage use. Costs a debugging round to
-      whoever meets it next. **S**
 - [x] **A refused machine is still remembered as `LAST USED`.** FIXED in the
       Phase MT close-out PR (James ruled it in on 2026-09-08). The invariant
       now gated: a machine the denylist refuses is never remembered as
@@ -364,25 +341,6 @@ spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
       same update as the phase flip. `forgetLastDevice` removes the key only
       when it still holds that exact name, so refusing one monitor cannot
       un-remember a different, good one. **S**
-- [ ] **`type: "rower"` is still hardcoded for machines the denylist lets
-      through.** Concept2's results enum has separate `dynamic`, `slides` and
-      `multierg` members, and the PM5 enum names `STATIC_DYNAMIC` (8), the
-      `SLIDES_*` family (16-20, 32) and `MULTIERG_*` (224-226). All of them are
-      rowing, so a wrong `type` is a smaller wrong than a SkiErg's — but it is
-      still wrong, and Concept2 rejects the verification code on a machine-type
-      mismatch either way. Deliberate consequence of the approved denylist
-      direction, not an oversight. **S**
-- [ ] **A monitor on pre-2018 firmware cannot be classified at all.**
-      `ergMachineType` is ABSENT below interface revision V1.26/V1.27, and
-      Phase MT does nothing on absence — refusing on ignorance would break a
-      working erg. `0x0016` ("Connected Erg Machine Type", READ) would settle
-      it and needs a `Transport.read`, which is the existing firmware-version
-      register row's dependency too. Both are unblocked by the same work.
-      **But `0x0016` may not exist:** rev 1.30's revision history reads
-      "2/3/2017 ... Deleted Machine Type information in Device Info Service as
-      firmware unable to support it. V1.21." Establish that before costing it.
-      **S**
-
 ## Phase DE — Difficulty out, effort in
 
 **Status: all three PRs merged — spec (#308) 2026-09-05, PR 1 (#309)
@@ -502,12 +460,17 @@ generation):
       `PREFERENCES_DEFAULTS` (`false`, `preferences.ts:20`), which proves
       this was a real row out of Postgres rather than the no-row default
       object `get()` falls back to.
-      **What this read still cannot see, stated rather than dropped:**
-      whether 0029's DROPs landed. `workouts.difficulty`, its enum and
-      `preferences.difficulties` being GONE is invisible from the API;
-      confirming it needs `\d preferences` against the production database,
-      and no SSH entry for the deploy host exists in `~/.ssh/config`. Not
-      currently scheduled.
+      **What this read could not see — whether 0029's DROPs landed — is
+      settled without SSH, in two steps.** INFERRED, strongly: `migrate()` is
+      a top-level `await` before the server listens (`app/server/index.ts`),
+      so a migration that failed would have killed the boot, failed
+      `deploy.sh`'s health wait and rolled back — and that deploy passed.
+      DECISIVE, and owed: `workouts.difficulty` was `NOT NULL` with no default
+      (`drizzle/0001`) and nothing has written it since #400, so ONE
+      successful custom-workout creation on production proves the column is
+      gone. · dies 2026-10-31 · a row and not a fix now only because the
+      controller cannot create a workout on production; it is one tap for
+      James, not an SSH entry that does not exist
 **Exit:** the two phase-close greps in spec §6 (no `pain`/`difficult`; and
 `effort` means one thing) pasted into the close gate; e2e and screenshots
 green with refreshed captures; the by-hand stale-build check (a `v0.38.1`
@@ -516,6 +479,27 @@ web build against the post-PR-2 server saves `pain: 3`, reads back
 recorded in PR 2's body; release note in rower words (spec §6.6).
 
 ## Phase PS — career stats on the You tab
+
+**EXIT CRITERION 6 — MET 2026-09-19, and with it the phase is READY TO
+CLOSE.** James compared You against his Concept2 logbook page
+(`log-dev.concept2.com`, where his sends land). **LIFETIME: 128,660 m here;
+Concept2's lifetime was not read, and is inferred equal to its season, since
+all 26 of its results fall inside it. THIS SEASON: 128,660 m / 9:27:00 / 28
+sessions (26 machine) here, against 91,175 m / 7:33:09.1 / 26 results there.**
+The 37,485 m gap is two explained effects pulling opposite ways: about
+49,635 m of work here was never sent (the 26 listed Concept2 rows sum to
+79,025 m; the app's weeks of 10 and 17 Aug have almost nothing behind them
+there, because sending shipped around 1 September), less the 12,150 m by
+which Concept2's tile exceeds its own listed scores — consistent with it
+counting rest metres. **Two agreements are exact:** this week reads 24,507 m
+on both sides, row for row (5,588 + 5,000 + 1,954 + 8,451 + 3,514), and both
+AVG-PER-DAY figures divide by the same 142 days since 1 May (906 here, 642
+there). Both counts reading 26 is a coincidence — the Concept2 list holds
+development test posts (the 935 m rows, the 200 m and 500 m rows of 09/07)
+and the app holds rows that were never sent. The three rows this phase filed
+no longer block it: one is answered and ticked, two left for "Small, queued"
+with their dates. **What remains is the close itself** — and its archive
+cannot be `docs/history/phase-ps.md`, which already holds the 6J-era sketch.
 
 **Status: OPEN 2026-09-12 — spec approved by James the same day; the three
 phase-open gates (antagonist anchor, PM slate, DBA spec pass) ran at
@@ -637,7 +621,7 @@ line naming it was struck by ruling 19), never corrected.
       figures as literals — lifetime 56,752 m / 3:59:39 / 13, season 43,012
       m, MACHINE 36,752 m, rest 718, cal 1,731, 176 W (RF7; the `8 OF 10`
       and `1 ROW PREDATES` lines were struck by ruling 19); PM final gate.
-- [x] **PR 2 — MERGED #424 (`30fd5cc0`, 2026-09-13), released in v0.46.0;
+- [x] **PR 2 — MERGED #424 (`30fd5cc0`, 2026-09-13), released in v0.47.0;
       its box sat unticked until 2026-09-19. The remaining charts, all
       designed and approved at Gate 0
       (ruling 11): METRES PER WEEK (eight Monday-start bars ending at the
@@ -694,7 +678,7 @@ line naming it was struck by ruling 19), never corrected.
 
 **Rows this phase files (dated; the hand-back list at PR 2):**
 
-- [ ] **Concept2 season/lifetime totals: work-only or work+rest? Live check
+- [x] **Concept2 season/lifetime totals: work-only or work+rest? Live check
       on log-dev.** A 2021 non-staff forum post (SECONDARY-UNCONFIRMED; the
       forum sits behind a Cloudflare challenge) says the logbook's headline
       counts rest while a row's `distance` is work-only (PRIMARY). James
@@ -705,28 +689,13 @@ line naming it was struck by ruling 19), never corrected.
       credentials, which rotate his live link. **S** · dies 2026-10-12 ·
       needs James's credentials and a rowed upload, neither of which a desk
       session can supply.
-- [ ] **`GET /api/stats/rows` grows a cursor or a server roll-up when any
-      user passes 5,000 rows.** Measured 2026-09-12 (DBA, spec §4.3):
-      224.8 B/row, 2.1 MiB and 78 ms at 10k rows; 5,000 is the 1 MiB line,
-      19 years away at 5/week. What would fix it now: a cursor — not done
-      because the household's busiest user has 16 rows. **S** · dies
-      2027-09-12 · the check is a count (`select user_id, count(*) from
-      session_logs group by 1 having count(*) > 5000`), not a build.
-- [ ] **The history LIST has no `steps` tier** (`LogRow.tsx:110-123`, its
-      own comment: a trusted tier-B2 row "still disagrees"), so such a row's
-      list metres differ from its detail hero and from LIFETIME. What would
-      fix it now: project Σ `actualMeters` server-side into
-      `LOG_LIST_COLUMNS` — not done because it is a list-surface change
-      outside PS's risk model (spec §12). **S** · dies 2026-10-12 ·
-      pre-existing, self-documented in the code, and PS names the detail
-      hero as its authority.
-
-The two Wave E rows this phase was expected to open (the history index, the
-generated columns) do NOT open from this route: the DBA measured on
-2026-09-12 that a full-history read ignores the composite and a covering
-index cannot carry `steps`; both got a `dies` date on the way past and James
-rules keep/kill at the PR 0 hand-back.
-
+      **TICKED 2026-09-19 — answered on James's own log-dev season page, as
+      far as an informational row needs.** Its SEASON METERS tile reads
+      91,175, while the 26 rows it lists sum to 79,025: 12,150 m more than its
+      own row scores. That is consistent with season totals counting rest
+      metres on top of each row's work-only score (the app's own season REST
+      METRES was 14,593 the same day). INFERENCE — the per-row rest distances
+      were not summed. By James's ruling it changes no number here.
 **Inherited, stated and not discharged:** the RC ruling that the first
 surface showing any `summaryDetail` field owes a photograph against the
 PM5's screen (`docs/history/phase-rc.md:1072`) — PS shows a SUM, which no
@@ -1894,7 +1863,7 @@ No Gate 0, no triad, no PM gate: nothing here changes what the app does.
 - [ ] **A rower can remove a bogus test result.** RESHAPED 2026-09-19 (James)
       from "the test-history list on You", whose central claim had gone false:
       it said the app "collects test results no rower can ever see", and Phase
-      PS PR 2 (#424, v0.46.0) shipped TEST TREND on You → Stats —
+      PS PR 2 (#424, v0.47.0) shipped TEST TREND on You → Stats —
       `StatsScreen.tsx` calls `useTestHistory()` and `TestTrendGroup.tsx` draws
       every 2k and 6k split over `test_history.loggedAt`. **That discharged the
       privacy argument and BREACHED the binding this row carried.** James's
@@ -2066,16 +2035,27 @@ date rather than in the F→A→D→B+C line. **Scope widened at open (James,
 2026-08-31): the in-app "Connect to Concept2" surface is IN** — manual
 per-row send, monitor-connected `finished` rows only; auto-upload is a
 named follow-on phase. Spec:
-`docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`. **M→L.**
+`docs/superpowers/specs/2026-08-31-concept2-logbook-design.md`. **REFINED
+2026-09-19 (James): the wave's L half has SHIPPED** — rows reach Concept2,
+auto-send, auto-verify, the link-outs and the per-user gate are all in
+testers' hands. Six rows were done and unticked; eleven of the seventeen open
+ones were never about Concept2 (driver checks, an auth coverage span, two
+index rows, a docs typo) and had collected here because the heading was open.
+They left for the register and the Icebox, and four were struck
+([evictions](docs/history/register-evictions-2026-09-19.md)). **What is left
+is S/M: three Concept2 rows and the Exit below.** · dies 2026-10-17 · the
+wave's open question is the parity walk's runsheet, which the controller owns
+as of this date; if it has not been written in a month the wave is furniture,
+and that comes back to James rather than sliding.
 
 **Goal:** the first contact with the authority this project has been reasoning
 about for two phases without ever talking to it.
 
 **Carried from Phase RC's close, and BINDING:** RC's exit criterion (d) is
-transcribed into this wave's own exit block verbatim on day one. The close-out
-gate was explicit that without the transcription the criterion evaporates on
-the rename — and Phase RC is titled "the row Concept2 would recognise" and
-closed with zero Concept2 contact.
+transcribed into this wave's own exit block. The close-out gate was explicit
+that without the transcription the criterion evaporates on the rename. **It
+was promised "on day one" and written on 2026-09-19** — the Exit is at the end
+of this section.
 
 - **The PM5 does not advertise while a Just Row is open**, so a generic scan
   cannot discover it mid-row. The spec's "already mid-Just-Row at connect"
@@ -2105,21 +2085,6 @@ closed with zero Concept2 contact.
   (The old "6 s → 220 s → power off" chain turned out to be
   three different layers; the timeouts are CSAFE slave-state ones that never
   governed an unprogrammed row in either connection state.)
-
-Smaller reconciliations owed: `domain/monitor/pm5/uuids.ts` says 0x003F "has
-never been recorded" and one now has been; status frames arrive at 1.00/s, not
-the ~2.2/s the tooling assumes; and the observer heading renders
-`PM5 432331249 Row connected` because the advertised BLE name already ends in
-"Row".
-
-**Honest distance: three to five weeks of working sessions.** Waves D and B
-ship a tester nothing, so they release alongside C rather than alone — two
-consecutive empty release notes is how the invisible-but-necessary wave gets
-skipped.
-
-**SLATE COMPLETE 2026-09-03.** All twelve items above are ticked; item 2
-(#278) was the last, and its walk found the connect latency that #283 then
-fixed.
   · dies 2026-10-10 (approved by James 2026-09-10) · a rower can hit this today; if Wave E has not taken it in a month it needs its own phase, not a row
 - **Smaller wire reconciliations owed** (lifted from Phase JR, 2026-09-10). `domain/monitor/pm5/uuids.ts` says 0x003F "has
   never been recorded" and one now has been; status frames arrive at 1.00/s, not
@@ -2291,7 +2256,7 @@ fixed.
       operator half, including the boot-log count and the psql remedy for
       revoking a link on someone's behalf. Design and rulings:
       `docs/superpowers/specs/2026-09-04-concept2-per-user-gate.md`. **S**
-- [ ] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open and
+- [x] **The sandbox as a test oracle** (RC-10) — RECONCILED at wave open and
       RE-RULED 2026-09-03: the `weight_class` gate is answered by Concept2,
       not by the link flow. James: "I don't want that set in our app. I want
       it to be set on Concept2's side." This SUPERSEDES the 2026-08-22 ruling
@@ -2322,6 +2287,11 @@ fixed.
       §5), which sends `workout.intervals[]` (never `splits[]`) with calories, HR, stroke
       rate and per-interval rest, result-level calories/drag/HR, and
       targets; `buildC2Payload` stays Wave E's file, LP owns that edit.
+      **TICKED 2026-09-19 — both gates this row names have shipped.**
+      `weight_class` is gone (`app/drizzle/0023_married_patch.sql`, #290), and
+      per-interval `rest_time` is sent (`app/server/concept2/intervals.ts`,
+      wired in `mapping.ts`; #332, v0.42.0). The handover to Phase LP PR 2
+      landed and nobody came back to say so.
 - [x] **PR B — the link-outs leave the app.** MERGED #298. The read-only Concept2
       link-outs (`View on Concept2 →`, `OPEN CONCEPT2 PROFILE`) drop the
       native `SFSafariViewController` sheet and its isolated cookie jar —
@@ -2370,7 +2340,7 @@ fixed.
       server ships. Not required to settle which number is authoritative (the
       5706/5707 API test did); required only to confirm production behaves as
       log-dev did.
-- [ ] **Auto-send — OFF · MANUAL · AUTOMATIC.** A per-rower sending mode:
+- [x] **Auto-send — OFF · MANUAL · AUTOMATIC.** A per-rower sending mode:
       OFF is the unlinked state, MANUAL is today's per-row Send, AUTOMATIC
       sends an eligible finished monitor row the moment it saves, silently —
       the Send button pressed for you, outcome on the row's block. One
@@ -2421,7 +2391,11 @@ fixed.
       log on every send — that line is the only evidence a thinned row
       leaves. No runsheet is owed until the flip is schedulable; it then
       gets its own PM readiness PASS.
-- [ ] **Verification code: hide it, say "verified".** James, 2026-09-05: like
+      **TICKED 2026-09-19 — this row says "Ticks at merge", and #312 merged on
+      2026-09-06 (v0.39.0).** The setting, its PATCH and the MANUAL / AUTOMATIC
+      control are all in the tree. Its owed tails moved to the wave's Exit
+      block, below.
+- [x] **Verification code: hide it, say "verified".** James, 2026-09-05: like
       Concept2's own UI, the MACHINE CONFIRMED block should not show the raw
       16-digit code by default; once Concept2 has accepted the code for that
       row, show "verified"; a debug reveal shows the raw code when needed.
@@ -2465,7 +2439,16 @@ fixed.
       and nothing that fires it. That is rarer than a passive trigger and worse.
       **NEXT (≤0.25): read `server/concept2/` and say whether a row outside the
       50-row page is genuinely unreachable.** If it is, this row closes.
-- [ ] **Auto-verification, as an option, DEFAULTED OFF (James, 2026-09-07).**
+      **TICKED 2026-09-19 — closed by its own written test.** `VERIFIED ✓`
+      ships (`FromTheLog.tsx`, gated on `row.verified`), and "hide by default"
+      was superseded by James's 2026-09-07 ruling to show the code only on
+      pieces that can be verified (#341). The question this row left open is
+      answered by the code: the reconcile "fires only ON A SEND, reads ONE
+      page (`DECLARATION_PAGE_SIZE`), and never walks `links.next`"
+      (`routes/concept2.ts`, where the constant is 50) — a row outside that
+      page is unreachable, and "If it is, this row closes." **The debug
+      reveal was never built and is STRUCK (James, 2026-09-19).**
+- [x] **Auto-verification, as an option, DEFAULTED OFF (James, 2026-09-07).**
       Sending the monitor's code with the upload verifies the row at receipt;
       that shipped as #336, was reversed as #337 because it took the act away
       from the rower, and James then asked for it back as a SETTING the rower
@@ -2502,6 +2485,9 @@ fixed.
       `.env` are `LOGBOOK_CLIENT_ID_DEV`/`LOGBOOK_CLIENT_SECRET_DEV`, not the
       `C2_*` names `c2-crossconnect.ts` reads; and a token refresh with scope
       `results:read` is REJECTED, it needs `user:read,results:write`.
+      **TICKED 2026-09-19 — shipped in v0.43.0** (#360, #363, #365;
+      release-noted). The one tail, a committed capture showing `VERIFIED ✓`,
+      is already owned by Phase TD (`dies 2026-11-10`).
 - [x] **Why does Concept2 show no Verify button on a row carrying interval
       data?** **ANSWERED 2026-09-07 and CLOSED — it was never about interval
       data.** Concept2 offers the Verification Code field only when the row's
@@ -2614,7 +2600,7 @@ fixed.
       NOT released on its own (James, 2026-09-07: rides his next batch).
       Spec: `docs/superpowers/specs/2026-09-07-signout-ends-google-design.md`. **S**
 
-- [ ] **Two `v8 ignore`s that no longer earn themselves, same class.**
+- [x] **Two `v8 ignore`s that no longer earn themselves, same class.**
       (a) `nativeSignIn` — see below. (b) `server/auth/google.ts`'s
       `callbackClaims`, found at #356's antagonist pass: it sits under an
       ignore labelled "thin openid-client wrapper" while containing
@@ -2622,14 +2608,16 @@ fixed.
       feed the allowlist and identity decision. Not thin by the standard #356
       itself just applied to the authorization parameters. Both are
       pre-existing debt, neither introduced by the PR that found them. **S**
-
+      **TICKED 2026-09-19 — (a) `nativeSignIn` is done (#444); (b)
+      `callbackClaims` left this wave** for "Small, queued", where it rides
+      the next auth PR.
 - [x] **DONE — `nativeSignIn` keeps a `v8 ignore` it no longer earns** — MOVED
       2026-09-13 into Wave A to ride the account-management PR, which edits the
       same file. Closed there 2026-09-14; the reasoning and the outcome are on
       the Wave A row. The `callbackClaims` half of the row above is NOT closed
       by it and stays open.
 
-- [ ] **SHIPPED v0.42.0 (902) — a monitor older than 2018 is silently unusable.**
+- [x] **SHIPPED v0.42.0 (902) — a monitor older than 2018 is silently unusable.**
       Concept2 appended `Erg Machine Type` to `0x0032` in spec V1.26
       (2018-11-02) and to `0x0038` in V1.27; our parsers demanded the longer
       form, so a pre-2018 monitor had every one of those frames rejected.
@@ -2641,7 +2629,13 @@ fixed.
       `docs/superpowers/specs/2026-09-07-short-status-frames-design.md`. All
       four plan tasks are complete and merged as #350 and released in v0.42.0 (build 902, 2026-09-07)
       (`as1-short-frame`); the checkbox stays open until the reporter confirms it fixed THEIR monitor — see the two open items below. **M**
-
+      **TICKED 2026-09-19 — the code shipped in v0.42.0 (#350) and is
+      release-noted.** The box stayed open waiting for the reporting rower to
+      confirm it fixed THEIR monitor; that wait is STRUCK (James, 2026-09-19)
+      — a person outside the cohort, with no owner, trigger or date, and the
+      firmware-read follow-on beside it is held on cost. This row's "two open
+      items below" pointer is stale: the firmware blocker was measured wrong
+      on 2026-09-13.
 - [x] **MERGED #361 (2026-09-08), RELEASED v0.43.0 — a monitor we cannot decode
       says nothing at all.** The connected screen now reads `NO READINGS`
       instead of `READY` when a characteristic's bytes fail to decode
@@ -2684,7 +2678,7 @@ fixed.
       NOT covered by #361, which fires on bytes that fail to parse — a
       SkiErg's parse perfectly, they just describe skiing. **M**
 
-- [ ] **The frame-error flood evicts its own diagnosis.** The ring holds 500
+- [x] **The frame-error flood evicts its own diagnosis.** The ring holds 500
       entries (`eventLog.ts:51`). A monitor we cannot decode produces a
       `frame-error` per arrival, roughly eight a second, so the buffer fills
       in about a minute and the connect-time entries are gone — including
@@ -2696,111 +2690,11 @@ fixed.
       parses — and a fresh export from them would be equally useless. Rate-limit
       or count a repeated identical `frame-error`, or reserve connect-time
       entries from eviction. **S**
-
-- [ ] **BOUNDARY RECONCILIATION: check what the monitor is RUNNING, not just
-      what it acked.** · dies 2026-11-13 · a row and not a fix now because it
-      is a new mechanism in the driver's hot path and wants its own spec and
-      antagonist pass, not a rider on a diagnostics change.
-      Filed 2026-09-13 out of the research that answered the arm-verification
-      row above. Everything it needs is already on the wire, unread: at each
-      interval's work phase, `0x0031`'s `intervalType` and
-      `(durationRaw, durationType)` and `0x0032`'s Rest Time name THAT
-      interval's programmed shape, and `0x0033`'s interval count says which
-      index it is. Compared against `program.intervals[k]` per boundary,
-      those four distinguish "the monitor is running what we sent" from "the
-      monitor is running something else" — the exact question the Sea Fret
-      report could not answer. `0x0037`'s per-boundary frame corroborates it
-      retrospectively, carrying the just-finished interval's own rest time
-      and distance (60/60/0 across the rests capture's three intervals).
-      **Two traps for whoever builds it.** `0.0` rest is ambiguous between
-      "programmed r0" and "no program loaded" — the menu-at-ready capture
-      shows the unloaded state reads 0.0 too — so a zero only means
-      something paired with `0x0031`'s structure fields. And this can only
-      ever be per-boundary: the interval count is a progress counter, so a
-      pre-flight gate is impossible. **M**
-
-- [ ] **The driver never checks the PM's own command echo.** · dies
-      2026-11-13 · a row and not a fix now because it is the cheap half of
-      the row above and should land with it rather than alone.
-      The CSAFE ack echoes the opcode IDs the monitor parsed — in
-      `walk-2026-08-25/rests-finished`, three 7-opcode interval blocks each
-      containing `04` (`SET_RESTDURATION`). That proves how many interval
-      blocks WITH a rest write it accepted, which is a direct check on the
-      "it dropped a rest" class of report. `domain/monitor/pm5/response.ts`'s
-      `echoedCommandIds` already parses it and is used ONLY by the fake to
-      build acks; nothing compares the monitor's echo against what we sent.
-      Carries no VALUES, so it bounds structure, never durations. **S**
-
-- [ ] **We cannot read the monitor's firmware version, and it is the one
-      fact every report of this class needs.** Documented at characteristic
-      `0x0014` (20 bytes, READ) in the C2 Device Information service
-      `0x0010` (BLE doc rev 1.30 attribute table). `Transport` has no read
-      method at all, so this touches both real transports, the fake, replay
-      and three decorators; a connect-time ring entry is the payoff. **Check
-      while implementing:** `DEVICE_INFO_SERVICE_UUID` is built from handle
-      `0x0000` while the document gives `0x0010`, and the constant's own
-      comment concedes we never established whether it or the `PM5` name
-      prefix matched at discovery. **M**
-
-- [ ] **Our arm verification cannot see a dropped rest, or ANY interval past
-      the first.** `expectedArmedStructure` predicts exactly three values —
-      workout type, workout duration, duration type — and the duration pair
-      mirrors INTERVAL 0 only. So a monitor can ack every frame, read back a
-      structure we declare correct, and still run something else: rest is
-      never checked on any interval, and intervals 1..N are never checked at
-      all. Found 2026-09-07 chasing a report that Sea Fret ran as work, work,
-      rest ON THE MONITOR'S OWN SCREEN rather than work, rest, work, rest.
-      **The report is UNREPRODUCED and there is no defect to fix yet:** the
-      compiled program carries `restSeconds: 60` on both intervals and the
-      wire bytes carry `04 02 00 3c` twice, matching the CSAFE worked
-      example byte for byte. What is certain is that no instrument we own
-      would have caught it (recurring failure 19).
-      **THE OPEN QUESTION IS ANSWERED, AND THIS ROW'S TWO STATED BLOCKERS
-      WERE BOTH WRONG (measured 2026-09-13).** It read: "whether the PM
-      exposes any readback for PROGRAMMED rest — `0x0032`'s rest fields are
-      live values, not configuration … Needs the reporter's firmware version
-      and a recorded session."
-      - **`0x0032`'s rest field IS the programmed value**, not a live-only
-        one. Measured across all ten committed captures that carry a
-        programming write: while armed and settled it equals interval 0's
-        `SET_RESTDURATION`, and it RE-ARMS per interval. In
-        `walk-2026-08-25/rests-finished` (`[60s r60, 500m r60, 60s r0]`) it
-        reads 60.0 armed, counts down through the rest phase, resets to 60.0
-        when interval 2's work starts, and reads 0.0 when interval 3's does.
-        The vendor document is SILENT on the field, not supporting — its
-        "this value will change depending on where you are in the interval"
-        footnote attaches to `Interval Type`, in both the GATT and
-        multiplexed tables.
-      - **Interval k's structure is readable while k is current.**
-        `0x0031`'s `(durationRaw, durationType)` pair tracks the CURRENT
-        interval, byte-exact to what we sent: 6000/time, 500/distance,
-        6000/time across that capture's three intervals.
-      - **"A recorded session" was unsatisfiable by the reporter anyway.**
-        Recording sits behind `DEV || VITE_ENABLE_FAKE_MONITOR`, folded out
-        at build time with a `pm5-recording` needle in `dist-grep.sh`
-        proving it absent from production bundles. A TestFlight tester
-        cannot record. No row said so.
-      **So this needs no `Transport.read`, no firmware version and no
-      recording — the data has been arriving the whole time and we ignore
-      it.** `verifyArmed` compares three values ONCE, pre-row: `armedWatch`
-      runs only while the machine reports `armed`, so all structural
-      checking stops at the first stroke. The Sea Fret symptom would have
-      shown as interval 1's work phase reporting `restSec 0.0` where the
-      program said 60.
-      **What it can never be is a pre-flight gate:** `0x0033`'s interval
-      count is a PROGRESS counter, not the programmed total (0 while armed,
-      then 1, 2, 3), so N is unknowable before the piece runs. Any check of
-      this kind is per-boundary reconciliation.
-      **One free corroboration nobody reads:** the CSAFE ack echoes the
-      opcode IDs the PM parsed — three 7-opcode blocks each containing `04`
-      (`SET_RESTDURATION`) in that capture. `response.ts`'s
-      `echoedCommandIds` exists and is used ONLY by the fake; the driver
-      never compares the monitor's echo against what it sent. **M**
-      · dies 2026-11-13 (campsite: given a date on the way past, 2026-09-13,
-      by the PR that rewrote this row) · what remains is BUILDING the
-      per-boundary check, which the two rows above own; this row is now the
-      evidence behind them rather than an open question.
-
+      **TICKED 2026-09-19 — fixed by #358 (`f2661907`, v0.43.0), which this
+      file never recorded.** `eventLog.ts` folds a consecutive identical entry
+      into `repeated` / `lastAtMs`, and `eventLog.test.ts` has "keeps the
+      connect-time entries a flood used to evict". INFERENCE, unobserved: two
+      failing characteristics that interleave would not fold.
 - [x] **The Bluetooth scan sheet mixes "PM5" and "monitor" in one flow.**
       CLOSED in the Phase MT close-out PR, with the permission-screen row that
       is the same rule (RF32). `capacitorBle.ts`'s `DISPLAY_STRINGS` now read
@@ -2821,16 +2715,14 @@ fixed.
       the walk, so a future validation change at Concept2 would thin rows
       silently from then on. Decide after the walk reads which path fired;
       a stored shape, so its own PM gate. **S**
-
-- [ ] **A Just Row's 5-minute auto-splits have no home.** Spec §8's owed
-      row (PM #332 found it living only in the LP section's prose): the
-      PM5 sends 0x0038 per auto-split on a free row
-      (`walk-2026-08-31-justrow`, two frames) and the record stores
-      `steps: []`, so LP renders a Just Row's tiles and no strip, and PR 2
-      sends no `workout` array for it. Giving those splits a stored home
-      (`splits[]` on the upload, a strip on the screen) is a later phase's
-      spec: a stored shape plus wire meaning, TRIAD twice. **M**
-
+      **NARROWED 2026-09-19 (James).** "No query can find it" is now half
+      false: every success writes a structured `c2_send` log line carrying
+      `intervalsSent` and `fallback: none | without_workout | without_code`
+      (`routes/concept2.ts`) — and `without_code` is a SECOND fallback this
+      row never mentioned. So the population is countable, from the log. **The
+      stored boolean is STRUCK:** a migration to make countable what a log
+      line already counts, for five users. What stays is the rower's half — a
+      thinned row reads as a success and can never be re-sent.
 - [x] **Rows auto-sent before Phase LP PR 2 keep their thin logbook entry
       forever, and nothing tells the rower.** RULED by James, 2026-09-07:
       "just leave em" — accept silently, no note on the row, no
@@ -2842,40 +2734,6 @@ fixed.
       short-circuits (`routes/concept2.ts`), so those entries stay as
       sent. **S**
 
-- [ ] **The history LIST has no `(user_id, logged_at desc, id desc)`
-      index.** Found by the Phase LP DBA benchmark, 2026-09-07
-      (`docs/superpowers/research/2026-09-07-machine-summary-jsonb-vs-columns.md`,
-      "Two things I found on the way"): `schema.ts` carries only
-      `session_logs_user_id_idx`, and at 25k rows per user the page of 50
-      measured ~40 ms without the composite index and ~0.25 ms with it,
-      identically for both storage shapes. Not a Phase LP change (no LP
-      query touches it); rides the next PR that adds a Drizzle migration
-      to `session_logs`. **S** · dies 2026-10-12 (dated on the way past by
-      Phase PS PR 0, campsite rule) · Phase PS's `GET /api/stats/rows` does
-      not open it either — the DBA measured 2026-09-12 that a full-history
-      read IGNORES the composite (743 vs 726 ms at 100k; it pays only under
-      `LIMIT`), so no PS query needs it; James rules keep/kill at the PR 0
-      hand-back.
-
-- [ ] **Generated columns for `machine_summary.totalCalories` /
-      `avgWatts` when the You-stats phase wants a covering index.** The
-      same benchmark's one real jsonb gap: Postgres `INCLUDE` takes
-      columns, never expressions, so a covering index for a per-user
-      monthly roll-up must carry the whole ~666-byte blob (346 MB vs
-      48 MB at 1M rows; 12-month cohort roll-up 337 ms vs 53 ms). The
-      escape hatch needs no backfill and no write-path change:
-      `GENERATED ALWAYS AS ((machine_summary->>'totalCalories')::int)
-      STORED`, then a btree/covering index on it. James (2026-09-07):
-      lifetime and monthly calories and average watts are the two figures
-      You will show. Opens WITH that phase, not before — at household
-      scale the un-indexed SUM measures ~1 ms. **S** · dies 2026-10-12
-      (dated on the way past by Phase PS PR 0, campsite rule; the trigger
-      FIRED 2026-09-12 when PS opened) · the DBA measured 2026-09-12 that a
-      covering index or generated column cannot help PS's per-row
-      projection — it helps only a SERVER roll-up (`SUM ... GROUP BY`),
-      which the PS design does not do, so the phase does not open this;
-      James rules keep/kill at the PR 0 hand-back.
-
 - [x] **A stored row's MACHINE SUMMARY REST column reads a dash.** CLOSED
       by Phase LP PR 2 (2026-09-07): `LogStep` gained `machineRestMeters`
       (and `machineRestSeconds`, which the logbook API's interval object
@@ -2883,17 +2741,18 @@ fixed.
       from the step itself on rows saved after PR 2; older rows keep the
       dash. **S**
 
-- [ ] **357 code comments cite `interface-notes.md §N` — a file that does
-      not exist** (`docs/monitor/` holds `pm5-interface-notes.md`;
-      `grep -rn "interface-notes.md" app/src app/domain | grep -v
-      pm5-interface | wc -l` → 357 across 32 files, re-measured
-      2026-09-12; it read 354 across 41 files on 2026-09-07, so the
-      citations grew while the files holding them shrank). RF16's
-      dangling-citation corollary, at scale; every one is the short name
-      for the same file, so a mechanical `sed` fixes it, but 32 files is
-      not a rider on an unrelated PR. Its own docs-class PR, or the next
-      sweep that already touches `driver.ts` wholesale. **S**
-
+- [ ] **`type: "rower"` is still hardcoded for machines the denylist lets
+      through.** Concept2's results enum has separate `dynamic`, `slides` and
+      `multierg` members, and the PM5 enum names `STATIC_DYNAMIC` (8), the
+      `SLIDES_*` family (16-20, 32) and `MULTIERG_*` (224-226). All of them are
+      rowing, so a wrong `type` is a smaller wrong than a SkiErg's — but it is
+      still wrong, and Concept2 rejects the verification code on a machine-type
+      mismatch either way. Deliberate consequence of the approved denylist
+      direction, not an oversight. **S**
+      **Moved here from Phase MT when it was prepared for close, 2026-09-19:**
+      it is a Concept2 row — what a stored row claims on someone else's record
+      — and TRIAD. It rides the next PR that touches `mapping.ts`, which is
+      the fence row below.
 - [ ] **A connected Just Row closed by End or TERMINATE cannot be sent to
       Concept2.** Filed at the door anchor pass, 2026-09-02 (RF14), narrowed
       at the spec pass. `server/concept2/mapping.ts:50` fences the export on
@@ -2906,6 +2765,46 @@ fixed.
       export button in ordinary use until the fence admits a `rower` close
       for free rows (`steps: []`). Needs a Wave E ruling: widen the fence
       for free rows, or accept and say so in the button's copy. **S**
+      **RULED 2026-09-19 (James): WIDEN THE FENCE**, rather than explain the
+      gap in the button's copy — a free row is a result Concept2 ranks, and a
+      missing Send on it reads as a bug, not a policy. The fence is now
+      `mapping.ts`'s `if (row.endedBy !== "finished") return "not_finished"`
+      (this row's `:50` citation has drifted). **TRIAD** — it decides what a
+      stored row may be sent as: full antagonist pass, DBA gate and PM final
+      gate, in its own PR. **First, and UNTESTED:** whether a row with
+      `steps: []` posts cleanly to Concept2 with no `workout` array. Measure
+      that on log-dev before the spec is written.
+**Exit** (written 2026-09-19; two rows above had promised it since the wave
+opened):
+
+1. [x] **Phase RC's exit criterion (d), transcribed verbatim:** _"a row posted
+   to the Concept2 sandbox comes back through `export/` matching what we
+   stored, or the reason it cannot is documented"_
+   (`docs/history/phase-rc.md`). MET by its second clause — all three exports
+   404 with "Stroke data not found" on a stroke-less row, by Concept2's design
+   (`docs/monitor/c2-crossconnect-2026-09/README.md`; PR0 is ticked).
+2. [ ] **The Phase LP parity walk** — Concept2's logbook page, our log screen
+   and the PM5's own View Detail screens for one row, in one frame. It is the
+   wave's ONLY external oracle (recurring failure 11) and it has never been
+   run. A hardware walk: a versioned runsheet and a PM readiness PASS before
+   James is asked for time. **The controller owns writing the runsheet.**
+3. [ ] **The weight-unit desk leg** — no erg, no phone.
+4. [ ] **The move to the LIVE logbook.** `C2_BASE_URL` defaults to the sandbox
+   and `docs/deploy.md` says the live logbook "needs write approval first".
+   **MEASURED 2026-09-19:** James's own sends are landing on
+   `log-dev.concept2.com` — his season page there lists 26 results through
+   09/18 — so production still talks to the sandbox, and any line in this
+   file that reads as though rows already reach the live logbook is about
+   log-dev. Owed with it: registering the native redirect on the live portal
+   under the name "Ergomatic".
+
+**Owed alongside, and in no row of their own** (auto-send's tails, lifted from
+its row when it was ticked): the AUTOMATIC-save check on a phone; PR C's
+confirming send; a `MANUAL` + `SEND FAILED` frame; and the rower-facing
+release note for sending, deliberately held for "the tag that widens the
+cohort" (`releaseNotes.ts`).
+
+---
 
 ## Codebase-audit owners
 
@@ -3076,6 +2975,40 @@ fixed.
   (§AUD-006, §V4).
 ## Tooling
 
+- **357 code comments cite `interface-notes.md §N` — a file that does
+  not exist** (`docs/monitor/` holds `pm5-interface-notes.md`;
+  `grep -rn "interface-notes.md" app/src app/domain | grep -v
+  pm5-interface | wc -l` → 357 across 32 files, re-measured
+  2026-09-12; it read 354 across 41 files on 2026-09-07, so the
+  citations grew while the files holding them shrank). RF16's
+  dangling-citation corollary, at scale; every one is the short name
+  for the same file, so a mechanical `sed` fixes it, but 32 files is
+  not a rider on an unrelated PR. Its own docs-class PR, or the next
+  sweep that already touches `driver.ts` wholesale. **S**
+  Lifted out of Wave E, 2026-09-19 — it was never Concept2 work. Re-counted
+  that day: still exactly 357 across 32 files under `app/src` + `app/domain`.
+  · dies 2026-11-30 · a mechanical rename over 32 files; it rides the next
+  wholesale driver sweep or it goes alone
+
+- **The refusal-survives-its-own-consequences guard is UNGATED.** `fail()`
+  refuses to let a standing `unsupported-machine` error be overwritten by
+  the `program()` rejection the refusal itself caused — without it the
+  rower watches the machine message become a generic failure screen a beat
+  later. The guard is correct on its face and NO TEST CAN MAKE IT FAIL.
+  Three routes were tried and all three go green with the guard deleted:
+  `deaf` starves the terminate's own settle so nothing rejects;
+  `failNextProgramFrame` rejects before the status subscriptions release,
+  so the refusal never fires; `lagStructureOneTick` produces no second
+  `fail()` at all. **What it needs is a fake control that withholds 0x0031
+  for a bounded number of ticks without starving the CSAFE ack path.** On
+  hardware the window is the measured 544 ms between the first 0x0032 and
+  `armed`. Found by the whole-branch review, finding 1. **S**
+  Lifted out of Phase MT at its close, 2026-09-19. Cross-linked, not
+  merged, with the decode-warning guard in Wave E that needs the same
+  missing fake control (`docs/closeouts/close-MT.md`, P3-G).
+  · dies 2026-11-15 · one piece of fake-transport tooling — a bounded
+  withhold — unblocks two guards nothing can currently gate
+
 - **Let a build flag reach the fake transport on NATIVE.** Today no build of
   any kind can put a fake PM5 in front of a connected surface on iOS:
   `src/adapters/monitorTransport.ts`'s `defaultTransport` takes the Capacitor
@@ -3166,6 +3099,113 @@ fixed.
   on; the released plugin has none of them. **Any NFC or Capacitor upgrade
   reapplies and re-reviews the patch and re-runs the 31 native tests before
   the dependency is accepted** (`docs/RELEASING.md` step 3 has the command).
+
+## Monitor-truth checks — does the PM5 do what we told it?
+
+Lifted out of Wave E on 2026-09-19 (James): these are PM5 driver correctness,
+not Concept2 work, and they had collected under the logbook's heading because
+it was open. **Do the echo first** — it is the cheap half, it needs no new
+mechanism, and it answers the question that started all three ("did the
+monitor take the rests we sent?").
+
+- **The driver never checks the PM's own command echo.** · dies
+  2026-11-13 · a row and not a fix now because it is the cheap half of
+  the boundary-reconciliation row below and should land with it rather than
+  alone.
+  The CSAFE ack echoes the opcode IDs the monitor parsed — in
+  `walk-2026-08-25/rests-finished`, three 7-opcode interval blocks each
+  containing `04` (`SET_RESTDURATION`). That proves how many interval
+  blocks WITH a rest write it accepted, which is a direct check on the
+  "it dropped a rest" class of report. `domain/monitor/pm5/response.ts`'s
+  `echoedCommandIds` already parses it and is used ONLY by the fake to
+  build acks; nothing compares the monitor's echo against what we sent.
+  Carries no VALUES, so it bounds structure, never durations. **S**
+
+- **BOUNDARY RECONCILIATION: check what the monitor is RUNNING, not just
+  what it acked.** · dies 2026-11-13 · a row and not a fix now because it
+  is a new mechanism in the driver's hot path and wants its own spec and
+  antagonist pass, not a rider on a diagnostics change.
+  Filed 2026-09-13 out of the research that answered the arm-verification
+  row above. Everything it needs is already on the wire, unread: at each
+  interval's work phase, `0x0031`'s `intervalType` and
+  `(durationRaw, durationType)` and `0x0032`'s Rest Time name THAT
+  interval's programmed shape, and `0x0033`'s interval count says which
+  index it is. Compared against `program.intervals[k]` per boundary,
+  those four distinguish "the monitor is running what we sent" from "the
+  monitor is running something else" — the exact question the Sea Fret
+  report could not answer. `0x0037`'s per-boundary frame corroborates it
+  retrospectively, carrying the just-finished interval's own rest time
+  and distance (60/60/0 across the rests capture's three intervals).
+  **Two traps for whoever builds it.** `0.0` rest is ambiguous between
+  "programmed r0" and "no program loaded" — the menu-at-ready capture
+  shows the unloaded state reads 0.0 too — so a zero only means
+  something paired with `0x0031`'s structure fields. And this can only
+  ever be per-boundary: the interval count is a progress counter, so a
+  pre-flight gate is impossible. **M**
+
+**Evidence behind both rows** — this was its own row in Wave E ("Our arm
+verification cannot see a dropped rest…") until 2026-09-19. It says itself
+that it is "now the evidence behind them rather than an open question", so it
+is kept as that and is not a third item of work:
+
+- **Our arm verification cannot see a dropped rest, or ANY interval past
+  the first.** `expectedArmedStructure` predicts exactly three values —
+  workout type, workout duration, duration type — and the duration pair
+  mirrors INTERVAL 0 only. So a monitor can ack every frame, read back a
+  structure we declare correct, and still run something else: rest is
+  never checked on any interval, and intervals 1..N are never checked at
+  all. Found 2026-09-07 chasing a report that Sea Fret ran as work, work,
+  rest ON THE MONITOR'S OWN SCREEN rather than work, rest, work, rest.
+  **The report is UNREPRODUCED and there is no defect to fix yet:** the
+  compiled program carries `restSeconds: 60` on both intervals and the
+  wire bytes carry `04 02 00 3c` twice, matching the CSAFE worked
+  example byte for byte. What is certain is that no instrument we own
+  would have caught it (recurring failure 19).
+  **THE OPEN QUESTION IS ANSWERED, AND THIS ROW'S TWO STATED BLOCKERS
+  WERE BOTH WRONG (measured 2026-09-13).** It read: "whether the PM
+  exposes any readback for PROGRAMMED rest — `0x0032`'s rest fields are
+  live values, not configuration … Needs the reporter's firmware version
+  and a recorded session."
+  - **`0x0032`'s rest field IS the programmed value**, not a live-only
+    one. Measured across all ten committed captures that carry a
+    programming write: while armed and settled it equals interval 0's
+    `SET_RESTDURATION`, and it RE-ARMS per interval. In
+    `walk-2026-08-25/rests-finished` (`[60s r60, 500m r60, 60s r0]`) it
+    reads 60.0 armed, counts down through the rest phase, resets to 60.0
+    when interval 2's work starts, and reads 0.0 when interval 3's does.
+    The vendor document is SILENT on the field, not supporting — its
+    "this value will change depending on where you are in the interval"
+    footnote attaches to `Interval Type`, in both the GATT and
+    multiplexed tables.
+  - **Interval k's structure is readable while k is current.**
+    `0x0031`'s `(durationRaw, durationType)` pair tracks the CURRENT
+    interval, byte-exact to what we sent: 6000/time, 500/distance,
+    6000/time across that capture's three intervals.
+  - **"A recorded session" was unsatisfiable by the reporter anyway.**
+    Recording sits behind `DEV || VITE_ENABLE_FAKE_MONITOR`, folded out
+    at build time with a `pm5-recording` needle in `dist-grep.sh`
+    proving it absent from production bundles. A TestFlight tester
+    cannot record. No row said so.
+  **So this needs no `Transport.read`, no firmware version and no
+  recording — the data has been arriving the whole time and we ignore
+  it.** `verifyArmed` compares three values ONCE, pre-row: `armedWatch`
+  runs only while the machine reports `armed`, so all structural
+  checking stops at the first stroke. The Sea Fret symptom would have
+  shown as interval 1's work phase reporting `restSec 0.0` where the
+  program said 60.
+  **What it can never be is a pre-flight gate:** `0x0033`'s interval
+  count is a PROGRESS counter, not the programmed total (0 while armed,
+  then 1, 2, 3), so N is unknowable before the piece runs. Any check of
+  this kind is per-boundary reconciliation.
+  **One free corroboration nobody reads:** the CSAFE ack echoes the
+  opcode IDs the PM parsed — three 7-opcode blocks each containing `04`
+  (`SET_RESTDURATION`) in that capture. `response.ts`'s
+  `echoedCommandIds` exists and is used ONLY by the fake; the driver
+  never compares the monitor's echo against what it sent. **M**
+  · dies 2026-11-13 (campsite: given a date on the way past, 2026-09-13,
+  by the PR that rewrote this row) · what remains is BUILDING the
+  per-boundary check, which the two rows above own; this row is now the
+  evidence behind them rather than an open question.
 
 ## Needs a decision from James
 
@@ -3485,6 +3525,18 @@ in both orientations.**
 
 ## Accepted, pinned, and not being fixed
 
+- **A MultiErg reporting a STATIC ski or bike value would be refused
+  outright.** The
+  vendor sentence that would exclude this — "this will be the one of the
+  MultiErg Machine Types" — is footnote 23, on `0x003C`, the one carrier we
+  do not subscribe. The two we read (footnotes 7 and 11) say only "the
+  Machine Type of the current interval". No capture and no vendor sentence
+  settles what a real MultiErg reports on 0x0032. Unowned, accepted. **S**
+  Lifted out of Phase MT at its close, 2026-09-19 — the row's own words
+  are "Unowned, accepted", which is this section.
+  · dies 2026-11-30 · accepted with no capture and no vendor sentence; the
+  date is when "nothing has appeared" is owed a re-read
+
 - **ACCEPTED (Gate 0-A's own cost, door PR A, 2026-09-02): Today's last
   three rows carry no PARTIAL chip.** The chip lands in History and on the
   log detail; Today's compact rows have no slot for it without displacing
@@ -3724,6 +3776,47 @@ Each needs erg time or a deliberate recording session.
   "off Connect Device". (`phase-nf.md`)
 
 ## Small, queued, rides the next PR in its area
+
+- **`callbackClaims` still sits under a `v8 ignore` it does not earn.**
+  `app/server/auth/google.ts` wraps one ignore span around an identity
+  decision — `c.email ?? ""` and `?? "Rower"` — so neither fallback has a
+  test. Its sibling, `nativeSignIn`, was fixed in #444. Lifted out of Wave E's
+  "Two `v8 ignore`s" row, 2026-09-19. **S** · dies 2026-10-31 · it rides the
+  next auth PR or it is debt nobody is buying
+
+- **The published matrix goes stale silently.** It is a claim in the app's
+  own voice, the same class as a shipped release note (RF9's drift class).
+  Changing `mapping.ts`'s hardcoded `type` or the denylist reconciles the
+  middle tier of `connect-the-monitor` and recounts the registry `minutes`.
+  The trigger is also recorded in the article's own source comment. **S**
+  Lifted out of Phase MT at its close, 2026-09-19.
+  · dies 2026-11-30 · a trigger, not work; the date is so a trigger nobody
+  trips does not become furniture
+
+- **`GET /api/stats/rows` grows a cursor or a server roll-up when any
+  user passes 5,000 rows.** Measured 2026-09-12 (DBA, spec §4.3):
+  224.8 B/row, 2.1 MiB and 78 ms at 10k rows; 5,000 is the 1 MiB line,
+  19 years away at 5/week. What would fix it now: a cursor — not done
+  because the household's busiest user has 16 rows. **S** · dies
+  2027-09-12 · the check is a count (`select user_id, count(*) from
+  session_logs group by 1 having count(*) > 5000`), not a build.
+  Lifted out of Phase PS at its close, 2026-09-19; date unchanged.
+
+- **The history LIST has no `steps` tier** (`LogRow.tsx:110-123`, its
+  own comment: a trusted tier-B2 row "still disagrees"), so such a row's
+  list metres differ from its detail hero and from LIFETIME. What would
+  fix it now: project Σ `actualMeters` server-side into
+  `LOG_LIST_COLUMNS` — not done because it is a list-surface change
+  outside PS's risk model (spec §12). **S** · dies 2026-10-12 ·
+  pre-existing, self-documented in the code, and PS names the detail
+  hero as its authority.
+
+The two Wave E rows this phase was expected to open (the history index, the
+generated columns) do NOT open from this route: the DBA measured on
+2026-09-12 that a full-history read ignores the composite and a covering
+index cannot carry `steps`; both got a `dies` date on the way past and James
+rules keep/kill at the PR 0 hand-back.
+  Lifted out of Phase PS at its close, 2026-09-19; date unchanged.
 
 - **The burst-handoff tests race their own timeout, so a failure there
   cannot say what failed.** The four ~2.3s tests in
@@ -4256,68 +4349,6 @@ Each needs erg time or a deliberate recording session.
   **This row stays open until a full CI suite has run green on it more than
   once**, because the whole point of its history is that one green run
   proves nothing here. **S**
-
-- **FLAKE 2 — one CI run failed four tests across four unrelated specs at
-  once.** · dies 2026-10-14 · a row and not a fix now because a single run
-  is an anecdote; what it needs first is a COUNT, and nothing collects one.
-  **DONE 2026-09-16 — #457 (`653bd5ea`) took the count and repaired all three
-  of this run's remaining failures** (the NFC status, the pairing locator and
-  the axe timeout; the fourth was FLAKE 4's). Each had its own cause and none
-  was the runner — FLAKE 5 below carries the detail. Proposed for eviction at
-  the 2026-09-19 hand-back; left here until James rules, since nothing is
-  struck without him. Original filing follows.
-  **2026-09-13, PR #423's run `34737876236`:** three failed plus one flaky
-  out of 569 — `connected.spec.ts:2236` (the NFC scan's `✓ Monitor found`
-  never appeared), `design.spec.ts:7601` (a pairing locator),
-  `design.spec.ts:776` (an axe `page.evaluate` timing out at 30 s) and
-  `stats.spec.ts:46` (`LIFETIME · 54,752 M`). **All four passed on a re-run
-  of the identical commit**, main was green, and the branch's diff touched
-  only the log detail's two components plus a comments-only edit to
-  `fake.ts` — verified by filtering that diff to non-comment lines, which
-  returned nothing.
-  **ONE OF THE FOUR IS NOW ACCOUNTED FOR, and it was not the runner.**
-  `stats.spec.ts:46` (`LIFETIME · 54,752 M`) is the delete-then-read race
-  closed under FLAKE 4 on 2026-09-14 — a real, reproducible bug in the
-  test, not load. That leaves three, and it weakens the inference below
-  rather than refuting it: a row that reads "four unrelated specs at once"
-  is a weaker signal once one of the four has its own cause.
-  **Four unrelated specs in one run reads like the RUNNER, not like any one
-  test** — the axe timeout is the most suggestive single data point, being
-  the heaviest step in the suite. But one run is not a population, and this
-  row deliberately does not open a hunt.
-  **THE COUNTING METHOD, SETTLED 2026-09-14 — and this row's own
-  description of the artifact was wrong in BOTH directions.** It said the
-  `playwright-report` artifact is "already uploaded on every red run".
-  `ci.yml:141` is `if: always()`, so it uploads on GREEN runs too — which
-  matters enormously, because `playwright.config.ts:21` sets
-  `retries: 1` under CI and a test saved by its retry leaves the job green
-  (2 of 9 FLAKE 1 occurrences went red; 0 of 10 for FLAKE 3). So the
-  artifact is not blind to flakes. **THREE of FLAKE 3's ten are
-  unreachable anyway, for two different reasons:** two expired out of the
-  `retention-days: 14` window (`ci.yml:146`), and the 2026-08-15 one
-  predates `196d817e` (2026-08-22, the #152 flake hunt), when the step was
-  still `if: failure()` and a flake's report was never written at all.
-  Artifacts alone would have found 7 of 10.
-  **What works, and what was actually used here:** fetch the `e2e` JOB LOG
-  for every attempt of every CI run (1,359 runs, 1,318 `e2e` job entries)
-  and grep the Playwright summary lines. Logs currently reach the first CI
-  run (2026-07-27) where artifacts do not — though that is this repo being
-  younger than GitHub's 90-day log retention, not a property of logs, and
-  it expires around 2026-10-25.
-  **Two traps, and the first write-up of this paragraph got both wrong.**
-  `gh run list` has no `--paginate` flag and errors `unknown flag`; the
-  1,000-result cap belongs to the Actions run-list API and applies only
-  when you FILTER (by `actor`, `branch`, `check_suite_id`, `created`,
-  `event`, `head_sha` or `status`) — unfiltered enumeration returned all
-  1,396. Date-windowing works, but `created` is itself a capped parameter,
-  so keep each window under 1,000. And the log API's failure is LOUD, not
-  silent: without `--allow-escape-sequences` `gh` writes zero bytes and
-  **exits 1** naming the flag on stderr. A pipe is what hides it.
-  **Local context worth recording:** this machine was measured at ~750 MB
-  free with swap at 3.7 of 5.1 GB while two sessions ran full suites at
-  once, and two CI watchers were killed for memory the same day. Whether
-  GitHub's runners are under comparable pressure is unknown and is exactly
-  what a count would show. **S**
 
 - **FLAKE 3 — `library.spec.ts`'s SOURCE filter test read the library
   before the workout it had just authored was committed.** · dies
@@ -5044,6 +5075,53 @@ than back in the queue this was built to replace.
 
 Not scheduled in any wave. Reconsider only when the recorded trigger fires;
 an iceboxed item is not a phase-close requirement.
+
+- **Reading what the monitor IS — firmware version, and classifying a
+  pre-2018 one. Iceboxed by James, 2026-09-19.** **Trigger:** a second report
+  of this class. Two rows, one blocker: `Transport`
+  (`app/domain/monitor/types.ts`) has `scan`, `connect`, `write`, `subscribe`
+  and `disconnect` and no `read`, so nothing can read characteristic
+  `0x0014`. Adding it touches both real transports, the fake, replay and
+  three decorators. One report, outside the cohort, never reproduced; the
+  follow-on was already held on cost (James, 2026-09-07). The two rows follow
+  verbatim. · dies 2026-11-13 · iceboxed on a single unreproduced report; the
+  date is when "no second report" stops being current
+
+  - **We cannot read the monitor's firmware version, and it is the one
+    fact every report of this class needs.** Documented at characteristic
+    `0x0014` (20 bytes, READ) in the C2 Device Information service
+    `0x0010` (BLE doc rev 1.30 attribute table). `Transport` has no read
+    method at all, so this touches both real transports, the fake, replay
+    and three decorators; a connect-time ring entry is the payoff. **Check
+    while implementing:** `DEVICE_INFO_SERVICE_UUID` is built from handle
+    `0x0000` while the document gives `0x0010`, and the constant's own
+    comment concedes we never established whether it or the `PM5` name
+    prefix matched at discovery. **M**
+
+  - **A monitor on pre-2018 firmware cannot be classified at all.**
+    `ergMachineType` is ABSENT below interface revision V1.26/V1.27, and
+    Phase MT does nothing on absence — refusing on ignorance would break a
+    working erg. `0x0016` ("Connected Erg Machine Type", READ) would settle
+    it and needs a `Transport.read`, which is the existing firmware-version
+    register row's dependency too. Both are unblocked by the same work.
+    **But `0x0016` may not exist:** rev 1.30's revision history reads
+    "2/3/2017 ... Deleted Machine Type information in Device Info Service as
+    firmware unable to support it. V1.21." Establish that before costing it.
+    **S**
+
+- **A Just Row's 5-minute auto-splits have no home.** Spec §8's owed
+  row (PM #332 found it living only in the LP section's prose): the
+  PM5 sends 0x0038 per auto-split on a free row
+  (`walk-2026-08-31-justrow`, two frames) and the record stores
+  `steps: []`, so LP renders a Just Row's tiles and no strip, and PR 2
+  sends no `workout` array for it. Giving those splits a stored home
+  (`splits[]` on the upload, a strip on the screen) is a later phase's
+  spec: a stored shape plus wire meaning, TRIAD twice. **M**
+  Iceboxed by James, 2026-09-19, out of Wave E. **Trigger:** James asks for
+  Just Row splits. The row prices itself — a stored shape plus wire
+  meaning, TRIAD twice — which is a phase nobody has asked for, not a row.
+  · dies 2027-03-19 · phase-sized and unrequested; six months is when a
+  deferred phase is owed a re-ask
 
 - **Global `exactOptionalPropertyTypes`, then `noUncheckedIndexedAccess` —
   iceboxed by James, 2026-09-19, out of the dissolved Wave D.** **Trigger:**
