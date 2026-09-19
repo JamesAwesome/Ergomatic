@@ -1,0 +1,113 @@
+{
+  "rows": [
+    {
+      "what": "Typed name, in the field",
+      "pairing": "ink on surface",
+      "hex": "#1b1a17 on #fffdf7",
+      "ratio": 17.11,
+      "bar": 4.5,
+      "why": "body text",
+      "passes": true
+    },
+    {
+      "what": "Field border against the page",
+      "pairing": "ink on page",
+      "hex": "#1b1a17 on #f4f1e8",
+      "ratio": 15.41,
+      "bar": 3,
+      "why": "non-text UI (1.4.11)",
+      "passes": true
+    },
+    {
+      "what": "Focused field border",
+      "pairing": "accent on page",
+      "hex": "#b5341f on #f4f1e8",
+      "ratio": 5.35,
+      "bar": 3,
+      "why": "non-text UI, focus state",
+      "passes": true
+    },
+    {
+      "what": "NAME heading",
+      "pairing": "ink3 on page",
+      "hex": "#57544c on #f4f1e8",
+      "ratio": 6.69,
+      "bar": 4.5,
+      "why": "small text, 11px mono",
+      "passes": true
+    },
+    {
+      "what": "Save label, enabled",
+      "pairing": "ink on page",
+      "hex": "#1b1a17 on #f4f1e8",
+      "ratio": 15.41,
+      "bar": 4.5,
+      "why": "button text",
+      "passes": true
+    },
+    {
+      "what": "Save border, enabled",
+      "pairing": "ink on page",
+      "hex": "#1b1a17 on #f4f1e8",
+      "ratio": 15.41,
+      "bar": 3,
+      "why": "non-text UI",
+      "passes": true
+    },
+    {
+      "what": "Save label, disabled",
+      "pairing": "ink4 on page",
+      "hex": "#6f6a5f on #f4f1e8",
+      "ratio": 4.76,
+      "bar": 4.5,
+      "why": "still must be readable",
+      "passes": true
+    },
+    {
+      "what": "Save border, disabled",
+      "pairing": "ink4 on page",
+      "hex": "#6f6a5f on #f4f1e8",
+      "ratio": 4.76,
+      "bar": 3,
+      "why": "non-text UI",
+      "passes": true
+    },
+    {
+      "what": "Helper note",
+      "pairing": "ink3 on page",
+      "hex": "#57544c on #f4f1e8",
+      "ratio": 6.69,
+      "bar": 4.5,
+      "why": "small text",
+      "passes": true
+    },
+    {
+      "what": "Refusal note",
+      "pairing": "accent on page",
+      "hex": "#b5341f on #f4f1e8",
+      "ratio": 5.35,
+      "bar": 4.5,
+      "why": "small text, carries meaning",
+      "passes": true
+    },
+    {
+      "what": "SAVED confirmation",
+      "pairing": "success on page",
+      "hex": "#49624f on #f4f1e8",
+      "ratio": 5.92,
+      "bar": 4.5,
+      "why": "small text, 10px mono",
+      "passes": true
+    },
+    {
+      "what": "Focus ring on the field",
+      "pairing": "ink on page",
+      "hex": "#1b1a17 on #f4f1e8",
+      "ratio": 15.41,
+      "bar": 3,
+      "why": "non-text UI (1.4.11)",
+      "passes": true
+    }
+  ],
+  "failing": 0
+}

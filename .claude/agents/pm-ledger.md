@@ -7655,3 +7655,62 @@ answer"). If that row is rescoped the binding returns with it.
 #474, #478 and #480 are tester-visible and untagged past v0.50.6; the docs,
 gate and tooling merges since each owe a stated "no note" line (RF15).
 Another session cuts it.
+
+## 2026-09-19 — Final-PR gate, #485 "Let a rower change their own name"
+
+**NOT READY, four conditions, none about the engineering.** Non-TRIAD UI
+change with an approved Gate 0; DBA and antagonist skips both correct. All
+four conditions were met before the PR went back to James.
+
+1. **Fold: 152 words / bullets 27,21,30,20,21,18** against ~120 / ~25. Best
+   result yet against this rule — five of six bullets clean, the overage 32
+   words across two welded ones. Replaced at 137.
+2. **A wrong integer above the fold** — "Three paths used to copy it back";
+   TWO did. The front door's `accept()` was already a self-assigning upsert on
+   main. The Record, the Gate 0 pack and `routes.ts`'s shipped comment all
+   said two. The fold inherits corrections nobody greps.
+3. **Ticked #480's carried-forward row; left its OWN row `- [ ]`**, deferral
+   clause still reading "the CONTROL does not exist yet". Second occurrence in
+   a fortnight after #474. Fixed, and the proposition swept: "nothing in the
+   product can rename an account" was live in two more places, one a sentence
+   this branch itself wrote. Dated specs keep it as history (JC ruling); no
+   user-facing copy carried it. The re-registration row is NARROWED, not
+   closed, and goes to James as a re-date.
+4. **Head was `0366211d`, not the `83f61eee` the dispatch and the body named.**
+   `83f61eee`'s CI FAILED. That push inverted a THIRD stale assertion, in the
+   integration suite the pre-push hook structurally cannot discover (it
+   discovers unit + client). Body said "two tests inverted"; three at head.
+
+**Non-blocking, all fixed same round:** `NameEditor` omitted the
+`aria-labelledby` both siblings on that screen carry — **axe cannot see it**,
+an unlabelled `<section>` is not a region at all, which is why 398 design
+assertions passed with one anonymous region among three (RF34's shape). A
+client test now asserts the region by name. The fold claimed the avatar
+initials change and nothing asserted it — clause dropped. "19 in
+`routes.test.ts`" restated as four new plus one inverted in a 19-test file.
+
+**`initials()` ruling.** Both sites already tested on main, neither function
+changed — no new unit test owed. The real change is the INPUT CLASS:
+`users.name` was provider-shaped and is now rower-typed. `You.tsx`'s
+`initials()` lacks the `|| "R"` fallback `SignIn.tsx`'s `initialsOf()` has —
+unreachable today, one server change from mattering. Recorded, not filed.
+
+**Product ruling upheld.** Provider names stop syncing rather than a column
+making the rename authoritative: the rejected option buys one propagation case
+and costs a migration, a stored shape, TRIAD, and a permanent
+two-sources-of-truth read at every future use of that column. Strongest case
+against, which nobody had made: a rower who never renames here now has a name
+silently frozen, with no signal anywhere. That is the argument for the notes
+sentence being a condition rather than a suggestion.
+
+**Gate 0 pack: both admissions correctly placed** — the contrast failure
+("a table that never failed anything is not evidence that it ran", RF6) makes
+it falsifiable, and the faithfulness note sits under its own heading rather
+than below the claim it corrects. The comparison it forced surfaced the
+`Account`-title / `ACCOUNT`-section duplication, which is #474's residue.
+
+**Release: RECOMMENDED as v0.51.0, at James's convenience** — his "not ready"
+is a schedule, not a verdict. `v0.50.6..main` carries #474 and #478 already
+tester-visible; this adds the first new capability in the range. MINOR. Notes
+PR before the tag, three pins. **The notes must carry "Changing your name at
+Google no longer changes it here."**

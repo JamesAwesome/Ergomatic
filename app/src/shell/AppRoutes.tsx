@@ -155,10 +155,15 @@ export function CompleteRedirect() {
 export default function AppRoutes({
   user,
   onSignedOut,
+  onRenamed,
   authFlow,
 }: {
   user?: Me;
   onSignedOut?: () => void;
+  // Optional for the same reason `user` is -- tests render <AppRoutes />
+  // without a signed-in rower. `/you/account` only renders when `user`
+  // exists, so the two are supplied together or not at all.
+  onRenamed?: () => void;
   authFlow?: AuthFlowController;
 } = {}) {
   const location = useLocation();
@@ -338,7 +343,11 @@ export default function AppRoutes({
               path="/you/account"
               element={
                 accountAuth ? (
-                  <AccountScreen auth={accountAuth} />
+                  <AccountScreen
+                    auth={accountAuth}
+                    name={user?.name ?? ""}
+                    onRenamed={onRenamed ?? (() => {})}
+                  />
                 ) : (
                   <Navigate to="/you" replace />
                 )

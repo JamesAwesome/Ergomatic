@@ -780,3 +780,58 @@ test("PR2: the post-proof confirmation renders both identities and both controls
     expect(box.height).toBeGreaterThanOrEqual(44);
   }
 });
+
+// RENAMING, END TO END (Gate 0 2026-09-19, option A).
+//
+// STARTS UPSTREAM OF THE WRITE AND ASSERTS PAST IT (RF24). The rename's whole
+// claim is that the new name REACHES the rest of the app and SURVIVES a
+// reload -- a component test can prove neither, because the first crosses a
+// screen boundary and the second crosses the server. So this signs in for
+// real, renames through the real control, and then leaves the screen and
+// comes back by RELOAD rather than by navigation: a same-document nav would
+// pass on module memory alone (Phase RN's lesson, RF38).
+test("a rower renames themselves and the whole app agrees, including after a reload", async ({
+  page,
+}, testInfo) => {
+  await enableFrontDoor(page);
+  await signInViaBackdoor(page, {
+    email: `rename-${testInfo.parallelIndex}@e2e.test`,
+    name: "Rower",
+  });
+
+  // The precondition this test exists to change: You shows the provider's
+  // name, and the avatar its initial.
+  await page.goto("/you");
+  await expect(page.getByText("Rower", { exact: true })).toBeVisible();
+
+  await page.goto("/you/account");
+  const field = page.getByLabel("Your name");
+  await expect(field).toHaveValue("Rower");
+  // Save is inert until the value differs -- the no-op guard, asserted here
+  // and not only in the component test, because this is where a rower meets
+  // it.
+  await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+
+  await field.fill("Maya Chen");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("SAVED")).toBeVisible();
+
+  // ACROSS THE SCREEN BOUNDARY, IN-DOCUMENT, AND THE NAVIGATION IS THE
+  // ASSERTION (RF38). You reads the same user object, so it must have been
+  // TOLD rather than left stale — but `page.goto` cannot prove that: a full
+  // document navigation remounts the app and re-reads `/api/me` from
+  // scratch, so it passes whether or not the rename announced itself.
+  // Measured: with `App.tsx`'s `onRenamed={refetch}` replaced by a no-op,
+  // the goto version of this leg stayed GREEN. Going back through the
+  // screen's own BACK control keeps the document — and therefore the
+  // module state — so a missing callback shows up as a stale name.
+  await page.getByRole("link", { name: "← BACK" }).click();
+  await expect(page).toHaveURL(/\/you$/);
+  await expect(page.getByText("Maya Chen", { exact: true })).toBeVisible();
+  await expect(page.getByText("Rower", { exact: true })).toHaveCount(0);
+
+  // ACROSS THE SERVER: a full reload re-reads /api/me from Postgres, so a
+  // name that survives this was actually stored rather than held in memory.
+  await page.reload();
+  await expect(page.getByText("Maya Chen", { exact: true })).toBeVisible();
+});

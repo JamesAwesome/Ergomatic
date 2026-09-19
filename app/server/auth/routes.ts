@@ -178,5 +178,40 @@ export function createAuthRouter({
     res.json({ user: req.user });
   });
 
+  /**
+   * THE RENAME (Gate 0 2026-09-19, option A; pack at
+   * `docs/design/rename-gate0/`).
+   *
+   * WHY IT EXISTS. A rower Apple did not offer the name screen to lands as
+   * `"Rower"` (`providers.ts`), and Apple never shows that screen twice — so
+   * before this, the name was permanent. That permanence is what made a
+   * failed Apple token revoke a real defect rather than an untidy one.
+   *
+   * IT IS THE ONLY WRITER OF `users.name` AFTER CREATION. The two paths that
+   * used to re-copy the provider's name on every sign-in stopped doing so in
+   * the same change (`signin.ts`, and `legacyGoogle`'s upsert in
+   * `attempts.ts`), because a rename that a sign-in silently reverts is worse
+   * than no rename at all. The provider names an account once; the rower owns
+   * it after that.
+   *
+   * EMPTY IS REFUSED RATHER THAN COERCED. `users.name` is NOT NULL, so empty
+   * is the one value the column itself forbids; answering 400 tells the
+   * screen what happened instead of storing a space that renders as a blank
+   * row and an empty avatar.
+   */
+  router.patch("/api/me", requireUser(sessions), async (req, res) => {
+    const raw: unknown = (req.body as { name?: unknown } | undefined)?.name;
+    const name = typeof raw === "string" ? raw.trim() : "";
+    if (!name) {
+      res.status(400).json({ error: "name_required" });
+      return;
+    }
+    await users.updateProfile(req.user!.id, name);
+    // The updated user, not a bare 204: the screen renders the name it just
+    // sent, and every other identity surface (You's header, its initials)
+    // reads the same object.
+    res.json({ user: { ...req.user!, name } });
+  });
+
   return router;
 }

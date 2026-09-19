@@ -1,6 +1,7 @@
 import BackLink from "../shell/BackLink";
 import type { AuthFlowController } from "../adapters/authFlow";
 import SignInMethods from "./SignInMethods";
+import NameEditor from "./NameEditor";
 
 /**
  * `/you/account` — the screen behind You's ACCOUNT row (Gate 0 2026-09-15,
@@ -36,11 +37,24 @@ import SignInMethods from "./SignInMethods";
  * on the summary). A one-word deviation from the approved render, called out
  * in the PR rather than made silently.
  */
-export default function AccountScreen({ auth }: { auth: AuthFlowController }) {
+export default function AccountScreen({
+  auth,
+  name,
+  onRenamed,
+}: {
+  auth: AuthFlowController;
+  name: string;
+  onRenamed: () => void;
+}) {
   return (
     <main className="screen">
       <BackLink fallback="/you" />
       <h1 className="screen-title">Account</h1>
+      {/* ABOVE the methods list, per Gate 0 2026-09-19 option A: renaming is
+          the reason a rower opens this screen, so the field sits 124px from
+          the top rather than 270px behind the sign-in list
+          (`docs/design/rename-gate0/renders/layout-audit.json`). */}
+      <NameEditor name={name} onRenamed={onRenamed} />
       <SignInMethods auth={auth} />
     </main>
   );

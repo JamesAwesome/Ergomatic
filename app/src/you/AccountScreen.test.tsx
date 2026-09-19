@@ -49,7 +49,7 @@ describe("AccountScreen", () => {
   it("carries the whole account block — the methods list and the delete box", async () => {
     render(
       <MemoryRouter>
-        <AccountScreen auth={controller()} />
+        <AccountScreen name="Rower" onRenamed={() => {}} auth={controller()} />
       </MemoryRouter>,
     );
     expect(
@@ -63,7 +63,7 @@ describe("AccountScreen", () => {
   it("is titled Account and backs out to You", async () => {
     render(
       <MemoryRouter>
-        <AccountScreen auth={controller()} />
+        <AccountScreen name="Rower" onRenamed={() => {}} auth={controller()} />
       </MemoryRouter>,
     );
     expect(

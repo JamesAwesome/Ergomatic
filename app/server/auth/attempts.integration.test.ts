@@ -943,7 +943,12 @@ describe("front-door transactions against Postgres", () => {
       name: "Changed",
       grant: undefined,
     });
-    expect(signed.user).toMatchObject({ email: "saved@test", name: "Changed" });
+    // INVERTED (James, 2026-09-19): the saved name is PRESERVED too, not
+    // refreshed to "Changed". `legacyGoogle`'s upsert used to carry
+    // `SET name=excluded.name`, which is what would have silently reverted a
+    // rename made on `/you/account`. Both halves of this row now survive a
+    // returning sign-in, which is what the test's own title claims.
+    expect(signed.user).toMatchObject({ email: "saved@test", name: "Saved" });
 
     const denied = createAttempts(
       pool,
@@ -972,7 +977,10 @@ describe("front-door transactions against Postgres", () => {
           "SELECT email,name FROM users WHERE google_sub='legacy'",
         )
       ).rows,
-    ).toStrictEqual([{ email: "saved@test", name: "Changed" }]);
+      // The STORED row, and the same inversion as the returned user above:
+      // the name the rower owns survives a returning sign-in that carries a
+      // different one from Google.
+    ).toStrictEqual([{ email: "saved@test", name: "Saved" }]);
     expect(
       (await pool.query("SELECT id FROM users WHERE google_sub='new-legacy'"))
         .rowCount,

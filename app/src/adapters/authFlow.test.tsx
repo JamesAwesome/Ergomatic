@@ -2226,7 +2226,7 @@ describe("useAuthFlow", () => {
               `Remove` through You would find no control at all. The seam
               this case exists for is unchanged — the real component, the
               real write, the real re-read. */}
-          <AccountScreen auth={auth} />
+          <AccountScreen name="Rower" onRenamed={() => {}} auth={auth} />
         </MemoryRouter>
       );
     }
@@ -2269,7 +2269,7 @@ describe("useAuthFlow", () => {
               `Remove` through You would find no control at all. The seam
               this case exists for is unchanged — the real component, the
               real write, the real re-read. */}
-          <AccountScreen auth={auth} />
+          <AccountScreen name="Rower" onRenamed={() => {}} auth={auth} />
         </MemoryRouter>
       );
     }

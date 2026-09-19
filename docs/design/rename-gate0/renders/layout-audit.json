@@ -1,0 +1,142 @@
+{
+  "01-today": {
+    "frame": [
+      390,
+      844
+    ],
+    "nameFieldTop": null,
+    "signInMethodsTop": 98,
+    "deleteBoxTop": 252,
+    "contentHeight": 415,
+    "scrolls": false,
+    "saveButtonBox": null,
+    "inputBox": null
+  },
+  "02-option-a": {
+    "frame": [
+      390,
+      844
+    ],
+    "nameFieldTop": 124,
+    "signInMethodsTop": 189,
+    "deleteBoxTop": 343,
+    "contentHeight": 506,
+    "scrolls": false,
+    "saveButtonBox": [
+      62,
+      44
+    ],
+    "inputBox": [
+      272,
+      44
+    ]
+  },
+  "03-option-b": {
+    "frame": [
+      390,
+      844
+    ],
+    "nameFieldTop": 270,
+    "signInMethodsTop": 98,
+    "deleteBoxTop": 343,
+    "contentHeight": 506,
+    "scrolls": false,
+    "saveButtonBox": [
+      62,
+      44
+    ],
+    "inputBox": [
+      272,
+      44
+    ]
+  },
+  "04-compare": {
+    "frame": [
+      390,
+      844
+    ],
+    "nameFieldTop": 124,
+    "signInMethodsTop": 189,
+    "deleteBoxTop": 343,
+    "contentHeight": 506,
+    "scrolls": false,
+    "saveButtonBox": [
+      62,
+      44
+    ],
+    "inputBox": [
+      272,
+      44
+    ]
+  },
+  "05-states": {
+    "frame": [
+      390,
+      844
+    ],
+    "nameFieldTop": 124,
+    "signInMethodsTop": 189,
+    "deleteBoxTop": 343,
+    "contentHeight": 506,
+    "scrolls": false,
+    "saveButtonBox": [
+      62,
+      44
+    ],
+    "inputBox": [
+      272,
+      44
+    ]
+  },
+  "06-today-landscape": {
+    "frame": [
+      844,
+      390
+    ],
+    "nameFieldTop": null,
+    "signInMethodsTop": 98,
+    "deleteBoxTop": 252,
+    "contentHeight": 415,
+    "scrolls": true,
+    "saveButtonBox": null,
+    "inputBox": null
+  },
+  "07-option-a-landscape": {
+    "frame": [
+      844,
+      390
+    ],
+    "nameFieldTop": 124,
+    "signInMethodsTop": 189,
+    "deleteBoxTop": 343,
+    "contentHeight": 506,
+    "scrolls": true,
+    "saveButtonBox": [
+      62,
+      44
+    ],
+    "inputBox": [
+      364,
+      44
+    ]
+  },
+  "08-option-b-landscape": {
+    "frame": [
+      844,
+      390
+    ],
+    "nameFieldTop": 270,
+    "signInMethodsTop": 98,
+    "deleteBoxTop": 343,
+    "contentHeight": 506,
+    "scrolls": true,
+    "saveButtonBox": [
+      62,
+      44
+    ],
+    "inputBox": [
+      364,
+      44
+    ]
+  }
+}

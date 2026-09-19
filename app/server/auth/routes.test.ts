@@ -100,7 +100,13 @@ describe("GET /api/auth/callback", () => {
     expect(cookies).toContain(`${SESSION_COOKIE}=tok`);
     expect(cookies).toContain(`${OAUTH_COOKIE}=;`);
   });
-  it("authorizes a returning Google subject by saved email and preserves it while refreshing the name", async () => {
+  // INVERTED, NOT DELETED (James, 2026-09-19). This test used to assert that
+  // a returning Google sign-in REFRESHED the stored name from the provider.
+  // That behaviour is what silently reverted a rename, so the product rule is
+  // now the opposite: the provider names an account once, at creation, and
+  // never again. The test is kept pointing at the same seam so the change is
+  // visible in the diff rather than looking like lost coverage.
+  it("authorizes a returning Google subject by saved email and leaves their name alone", async () => {
     const d = deps({
       accessPolicy: createAccessPolicy("restricted", "a@x.com"),
       oauth: {
@@ -121,7 +127,7 @@ describe("GET /api/auth/callback", () => {
     const res = await cb(d);
     expect(res.status).toBe(302);
     expect(res.headers.location).toBe("/");
-    expect(d.users.updateProfile).toHaveBeenCalledWith("u1", "Changed Name");
+    expect(d.users.updateProfile).not.toHaveBeenCalled();
   });
   it("denies a returning Google subject whose saved email is outside restricted access", async () => {
     const d = deps({
@@ -164,6 +170,60 @@ describe("GET /api/auth/callback", () => {
     const res = await cb(d);
     expect(res.headers.location).toBe("/?denied=a%40x.com");
     expect(d.users.createUser).not.toHaveBeenCalled();
+  });
+  // --- PATCH /api/me, the rename (Gate 0 2026-09-19, option A) ----------
+  describe("PATCH /api/me", () => {
+    const signedIn = (d: AppDeps) => {
+      (d.sessions.resolveSession as ReturnType<typeof vi.fn>).mockResolvedValue(
+        {
+          sessionId: "s1",
+          user: { id: "u1", email: "a@x.com", name: "Rower" },
+          expiresAt: new Date(Date.now() + 1000),
+          refreshed: false,
+        },
+      );
+      return d;
+    };
+    const patch = (d: AppDeps, body: { name?: unknown }) =>
+      request(createApp(d))
+        .patch("/api/me")
+        .set("Cookie", `${SESSION_COOKIE}=tok`)
+        .send(body);
+
+    it("renames the account and answers with the new name", async () => {
+      const d = signedIn(deps());
+      const res = await patch(d, { name: "James" });
+      expect(res.status).toBe(200);
+      expect(res.body.user.name).toBe("James");
+      expect(d.users.updateProfile).toHaveBeenCalledWith("u1", "James");
+    });
+
+    // `users.name` is NOT NULL, so empty is the one value the column itself
+    // forbids. Refused with a 400 rather than coerced to a space.
+    it("refuses an empty name and writes nothing", async () => {
+      const d = signedIn(deps());
+      const res = await patch(d, { name: "   " });
+      expect(res.status).toBe(400);
+      expect(d.users.updateProfile).not.toHaveBeenCalled();
+    });
+
+    it("trims before storing, so a padded name is not a different name", async () => {
+      const d = signedIn(deps());
+      await patch(d, { name: "  James  " });
+      expect(d.users.updateProfile).toHaveBeenCalledWith("u1", "James");
+    });
+
+    // The guard is `requireUser`, the same one /api/me GET uses -- a rename
+    // is an authenticated write and must not be reachable without a session.
+    it("refuses a signed-out caller", async () => {
+      const d = deps();
+      (d.sessions.resolveSession as ReturnType<typeof vi.fn>).mockResolvedValue(
+        null,
+      );
+      const res = await patch(d, { name: "James" });
+      expect(res.status).toBe(401);
+      expect(d.users.updateProfile).not.toHaveBeenCalled();
+    });
   });
   it("handles user-cancelled consent silently", async () => {
     const res = await request(createApp(deps())).get(

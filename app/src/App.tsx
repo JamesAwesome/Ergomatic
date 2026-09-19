@@ -153,7 +153,17 @@ function AppContent() {
   if (me.state === "loading") return null;
   if (me.state === "out") return <SignIn onSignedIn={refetch} auth={auth} />;
 
-  return <AppRoutes user={me.user} onSignedOut={signedOut} authFlow={auth} />;
+  return (
+    <AppRoutes
+      user={me.user}
+      onSignedOut={signedOut}
+      // A rename re-reads /api/me rather than patching a local copy: You's
+      // header and its initials read the same object, so one source of truth
+      // is cheaper than keeping three in step.
+      onRenamed={refetch}
+      authFlow={auth}
+    />
+  );
 }
 
 export default function App() {
