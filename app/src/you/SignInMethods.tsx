@@ -300,12 +300,34 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
         <button
           className="auth-delete-account"
           disabled={deleteProvider === undefined}
+          aria-describedby={deleteProvider ? "auth-delete-reauth" : undefined}
           onClick={() =>
             void (deleteProvider && auth.startDelete(deleteProvider))
           }
         >
           Delete account
         </button>
+        {/* THE RE-AUTH DISCLOSURE (Gate 0 ruling 3, James, 2026-09-14,
+            immediately after running the deletion twice on a real account:
+            "we really need to make it more obvious that the reauth is
+            required to delete the account"). AT THE TAP, not on the confirm
+            screen: the provider round trip happens BEFORE that screen, so a
+            warning there reaches the rower after the cost is paid — and the
+            confirm screen's own 2026-09-14 ruling (state facts, not prose)
+            stays intact by not being touched.
+
+            It names `deleteProvider`, the provider `startDelete` is actually
+            called with, so the sentence cannot promise one provider while
+            the flow proves another. ABSENT when that is undefined: the
+            button is disabled on such a host, no round trip is coming, and
+            there is no provider to name. Also the button's
+            `aria-describedby`, so it is announced at the tap rather than
+            found afterwards. */}
+        {deleteProvider && (
+          <p id="auth-delete-reauth" className="auth-delete-reauth">
+            Asks you to sign in with {name(deleteProvider)} first.
+          </p>
+        )}
       </section>
     </div>
   );

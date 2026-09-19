@@ -492,6 +492,66 @@ describe("SignInMethods", () => {
     expect(auth.startDelete).toHaveBeenCalledWith("google");
   });
 
+  // THE DISCLOSURE (Gate 0 ruling 3, James, 2026-09-14, after running the
+  // deletion twice on a real account: *"we really need to make it more
+  // obvious that the reauth is required to delete the account."*). It goes
+  // at the TAP, not on the confirm screen, because the re-auth happens
+  // BEFORE the confirm screen — a warning there arrives after the cost is
+  // paid. It names the provider `startDelete` will actually use, so the
+  // sentence and the round trip cannot disagree.
+  it.each([
+    ["google", { apple: false, google: true }, "Google"] as const,
+    ["apple", { apple: true, google: true }, "Apple"] as const,
+  ])(
+    "says the delete will re-prove %s, the provider it starts",
+    async (provider, methods, label) => {
+      vi.mocked(api).mockResolvedValue(
+        new Response(JSON.stringify(methods), { status: 200 }),
+      );
+      const auth = controller({ kind: "idle" });
+      render(<SignInMethods auth={auth} />);
+      const remove = await screen.findByRole("button", {
+        name: "Delete account",
+      });
+      expect(
+        screen.getByText(`Asks you to sign in with ${label} first.`),
+      ).toBeVisible();
+      // The sentence is the button's accessible description, so it is read
+      // AT the tap by ear as well as by eye.
+      expect(remove).toHaveAccessibleDescription(
+        `Asks you to sign in with ${label} first.`,
+      );
+      await userEvent.click(remove);
+      expect(auth.startDelete).toHaveBeenCalledWith(provider);
+    },
+  );
+
+  it("says nothing about a re-auth when no provider can be re-proved here", async () => {
+    // The button is disabled on this host, so there is no round trip to
+    // disclose and no provider to name. A sentence here would promise a
+    // sign-in that cannot happen.
+    vi.mocked(api).mockResolvedValue(
+      new Response(JSON.stringify({ apple: true, google: false }), {
+        status: 200,
+      }),
+    );
+    const auth = controller({ kind: "idle" });
+    auth.options = {
+      state: "ready",
+      frontDoorEnabled: true,
+      legacyGoogle: false,
+      apple: false,
+      google: true,
+    };
+    render(<SignInMethods auth={auth} />);
+    const remove = await screen.findByRole("button", {
+      name: "Delete account",
+    });
+    expect(remove).toBeDisabled();
+    expect(screen.queryByText(/Asks you to sign in with/)).toBeNull();
+    expect(remove).toHaveAccessibleDescription("");
+  });
+
   it("disables Delete account when no held provider can be re-proved here", async () => {
     vi.mocked(api).mockResolvedValue(
       new Response(JSON.stringify({ apple: true, google: false }), {
