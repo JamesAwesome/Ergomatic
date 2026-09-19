@@ -616,7 +616,10 @@ export default function FromTheLog() {
               `undefined` at its own type boundary; the `?? undefined`
               here is only that type coercion, never a behavioral
               decision this screen makes. */}
-          <TraceChart series={row.series ?? undefined} />
+          <TraceChart
+            series={row.series ?? undefined}
+            intervals={view.intervalSpans}
+          />
 
           {view.planFooter !== undefined && (
             <p className="log-plan-footer">{view.planFooter}</p>

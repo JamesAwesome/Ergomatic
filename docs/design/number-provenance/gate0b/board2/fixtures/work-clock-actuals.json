@@ -1,0 +1,18 @@
+[
+  {
+    "index": 0,
+    "elapsedSeconds": 129.2,
+    "distanceMeters": 250,
+    "avgSplit": 258.4,
+    "avgSpm": 14,
+    "avgHeartRateBpm": null,
+    "restDistanceMeters": 0,
+    "restSeconds": 0,
+    "type": 1,
+    "calories": 15,
+    "calPerHour": 369,
+    "watts": 20,
+    "dragFactor": 125,
+    "restHeartRateBpm": null
+  }
+]

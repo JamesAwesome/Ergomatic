@@ -1,0 +1,1710 @@
+diff --git a/app/e2e/gate0b-board2.spec.ts b/app/e2e/gate0b-board2.spec.ts
+new file mode 100644
+index 00000000..830dfaa2
+--- /dev/null
++++ b/app/e2e/gate0b-board2.spec.ts
+@@ -0,0 +1,619 @@
++// GATE 0B CAPTURE HARNESS — board 2 (members M3, M6, M9).
++//
++// Renders the trace chart's FOUR x-axis treatments against THREE committed
++// captures, so the axis question is something James SEES rather than
++// something the spec asserts. Throwaway: deleted by the PR that implements
++// board 2's ruling, exactly as `gate0b.spec.ts` was.
++//
++// THE AXIS TREATMENTS come from a prototype patch that is NOT committed to
++// product code (`board2-variants.patch` beside the frames): `TraceChart`
++// reads `?axis=today|work|wall|breaks`, `?rest=<machine rest seconds>` and
++// `?stops=<seconds>` from the URL. `axis=today` is `main` unchanged.
++//
++// THE FIXTURES are real stored series, produced from committed wire
++// captures through the SHIPPED recorder (`fixtures/README.md` names the
++// probe): three equal 30 s rests, a 60.5 s mid-interval stop, and the free
++// row's 104.6 s pause.
++import fs from "node:fs";
++import path from "node:path";
++import { test, expect, type Page } from "@playwright/test";
++import { RUN_ID, signInViaBackdoor } from "./helpers";
++
++const BOARD = path.resolve(
++  process.cwd(),
++  "../docs/design/number-provenance/gate0b/board2",
++);
++const OUT = path.join(BOARD, process.env.BOARD2_OUT ?? "frames");
++const FIX = path.join(BOARD, "fixtures");
++
++interface Actual {
++  index: number;
++  elapsedSeconds: number;
++  distanceMeters: number;
++  avgSplit: number;
++  avgSpm: number;
++  avgHeartRateBpm: number | null;
++  restDistanceMeters: number;
++  restSeconds: number;
++  calories: number;
++  calPerHour: number;
++  watts: number;
++  dragFactor: number;
++}
++
++function readJson<T>(name: string): T {
++  return JSON.parse(fs.readFileSync(path.join(FIX, name), "utf8")) as T;
++}
++
++/** A log body shaped like the one the monitor doors post, built from the
++ *  capture's OWN actuals rather than invented numbers. */
++function bodyFor(opts: {
++  title: string;
++  seriesFile: string;
++  actualsFile: string | null;
++  freeRow: boolean;
++}): unknown {
++  // A free row has no intervals at all (`actuals: []`, proved on this very
++  // capture by `justRowReplay.test.ts`), so its totals come from 0x0039's
++  // own summary — the walk README's decode table, transcribed:
++  // 393.60 s / 1396.0 m, 25 spm, drag 101, average pace 140.9 s.
++  const FREE_ROW = {
++    workSeconds: 393.6,
++    workMeters: 1396,
++    avgSplit: 140.9,
++    avgSpm: 25,
++    drag: 101,
++  };
++  const series = readJson<{ samples: unknown[] }>(opts.seriesFile);
++  const actuals =
++    opts.actualsFile === null ? [] : readJson<Actual[]>(opts.actualsFile);
++  const steps = actuals.map((a) => ({
++    label: `${Math.round(a.distanceMeters)}m`,
++    // The capture's own programmed split (129 s/500m on both walks). The
++    // one value here NOT read off the wire: session-2's first interval is
++    // a 100 m warm-up whose program carries no target, and the log route
++    // requires a number, so it takes the same 129.
++    targetSplit: 129,
++    actualSplit: a.avgSplit,
++    actualSeconds: a.elapsedSeconds,
++    actualSource: "pm5",
++    meters: Math.round(a.distanceMeters),
++    actualMeters: Math.round(a.distanceMeters),
++    actualSpm: a.avgSpm,
++    machineCalories: a.calories,
++    machineCalPerHour: a.calPerHour,
++    machineWatts: a.watts,
++    machineDragFactor: a.dragFactor,
++    machineRestHr: null,
++    machineRestSeconds: a.restSeconds,
++    machineRestMeters: Math.round(a.restDistanceMeters),
++    ...(a.avgHeartRateBpm === null ? {} : { avgHr: a.avgHeartRateBpm }),
++  }));
++  const workSeconds = opts.freeRow
++    ? FREE_ROW.workSeconds
++    : actuals.reduce((n, a) => n + a.elapsedSeconds, 0);
++  const workMeters = opts.freeRow
++    ? FREE_ROW.workMeters
++    : actuals.reduce((n, a) => n + a.distanceMeters, 0);
++  const restSeconds = actuals.reduce((n, a) => n + a.restSeconds, 0);
++  const restMeters = actuals.reduce((n, a) => n + a.restDistanceMeters, 0);
++  return {
++    workoutId: null,
++    // A free row posts "Just Row" with a null id AND null type — the pair
++    // `isFreeRow` keys on (`src/justrow/JustRowLog.tsx:245`).
++    workoutTitle: opts.freeRow ? "Just Row" : opts.title,
++    workoutType: opts.freeRow ? null : "AT",
++    deviceName: "PM5 432331249",
++    source: "pm5",
++    held: "under",
++    effort: 3,
++    notes: null,
++    avgSplitSeconds:
++      workMeters > 0 ? (500 * workSeconds) / workMeters : null,
++    timeSeconds: Math.round(workSeconds + restSeconds),
++    distanceMeters: Math.round(workMeters + restMeters),
++    restSeconds: Math.round(restSeconds),
++    restMeters: Math.round(restMeters),
++    advancesPlan: false,
++    series,
++    steps,
++    machineWorkSeconds: workSeconds,
++    machineWorkMeters: Math.round(workMeters),
++    machineSummary: {
++      avgPaceSecondsPer500m:
++        workMeters > 0 ? (500 * workSeconds) / workMeters : 0,
++      avgStrokeRate: opts.freeRow
++        ? FREE_ROW.avgSpm
++        : actuals.length > 0
++          ? Math.round(
++              actuals.reduce((n, a) => n + a.avgSpm, 0) / actuals.length,
++            )
++          : 0,
++      dragFactorAverage: opts.freeRow
++        ? FREE_ROW.drag
++        : actuals.length > 0
++          ? Math.round(actuals[0]!.dragFactor)
++          : 0,
++      totalCalories: actuals.reduce((n, a) => n + a.calories, 0),
++      avgWatts:
++        actuals.length > 0
++          ? Math.round(
++              actuals.reduce((n, a) => n + a.watts, 0) / actuals.length,
++            )
++          : 0,
++      avgCalPerHour:
++        actuals.length > 0
++          ? Math.round(
++              actuals.reduce((n, a) => n + a.calPerHour, 0) / actuals.length,
++            )
++          : 0,
++      totalRestMeters: Math.round(restMeters),
++    },
++  };
++}
++
++const FIXTURES = [
++  {
++    key: "equal-rests",
++    title: "Three equal rests",
++    seriesFile: "session2-series.json",
++    actualsFile: "session2-actuals.json",
++    freeRow: false,
++    rest: "30,30,30",
++  },
++  {
++    key: "mid-stop",
++    title: "Stopped mid interval",
++    seriesFile: "work-clock-series.json",
++    actualsFile: "work-clock-actuals.json",
++    freeRow: false,
++    rest: "",
++  },
++  {
++    key: "free-row",
++    title: "Free row",
++    seriesFile: "justrow-series.json",
++    actualsFile: null,
++    freeRow: true,
++    rest: "",
++  },
++] as const;
++
++const AXES = ["today", "work", "wall", "breaks"] as const;
++
++async function seed(page: Page, body: unknown): Promise<string> {
++  return page.evaluate(async (b) => {
++    const res = await fetch("/api/logs", {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify(b),
++    });
++    const text = await res.text();
++    if (!res.ok) throw new Error(text);
++    return (JSON.parse(text) as { id: string }).id;
++  }, body);
++}
++
++for (const [orient, size] of [
++  ["portrait", { width: 390, height: 844 }],
++  ["landscape", { width: 844, height: 390 }],
++] as const) {
++  test(`gate 0B board 2: four axes over three captures, ${orient}`, async ({
++    page,
++  }) => {
++    test.setTimeout(300_000);
++    await page.setViewportSize(size);
++    await signInViaBackdoor(page, {
++      email: `gate0b2-${orient}-${RUN_ID}@e2e.test`,
++      name: "Gate 0B2",
++    });
++    fs.mkdirSync(OUT, { recursive: true });
++
++    const geometry: unknown[] = [];
++    for (const f of FIXTURES) {
++      await page.goto("/today");
++      const id = await seed(
++        page,
++        bodyFor({
++          title: f.title,
++          seriesFile: f.seriesFile,
++          actualsFile: f.actualsFile,
++          freeRow: f.freeRow,
++        }),
++      );
++      // The four candidates carry NO stop mark — `stops: "0"` is what the
++      // axis question is about on its own. The mark is a SEPARATE
++      // proposal and is captured after them, on the two fixtures that can
++      // tell whether it fires.
++      const passes: {
++        axis: (typeof AXES)[number];
++        stops: string;
++        mark: "fill" | "rules" | "band" | "gutter";
++        suffix: string;
++      }[] = [
++        ...AXES.map((axis) => ({
++          axis,
++          stops: "0",
++          mark: "fill" as const,
++          suffix: "",
++        })),
++        // Candidate C's break, drawn as two full-strength rules instead of
++        // a wash — the treatment the measured 1.36:1 forces onto the board
++        // (RF30: the option ruled out in a clause is the one that needs
++        // the receipt).
++        ...(f.key === "equal-rests"
++          ? [
++              {
++                axis: "breaks" as const,
++                stops: "0",
++                mark: "rules" as const,
++                suffix: "-rules",
++              },
++              // James ruled C with a BAND rather than rules (2026-09-19).
++              // Two band treatments that actually clear AA, since the
++              // 25 % wash does not.
++              {
++                axis: "breaks" as const,
++                stops: "0",
++                mark: "band" as const,
++                suffix: "-band",
++              },
++              {
++                axis: "breaks" as const,
++                stops: "0",
++                mark: "gutter" as const,
++                suffix: "-gutter",
++              },
++            ]
++          : []),
++        ...(f.key === "mid-stop" || f.key === "free-row"
++          ? [
++              {
++                axis: "today" as const,
++                stops: "5",
++                mark: "fill" as const,
++                suffix: "-stopmark",
++              },
++              {
++                axis: "today" as const,
++                stops: "5",
++                mark: "rules" as const,
++                suffix: "-stopmark-rules",
++              },
++              {
++                axis: "today" as const,
++                stops: "5",
++                mark: "band" as const,
++                suffix: "-stopmark-band",
++              },
++            ]
++          : []),
++      ];
++      for (const pass of passes) {
++        const axis = `${pass.axis}${pass.suffix}`;
++        const q = new URLSearchParams({
++          axis: pass.axis,
++          stops: pass.stops,
++          mark: pass.mark,
++        });
++        if (f.rest !== "") q.set("rest", f.rest);
++        await page.goto(`/today/log/${id}?${q.toString()}`);
++        const figure = page.locator(".trace-figure");
++        await expect(figure).toBeVisible();
++        await page.evaluate(() => document.fonts.ready);
++        await figure.scrollIntoViewIfNeeded();
++        await figure.screenshot({
++          path: path.join(OUT, `${f.key}-${axis}-${orient}.png`),
++        });
++        // The chart with the block that names its quantity, in one frame
++        // (M3: the axis sits directly under MACHINE CONFIRMED · WORK ONLY).
++        const block = page.locator(".log-machine-confirmed");
++        if ((await block.count()) > 0) {
++          const a = await block.boundingBox();
++          const b = await figure.boundingBox();
++          if (a !== null && b !== null) {
++            await page.screenshot({
++              path: path.join(OUT, `${f.key}-${axis}-${orient}-in-context.png`),
++              clip: {
++                x: Math.min(a.x, b.x),
++                y: a.y,
++                width: Math.max(a.width, b.width),
++                height: b.y + b.height - a.y,
++              },
++            });
++          }
++        }
++        geometry.push(
++          await page.evaluate(
++            ({ key, axisMode, orientation }) => {
++              const svg = document.querySelector(".trace-svg");
++              const vb = svg?.getAttribute("viewBox") ?? "";
++              const bands = Array.from(
++                document.querySelectorAll(".trace-rest-band"),
++              ).map((r) => ({
++                x: Number(r.getAttribute("x")),
++                width: Number(r.getAttribute("width")),
++                height: Number(r.getAttribute("height")),
++              }));
++              const stops = Array.from(
++                document.querySelectorAll(".trace-stop-span"),
++              ).map((r) => ({
++                x: Number(r.getAttribute("x")),
++                width: Number(r.getAttribute("width")),
++              }));
++              const lines = Array.from(
++                document.querySelectorAll("polyline.trace-line"),
++              ).length;
++              const ticks = Array.from(
++                document.querySelectorAll('[data-testid="trace-x-tick"]'),
++              ).map((t) => t.textContent);
++              const legend =
++                document.querySelector(".trace-legend")?.textContent ?? null;
++              const texts = Array.from(
++                document.querySelectorAll(".trace-svg text"),
++              ).map((t) => t.textContent);
++              return {
++                key,
++                axis: axisMode,
++                orientation,
++                viewBox: vb,
++                polylines: lines,
++                bands,
++                stops,
++                ticks,
++                legend,
++                texts,
++              };
++            },
++            { key: f.key, axisMode: axis, orientation: orient },
++          ),
++        );
++      }
++    }
++    fs.writeFileSync(
++      path.join(OUT, `geometry-${orient}.json`),
++      `${JSON.stringify(geometry, null, 2)}\n`,
++    );
++    process.stdout.write(`${JSON.stringify(geometry, null, 2)}\n`);
++  });
++}
++
++// Every colour pairing board 2 introduces, measured from the LIVE cascade
++// (RF6: the number goes in the report, never an eye). The two new marks sit
++// on TRANSLUCENT fills, so each is composited over the first opaque
++// background behind it before the ratio is taken — a ratio against the raw
++// token would be a different, easier question than the one on screen.
++test("gate 0B board 2: contrast", async ({ page }) => {
++  test.setTimeout(300_000);
++  await signInViaBackdoor(page, {
++    email: `gate0b2-contrast-${RUN_ID}@e2e.test`,
++    name: "Gate 0B2",
++  });
++  await page.goto("/today");
++  const id = await seed(
++    page,
++    bodyFor({
++      title: "Three equal rests",
++      seriesFile: "session2-series.json",
++      actualsFile: "session2-actuals.json",
++      freeRow: false,
++    }),
++  );
++  await page.goto(`/today/log/${id}?axis=breaks&rest=30,30,30&stops=5`);
++  await expect(page.locator(".trace-figure")).toBeVisible();
++  const measure = () => {
++    const parse = (c: string): [number, number, number, number] => {
++      const m = /rgba?\(([^)]+)\)/.exec(c);
++      if (m === null) return [0, 0, 0, 1];
++      const p = m[1]!.split(",").map((v) => parseFloat(v));
++      return [p[0]!, p[1]!, p[2]!, p[3] ?? 1];
++    };
++    const lum = ([r, g, b]: number[]) => {
++      const f = (v: number) => {
++        const s = v! / 255;
++        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
++      };
++      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
++    };
++    const over = (
++      fg: [number, number, number, number],
++      bg: [number, number, number, number],
++    ): [number, number, number, number] => [
++      fg[0] * fg[3] + bg[0] * (1 - fg[3]),
++      fg[1] * fg[3] + bg[1] * (1 - fg[3]),
++      fg[2] * fg[3] + bg[2] * (1 - fg[3]),
++      1,
++    ];
++    const ratio = (a: number[], b: number[]) => {
++      const [l1, l2] = [lum(a), lum(b)].sort((x, y) => y - x);
++      return Number(((l1! + 0.05) / (l2! + 0.05)).toFixed(2));
++    };
++    const opaqueBehind = (el: Element): [number, number, number, number] => {
++      let n: Element | null = el;
++      while (n !== null) {
++        const c = parse(getComputedStyle(n).backgroundColor);
++        if (c[3] === 1) return c;
++        n = n.parentElement;
++      }
++      return parse(getComputedStyle(document.body).backgroundColor);
++    };
++    const out: unknown[] = [];
++    const page = opaqueBehind(document.querySelector(".trace-figure")!);
++
++    // Plain text on the page.
++    for (const sel of [
++      ".trace-legend",
++      ".trace-tick-label-y",
++      ".trace-tick-label-x",
++    ]) {
++      const el = document.querySelector(sel);
++      if (el === null) {
++        out.push({ element: sel, MISSING: true });
++        continue;
++      }
++      const st = getComputedStyle(el);
++      out.push({
++        element: sel,
++        sample: (el.textContent ?? "").slice(0, 12),
++        fg: st.color,
++        bg: `rgb(${page.slice(0, 3).map(Math.round).join(", ")})`,
++        fontPx: st.fontSize,
++        ratio: ratio(parse(st.color), page),
++      });
++    }
++    // The legend's swatch — a graphical object standing in for the word
++    // BAND, so it carries meaning and is held to 1.4.11's 3:1.
++    const swatch = document.querySelector(".trace-legend-swatch");
++    if (swatch === null) {
++      out.push({ element: ".trace-legend-swatch", MISSING: true });
++    } else {
++      const ss = getComputedStyle(swatch);
++      out.push({
++        element: ".trace-legend-swatch",
++        fill: ss.backgroundColor,
++        size: `${ss.width} x ${ss.height}`,
++        vsPage: ratio(parse(ss.backgroundColor), page),
++      });
++    }
++    // The two marks: fill vs page (a graphical object, AA 3:1), and the
++    // label sitting ON that composited fill (text, AA 4.5:1).
++    for (const [sel, label] of [
++      [".trace-rest-band", "break fill"],
++      [".trace-stop-span", "stop fill"],
++    ] as const) {
++      const rect = document.querySelector(sel);
++      if (rect === null) {
++        out.push({ element: sel, MISSING: true });
++        continue;
++      }
++      const st = getComputedStyle(rect);
++      // A rules treatment paints with `stroke`, a wash with `fill`.
++      const isRule = rect.tagName.toLowerCase() === "line";
++      const fill = parse(isRule ? st.stroke : st.fill);
++      const alpha = Number(rect.getAttribute("opacity") ?? st.opacity ?? "1");
++      const composited = over(
++        [fill[0], fill[1], fill[2], alpha * (fill[3] || 1)],
++        page,
++      );
++      out.push({
++        element: `${sel} (${label}, ${isRule ? "rules" : "wash"})`,
++        fill: isRule ? st.stroke : st.fill,
++        opacity: alpha,
++        composited: `rgb(${composited.slice(0, 3).map(Math.round).join(", ")})`,
++        vsPage: ratio(composited, page),
++      });
++      // The text drawn inside it.
++      const text = rect.parentElement?.querySelector("text");
++      if (text !== null && text !== undefined) {
++        const ts = getComputedStyle(text);
++        // The label is only ON the mark when the mark actually sits
++        // behind it. Under RULES the mark is a zero-width line, and under
++        // the GUTTER treatment it is a short bar below the plot while the
++        // label sits at the plot's top — in both the background is the
++        // page, and compositing over the mark would measure a background
++        // the text never has.
++        const markBox = rect.getBoundingClientRect();
++        const textBox = text.getBoundingClientRect();
++        const onTheMark =
++          !isRule &&
++          textBox.top >= markBox.top - 1 &&
++          textBox.bottom <= markBox.bottom + 1;
++        const behind = onTheMark ? composited : page;
++        out.push({
++          element: `${sel} label (on ${onTheMark ? "the mark" : "the page"})`,
++          sample: text.textContent,
++          fg: ts.color,
++          fontPx: ts.fontSize,
++          bg: `rgb(${behind.slice(0, 3).map(Math.round).join(", ")})`,
++          ratio: ratio(parse(ts.color), behind),
++        });
++      }
++    }
++    // The line itself, over the break fill it now crosses nothing of.
++    const line = document.querySelector("polyline.trace-line");
++    if (line !== null) {
++      const ls = getComputedStyle(line);
++      out.push({
++        element: "polyline.trace-line",
++        stroke: ls.stroke,
++        ratio: ratio(parse(ls.stroke), page),
++      });
++    }
++    return out;
++  };
++  const rows = await page.evaluate(measure);
++  await page.goto(
++    `/today/log/${id}?axis=breaks&rest=30,30,30&stops=5&mark=rules`,
++  );
++  await expect(page.locator(".trace-figure")).toBeVisible();
++  const ruleRows = (await page.evaluate(measure)) as { element: string }[];
++  // James ruled C with a band (2026-09-19). Both band treatments that
++  // clear AA, measured from the live cascade rather than computed.
++  await page.goto(
++    `/today/log/${id}?axis=breaks&rest=30,30,30&stops=5&mark=band&alpha=0.83`,
++  );
++  await expect(page.locator(".trace-figure")).toBeVisible();
++  const bandRows = (await page.evaluate(measure)) as { element: string }[];
++  await page.goto(
++    `/today/log/${id}?axis=breaks&rest=30,30,30&stops=5&mark=gutter`,
++  );
++  await expect(page.locator(".trace-figure")).toBeVisible();
++  const gutterRows = (await page.evaluate(measure)) as { element: string }[];
++  // The stop mark does not exist on a fixture with no stop, so it is
++  // measured on the capture that HAS one — the same run, a second row.
++  const stopId = await seed(
++    page,
++    bodyFor({
++      title: "Stopped mid interval",
++      seriesFile: "work-clock-series.json",
++      actualsFile: "work-clock-actuals.json",
++      freeRow: false,
++    }),
++  );
++  await page.goto(`/today/log/${stopId}?axis=today&stops=5`);
++  // ATTACHED, not visible: the rules treatment paints a zero-width
++  // `<line>`, which has no bounding box and so is "hidden" to Playwright
++  // however plainly it is on screen.
++  await expect(page.locator(".trace-stop-span").first()).toBeAttached();
++  const stopRows = (await page.evaluate(measure)) as { element: string }[];
++  await page.goto(`/today/log/${stopId}?axis=today&stops=5&mark=band`);
++  await expect(page.locator(".trace-stop-span").first()).toBeAttached();
++  const stopBandRows = (await page.evaluate(measure)) as { element: string }[];
++  await page.goto(`/today/log/${stopId}?axis=today&stops=5&mark=rules`);
++  // ATTACHED, not visible: the rules treatment paints a zero-width
++  // `<line>`, which has no bounding box and so is "hidden" to Playwright
++  // however plainly it is on screen.
++  await expect(page.locator(".trace-stop-span").first()).toBeAttached();
++  const stopRuleRows = (await page.evaluate(measure)) as { element: string }[];
++  const all = [
++    ...(rows as { element: string; MISSING?: boolean }[]).filter(
++      (r) => !r.element.startsWith(".trace-stop-span"),
++    ),
++    ...ruleRows
++      .filter((r) => r.element.startsWith(".trace-rest-band"))
++      .map((r) => ({ ...r, treatment: "rules" })),
++    ...bandRows
++      .filter((r) => r.element.startsWith(".trace-rest-band"))
++      .map((r) => ({ ...r, treatment: "band 0.83" })),
++    ...gutterRows
++      .filter((r) => r.element.startsWith(".trace-rest-band"))
++      .map((r) => ({ ...r, treatment: "gutter, full strength" })),
++    ...stopRows.filter((r) => r.element.startsWith(".trace-stop-span")),
++    ...stopBandRows
++      .filter((r) => r.element.startsWith(".trace-stop-span"))
++      .map((r) => ({ ...r, treatment: "band 0.68" })),
++    ...stopRuleRows
++      .filter((r) => r.element.startsWith(".trace-stop-span"))
++      .map((r) => ({ ...r, treatment: "rules" })),
++  ];
++  const missing = (all as { element: string; MISSING?: boolean }[])
++    .filter((r) => r.MISSING === true)
++    .map((r) => r.element);
++  expect(missing, "selectors that matched no element").toEqual([]);
++  fs.mkdirSync(OUT, { recursive: true });
++  fs.writeFileSync(
++    path.join(OUT, "contrast.json"),
++    `${JSON.stringify(all, null, 2)}\n`,
++  );
++  process.stdout.write(`${JSON.stringify(all, null, 2)}\n`);
++});
+diff --git a/app/src/index.css b/app/src/index.css
+index 8cdfd505..926068d2 100644
+--- a/app/src/index.css
++++ b/app/src/index.css
+@@ -11047,6 +11047,21 @@ section:not(.news-pinned) .news-row:last-of-type {
+   text-align: center;
+ }
+ 
++/* BOARD 2 PROTOTYPE: the swatch that replaces the word BAND in the
++   legend (James, 2026-09-19). Sized to the band it stands for —
++   `REST_BAND_HEIGHT` is 8 SVG units in a 320-unit viewBox, so at the
++   legend's own 10px type an 18x8 bar reads as the same object rather
++   than as a bullet. Full-strength `--trace-rest`, the same fill
++   `.trace-rest-band` carries, so the two cannot drift. */
++.trace-legend-swatch {
++  display: inline-block;
++  width: 18px;
++  height: 8px;
++  background: var(--trace-rest);
++  vertical-align: baseline;
++  margin-right: 0.35em;
++}
++
+ .trace-tick-mark {
+   stroke: var(--rule-3);
+   stroke-width: 1;
+diff --git a/app/src/log/TraceChart.tsx b/app/src/log/TraceChart.tsx
+index ee7db6c5..86179938 100644
+--- a/app/src/log/TraceChart.tsx
++++ b/app/src/log/TraceChart.tsx
+@@ -37,14 +37,69 @@
+ import { useId, useMemo, useState } from "react";
+ import type { SeriesData } from "../monitor/seriesRecorder.js";
+ import { linearScale, decimate } from "../charts/scale.js";
+-import { ADVANCE, chooseTicks, formatTick, labelRoom } from "../charts/axis.js";
++import { ADVANCE, formatTick, labelRoom } from "../charts/axis.js";
+ import {
+   buildTrace,
++  type AxisMode,
+   type Measure,
+   type TraceModel,
+   type TracePoint,
+ } from "./traceModel.js";
+ 
++// ===== BOARD 2 PROTOTYPE — THROWAWAY =====
++/** `?axis=today|work|wall|breaks` and `?rest=30,30,30` (the machine's own
++ *  per-interval rest seconds, 0x0037 offset 12). Absent = `main`. */
++function boardAxis(): {
++  mode: AxisMode;
++  rest: number[];
++  stops: number;
++  mark: "fill" | "rules" | "band" | "gutter";
++  alpha: number;
++} {
++  if (typeof window === "undefined")
++    return { mode: "today", rest: [], stops: 0, mark: "fill", alpha: 0.83 };
++  const q = new URLSearchParams(window.location.search);
++  const raw = q.get("axis");
++  const mode: AxisMode =
++    raw === "work" || raw === "wall" || raw === "breaks" ? raw : "today";
++  const stops = Number(q.get("stops") ?? "0");
++  const rawMark = q.get("mark");
++  const mark =
++    rawMark === "rules" || rawMark === "band" || rawMark === "gutter"
++      ? rawMark
++      : "fill";
++  const alphaRaw = Number(q.get("alpha") ?? "");
++  const alpha = Number.isFinite(alphaRaw) && alphaRaw > 0 ? alphaRaw : 0.83;
++  const rest = (q.get("rest") ?? "")
++    .split(",")
++    .map((v) => Number(v))
++    .filter((v) => Number.isFinite(v));
++  return {
++    mode,
++    rest,
++    stops: Number.isFinite(stops) ? stops : 0,
++    mark,
++    alpha,
++  };
++}
++
++const AXIS_LEGEND: Record<AxisMode, string | null> = {
++  today: null,
++  work: "X = WORK TIME · RESTS NOT SHOWN",
++  // The mark names itself: a swatch of the real band colour stands where
++  // the word BAND used to (James, 2026-09-19). The word survives for a
++  // screen reader, which cannot see a swatch.
++  //
++  // AND THE AXIS NAMES ITSELF TOO (James, 2026-09-19: "you can drop the
++  // label for x — it's obvious what it is"). The legend used to open
++  // `X = TIME AT THE ERG ·`. What carries the quantity now is the band:
++  // a rest drawn at its own length says the axis counts rest, which is
++  // exactly what distinguishes this axis from the work-only one.
++  wall: "",
++  breaks: "",
++};
++// ===== END BOARD 2 PROTOTYPE =====
++
+ const MEASURES: readonly Measure[] = ["pace", "rate", "hr"];
+ 
+ const MEASURE_LABEL: Record<Measure, { visible: string; spoken: string }> = {
+@@ -156,6 +211,7 @@ const X_TICK_LABEL_Y = X_TICK_MARK_Y2 + 4;
+  *  in spec §4 pins a count, and this keeps a narrow SVG legible without
+  *  crowding `chooseTicks`'s own round-number selection. */
+ const X_TICK_COUNT = 4;
++void X_TICK_COUNT;
+ 
+ /** Decimation's own `columns` argument (Task 1's `decimate`, §3's "~2
+  *  points per horizontal pixel"). An inline SVG has no fixed device-pixel
+@@ -230,10 +286,13 @@ export default function TraceChart({
+   // one `id` and one clip-path would silently win for both).
+   const plotClipId = useId();
+ 
++  const board = boardAxis();
+   const traces = useMemo(() => {
+     const built = {} as Record<Measure, TraceModel | null>;
+-    for (const m of MEASURES) built[m] = buildTrace(series, m);
++    for (const m of MEASURES)
++      built[m] = buildTrace(series, m, board.mode, board.rest, board.stops);
+     return built;
++    // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [series]);
+ 
+   // §1's absence idiom: the DEFAULT measure alone decides whether the
+@@ -257,7 +316,7 @@ export default function TraceChart({
+   // trace-truth Task 3 (spec §4): `chooseTicks` reused unchanged, over
+   // the SAME `domainX` the polyline/x-scale already use — the axis spans
+   // exactly the trace's own duration, never a re-derived one.
+-  const ticksX = chooseTicks(trace.domainX, X_TICK_COUNT);
++  const ticksX = trace.ticksX;
+ 
+   return (
+     <figure className="trace-figure">
+@@ -307,13 +366,19 @@ export default function TraceChart({
+             points per segment; the polyline below is decimated
+             independently and stays one continuous stroke across the
+             band's own x-range (§3: a rest is not a gap). */}
+-        {trace.points.map((segment, segIndex) =>
+-          restBandsForSegment(segment).map((band, bandIndex) => {
+-            const x1 = xScale(Math.max(trace.domainX[0], band.startX));
+-            const x2 = xScale(Math.min(trace.domainX[1], band.endX));
++        {/* BOARD 2 PROTOTYPE — candidate B draws each band from the
++            MACHINE's own rest seconds (`trace.spans`), not from the
++            rest-marked readings: the readings only cover the part of the
++            rest the rower kept moving through, which is the defect (M6),
++            so deriving the band from them would reproduce it inside the
++            candidate meant to fix it. `today` is unchanged. */}
++        {trace.axisMode === "wall" &&
++          trace.spans.map((span, i) => {
++            const x1 = xScale(span.startX);
++            const x2 = xScale(span.endX);
+             return (
+               <rect
+-                key={`${segIndex}-${bandIndex}`}
++                key={`wall-${i}`}
+                 className="trace-rest-band"
+                 x={x1}
+                 y={REST_BAND_Y}
+@@ -321,8 +386,174 @@ export default function TraceChart({
+                 height={REST_BAND_HEIGHT}
+               />
+             );
+-          }),
+-        )}
++          })}
++        {trace.axisMode === "today" &&
++          trace.points.map((segment, segIndex) =>
++            restBandsForSegment(segment).map((band, bandIndex) => {
++              const x1 = xScale(Math.max(trace.domainX[0], band.startX));
++              const x2 = xScale(Math.min(trace.domainX[1], band.endX));
++              return (
++                <rect
++                  key={`${segIndex}-${bandIndex}`}
++                  className="trace-rest-band"
++                  x={x1}
++                  y={REST_BAND_Y}
++                  width={Math.max(0, x2 - x1)}
++                  height={REST_BAND_HEIGHT}
++                />
++              );
++            }),
++          )}
++        {/* BOARD 2 PROTOTYPE — the STOP mark: a span where the machine's
++            own distance stood still while its clock ran. Orthogonal to
++            the axis choice; drawn over whichever candidate is active. */}
++        {trace.stops.map((stop, i) => {
++          const x1 = xScale(stop.startX);
++          const x2 = xScale(stop.endX);
++          return (
++            <g key={`stop-${i}`}>
++              {board.mark === "band" || board.mark === "gutter" ? (
++                /* The stop mark follows the same rule the break does: a
++                   band, at an opacity where it is a graphical object in
++                   its own right AND still carries a legible label.
++                   `--ink-3` has its own window — below 0.647 the band
++                   misses 3:1, above 0.710 the 9 px label misses 4.5:1 —
++                   so 0.68 sits in the middle. */
++                <rect
++                  className="trace-stop-span"
++                  x={x1}
++                  y={TOP_PAD}
++                  width={Math.max(0, x2 - x1)}
++                  height={PLOT_BOTTOM - TOP_PAD}
++                  fill="var(--ink-3)"
++                  opacity={0.68}
++                />
++              ) : board.mark === "rules" ? (
++                <>
++                  {/* Two FULL-STRENGTH rules instead of a wash. A fill
++                      pale enough not to read as "something is blocking
++                      the data" (the treatment James rejected in the
++                      trace design's round 2) cannot reach WCAG 1.4.11's
++                      3:1 for a graphical object: measured 1.30:1 at the
++                      0.18 the wash needs. A rule is its own object and
++                      clears it at 6.69:1. */}
++                  <line
++                    className="trace-stop-span"
++                    x1={x1}
++                    x2={x1}
++                    y1={TOP_PAD}
++                    y2={PLOT_BOTTOM}
++                    stroke="var(--ink-3)"
++                    strokeDasharray="2 2"
++                  />
++                  <line
++                    x1={x2}
++                    x2={x2}
++                    y1={TOP_PAD}
++                    y2={PLOT_BOTTOM}
++                    stroke="var(--ink-3)"
++                    strokeDasharray="2 2"
++                  />
++                </>
++              ) : (
++                <rect
++                  className="trace-stop-span"
++                  x={x1}
++                  y={TOP_PAD}
++                  width={Math.max(0, x2 - x1)}
++                  height={PLOT_BOTTOM - TOP_PAD}
++                  fill="var(--ink-3)"
++                  opacity={0.18}
++                />
++              )}
++              <text
++                className="trace-tick-label"
++                x={(x1 + x2) / 2}
++                y={TOP_PAD + 8}
++                textAnchor="middle"
++                dominantBaseline="hanging"
++              >
++                {`STOPPED ${Math.round(stop.seconds)}s`}
++              </text>
++            </g>
++          );
++        })}
++        {/* BOARD 2 PROTOTYPE — candidate C: a fixed-width break carrying
++            the interval's own rest seconds, full plot height so it reads
++            as a cut in the timeline rather than a measured span. */}
++        {trace.axisMode === "breaks" &&
++          trace.spans.map((span, i) => {
++            const x1 = xScale(span.startX);
++            const x2 = xScale(span.endX);
++            return (
++              <g key={`break-${i}`}>
++                {board.mark === "gutter" ? (
++                  /* The band the chart ALREADY ships, in the gutter, at
++                     full strength (4.25:1 vs the page) — the plot keeps a
++                     clean empty gap and the label sits on the page above
++                     it at 15.41:1. */
++                  <rect
++                    className="trace-rest-band"
++                    x={x1}
++                    y={REST_BAND_Y}
++                    width={Math.max(0, x2 - x1)}
++                    height={REST_BAND_HEIGHT}
++                  />
++                ) : board.mark === "band" ? (
++                  /* A full-height band strong enough to be a graphical
++                     object in its own right. The bronze token has a narrow
++                     window: below 0.793 the band misses WCAG 1.4.11's 3:1
++                     against the page, above 0.873 the 9px label on it
++                     misses 4.5:1. 0.83 sits in the middle at 3.20 and
++                     4.81. */
++                  <rect
++                    className="trace-rest-band"
++                    x={x1}
++                    y={TOP_PAD}
++                    width={Math.max(0, x2 - x1)}
++                    height={PLOT_BOTTOM - TOP_PAD}
++                    opacity={board.alpha}
++                  />
++                ) : board.mark === "rules" ? (
++                  <>
++                    <line
++                      className="trace-rest-band"
++                      x1={x1}
++                      x2={x1}
++                      y1={TOP_PAD}
++                      y2={PLOT_BOTTOM}
++                      stroke="var(--trace-rest)"
++                    />
++                    <line
++                      x1={x2}
++                      x2={x2}
++                      y1={TOP_PAD}
++                      y2={PLOT_BOTTOM}
++                      stroke="var(--trace-rest)"
++                    />
++                  </>
++                ) : (
++                  <rect
++                    className="trace-rest-band"
++                    x={x1}
++                    y={TOP_PAD}
++                    width={Math.max(0, x2 - x1)}
++                    height={PLOT_BOTTOM - TOP_PAD}
++                    opacity={0.25}
++                  />
++                )}
++                <text
++                  className="trace-tick-label"
++                  x={(x1 + x2) / 2}
++                  y={TOP_PAD + 8}
++                  textAnchor="middle"
++                  dominantBaseline="hanging"
++                >
++                  {span.seconds === null ? "REST" : `${span.seconds}s`}
++                </text>
++              </g>
++            );
++          })}
+         {trace.ticksY.map((tick) => {
+           const y = yScale(tick);
+           return (
+@@ -358,8 +589,8 @@ export default function TraceChart({
+             class alone can't distinguish an x-label from a y-label now
+             that both exist. */}
+         {ticksX.map((tick) => {
+-          const x = xScale(tick);
+-          const label = formatTick(tick * 10, "time");
++          const x = xScale(tick.x);
++          const label = formatTick(tick.label * 10, "time");
+           // Gate 0A, member M8: a tick sitting ON the plot's right edge
+           // carries a CENTRED label that overhangs the viewBox by 2.80
+           // units and loses its final glyph (`0:4(` — measured 2026-09-14,
+@@ -378,7 +609,7 @@ export default function TraceChart({
+           const anchor =
+             x - half < 0 ? "start" : x + half > CHART_WIDTH ? "end" : "middle";
+           return (
+-            <g key={tick}>
++            <g key={`${tick.x}-${tick.label}`}>
+               <line
+                 className="trace-tick-mark"
+                 x1={x}
+@@ -438,8 +669,21 @@ export default function TraceChart({
+           carries no colour word on purpose — `#97692a` reads amber in
+           the PR body and bronze on the actual capture; naming a colour
+           here would just be a second thing to get wrong later. */}
+-      {trace.points.some((segment) => segment.some((p) => p.rest)) && (
+-        <p className="trace-legend">BAND = REST</p>
++      {AXIS_LEGEND[trace.axisMode] !== null ? (
++        <p className="trace-legend">
++          {AXIS_LEGEND[trace.axisMode]}
++          {(trace.axisMode === "wall" || trace.axisMode === "breaks") && (
++            <>
++              <span className="trace-legend-swatch" aria-hidden="true" />
++              <span className="visually-hidden">band</span>
++              {" = REST"}
++            </>
++          )}
++        </p>
++      ) : (
++        trace.points.some((segment) => segment.some((p) => p.rest)) && (
++          <p className="trace-legend">BAND = REST</p>
++        )
+       )}
+     </figure>
+   );
+diff --git a/app/src/log/board2Axis.test.ts b/app/src/log/board2Axis.test.ts
+new file mode 100644
+index 00000000..34a0d31a
+--- /dev/null
++++ b/app/src/log/board2Axis.test.ts
+@@ -0,0 +1,50 @@
++// BOARD 2 PROBE (axis geometry) — THROWAWAY.
++import { describe, expect, it } from "vitest";
++import fs from "node:fs";
++import { buildTrace, type AxisMode } from "./traceModel";
++import type { SeriesData } from "../monitor/seriesRecorder";
++
++const DIR = "../docs/design/number-provenance/gate0b/board2/fixtures";
++const CHART_WIDTH = 320;
++const LEFT_PAD = 28;
++const RIGHT_PAD = 8;
++
++const FIXTURES: { name: string; file: string; rest: number[] }[] = [
++  { name: "session-2 (three EQUAL 30 s rests)", file: "session2-series.json", rest: [30, 30, 30] },
++  { name: "rests-finished (two EQUAL 60 s rests)", file: "rests-finished-series.json", rest: [60, 60] },
++  { name: "work-clock (60.5 s mid-interval STOP)", file: "work-clock-series.json", rest: [] },
++  { name: "free row (104.6 s pause)", file: "justrow-series.json", rest: [] },
++];
++
++describe("board 2 axis geometry", () => {
++  it("measures every candidate against every fixture", () => {
++    const out: string[] = [];
++    for (const f of FIXTURES) {
++      const series = JSON.parse(
++        fs.readFileSync(`${DIR}/${f.file}`, "utf8"),
++      ) as SeriesData;
++      out.push(`\n===== ${f.name} =====`);
++      for (const mode of ["today", "work", "wall", "breaks"] as AxisMode[]) {
++        const t = buildTrace(series, "pace", mode, f.rest, 5);
++        if (t === null) {
++          out.push(`  ${mode}: NO TRACE`);
++          continue;
++        }
++        const plotW = CHART_WIDTH - LEFT_PAD - RIGHT_PAD;
++        const toX = (v: number) =>
++          LEFT_PAD + ((v - t.domainX[0]) / (t.domainX[1] - t.domainX[0])) * plotW;
++        const widths = t.spans.map(
++          (s) => `${(toX(s.endX) - toX(s.startX)).toFixed(2)}u/${s.seconds ?? "?"}s`,
++        );
++        out.push(
++          `  ${mode.padEnd(7)} domainX=[0, ${t.domainX[1].toFixed(1)}] ` +
++            `segments=${t.points.length} spans=${t.spans.length} [${widths.join(", ")}] ` +
++            `ticks=${t.ticksX.map((x) => x.label.toFixed(0)).join("/")} ` +
++            `stops=[${t.stops.map((x) => `${x.seconds.toFixed(1)}s`).join(", ")}]`,
++        );
++      }
++    }
++    process.stdout.write(`${out.join("\n")}\n`);
++    expect(out.length).toBeGreaterThan(0);
++  });
++});
+diff --git a/app/src/log/board2FreeRow.test.ts b/app/src/log/board2FreeRow.test.ts
+new file mode 100644
+index 00000000..cdce6852
+--- /dev/null
++++ b/app/src/log/board2FreeRow.test.ts
+@@ -0,0 +1,121 @@
++// BOARD 2 PROBE (free row) — THROWAWAY. Deleted before the board's PR.
++//
++// Drives the 2026-08-31 free-row capture through the SHIPPED producer
++// (`useMonitorSession` + `beginFreeRow`, the same path
++// `justRowReplay.test.ts` uses) and dumps the stored series, so M9's
++// "the pause is invisible" is measured on a production-shaped record
++// rather than asserted. Readouts through `process.stdout.write`
++// (TESTING.md §11).
++import { describe, expect, it, vi, afterEach } from "vitest";
++import fs from "node:fs";
++import { act, renderHook } from "@testing-library/react";
++import { parseRecording, type ParsedRecording } from "../monitor/transports/recording";
++import { createReplayTransport } from "../monitor/transports/replay";
++import { withLiveness } from "../monitor/transports/liveness";
++import { releasingSchedule } from "../test/statusSubscriptions";
++import { readCapture } from "../test/captures";
++
++const OUT = process.env.BOARD2_OUT ?? "/tmp/board2";
++
++const JUST_ROW_CAPTURE: ParsedRecording = parseRecording(
++  readCapture(
++    "walk-2026-08-31-justrow",
++    "just-row-pm5-recording-1788214688045.jsonl.gz",
++  ),
++);
++
++const FIXED_NOW = new Date("2026-08-31T09:00:00.000Z");
++
++describe("board 2 free-row probe", () => {
++  afterEach(() => {
++    vi.doUnmock("../api");
++    vi.resetModules();
++    vi.restoreAllMocks();
++    localStorage.clear();
++  });
++
++  it("dumps the free row's stored series", async () => {
++    const replay = createReplayTransport(JUST_ROW_CAPTURE);
++    const transport = withLiveness(replay.transport, {
++      now: () => replay.clock.now(),
++      schedule: (fn, ms) => replay.clock.schedule(fn, ms),
++      onSilence: () => undefined,
++      onRecovery: () => undefined,
++    });
++    const apiFn = vi.fn<(path: string, init?: RequestInit) => Promise<Response>>(
++      async () => new Response(JSON.stringify({ id: "log-board2" })),
++    );
++    vi.doMock("../api", () => ({ api: apiFn }));
++    vi.resetModules();
++
++    const { useMonitorSession: freshUseMonitorSession } =
++      await import("../monitor/useMonitorSession");
++    const freshStore = await import("../monitor/handoffStore");
++
++    const { result } = renderHook(() =>
++      freshUseMonitorSession({
++        now: () => FIXED_NOW,
++        createTransport: () => transport,
++        registerAppLifecycleListener: () => (): void => undefined,
++        driverOptions: {
++          now: () => replay.clock.now(),
++          schedule: releasingSchedule((cb, ms) => replay.clock.schedule(cb, ms)),
++        },
++      }),
++    );
++
++    await act(async () => {
++      await result.current.connect();
++    });
++    act(() => {
++      result.current.beginFreeRow();
++    });
++    await act(async () => replay.run());
++
++    const record = freshStore.currentUnretired()?.run;
++    const series = record?.series;
++    expect(series).toBeDefined();
++    const s = series!.samples;
++    fs.mkdirSync(OUT, { recursive: true });
++    fs.writeFileSync(`${OUT}/justrow-series.json`, `${JSON.stringify(series)}\n`);
++
++    const lines: string[] = ["\n===== walk-2026-08-31 free row ====="];
++    lines.push(`samples: ${s.length}`);
++    lines.push(`rest-marked: ${s.filter((x) => x.r === true).length}`);
++    lines.push(`domainX today: [0, ${(s[s.length - 1]!.t / 10).toFixed(2)}] s`);
++    lines.push(`last d: ${(s[s.length - 1]!.d / 10).toFixed(1)} m`);
++    lines.push(
++      `summaryTotals: ${JSON.stringify(record?.summaryTotals)}`,
++    );
++    const r = record as unknown as Record<string, unknown>;
++    lines.push(`record keys: ${Object.keys(r).join(", ")}`);
++    lines.push(`startedAt: ${String(r.startedAt)}  completedAt: ${String(r.completedAt)}`);
++    let maxGap = 0;
++    let at = 0;
++    for (let i = 1; i < s.length; i++) {
++      const g = (s[i]!.t - s[i - 1]!.t) / 10;
++      if (g > maxGap) {
++        maxGap = g;
++        at = s[i - 1]!.t / 10;
++      }
++    }
++    lines.push(`largest gap between consecutive samples: ${maxGap.toFixed(2)} s at t=${at.toFixed(1)}`);
++    let best = 0;
++    let bestFrom = 0;
++    let from = 0;
++    for (let i = 1; i < s.length; i++) {
++      if (Math.abs(s[i]!.d - s[from]!.d) < 1) {
++        const span = (s[i]!.t - s[from]!.t) / 10;
++        if (span > best) {
++          best = span;
++          bestFrom = s[from]!.t / 10;
++        }
++      } else {
++        from = i;
++      }
++    }
++    lines.push(`longest flat-distance span: ${best.toFixed(2)} s from t=${bestFrom.toFixed(1)}`);
++    lines.push(`real pace readings: ${s.filter((x) => x.p !== 0).length}`);
++    process.stdout.write(`${lines.join("\n")}\n`);
++  }, 180_000);
++});
+diff --git a/app/src/log/board2Probe.test.ts b/app/src/log/board2Probe.test.ts
+new file mode 100644
+index 00000000..7d974ee9
+--- /dev/null
++++ b/app/src/log/board2Probe.test.ts
+@@ -0,0 +1,276 @@
++// BOARD 2 PROBE — THROWAWAY. Deleted before the board's PR.
++//
++// Produces the real stored series for two committed captures and measures
++// what the trace chart's x axis actually does with their rests, so board 2
++// argues from numbers rather than from the spec's prose.
++//
++// Readouts go through `process.stdout.write`: this is a `client` test and
++// jsdom owns `console` (CLAUDE.md, TESTING.md §11).
++import { describe, expect, it } from "vitest";
++import fs from "node:fs";
++import type { MonitorFrame } from "../../domain/monitor/types.js";
++import type { WorkoutProgram } from "../../domain/monitor/program.js";
++import { parseRecording } from "../monitor/transports/recording.js";
++import { createEventLog } from "../monitor/eventLog.js";
++import { createSubscribedDriver } from "../test/statusSubscriptions";
++import { createReplayTransport } from "../monitor/transports/replay.js";
++import { createSeriesRecorder } from "../monitor/seriesRecorder.js";
++import type { SeriesData } from "../monitor/seriesRecorder.js";
++import { readCapture } from "../test/captures";
++
++const OUT = process.env.BOARD2_OUT ?? "/tmp/board2";
++
++/** The driver's own `intervalComplete` actuals from the last
++ *  `loadCaptureFrames` call — candidate B needs each interval's stored
++ *  `restSeconds` (0x0037 offset 12, a READBACK per
++ *  `domain/monitor/types.ts`). */
++const capturedActuals: unknown[] = [];
++
++async function loadCaptureFrames(
++  walkDir: string,
++  file: string,
++  programOverride?: WorkoutProgram,
++): Promise<MonitorFrame[]> {
++  const text = readCapture(walkDir, file);
++  const parsed = parseRecording(text);
++  const program = programOverride ?? parsed.header.program;
++  if (!program) throw new Error(`no program on ${walkDir}/${file}`);
++  const replay = createReplayTransport(parsed);
++  const [dev] = await replay.transport.scan();
++  await replay.transport.connect(dev!.id);
++  const log = createEventLog();
++  const driver = createSubscribedDriver(replay.transport, log, {
++    deviceName: dev!.name,
++    now: () => replay.clock.now(),
++    schedule: (cb, ms) => replay.clock.schedule(cb, ms),
++  });
++  const frames: MonitorFrame[] = [];
++  const actuals: unknown[] = [];
++  driver.events((e) => {
++    if (e.kind === "frame") frames.push(e.frame);
++    if (e.kind === "intervalComplete") actuals.push(e.actual);
++  });
++  capturedActuals.length = 0;
++  const programPending = driver.program(program);
++  await replay.run();
++  await programPending;
++  capturedActuals.push(...actuals);
++  return frames;
++}
++
++
++/** Transcribed from `registerReplay.test.ts`'s own decode of this
++ *  recording's tx bytes (walk-2026-08-16 session 2). */
++const SESSION_2_PROGRAM: WorkoutProgram = {
++  intervals: [
++    { type: "work", kind: "distance", value: 100, targetSplit: null, displaySpm: null, restSeconds: 0 },
++    { type: "work", kind: "time", value: 60, targetSplit: 129, displaySpm: null, restSeconds: 30 },
++    { type: "work", kind: "time", value: 120, targetSplit: 129, displaySpm: null, restSeconds: 30 },
++    { type: "work", kind: "distance", value: 500, targetSplit: 129, displaySpm: null, restSeconds: 30 },
++    { type: "work", kind: "time", value: 60, targetSplit: 129, displaySpm: null, restSeconds: 0 },
++  ],
++};
++
++/** `docs/monitor/sessions/walk-2026-08-25/README.md`'s own provenance row:
++ *  "Walk Rests (`w 1' r1 / w 500m r1 / w 1'`)" — two EQUAL 60 s rests. */
++const RESTS_FINISHED_PROGRAM: WorkoutProgram = {
++  intervals: [
++    { type: "work", kind: "time", value: 60, targetSplit: 129, displaySpm: null, restSeconds: 60 },
++    { type: "work", kind: "distance", value: 500, targetSplit: 129, displaySpm: null, restSeconds: 60 },
++    { type: "work", kind: "time", value: 60, targetSplit: 129, displaySpm: null, restSeconds: 0 },
++  ],
++};
++
++
++/** `docs/monitor/sessions/walk-2026-09-15-work-clock/README.md`'s own
++ *  provenance row: "Walk Keystone (`x2` / `w 250m 6k @24`), abandoned
++ *  after interval 1". */
++const WORK_CLOCK_PROGRAM: WorkoutProgram = {
++  intervals: [
++    { type: "work", kind: "distance", value: 250, targetSplit: 129, displaySpm: 24, restSeconds: 0 },
++    { type: "work", kind: "distance", value: 250, targetSplit: 129, displaySpm: 24, restSeconds: 0 },
++  ],
++};
++
++/** Today's chart: LEFT_PAD/RIGHT_PAD/CHART_WIDTH from `TraceChart.tsx`. */
++const CHART_WIDTH = 320;
++const LEFT_PAD = 28;
++const RIGHT_PAD = 8;
++const PAD = 0.5;
++
++function report(name: string, series: SeriesData): string {
++  const s = series.samples;
++  const lines: string[] = [`\n===== ${name} =====`];
++  lines.push(`samples: ${s.length}`);
++  const rest = s.filter((x) => x.r === true).length;
++  lines.push(`rest-marked samples: ${rest}`);
++  const lastT = s[s.length - 1]!.t / 10;
++  lines.push(`domainX today: [0, ${lastT.toFixed(2)}] s`);
++  lines.push(`last d: ${(s[s.length - 1]!.d / 10).toFixed(1)} m`);
++
++  // Pace readings, exactly `traceModel.realReadings`.
++  const readings = s
++    .filter((x) => x.p !== 0)
++    .map((x) => ({ t: x.t / 10, rest: x.r === true }));
++  lines.push(`real pace readings: ${readings.length}`);
++
++  // Rest runs over the PACE readings — what `restBandsForSegment` sees.
++  const runs: { from: number; to: number; n: number }[] = [];
++  let cur: { from: number; to: number; n: number } | null = null;
++  for (const r of readings) {
++    if (r.rest) {
++      if (cur === null) cur = { from: r.t, to: r.t, n: 1 };
++      else {
++        cur.to = r.t;
++        cur.n++;
++      }
++    } else if (cur !== null) {
++      runs.push(cur);
++      cur = null;
++    }
++  }
++  if (cur !== null) runs.push(cur);
++
++  const plotW = CHART_WIDTH - LEFT_PAD - RIGHT_PAD;
++  const toX = (t: number) => LEFT_PAD + (t / lastT) * plotW;
++  lines.push(`rest BANDS drawn today: ${runs.length}`);
++  for (const [i, r] of runs.entries()) {
++    const w = toX(Math.min(lastT, r.to + PAD)) - toX(Math.max(0, r.from - PAD));
++    lines.push(
++      `  band ${i + 1}: t ${r.from.toFixed(1)}..${r.to.toFixed(1)} s ` +
++        `(${(r.to - r.from).toFixed(1)} s of axis, ${r.n} readings) ` +
++        `-> ${w.toFixed(2)} SVG units wide`,
++    );
++  }
++
++  // Rest runs over ALL samples (not just pace-bearing ones).
++  const allRuns: { from: number; to: number; n: number }[] = [];
++  let c2: { from: number; to: number; n: number } | null = null;
++  for (const x of s) {
++    const t = x.t / 10;
++    if (x.r === true) {
++      if (c2 === null) c2 = { from: t, to: t, n: 1 };
++      else {
++        c2.to = t;
++        c2.n++;
++      }
++    } else if (c2 !== null) {
++      allRuns.push(c2);
++      c2 = null;
++    }
++  }
++  if (c2 !== null) allRuns.push(c2);
++  lines.push(`rest runs over ALL samples: ${allRuns.length}`);
++  for (const [i, r] of allRuns.entries()) {
++    lines.push(
++      `  run ${i + 1}: t ${r.from.toFixed(1)}..${r.to.toFixed(1)} s ` +
++        `(${(r.to - r.from).toFixed(1)} s, ${r.n} samples)`,
++    );
++  }
++
++  // The longest flat span in `t` between consecutive samples, and the
++  // longest run of samples whose `d` does not move (a stop the axis
++  // cannot show).
++  let maxGap = 0;
++  let maxGapAt = 0;
++  for (let i = 1; i < s.length; i++) {
++    const g = (s[i]!.t - s[i - 1]!.t) / 10;
++    if (g > maxGap) {
++      maxGap = g;
++      maxGapAt = s[i - 1]!.t / 10;
++    }
++  }
++  lines.push(`largest gap between consecutive samples: ${maxGap.toFixed(2)} s at t=${maxGapAt.toFixed(1)}`);
++  let flatBest = 0;
++  let flatFrom = 0;
++  let runFrom = 0;
++  for (let i = 1; i < s.length; i++) {
++    if (Math.abs(s[i]!.d - s[runFrom]!.d) < 1) {
++      const span = (s[i]!.t - s[runFrom]!.t) / 10;
++      if (span > flatBest) {
++        flatBest = span;
++        flatFrom = s[runFrom]!.t / 10;
++      }
++    } else {
++      runFrom = i;
++    }
++  }
++  lines.push(`longest flat-distance span: ${flatBest.toFixed(2)} s from t=${flatFrom.toFixed(1)}`);
++  return lines.join("\n");
++}
++
++describe("board 2 probe", () => {
++  it("step-3: a programmed, rest-bearing piece with THREE EQUAL 30 s rests", async () => {
++    const frames = await loadCaptureFrames(
++      "walk-2026-08-17",
++      "step-3-pm5-recording-second-rest-1786973713929.jsonl",
++    );
++    const rec = createSeriesRecorder();
++    for (const f of frames) rec.onFrame(f);
++    const series = rec.snapshot()!;
++    fs.mkdirSync(OUT, { recursive: true });
++    fs.writeFileSync(
++      `${OUT}/step3-series.json`,
++      `${JSON.stringify(series)}\n`,
++    );
++    process.stdout.write(report("walk-2026-08-17 step-3 (wu 1' r0 / 1' r30 / 2' r30 / 500m r30 / 1')", series));
++    process.stdout.write("\n");
++    process.stdout.write(`actuals: ${JSON.stringify(capturedActuals)}\n`);
++    fs.writeFileSync(`${OUT}/step3-actuals.json`, `${JSON.stringify(capturedActuals, null, 2)}\n`);
++    expect(series.samples.length).toBeGreaterThan(0);
++  }, 120_000);
++
++  it("rests-finished: a natural finish with TWO EQUAL 60 s rests", async () => {
++    const frames = await loadCaptureFrames(
++      "walk-2026-08-25",
++      "rests-finished-recording.jsonl.gz",
++      RESTS_FINISHED_PROGRAM,
++    );
++    const rec = createSeriesRecorder();
++    for (const f of frames) rec.onFrame(f);
++    const series = rec.snapshot()!;
++    fs.mkdirSync(OUT, { recursive: true });
++    fs.writeFileSync(`${OUT}/rests-finished-series.json`, `${JSON.stringify(series)}\n`);
++    process.stdout.write(report("walk-2026-08-25 rests-finished (1' r60 / 500m r60 / 1')", series));
++    process.stdout.write("\n");
++    process.stdout.write(`actuals: ${JSON.stringify(capturedActuals)}\n`);
++    fs.writeFileSync(`${OUT}/rests-finished-actuals.json`, `${JSON.stringify(capturedActuals, null, 2)}\n`);
++    expect(series.samples.length).toBeGreaterThan(0);
++  }, 180_000);
++
++  it("session-2-wu-4unequal: THREE EQUAL 30 s rests, rowed through", async () => {
++    const frames = await loadCaptureFrames(
++      "walk-2026-08-16",
++      "session-2-wu-4unequal.jsonl",
++      SESSION_2_PROGRAM,
++    );
++    const rec = createSeriesRecorder();
++    for (const f of frames) rec.onFrame(f);
++    const series = rec.snapshot()!;
++    fs.mkdirSync(OUT, { recursive: true });
++    fs.writeFileSync(`${OUT}/session2-series.json`, `${JSON.stringify(series)}\n`);
++    process.stdout.write(report("walk-2026-08-16 session-2 (100m / 1' r30 / 2' r30 / 500m r30 / 1')", series));
++    process.stdout.write("\n");
++    process.stdout.write(`actuals: ${JSON.stringify(capturedActuals)}\n`);
++    fs.writeFileSync(`${OUT}/session2-actuals.json`, `${JSON.stringify(capturedActuals, null, 2)}\n`);
++    expect(series.samples.length).toBeGreaterThan(0);
++  }, 180_000);
++
++  it("work-clock walk: a programmed interval with a 60.5 s mid-interval STOP", async () => {
++    const frames = await loadCaptureFrames(
++      "walk-2026-09-15-work-clock",
++      "pm5-recording-1789471533667.jsonl.gz",
++      WORK_CLOCK_PROGRAM,
++    );
++    const rec = createSeriesRecorder();
++    for (const f of frames) rec.onFrame(f);
++    const series = rec.snapshot()!;
++    fs.mkdirSync(OUT, { recursive: true });
++    fs.writeFileSync(`${OUT}/work-clock-series.json`, `${JSON.stringify(series)}\n`);
++    process.stdout.write(report("walk-2026-09-15 work-clock (250m, stopped 60.5 s mid-interval)", series));
++    process.stdout.write("\n");
++    process.stdout.write(`actuals: ${JSON.stringify(capturedActuals)}\n`);
++    fs.writeFileSync(`${OUT}/work-clock-actuals.json`, `${JSON.stringify(capturedActuals, null, 2)}\n`);
++    expect(series.samples.length).toBeGreaterThan(0);
++  }, 180_000);
++});
+diff --git a/app/src/log/traceModel.ts b/app/src/log/traceModel.ts
+index 5787a6e6..e6ec6673 100644
+--- a/app/src/log/traceModel.ts
++++ b/app/src/log/traceModel.ts
+@@ -135,6 +135,11 @@ export interface TraceModel {
+    *  segment count (when the line actually breaks) is a fact about the
+    *  DRAWN LINE, not a claim about workout structure. */
+   summary: string;
++  /** BOARD 2 PROTOTYPE. */
++  axisMode: AxisMode;
++  spans: RestSpan[];
++  ticksX: { x: number; label: number }[];
++  stops: StopSpan[];
+ }
+ 
+ /** §3: the line breaks across a gap of more than this many seconds. */
+@@ -176,10 +181,14 @@ interface Reading {
+ /** Extracts `measure`'s own real readings from `samples`, in wire order —
+  *  §2's sentinel rule, applied once per measure so `buildTrace` never
+  *  repeats the exclusion logic per caller. */
+-function realReadings(samples: readonly Sample[], measure: Measure): Reading[] {
++function realReadings(
++  samples: readonly Sample[],
++  measure: Measure,
++  xs?: readonly number[],
++): Reading[] {
+   const out: Reading[] = [];
+-  for (const s of samples) {
+-    const t = s.t / 10;
++  for (const [i, s] of samples.entries()) {
++    const t = xs === undefined ? s.t / 10 : xs[i]!;
+     const rest = s.r === true;
+     switch (measure) {
+       case "pace":
+@@ -303,13 +312,175 @@ function buildSummary(
+   );
+ }
+ 
++// ===== BOARD 2 PROTOTYPE — THROWAWAY, NEVER COMMITTED TO PRODUCT CODE =====
++// Four x-axis treatments for Gate 0B board 2. `today` is `main` unchanged.
++export type AxisMode = "today" | "work" | "wall" | "breaks";
++
++/** One rest run in x-space, so the chart can draw a band or a break. */
++export interface RestSpan {
++  startX: number;
++  endX: number;
++  /** The machine's own rest seconds for the interval this rest closed
++   *  (0x0037 offset 12 — a READBACK, `domain/monitor/types.ts`). */
++  seconds: number | null;
++}
++
++/** Candidate C's separator width, in axis units of the work clock it sits
++ *  in. Fixed by construction: the whole point is that it asserts nothing
++ *  about the time a rest took. */
++const BREAK_UNITS = 14;
++
++/** BOARD 2 PROTOTYPE — a span where the machine's own distance did not
++ *  move while its clock did. Detectable from the series alone; the
++ *  threshold sits above every non-stop flat run this repo has measured
++ *  (4 s across staging, 3.0 s on the committed captures). */
++export interface StopSpan {
++  startX: number;
++  endX: number;
++  seconds: number;
++}
++
++export function findStopSpans(
++  samples: readonly Sample[],
++  xs: readonly number[],
++  minSeconds: number,
++  measure: Measure,
++): StopSpan[] {
++  // A stop is only a stop if the rower CARRIED ON afterwards. The tail of
++  // a closed piece is flat too (measured: 5.1 s at the end of the
++  // 2026-09-15 work-clock capture, every sample a `p === 0` sentinel), and
++  // marking it would put "STOPPED 5s" on the moment the rower pressed END.
++  let lastReal = -1;
++  for (const [i, s] of samples.entries()) {
++    const v =
++      measure === "pace" ? s.p : measure === "rate" ? s.spm : (s.hr ?? 0);
++    if (v !== 0) lastReal = i;
++  }
++  const out: StopSpan[] = [];
++  let from = 0;
++  for (let i = 1; i <= samples.length; i++) {
++    const same =
++      i < samples.length && Math.abs(samples[i]!.d - samples[from]!.d) < 1;
++    if (!same) {
++      const secs = (samples[i - 1]!.t - samples[from]!.t) / 10;
++      if (secs >= minSeconds && i - 1 < lastReal) {
++        out.push({ startX: xs[from]!, endX: xs[i - 1]!, seconds: secs });
++      }
++      from = i;
++    }
++  }
++  return out;
++}
++
++export interface AxisResult {
++  xs: number[];
++  domainX: [number, number];
++  spans: RestSpan[];
++  /** Work-clock values the x ticks should carry, mapped into x-space. */
++  ticks: { x: number; label: number }[];
++}
++
++export function buildAxis(
++  samples: readonly Sample[],
++  mode: AxisMode,
++  restSeconds: readonly number[],
++): AxisResult {
++  const xs: number[] = [];
++  const spans: RestSpan[] = [];
++  let x = 0;
++  let work = 0;
++  const workAtX: { x: number; work: number }[] = [];
++  let restIndex = 0;
++  let inRest = false;
++  let spanStart = 0;
++  let spanStartWork = 0;
++  for (let i = 0; i < samples.length; i++) {
++    const s = samples[i]!;
++    const prev = i === 0 ? null : samples[i - 1]!;
++    const dt = prev === null ? s.t / 10 : (s.t - prev.t) / 10;
++    const rest = s.r === true;
++    if (mode === "today") {
++      x = s.t / 10;
++      if (!rest) work += dt;
++    } else if (rest) {
++      // work / wall / breaks: a rest advances NO work time.
++      if (!inRest) {
++        inRest = true;
++        spanStart = x;
++        spanStartWork = work;
++      }
++      if (mode === "wall") x += dt;
++    } else {
++      if (inRest) {
++        const seconds = restSeconds[restIndex] ?? null;
++        if (mode === "wall") {
++          // The rest occupies the machine's own rest seconds, not the
++          // part of it the rower happened to keep moving through.
++          const moved = x - spanStart;
++          x = spanStart + (seconds ?? moved);
++        } else if (mode === "breaks") {
++          x = spanStart + BREAK_UNITS;
++        }
++        spans.push({ startX: spanStart, endX: x, seconds });
++        restIndex++;
++        inRest = false;
++      }
++      work += dt;
++      x += dt;
++    }
++    xs.push(x);
++    workAtX.push({ x, work });
++  }
++  if (inRest) {
++    const seconds = restSeconds[restIndex] ?? null;
++    if (mode === "breaks") x = spanStart + BREAK_UNITS;
++    else if (mode === "wall") x = spanStart + (seconds ?? x - spanStart);
++    spans.push({ startX: spanStart, endX: x, seconds });
++    void spanStartWork;
++  }
++  const domainX: [number, number] = [0, xs[xs.length - 1] ?? 0];
++  // Ticks: `today`/`wall` label the axis value itself; `work`/`breaks`
++  // label WORK time, mapped through the transform.
++  const ticks: { x: number; label: number }[] = [];
++  if (mode === "today" || mode === "wall") {
++    for (const t of chooseTicks(domainX, 4)) ticks.push({ x: t, label: t });
++  } else {
++    const totalWork = work;
++    for (const t of chooseTicks([0, totalWork], 4)) {
++      let mapped = domainX[1];
++      for (const p of workAtX) {
++        if (p.work >= t) {
++          mapped = p.x;
++          break;
++        }
++      }
++      ticks.push({ x: mapped, label: t });
++    }
++  }
++  return { xs, domainX, spans, ticks };
++}
++// ===== END BOARD 2 PROTOTYPE =====
++
+ export function buildTrace(
+   series: SeriesData | undefined,
+   measure: Measure,
++  axisMode: AxisMode = "today",
++  restSeconds: readonly number[] = [],
++  stopSeconds = 0,
+ ): TraceModel | null {
+   if (series === undefined || series.samples.length === 0) return null;
+ 
+-  const readings = realReadings(series.samples, measure);
++  const axis = buildAxis(series.samples, axisMode, restSeconds);
++  // BOARD 2 PROTOTYPE. A work-only axis has NO ROOM for a rest reading:
++  // every sample inside one lands on the same x, which draws as a vertical
++  // spike into nothing. So `work` and `breaks` drop rest readings from the
++  // line entirely — the honest consequence of the axis they propose, and
++  // something the board has to show rather than tidy away.
++  const all = realReadings(series.samples, measure, axis.xs);
++  const readings =
++    axisMode === "work" || axisMode === "breaks"
++      ? all.filter((r) => !r.rest)
++      : all;
+   if (readings.length < MIN_REAL_READINGS) return null;
+ 
+   // 2026-08-20 ruling (file header, above): the vertical domain is built
+@@ -332,13 +503,26 @@ export function buildTrace(
+   });
+   if (domainY === null) return null;
+ 
+-  const lastSample = series.samples[series.samples.length - 1]!;
+-  const domainX: [number, number] = [0, lastSample.t / 10];
++  const domainX: [number, number] = axis.domainX;
+ 
+   const segments = toSegments(readings);
+   const ticksY = chooseTicks(domainY, TICK_COUNT);
+   const invert = measure === "pace";
+   const summary = buildSummary(measure, readings, segments);
+ 
+-  return { points: segments, domainX, domainY, ticksY, invert, summary };
++  return {
++    points: segments,
++    domainX,
++    domainY,
++    ticksY,
++    invert,
++    summary,
++    axisMode,
++    spans: axis.spans,
++    ticksX: axis.ticks,
++    stops:
++      stopSeconds > 0
++        ? findStopSpans(series.samples, axis.xs, stopSeconds, measure)
++        : [],
++  };
+ }

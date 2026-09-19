@@ -1218,6 +1218,44 @@ describe("PostWorkoutSummary — the trace chart (Phase LT spec 3)", () => {
     ).toBeTruthy();
   });
 
+  // Gate 0B board 2, and the last hop of the seam RF24 asks about: the
+  // model can carry the machine's own intervals and the chart can use
+  // them, and this screen is the only thing joining them. Without the
+  // assertion, deleting the prop here leaves every other gate green.
+  it("hands the model's own interval spans to the chart, so a rest draws at the length the machine says", () => {
+    // Two 20 s samples of work, a rest sample, then work again — the
+    // rest ADVANCED 20 s of its own, but the machine says it was 60.
+    const series: SeriesData = {
+      samples: [
+        { t: 0, d: 0, p: 1400, spm: 22, r: undefined },
+        { t: 200, d: 80, p: 1380, spm: 22, r: undefined },
+        { t: 400, d: 160, p: 3600, spm: 12, r: true },
+        { t: 600, d: 240, p: 1350, spm: 23, r: undefined },
+        { t: 800, d: 320, p: 1300, spm: 24, r: undefined },
+      ],
+    };
+    const model = {
+      ...monitorModel(),
+      intervalSpans: [
+        { workSeconds: 20, restSeconds: 60 },
+        { workSeconds: 40, restSeconds: 0 },
+      ],
+    };
+    const { container } = renderSummary({ series, model });
+    const band = container.querySelector(".trace-rest-band");
+    expect(band).not.toBeNull();
+    // The fixture carries 60 s of WORK (five samples spanning 80 s, of
+    // which the rest sample's own 20 s is not work) plus the machine's
+    // 60 s of rest, so the axis is 120 s and the band is half of it,
+    // across the plot's own 284 units (CHART_WIDTH 320 - LEFT_PAD 28 -
+    // RIGHT_PAD 8). Computed here from the fixture, never read back out
+    // of the chart.
+    expect(Number(band!.getAttribute("width"))).toBeCloseTo(
+      (60 / 120) * 284,
+      2,
+    );
+  });
+
   it("renders NOTHING when `series` is absent — the timer/by-hand doors' own shape (no `series` prop at all)", () => {
     const { container } = renderSummary();
     expect(container.querySelector(".trace-figure")).toBeNull();

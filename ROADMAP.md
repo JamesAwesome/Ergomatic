@@ -4862,7 +4862,7 @@ than back in the queue this was built to replace.
       find out. This is a FAKE-side gap only: the same fold works on real
       wire bytes, which is what `justRowReplay.test.ts` gates.
 
-- [ ] **PR 3 of the number-provenance pass — the chart's axis (M3, M6, M9).**
+- [ ] **PR 3 of the number-provenance pass — the chart's axis (M3, M6).**
       · dies 2026-10-06 · a row and not a fix now because it cannot start
       until Gate 0B board 2 is drawn and ruled, and a board is James's
       decision rather than work I can do ahead of him.
@@ -4876,10 +4876,19 @@ than back in the queue this was built to replace.
       candidate B is alive. Nothing blocks drawing the board.
       **What board 2 must show, already known:** a mid-interval stop stores
       as 250 m in 129.2 s, so a piece pulled at about 2:15 saves as roughly
-      4:18/500m with nothing on screen saying why. **S**
+      4:18/500m with nothing on screen saying why.
+      **BOARD 2 DRAWN AND RULED 2026-09-19 — candidate B, the swatch
+      legend, the stopped-span band, and I3 reworded**
+      (`docs/design/number-provenance/gate0b/board2/BOARD2.md`).
+      **M9 IS NO LONGER IN THIS PR** — the free row's 104.6 s pause leaves
+      a 1.8 s gap in the stored series and nothing else, and the wall
+      duration that would name it is not stored at all (`session_logs`
+      carries `completed_at` and no start time), so naming it is a stored
+      shape and rides PR 4's gates. **S**
 
 - [ ] **PR 4 of the number-provenance pass — live total versus stored
-      (M4, M5, M7), and it is TRIAD.** · dies 2026-10-08 · a row and not a
+      (M4, M5, M7, and as of 2026-09-19 M9 too), and it is TRIAD.**
+      · dies 2026-10-08 · a row and not a
       fix now because it moves a STORED figure, so it carries the full
       antagonist pass and a PM final gate, and it needs Gate 0B board 3 —
       which is unstarted.

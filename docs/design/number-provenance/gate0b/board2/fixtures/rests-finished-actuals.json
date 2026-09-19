@@ -1,0 +1,50 @@
+[
+  {
+    "index": 0,
+    "elapsedSeconds": 60,
+    "distanceMeters": 218,
+    "avgSplit": 137.6,
+    "avgSpm": 25,
+    "avgHeartRateBpm": 71,
+    "restDistanceMeters": 130,
+    "restSeconds": 60,
+    "type": 0,
+    "calories": 12,
+    "calPerHour": 762,
+    "watts": 134,
+    "dragFactor": 101,
+    "restHeartRateBpm": 94
+  },
+  {
+    "index": 1,
+    "elapsedSeconds": 134.8,
+    "distanceMeters": 500,
+    "avgSplit": 134.8,
+    "avgSpm": 24,
+    "avgHeartRateBpm": 120,
+    "restDistanceMeters": 144,
+    "restSeconds": 60,
+    "type": 1,
+    "calories": 29,
+    "calPerHour": 791,
+    "watts": 143,
+    "dragFactor": 101,
+    "restHeartRateBpm": 108
+  },
+  {
+    "index": 2,
+    "elapsedSeconds": 60,
+    "distanceMeters": 217,
+    "avgSplit": 138.2,
+    "avgSpm": 23,
+    "avgHeartRateBpm": 117,
+    "restDistanceMeters": 0,
+    "restSeconds": 0,
+    "type": 0,
+    "calories": 12,
+    "calPerHour": 755,
+    "watts": 132,
+    "dragFactor": 100,
+    "restHeartRateBpm": null
+  }
+]

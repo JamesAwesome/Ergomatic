@@ -98,6 +98,7 @@ import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import type { IntervalActual } from "../../domain/monitor/types.js";
 import { judgeVsTarget } from "../judgeBand.js";
+import type { IntervalSpan } from "../log/traceModel.js";
 import {
   measuredSessionSeconds,
   type CloseReason,
@@ -289,6 +290,77 @@ export function machineSplitRowsFromRun(run: MonitorRun): MachineSplitRow[] {
   return machineSplitRows(buildMonitorLogSteps(run));
 }
 
+/** Gate 0B board 2 (APPROVED 2026-09-19): the two machine figures the
+ *  trace chart's x axis is built from — each interval's WORK seconds
+ *  (0x0039's own per-interval elapsed) and the rest READBACK that
+ *  follows it (0x0037 offset 12). In rowed order; `TraceChart` walks
+ *  them against the series.
+ *
+ *  FAIL CLOSED. This guard covers MISSING data only; spurious data — a
+ *  lone rest mark inside live work — is `buildAxis`'s own near-boundary
+ *  window, not this function's. The axis places each
+ *  rest at the cumulative WORK boundary of the interval before it, so a
+ *  single step whose work seconds are missing — or that the machine
+ *  never measured at all — shifts every later rest onto the wrong part
+ *  of the chart. Rather than draw a plausible wrong axis, ANY such step
+ *  returns none at all, and the chart keeps the axis it had.
+ *
+ *  AN ABSENT `machineRestSeconds` IS NOT A ZERO, and where it sits
+ *  decides whether the axis survives it. `buildMonitorLogSteps` writes
+ *  `0` for a genuine r0 piece and omits the key entirely when the actual
+ *  carried no readback — which is a REAL and documented population, not
+ *  a corner: `monitorRun.ts` names the synthesized-final fallback (the
+ *  last split notification is dropped, so the final interval is derived
+ *  from the summary and has work data but no rest data), and every row
+ *  saved before Phase LP PR 2 has none at all.
+ *
+ *  So: a missing readback shifts every rest AFTER it onto the wrong part
+ *  of the axis, and shifts nothing before it. Missing at the TAIL is
+ *  therefore survivable and is read as "no band there" — one band lost
+ *  at the very end of the piece. Missing in the MIDDLE is not, and
+ *  stands the whole axis down. Missing EVERYWHERE is a row with no rest
+ *  data at all: that also stands down, so the chart takes the
+ *  no-intervals path and draws its bands from the rest-marked points
+ *  exactly as it did before this change, rather than a work-only axis
+ *  with every rest silently at zero width — which is candidate A, the
+ *  treatment the board REJECTED. */
+export function machineIntervalSpans(
+  steps: readonly Pick<
+    LogStep,
+    "actualSource" | "actualSeconds" | "machineRestSeconds"
+  >[],
+): IntervalSpan[] {
+  const partial: { workSeconds: number; restSeconds: number | null }[] = [];
+  for (const s of steps) {
+    if (s.actualSource !== "pm5" || typeof s.actualSeconds !== "number") {
+      return [];
+    }
+    partial.push({
+      workSeconds: s.actualSeconds,
+      restSeconds:
+        typeof s.machineRestSeconds === "number" ? s.machineRestSeconds : null,
+    });
+  }
+  let lastKnown = -1;
+  partial.forEach((span, i) => {
+    if (span.restSeconds !== null) lastKnown = i;
+  });
+  if (lastKnown === -1) return [];
+  for (let i = 0; i < lastKnown; i++) {
+    if (partial[i]!.restSeconds === null) return [];
+  }
+  return partial.map((span) => ({
+    workSeconds: span.workSeconds,
+    restSeconds: span.restSeconds ?? 0,
+  }));
+}
+
+/** The live door's spans, the sibling of `machineSplitRowsFromRun` and
+ *  built off the same steps for the same reason. */
+export function machineIntervalSpansFromRun(run: MonitorRun): IntervalSpan[] {
+  return machineIntervalSpans(buildMonitorLogSteps(run));
+}
+
 /** The session's TARGET stroke rate — a single number only when every
  *  interval names the same one (spec §3.2); otherwise `undefined`, and the
  *  per-interval targets stay where they already are, in the INTERVALS
@@ -467,6 +539,13 @@ export interface SummaryModel {
    *  fixtures) reads as "no strip", the same absent-means-none idiom as
    *  `caption`. */
   machineRows?: MachineSplitRow[];
+  /** Gate 0B board 2: the machine's own per-interval work and rest
+   *  seconds, which is what makes the trace chart's x axis
+   *  `work + rest`. Absent/empty on the timer and manual doors, on a
+   *  Just Row, and wherever `machineIntervalSpans` fails closed — the
+   *  chart then keeps the axis it had. Optional for the same
+   *  absent-means-none reason `machineRows` above is. */
+  intervalSpans?: IntervalSpan[];
   /** The one centred line under the interval table. TWO producers now,
    *  resolved by PRECEDENCE — never stacked, and never more than one
    *  element (door spec 2026-09-02 §6, Gate 0-B decision (c), APPROVED):
@@ -1442,6 +1521,8 @@ function buildMonitorModel(run: MonitorRun): SummaryModel {
     ...(suppressCompletionEyebrow ? { suppressCompletionEyebrow: true } : {}),
     // Phase LP §3: the strip's rows ride the model; empty on a Just Row.
     machineRows: machineSplitRowsFromRun(run),
+    // Gate 0B board 2: the same steps, read for the trace chart's axis.
+    intervalSpans: machineIntervalSpansFromRun(run),
   };
 }
 

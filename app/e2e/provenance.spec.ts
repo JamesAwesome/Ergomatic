@@ -294,3 +294,103 @@ test("in LANDSCAPE the sheet opens at its title, not scrolled past it", async ({
   // and the first group's heading is reachable without scrolling up
   await expect(dialog.getByText("DERIVED", { exact: true })).toBeInViewport();
 });
+
+// ---------------------------------------------------------------------
+// Gate 0B board 2, PR 3 (APPROVED 2026-09-19, candidate B). Also RF24's
+// seam, on the STORED door: the fixture is seeded through the API and the
+// assertions are on rendered geometry, so a break anywhere between the
+// step's `machineRestSeconds` and the drawn rect goes red. Geometry lives
+// here rather than in `client` because jsdom leaves `getBBox` undefined
+// and every rect zero (spec §7).
+// ---------------------------------------------------------------------
+
+/** The band widths the chart actually drew, in SVG user units. */
+async function restBandWidths(page: Page): Promise<number[]> {
+  return page.$$eval(".trace-rest-band", (els) =>
+    els.map((el) => (el as SVGGraphicsElement).getBBox().width),
+  );
+}
+
+test("two rests the rower never moved through still draw, and draw the SAME width", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await signInViaBackdoor(page, {
+    email: `prov-axis-${RUN_ID}@e2e.test`,
+    name: "Provenance",
+  });
+
+  // NO rest-marked sample anywhere — the shape a rower who sits still
+  // through a rest produces, since 0x0031's elapsed advances only while
+  // the flywheel turns. Both rests are therefore invisible to the series
+  // and visible only through the steps' own readback, which is the case
+  // candidate B exists to draw. 140 s of samples, which carries the work
+  // clock past both of the row's own interval boundaries — the steps'
+  // `actualSeconds` are 67.9 and 56.1, so the boundaries are at 67.9 s
+  // and 124.0 s cumulative.
+  const samples = [];
+  for (let i = 0; i <= 140; i++) {
+    samples.push({ t: i * 10, d: i * 40, p: 1240, spm: 26, hr: 140 });
+  }
+  await seedAndOpen(page, {
+    ...machineRow({ title: "Still rests", endedBy: "finished", spm: 26 }),
+    series: { samples },
+  });
+  await expect(
+    page.getByRole("heading", { name: "Still rests" }),
+  ).toBeVisible();
+  await expect(page.locator(".trace-figure")).toBeVisible();
+
+  const widths = await restBandWidths(page);
+  expect(widths).toHaveLength(2);
+  // Both steps say 60 s, so both bands are the same width — the whole of
+  // M6. Equal to within a rendering epsilon, never "greater than zero".
+  expect(Math.abs(widths[0]! - widths[1]!)).toBeLessThan(0.01);
+  // And the axis is 260 s (140 s of samples plus the machine's 120 s of
+  // rest), so each band is 60 of those 260 across the plot's own 284
+  // units (CHART_WIDTH 320 - LEFT_PAD 28 - RIGHT_PAD 8) — computed from
+  // the fixture, never read back out of the chart.
+  expect(widths[0]!).toBeCloseTo((60 / 260) * 284, 1);
+
+  // The legend names the mark with the mark (James, 2026-09-19).
+  const legend = page.locator(".trace-legend");
+  await expect(legend).toHaveText("Band = REST");
+  await expect(legend.locator(".trace-legend-swatch")).toHaveCount(1);
+});
+
+test("a minute of standing still inside a work interval is marked, not drawn as rowing", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await signInViaBackdoor(page, {
+    email: `prov-stop-${RUN_ID}@e2e.test`,
+    name: "Provenance",
+  });
+
+  // 40 s of rowing, 20 s with the clock running and the distance frozen,
+  // then 40 s more. The monitor holds its last pace across a stop, which
+  // is why the unmarked chart asserts the rower was pulling.
+  const samples = [];
+  for (let i = 0; i <= 100; i++) {
+    const frozen = i > 40 && i <= 60;
+    samples.push({
+      t: i * 10,
+      d: (frozen ? 40 : i) * 40,
+      p: 1240,
+      spm: 26,
+      hr: 140,
+    });
+  }
+  const row = machineRow({
+    title: "Stopped mid row",
+    endedBy: "finished",
+    spm: 26,
+  });
+  await seedAndOpen(page, { ...row, series: { samples } });
+  await expect(
+    page.getByRole("heading", { name: "Stopped mid row" }),
+  ).toBeVisible();
+
+  await expect(page.locator(".trace-stop-span")).toHaveCount(1);
+  await expect(page.locator(".trace-stop-label")).toHaveText("STOPPED 20s");
+});

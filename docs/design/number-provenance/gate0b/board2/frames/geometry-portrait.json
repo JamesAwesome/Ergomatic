@@ -1,0 +1,625 @@
+[
+  {
+    "key": "equal-rests",
+    "axis": "today",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 2,
+    "bands": [
+      {
+        "x": 89.74207389749702,
+        "width": 5.754469606674618,
+        "height": 8
+      },
+      {
+        "x": 176.26221692491063,
+        "width": 5.212872467222866,
+        "height": 8
+      },
+      {
+        "x": 268.9430274135876,
+        "width": 2.707985697258664,
+        "height": 8
+      }
+    ],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00",
+      "6:40"
+    ],
+    "legend": "BAND = REST",
+    "texts": [
+      "1:40",
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00",
+      "6:40"
+    ]
+  },
+  {
+    "key": "equal-rests",
+    "axis": "work",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 2,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": "X = WORK TIME · RESTS NOT SHOWN",
+    "texts": [
+      "1:40",
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "equal-rests",
+    "axis": "wall",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 4,
+    "bands": [
+      {
+        "x": 79.99097990979902,
+        "width": 17.466174661746592,
+        "height": 8
+      },
+      {
+        "x": 166.85608856088535,
+        "width": 17.466174661746606,
+        "height": 8
+      },
+      {
+        "x": 259.54325543255425,
+        "width": 17.466174661746606,
+        "height": 8
+      }
+    ],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "3:20",
+      "6:40"
+    ],
+    "legend": "band = REST",
+    "texts": [
+      "1:40",
+      "2:30",
+      "3:20",
+      "0:00",
+      "3:20",
+      "6:40"
+    ]
+  },
+  {
+    "key": "equal-rests",
+    "axis": "breaks",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 4,
+    "bands": [
+      {
+        "x": 85.66530241018637,
+        "width": 9.040472942246467,
+        "height": 120
+      },
+      {
+        "x": 171.67894497498838,
+        "width": 9.040472942246453,
+        "height": 120
+      },
+      {
+        "x": 264.1500682128239,
+        "width": 9.040472942246481,
+        "height": 120
+      }
+    ],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": "band = REST",
+    "texts": [
+      "30s",
+      "30s",
+      "30s",
+      "1:40",
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "equal-rests",
+    "axis": "breaks-rules",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 4,
+    "bands": [
+      {
+        "x": 0,
+        "width": 0,
+        "height": 0
+      },
+      {
+        "x": 0,
+        "width": 0,
+        "height": 0
+      },
+      {
+        "x": 0,
+        "width": 0,
+        "height": 0
+      }
+    ],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": "band = REST",
+    "texts": [
+      "30s",
+      "30s",
+      "30s",
+      "1:40",
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "equal-rests",
+    "axis": "breaks-band",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 4,
+    "bands": [
+      {
+        "x": 85.66530241018637,
+        "width": 9.040472942246467,
+        "height": 120
+      },
+      {
+        "x": 171.67894497498838,
+        "width": 9.040472942246453,
+        "height": 120
+      },
+      {
+        "x": 264.1500682128239,
+        "width": 9.040472942246481,
+        "height": 120
+      }
+    ],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": "band = REST",
+    "texts": [
+      "30s",
+      "30s",
+      "30s",
+      "1:40",
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "equal-rests",
+    "axis": "breaks-gutter",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 4,
+    "bands": [
+      {
+        "x": 85.66530241018637,
+        "width": 9.040472942246467,
+        "height": 8
+      },
+      {
+        "x": 171.67894497498838,
+        "width": 9.040472942246453,
+        "height": 8
+      },
+      {
+        "x": 264.1500682128239,
+        "width": 9.040472942246481,
+        "height": 8
+      }
+    ],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": "band = REST",
+    "texts": [
+      "30s",
+      "30s",
+      "30s",
+      "1:40",
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "mid-stop",
+    "axis": "today",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "0:50",
+      "1:40"
+    ],
+    "legend": null,
+    "texts": [
+      "2:30",
+      "3:20",
+      "0:00",
+      "0:50",
+      "1:40"
+    ]
+  },
+  {
+    "key": "mid-stop",
+    "axis": "work",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "0:50",
+      "1:40"
+    ],
+    "legend": "X = WORK TIME · RESTS NOT SHOWN",
+    "texts": [
+      "2:30",
+      "3:20",
+      "0:00",
+      "0:50",
+      "1:40"
+    ]
+  },
+  {
+    "key": "mid-stop",
+    "axis": "wall",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "0:50",
+      "1:40"
+    ],
+    "legend": "band = REST",
+    "texts": [
+      "2:30",
+      "3:20",
+      "0:00",
+      "0:50",
+      "1:40"
+    ]
+  },
+  {
+    "key": "mid-stop",
+    "axis": "breaks",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "0:50",
+      "1:40"
+    ],
+    "legend": "band = REST",
+    "texts": [
+      "2:30",
+      "3:20",
+      "0:00",
+      "0:50",
+      "1:40"
+    ]
+  },
+  {
+    "key": "mid-stop",
+    "axis": "today-stopmark",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [
+      {
+        "x": 62.70164917541229,
+        "width": 128.80059970014992
+      }
+    ],
+    "ticks": [
+      "0:00",
+      "0:50",
+      "1:40"
+    ],
+    "legend": null,
+    "texts": [
+      "STOPPED 61s",
+      "2:30",
+      "3:20",
+      "0:00",
+      "0:50",
+      "1:40"
+    ]
+  },
+  {
+    "key": "mid-stop",
+    "axis": "today-stopmark-rules",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [
+      {
+        "x": 0,
+        "width": 0
+      }
+    ],
+    "ticks": [
+      "0:00",
+      "0:50",
+      "1:40"
+    ],
+    "legend": null,
+    "texts": [
+      "STOPPED 61s",
+      "2:30",
+      "3:20",
+      "0:00",
+      "0:50",
+      "1:40"
+    ]
+  },
+  {
+    "key": "mid-stop",
+    "axis": "today-stopmark-band",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [
+      {
+        "x": 62.70164917541229,
+        "width": 128.80059970014992
+      }
+    ],
+    "ticks": [
+      "0:00",
+      "0:50",
+      "1:40"
+    ],
+    "legend": null,
+    "texts": [
+      "STOPPED 61s",
+      "2:30",
+      "3:20",
+      "0:00",
+      "0:50",
+      "1:40"
+    ]
+  },
+  {
+    "key": "free-row",
+    "axis": "today",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": null,
+    "texts": [
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "free-row",
+    "axis": "work",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": "X = WORK TIME · RESTS NOT SHOWN",
+    "texts": [
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "free-row",
+    "axis": "wall",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": "band = REST",
+    "texts": [
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "free-row",
+    "axis": "breaks",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": "band = REST",
+    "texts": [
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "free-row",
+    "axis": "today-stopmark",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": null,
+    "texts": [
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "free-row",
+    "axis": "today-stopmark-rules",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": null,
+    "texts": [
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  },
+  {
+    "key": "free-row",
+    "axis": "today-stopmark-band",
+    "orientation": "portrait",
+    "viewBox": "0 0 320 174",
+    "polylines": 1,
+    "bands": [],
+    "stops": [],
+    "ticks": [
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ],
+    "legend": null,
+    "texts": [
+      "2:30",
+      "3:20",
+      "0:00",
+      "1:40",
+      "3:20",
+      "5:00"
+    ]
+  }
+]
