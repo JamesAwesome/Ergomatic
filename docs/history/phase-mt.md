@@ -1,0 +1,209 @@
+# Phase MT — the app refuses a machine it cannot record (CLOSED 2026-09-19)
+
+**Closed by James's word on 2026-09-19, together with Phases DE and PS, in one
+doc-class PR** — one antagonist exit pass and one PM close gate covered all
+three. Shipped in v0.43.0 (#366), v0.44.0 (#369, #370) and v0.45.0 (#377, #378,
+#380). Close record: `docs/closeouts/close-MT.md`.
+
+**PM close gate: PASS.** **Antagonist exit pass: EXIT HOLDS WITH STATED
+LIMITS.** Exit criteria 1-5, 8 and 9 are enforced by tests in the tree at head
+(spot-checked: `ergMachine.test.ts` per-value refusals, `Plan.test.tsx`'s
+`state.from` pins, `fake.test.ts`'s ordering assertion); criteria 7 and 10 were
+verified in tree at the close; criterion 6 — Gate 0 approved on both rendered
+screens — is a historical event, met at #366 and re-met by the later gates on
+#369, #370 and #378, which changed both screens.
+
+**Where its seven residuals went (#481):** one ticked as a ruled record, one
+struck with a measured receipt (`docs/history/register-evictions-2026-09-19.md`),
+and five lifted with dates — the published matrix to "Small, queued", the
+MultiErg static-value case to "Accepted, pinned", the ungated refusal guard to
+Tooling, the hardcoded `type: "rower"` to Wave E, and pre-2018 classification
+to the Icebox.
+
+The body below is the section as it stood at the close, verbatim.
+
+---
+
+## Phase MT — the app refuses a machine it cannot record
+
+**Status: all three PRs merged — PR 1 (#366, `a476cbc6`) 2026-09-08 shipped in
+v0.43.0; the two design gates (#369) and the landscape budget (#370) in
+v0.44.0. READY TO CLOSE as of 2026-09-19: no open row is left in this
+section.** `/close-phase` HAS run — `docs/closeouts/close-MT.md` was frozen at
+`dffd5a8c` on 2026-09-08 and its three BUILD PRs all merged (#377, #378,
+#380) — though this line said otherwise until 2026-09-19. Of the seven
+residuals, one was ticked as a ruled record, one was struck (its mechanism
+measured false), and five left with dates: the published matrix to "Small,
+queued", the MultiErg case to "Accepted, pinned", the ungated refusal guard
+to Tooling, the hardcoded `type: "rower"` to Wave E, and pre-2018
+classification to the Icebox. What remains is the close itself: re-freeze the
+worklist (the span has moved since 2026-09-08), one antagonist exit pass, the
+PM close gate, the archive and a ledger row. Corrected 2026-09-13 (James):
+this line read "in flight" for five days with zero open PRs. Shape approved by James 2026-09-08:
+**Option A (refuse the sitting) with a DENYLIST**. Spec:
+[docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md](docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md).
+
+The PM5 fits the RowErg, SkiErg and BikeErg, and `ergMachineType` — the field
+that says which — had no consumer from the day it was first decoded until
+this phase. A SkiErg
+therefore connects, gets programmed, and stores its piece as a row. Worse than
+the local wrongness: `server/concept2/mapping.ts` posts a hardcoded
+`type: "rower"`, so such a row is uploaded into the rower's Concept2 logbook as
+a rowing result, and its verification code is guaranteed rejected — Concept2's
+own documentation says the code is accepted only if "date, time, distance,
+workout_type and machine type match".
+
+TRIAD (it decides what a stored row may MEAN): full antagonist pass on the
+spec, PM final gate on the PR, and Gate 0 on the rendered refusal screen.
+
+- [x] **PR 1 — MERGED as #366 (`a476cbc6`), ticked 2026-09-09. The refusal, the link, and the matrix.** A domain denylist
+      stating the RULE rather than a subset of it: refuse every value the vendor
+      NAMES as not rowing — 64 (Dyno), 128/143 (ski), 192-194/207 (bike),
+      225/226 (MultiErg ski/bike) — and allow everything else, named or not,
+      including 224 (MultiErg on a rowing interval). The driver classifies on
+      the FIRST decode; the hook routes it through the existing `fail()` path,
+      which chains a `terminate()` ahead of the disconnect so the workout we
+      just sent is withdrawn from the erg. Safety is an invariant, not a race:
+      `maybeEmitFrame` cannot emit before a 0x0032 has decoded and no record
+      opens without a frame, so nothing can be stored or sent on either connect
+      door. Plus one link, `WHICH ERGS WORK ›`, into `connect-the-monitor`, and
+      a three-tier support matrix published there. No stored-shape change and no
+      migration. **M**
+
+### Owed by this phase, filed here rather than in a PR body
+
+- [x] **A refused sitting on the FREE-ROW door can still retire a record.**
+      `beginFreeRow()` emits `armed` on the CSAFE ack — the same ack that
+      releases the status subscriptions — so on that door `armed` precedes the
+      first classifiable frame structurally (449 ms, measured in
+      `docs/monitor/sessions/walk-2026-09-03-connect-sooner/ring-2-free-row.json`),
+      and the `armed` handler is where a staged handoff retire fires. James
+      ruled 2026-09-08: ACCEPT, because reaching a staged retire at all requires
+      the rower to have confirmed "connect anyway" over that record, and the
+      alternative (holding the free row's arm until classification) costs every
+      Just Row ~449 ms forever to protect against a machine nobody owns. The
+      handler's comment is corrected in the same PR; this row is the residual.
+      **S**
+      **TICKED 2026-09-19 — a ruled record, not work.** James ruled ACCEPT on
+      2026-09-08 and the corrected comment is in the tree
+      (`useMonitorSession.ts`, the `beginFreeRow` block); that also meets spec
+      exit criterion 7.
+- [x] **`permission-denied` already ships a five-button action stack, and it
+      leaves a 10px body in landscape.** CLOSED by the landscape budget fix
+      (Gate 0 approved 2026-09-08): the failure frames' action stack now pairs
+      its last FOUR buttons, taking this frame 10px -> 138px, `link-failed`
+      78px -> 206px and `unsupported-machine` 142px -> 206px, all measured on
+      the real frames at 844x390. The scope widened at the gate because the
+      capture showed `link-failed` — the failure a rower actually hits — was
+      cutting its headline too.
+      CORRECTION TO THIS ROW'S OWN CLAIM: it said the last-two pairing left
+      five buttons at "74px and the headline is on screen". The headline runs
+      to y94 on any frame whose title wraps, so 74px CUT it — the reason the
+      approved fix pairs four rather than two. **S**
+- [x] **Nothing can gate the five-button failure frame.** CLOSED by a SEAM
+      (James ruled BUILD, 2026-09-08), at the Phase MT close-out.
+      `canOpenAppSettings()` now also returns true when
+      `window.__appSettingsDoor__` holds the literal `app-settings door (dev
+      override)`, inside the same `DEV || VITE_ENABLE_FAKE_MONITOR` build-time
+      fold every other dev seam here uses; `e2e/helpers.ts`'s
+      `forceAppSettingsDoor` writes it and `e2e/design.spec.ts` drives the
+      real five-button React tree — the shape, `Open Settings` first, the
+      44px/axe/ink-4 sweep, and the landscape geometry at 844x390.
+      The override moves ONE boolean: `openAppSettings()` is untouched, so a
+      forced-open button on the web calls no plugin. A global `isNative()`
+      stub was ruled out with a receipt — `adapters/monitorTransport.ts` takes
+      the Capacitor BLE arm on `isNative()`, which would kill the fake every
+      connected walk runs on (RF13).
+      MEASURED on the real frame, which is also the check that the seam
+      renders the shipped screen rather than a reconstruction: window 138px,
+      content 259px, overflow 121px — the same 121 the DETAIL-panel row above
+      recorded for the five-button shape after #378. Reverting the pairing to
+      `nth-last-child(-n + 2)` now fails HERE ("the headline ends 20px below
+      the body's visible bottom", expected <= 74.5, received 94), where it
+      used to be catchable only one frame over; dropping the fifth button, or
+      the override itself, fails the count at 4.
+      `scripts/dist-grep.sh` gains the token as its tenth needle, proven both
+      directions (RF12): a plain `pnpm build` leaves `dist/client` clean, and
+      `VITE_ENABLE_FAKE_MONITOR=1 pnpm build` makes it exit 1 naming
+      `dist/client/assets/index-*.js`, where the literal survives minification
+      verbatim beside a `canOpenAppSettings` renamed to two characters. **S**
+- [x] **The permission screen says "your PM5" where it means "your monitor".**
+      CLOSED in the Phase MT close-out PR, together with the Bluetooth scan
+      sheet's own instance of the same rule (both were RF32, both copy-only,
+      so they landed as one change). `useMonitorSession.ts`'s
+      `BluetoothPermissionError` detail now reads "Ergomatic can't reach your
+      monitor without Bluetooth." The census the rule prescribes
+      (`grep -rn "PM5" app/src` over string literals) also caught the NFC
+      connecting card's "Keep the PM5 on and close by.", in both components
+      that render it, and that changed with them. **S**
+- [x] **The permission frame's DETAIL panel repeats its own remedy sentence.**
+      RULED (James, 2026-09-08) and CLOSED at the Phase MT close-out: the panel
+      renders `error.detail` only where the frame has not already printed it.
+      Scoped to the invariant rather than the frame — TWELVE of the twenty
+      reasons were duplicating, not one: `failedSerifLine` returns `detail` as
+      the HEADLINE for every non-machine-refusal reason, and `permission-denied`
+      prints it as its own body line. The reason slug and `raw` stay
+      (`mapRadioFailure` always attaches a `raw` on the permission arm, so
+      dropping the whole panel would delete the only diagnostic). Measured at
+      844x390: permission-denied's landscape overflow 102px -> 53px, the
+      five-button iOS shape 170px -> 121px, `link-failed` 13px -> 0. Every
+      frame's before/after is in `docs/design/mt-closeout-gate0/`. **S**
+- [x] **On the web build, the top of an overflowing interstitial body cannot be
+      scrolled to at all.** CLOSED by #366's landscape fix: the body is
+      `flex-start` plus auto margins on its first and last child, so overflow
+      now falls entirely BELOW the window. Was: `justify-content: center`
+      overflowed in BOTH directions; chromium clamps `scrollTop` at 0 while the
+      first child sat at -30 to -100px, so the headline was unreachable, while
+      WebKit permits negative `scrollTop` (measured range [-101, 102]) and the
+      iOS app could pull it into view. Now GATED, by the row below. **S**
+- [x] **"Row on the phone timer instead" is offered on the refusal screen.**
+      RULED OUT (James, 2026-09-08) and CLOSED at the Phase MT close-out: the
+      offer is withheld on `unsupported-machine` and kept on every other
+      failure, where a radio that will not come up is exactly when the phone's
+      own timer earns its place. Was: after a SkiErg refusal it routed the
+      rower to store the ski piece as a rowing log by hand. The refusal is now
+      the one failure stack with three buttons — `Try again` full width over a
+      `View connection log` / `Cancel` pair, held by a
+      `:first-child:nth-last-child(3)` rule and gated on real geometry in
+      `e2e/design.spec.ts`. It costs no landscape budget (the stack is 120px
+      either way) and gains 64px of portrait message window. **S**
+- [x] **Two design gates the refusal screen owes.** BUILT, in
+      `e2e/design.spec.ts`, each kept only because it went red on a stated
+      mutation. (a) A REFUSED interstitial case (`ergMachineType: 128`,
+      threaded through `injectConnectedFake` the way `screenshots.spec.ts`
+      threads it) puts `.connected-support-link` in the DOM while
+      `assertTapTargets` sweeps — the first time it ever has, since the
+      existing case drives a `link-failed` failure and the link renders only
+      for `unsupported-machine`. Dropping `min-height: var(--tap)` fails the
+      sweep at `Received: 15`. (b) At 844x390 the same frame asserts the
+      headline lies inside `.connected-interstitial-body`'s client box and
+      that nothing sits above the minimum reachable scroll position (on
+      chromium that position is always 0, so what the assertion reads is the
+      first child's top; the review pass deleted a `minScrollTop === 0`
+      companion that no CSS could fail); the FAILED case gets the second half
+      too, for the price of a resize.
+      Restoring `justify-content: center` fails it at -7.5px on the refusal
+      frame and -70.5px on the link-failed one. TWO CORRECTIONS TO THIS ROW'S
+      OWN PRESCRIPTION, both measured: the auto margins are not what saves the
+      frame (they resolve to zero exactly when the overflow is negative, so
+      flipping the one declaration is enough), and the design pass's -73..-37
+      figures are unreachable by a CSS-only mutation now, because #366 also
+      dropped the DETAIL panel from this frame. The containment half needs a
+      body window under 58px, which four buttons never produce — it goes red
+      only on the five-button stack with the pairing removed (window 10px,
+      headline 48px below the fold), so what it actually pins is the landscape
+      action-stack budget, not the centring. THAT SHAPE IS NO LONGER
+      HYPOTHETICAL: the Phase MT close-out's door override makes it reachable
+      from a browser, and `design.spec.ts`'s five-button case gates it
+      directly, so this frame's copy stays a dormant tripwire rather than the
+      only home of the claim. **S**
+- [x] **A refused machine is still remembered as `LAST USED`.** FIXED in the
+      Phase MT close-out PR (James ruled it in on 2026-09-08). The invariant
+      now gated: a machine the denylist refuses is never remembered as
+      LAST USED. It had to be a CLEAR rather than a narrower save — the
+      refusal rides a decoded 0x0032, so the pair (and therefore
+      `saveLastDevice`) necessarily precedes it — and the refused name comes
+      from a ref rather than `session.deviceName`, which `fail()` nulls in the
+      same update as the phase flip. `forgetLastDevice` removes the key only
+      when it still holds that exact name, so refusing one monitor cannot
+      un-remember a different, good one. **S**

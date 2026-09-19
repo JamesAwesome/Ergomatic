@@ -1,4 +1,8 @@
 > **Archived 2026-08-28** from `ROADMAP.md` (lines 1633-1675 of the
+
+> **This is the 6J-era SKETCH of Phase PS, archived 2026-08-28.** The phase that
+> was actually built — career stats on the You tab, closed 2026-09-19 — is
+> [phase-ps-career-stats.md](phase-ps-career-stats.md).
 > pre-rebalance file, main `39e9430`). **This section was still LIVE when it
 > was archived.** Deferred under "After the strangers", carrying its RC-5 metres hazard with it.
 >

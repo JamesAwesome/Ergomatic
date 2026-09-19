@@ -32,13 +32,31 @@ pr3-drop-compat      | DONE | PR 3 — drop compat                       | close
 releasing-0029-tag   | DONE | RELEASING.md said 0029 was untagged      | closed | #481; git tag --contains 13adce4b -> v0.46.0
 ```
 
-## Exit criteria (ROADMAP's **Exit** paragraph; spec §6)
+## Exit criteria — spec §6, all SIX (ROADMAP's Exit paragraph abridges them to four)
 
-1. The two phase-close greps — pasted below. MET.
-2. e2e and screenshots green — rests on CI at v0.39.0 and v0.46.0. INFERRED.
+1. The two phase-close greps — pasted below. MET on `pain`/`difficult`;
+   LITERALLY UNMET on "`effort` means one thing", accepted (see below).
+2. EFFORT renders on both filter sheets, `WorkoutRow`, `ClassificationCard`,
+   `LogRow` and the article; e2e and screenshots green — rests on CI at
+   v0.39.0 and v0.46.0. INFERRED.
 3. The by-hand stale-build check recorded in PR 2's body — #310's body carries
    "Stale-build check (spec §6.3), run by hand 2026-09-05" with its transcript. MET.
-4. Release note in rower words — `releaseNotes.ts`, v0.39.0. MET.
+4. `library.test.ts`'s within-type ordering over effort; `variety.test.ts` and
+   the archetype ratchet unchanged — tests in the tree, run on every push.
+   INFERRED from CI; not re-run here (admission-controlled).
+5. Records. `DEVIATIONS.md`'s three NAMED rows (34, 35, 37) reconciled; both
+   `SKILL.md`s correct (`wod-import` uses effort; `hardware-walk` names the
+   legacy form AS legacy). **Two cells the spec did not name were still
+   wrong and are fixed in the close PR:** row 36 described the filter sheet as
+   holding DIFFICULTY and PAIN groups and gave `PAIN 4–5` token examples; row
+   70 said the same in passing. The section becomes one ledger row — done.
+   **"This spec's body moves to `docs/history/`" is DELIBERATELY NOT DONE:**
+   159 files in `docs/superpowers/specs/`, none in `docs/history/`, and no
+   closed phase has ever moved one; moving it would dangle five citations, two
+   in tracked SQL (`app/drizzle/0024_pain_to_effort.sql`,
+   `0029_drop_difficulty_compat.sql`) and two in the PR 1 / PR 2 plans. It is
+   a spec criterion, so it is put to James in the close PR's hand-back.
+6. Release note in rower words — `releaseNotes.ts`, v0.39.0. MET.
 
 ### The greps, run at `708bfa8d`
 
@@ -69,8 +87,25 @@ Read against criterion 1: every `pain` hit is a release note, the `pain-scale`
 slug redirect (`Reader.tsx`, `articles.tsx`, `news.spec.ts`), the legacy bulk
 header kept on purpose (`domain/bulk.ts`), a bodily "pain" in the effort
 article, or a comment naming the rename. `effortCompat.ts` is deleted and
-`difficult` has zero hits in `server/`. **One honest miss on "`effort` means
-one thing":** `bestEffort` in `src/monitor/useMonitorSession.ts` is the English
-idiom for a fire-and-forget helper, not the 1–5 figure. Every other name in the
-family is the figure. Noted, not fixed — a rename under `app/src/` is outside a
-doc-class close, and the helper is unambiguous in context.
+`difficult` has zero hits in `server/`. **TWO honest misses on "`effort` means
+one thing"** (the first draft of this record said one, and named one file
+where there are two): `bestEffort`, the English idiom for a fire-and-forget
+helper, in `src/monitor/useMonitorSession.ts` AND in a comment in
+`src/monitor/transports/holdOpen.ts`; and `effortful`, in a comment in
+`src/session/Timer.tsx`. Every other name in the family is the 1–5 figure.
+Noted, not fixed — a rename under `app/src/` is outside a doc-class close, and
+both are unambiguous in context. **Not run:** criterion 1's other half,
+`grep -rln "effort" domain src --exclude='*.test.*'` with a per-file read of
+every hit; the family command above is what was run.
+
+## Gates, 2026-09-19
+
+PM close gate: **PASS WITH CONDITIONS** — enumerate all six criteria; fix the
+two unnamed `DEVIATIONS.md` cells. Both met in the close PR. Antagonist exit
+pass: **HOLDS WITH STATED LIMITS.** It STRENGTHENED the 0029 receipt: drizzle's
+`pg-core/dialect.js` runs every pending migration AND its journal row inside
+one `session.transaction`, so the three DROPs in 0029 are atomic with each
+other — one successful custom-workout insert proves all three landed, not only
+`workouts.difficulty`. It verified `0001_tan_thunderball.sql`'s
+`"difficulty" "difficulty" NOT NULL` has no default, that no later migration
+adds one, and that `server/stores/workouts.ts`'s `create()` omits the column.

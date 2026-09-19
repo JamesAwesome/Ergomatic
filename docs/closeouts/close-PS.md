@@ -47,12 +47,37 @@ deleted-test-point    | CARRY | no surface says a test point outlives its log   
    scripts in `docs/superpowers/research/2026-09-12-stats-rows/`. MET.
 4. Gate 0 approved before PR 1's first implementation commit. MET 2026-09-12.
 5. Totals at ≥ 1 row; charts at ≥ 2 points; empty states. MET per PR; test green rests on CI. INFERRED for the CI half.
-6. **The eyeball oracle. MET 2026-09-19.** LIFETIME 128,660 m here; Concept2's
+6. **The eyeball oracle. MET WITH STATED LIMITS, 2026-09-19.** LIFETIME 128,660 m here; Concept2's
    lifetime not read, inferred equal to its season (all 26 results fall in it).
    THIS SEASON 128,660 m / 9:27:00 / 28 sessions (26 machine) here against
    91,175 m / 7:33:09.1 / 26 results on `log-dev.concept2.com`. Gap explained:
    ~49,635 m never sent, less 12,150 m by which Concept2's tile exceeds its own
    listed scores. Exact agreements: this week 24,507 m on both sides row for
    row; both avg-per-day figures divide by 142 days (906 / 642).
+   **The limits, from both close gates:** (a) the row-for-row agreement is a
+   ROUND TRIP, not a measurement — `mapping.ts`'s `postedMeters` and
+   `domain/stats/rowContribution.ts` both read `row.machineWorkMeters`; (b)
+   Concept2's LIFETIME was never read, and on a sandbox account holding only
+   what this app posted it could not have disagreed; (c) 49,635 is
+   128,660 − 79,025 by construction — what supports "never sent" is by WEEK
+   (the app's week of 17 Aug, 24,838 m, against 935 m on Concept2), not by
+   row; (d) the 12,150 m rest reading is INFERRED and UNTESTED — the posted
+   `rest_distance` was never summed over those 26 rows; (e) TIME (1:53:51
+   apart) and COUNT (26 machine sessions against 26 results, a coincidence —
+   the Concept2 list holds development test posts) are unexplained; (f) it ran
+   against the SANDBOX, which is where production sends today, and owes ONE
+   re-run after Wave E's exit moves production to the live logbook. **The one
+   genuinely external agreement is the 142-day divisor.**
 7. The reference fixture agrees with the canvas — `56,752` in
    `app/e2e/stats.spec.ts`; the hero is one control named `Stats`. MET.
+
+## Gates, 2026-09-19
+
+PM close gate: **PASS WITH CONDITIONS** — record the residual as unattributed
+and name the 26/26 coincidence; say the check ran against the sandbox and owes
+a re-run. Both met. It accepted the inferred Concept2 LIFETIME rather than
+spend James's turn. Antagonist exit pass: **the phase HOLDS; criterion 6 is
+MET WITH STATED LIMITS, not MET.** It held that the sandbox does NOT void the
+criterion (`app/server/index.ts` defaults `C2_BASE_URL` to log-dev), re-ran
+criterion 2's grep at this head (exit 1), and could not establish whether
+Concept2's season tile sums `rest_distance`.

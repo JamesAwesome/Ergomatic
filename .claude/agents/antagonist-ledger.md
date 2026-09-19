@@ -11833,3 +11833,58 @@ moving the read inside the deleting transaction.
 inside `attempts.ts` and its line numbers; sites 1/6 safety via `grant()`
 ordering; the delete-confirmation double-token sequence; all three Apple
 revoke quotes as PRIMARY; "no stored shape"; after-commit revoke ordering.
+
+## 2026-09-19 — Phases MT / DE / PS, one phase-close EXIT pass
+
+Target: `docs/closeouts/close-{MT,DE,PS}.md` + their spans, ROADMAP's three
+phase sections, and the three specs' exit criteria. Branch
+`worktree-close-mt-de-ps`, head `d08b2a78`. Read-only; no suites run.
+
+**Verdicts.** MT HOLDS WITH STATED LIMITS. DE HOLDS WITH STATED LIMITS. PS
+holds, but its criterion 6 is MET-WITH-STATED-LIMITS rather than MET.
+
+**Broken.**
+1. PS criterion 6's per-row agreement is a MIRROR. `mapping.ts`'s
+   `postedMeters` and `rowContribution.ts`'s machine tier both return
+   `row.machineWorkMeters`. The week's 24,507 m row-for-row match proves a
+   send/display seam and a Concept2 round trip, never that the metres are
+   right. -> technique 98.
+2. Criterion 6 asks for "both pairs of numbers"; Concept2's LIFETIME was never
+   read. On a sandbox account it could not have disagreed. -> 99.
+3. "~49,635 m never sent" = 128,660 - 79,025 exactly. -> 100.
+4. The 12,150 m rest inference is untested and sits against CLAUDE.md RF11's
+   "Concept2's logbook stores work only". The app DOES post `rest_distance`,
+   so the inference is coherent — but the sum over the 26 posted rows was
+   never taken.
+5. DE's "one honest miss" on criterion 1 is TWO: `bestEffort`
+   (`useMonitorSession.ts` AND `transports/holdOpen.ts` — the worklist named
+   one file) and `effortful` (`Timer.tsx`).
+6. `close-DE.md` walked 4 of spec §6's 6 criteria. -> 102.
+7. `DEVIATIONS.md` row 36 still described DIFFICULTY and PAIN as live filter
+   groups in its current-state column (RF9 / RF34).
+8. MT's `type: "rower"` carry into Wave E had a trigger and no date; the
+   pre-2018 carry had a date but no "Lifted out of Phase MT" stamp.
+9. If the DE spec moves per §6.5, five citations dangle, two in tracked SQL.
+
+**Strengthened rather than broken.** DE's 0029 receipt covered one of three
+drops; `drizzle-orm/pg-core/dialect.js` wraps all pending migrations and the
+journal row in ONE transaction, so the custom-workout evidence proves all
+three. -> 101.
+
+**Attacked and HELD (vetted ground for the close).** log-dev is the right
+page (`server/index.ts` defaults `C2_BASE_URL` to it); the 142-day / 906 / 642
+/ 24,507 arithmetic; `workouts.difficulty` NOT NULL with no default across all
+migrations plus `stores/workouts.ts`'s `create()` omitting it; MT criteria
+3/8/9 present in tree as ordering and per-value assertions; PS criterion 2's
+grep exit 1 at this head; MT's STRIKE receipt as a measurement with both
+artifacts present; no open BUILD/DECIDE row anywhere.
+
+**Controller's note when landing this entry.** Item 8's first half was
+answered rather than fixed with a new date: a row INSIDE a wave is stamped on
+the wave's status line (James, 2026-09-10), so the Wave E carry now says it
+dies with Wave E's 2026-10-17 stamp. All other items were applied in the
+close PR; item 9 went to James in the hand-back with "do not move"
+recommended.
+
+**Could not establish.** Whether Concept2's season tile sums `rest_distance`
+— needs the per-row rest sum over the 26 posted rows.

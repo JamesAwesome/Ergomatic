@@ -167,6 +167,22 @@ home with a date, or STRUCK with a measured receipt. **Satisfied.**
 
 ### Exit criteria (spec `docs/superpowers/specs/2026-09-08-unsupported-erg-machine-design.md`)
 
-PROVEN in tree on 2026-09-19: criteria 7 and 10. INFERRED, and said so rather
-than re-derived: criteria 1-6, 8 and 9 rest on #366's merged PM final-PR gate
-and on CI at the tags that carry them.
+- **Enforced by tests in the tree at head (1-5, 8, 9).** "Inferred from CI at
+  the tags" understated them; both close gates said so. Spot-checked by the
+  antagonist exit pass: criterion 3 is an ORDERING assertion
+  (`src/monitor/transports/fake.test.ts`, `toStrictEqual(["0x0031-terminate",
+  "0x0037","0x0038"])`), criterion 8 is per-value (`ergMachine.test.ts`: 64
+  refused, 224 proceeds, 225 refused), criterion 9 pins `state.from`
+  (`src/plan/Plan.test.tsx`).
+- **Verified in tree at the close (7, 10).**
+- **Historical, cannot be re-derived (6)** — Gate 0 approved on both rendered
+  screens. Met at #366; #369, #370 and #378 each changed those screens and
+  each carried its own gate, so criterion 6 does not rest on #366 alone.
+
+## Gates, 2026-09-19
+
+PM close gate: **PASS**, no conditions. Antagonist exit pass: **EXIT HOLDS WITH
+STATED LIMITS.** Its two must-fix items were applied in the close PR: the
+`type: "rower"` carry in Wave E now says it dies with the wave's status-line
+stamp (2026-10-17), and the pre-2018 carry in the Icebox now says it was
+lifted out of Phase MT. STRIKE receipt judged a measurement, RF30 satisfied.
