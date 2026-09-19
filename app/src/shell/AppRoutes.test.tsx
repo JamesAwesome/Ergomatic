@@ -526,6 +526,27 @@ describe("AppRoutes", () => {
     expect(screen.getByRole("navigation", { name: "Main" })).toBeVisible();
   });
 
+  // AN UNANSWERED OPTIONS READ IS NOT A REFUSAL. A direct arrival — a
+  // bookmark, a deep link, or an OAuth return, which lands here now — hits
+  // this route before the controller's own read resolves. Sharing the
+  // door's predicate bounced every one of them to You: measured in
+  // `appleAuth.spec.ts`'s refusal leg, which found no `Remove Apple` at all
+  // because the redirect had already fired.
+  it("keeps /you/account mounted while the options read is still in flight", async () => {
+    const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
+    const auth = idleAuthFlow();
+    auth.options = { state: "loading" };
+    render(
+      <MemoryRouter initialEntries={["/you/account"]}>
+        <AppRoutes user={user} onSignedOut={() => {}} authFlow={auth} />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Account", level: 1 }),
+    ).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "You" })).toBeNull();
+  });
+
   it("redirects /you/account to You when the host's front door is off", async () => {
     const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
     const auth = idleAuthFlow();

@@ -104,7 +104,8 @@ export default function You({
           `margin-top: auto` on this wrapper (`.you-doors`, index.css) —
           invariant R7; rows each carrying their own auto margin would
           be a flex free-space split, not a stack. ORDER: ACCOUNT,
-          BASELINES, CONCEPT2, SETTINGS, DIAGNOSTICS — ruling 7 fixed CONCEPT2 above
+          BASELINES, CONCEPT2, SETTINGS, DIAGNOSTICS — ruling 7 fixed
+          CONCEPT2 above
           DIAGNOSTICS and keeps DIAGNOSTICS You's last child, Phase JC's
           Gate 0 ruling 3 (James, 2026-09-08: "put settings under concept
           2 but above diagnostics") put SETTINGS between them, and
@@ -127,12 +128,16 @@ export default function You({
           ruling 7's CONCEPT2-above-DIAGNOSTICS and DIAGNOSTICS-last are
           untouched by adding above BASELINES.
 
-          IT IS GATED ON THE SAME PREDICATE THE SCREEN IS
-          (`you/accountDoor.ts`, invariant D1). The block it leads to draws
+          ITS PREDICATE LIVES BESIDE THE SCREEN'S, in
+          `you/accountDoor.ts` (invariant D1). The block it leads to draws
           nothing at all on a host whose front door is off, so a door here
           would open onto an empty screen; before the split there was one
-          decision and it could not disagree with itself. Do not re-derive
-          the condition in this file.
+          decision and it could not disagree with itself. The two are not
+          IDENTICAL, on purpose: this row hides while the options read is
+          still in flight, because an unknown answer is not a yes, while
+          the ROUTE waits on that same state rather than refusing — see
+          `accountDoor.ts`, which carries the measurement. Do not
+          re-derive either condition in this file.
 
           BASELINES (Gate 0, 2026-09-05 — James: "move baselines into a
           subpage of You, I'd still like them to be visible when they are

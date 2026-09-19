@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AuthFlowController } from "../adapters/authFlow";
-import { accountDoorAvailable } from "./accountDoor";
+import { accountDoorAvailable, accountScreenController } from "./accountDoor";
 
 function controller(
   options: AuthFlowController["options"],
@@ -62,5 +62,48 @@ describe("accountDoorAvailable", () => {
         }),
       ),
     ).toBe(true);
+  });
+});
+
+describe("accountScreenController", () => {
+  const ready = {
+    state: "ready",
+    frontDoorEnabled: true,
+    legacyGoogle: false,
+    apple: true,
+    google: true,
+  } as const;
+
+  it("refuses when there is no controller to serve the screen", () => {
+    expect(accountScreenController(undefined)).toBeUndefined();
+  });
+
+  it("refuses on a settled no", () => {
+    expect(
+      accountScreenController(
+        controller({
+          state: "ready",
+          frontDoorEnabled: false,
+          legacyGoogle: true,
+          apple: false,
+          google: true,
+        }),
+      ),
+    ).toBeUndefined();
+  });
+
+  // THE ONE STATE THE TWO PREDICATES DISAGREE ON, and the disagreement is
+  // the point: the door hides on an unanswered read, the route waits on it.
+  // Refusing here bounces every direct arrival — a bookmark, a deep link,
+  // and every OAuth return — off the screen before its own read lands.
+  it("does not refuse while the options read is still in flight, where the door is merely not drawn yet", () => {
+    const loading = controller({ state: "loading" });
+    expect(accountScreenController(loading)).toBe(loading);
+    expect(accountDoorAvailable(loading)).toBe(false);
+  });
+
+  it("hands the screen the very controller it was given once the front door is ready", () => {
+    const live = controller(ready);
+    expect(accountScreenController(live)).toBe(live);
   });
 });

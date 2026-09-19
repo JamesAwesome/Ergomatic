@@ -24,9 +24,11 @@ import SignInMethods from "./SignInMethods";
  * would have left the notice on a screen the rower had left.
  *
  * THIS FILE ADDS NO BEHAVIOUR. It is the house subpage frame — back link,
- * title — around a component that moved here unchanged. Its route is
- * guarded by `accountDoorAvailable`, the same predicate that decides whether
- * You draws the door at all (`accountDoor.ts`, invariant D1).
+ * title — around a component that moved here unchanged. Its route is guarded
+ * by `accountScreenController`, which lives beside the predicate You draws
+ * the door from (`accountDoor.ts`, invariant D1) and differs from it in exactly
+ * one state: an options read still in flight hides the door but does NOT
+ * refuse this route.
  *
  * `← BACK`, not the pack's `← YOU`: every sibling subpage (baselines,
  * concept2, settings, diagnostics, stats) uses the house default, and

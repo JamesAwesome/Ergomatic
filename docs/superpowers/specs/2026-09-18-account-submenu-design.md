@@ -112,19 +112,32 @@ Today the entire block — list and delete button — renders only when
 shows nothing. **That reachability must not change**, so the same predicate
 decides the row and the route:
 
-- **New module `src/you/accountDoor.ts`** exporting
-  `accountDoorAvailable(auth: AuthFlowController): boolean` — one source, so
-  the door and the screen cannot disagree. (Its own module rather than an
-  export from `SignInMethods.tsx`, which is a component file under
+- **New module `src/you/accountDoor.ts`** — one place, so the door and the
+  screen cannot drift apart. (Its own module rather than an export from
+  `SignInMethods.tsx`, which is a component file under
   `react-refresh/only-export-components`.)
-- **You** renders the ACCOUNT row only when it is true.
-- **`/you/account`** renders `Navigate to="/you" replace` when it is false —
-  the same idiom `/you/sign-in-methods` already uses for a state it does not
-  own. This covers a deep link and an options flip mid-session.
+- **You** renders the ACCOUNT row when `accountDoorAvailable(auth)` is true.
+- **`/you/account`** asks `accountScreenController(auth)` which controller
+  may serve it and renders `Navigate to="/you" replace` when the answer is
+  `undefined` — a controller rather than a boolean, so the route has one
+  decision and no narrowing guard of its own — the same idiom `/you/sign-in-methods`
+  already uses for a state it does not own. This covers a deep link and an
+  options flip mid-session.
+
+**They are two predicates, and the asymmetry was measured, not guessed.**
+`options` has THREE states — loading, ready-with-front-door, ready-without —
+and "not yet known" is not "no". The door hides on unknown, which costs a
+rower nothing: the row appears in the same frame the rest of You settles.
+The route must WAIT on unknown, because a direct arrival — a bookmark, a deep
+link, or an OAuth return, which §7 now sends here — hits the route before the
+controller's read resolves. **With the route sharing the door's predicate,
+`appleAuth.spec.ts`'s removal-refusal leg found no `Remove Apple` at all:**
+the redirect had already fired. Caught by e2e, not by any client test.
 
 **Invariant D1:** `Delete account` is reachable exactly when it was reachable
-before this change. A door that appears while the screen would be empty, or a
-screen reachable while the door is hidden, are both defects.
+before this change. A door that appears while the screen would be empty, a
+screen reachable while the door is permanently hidden, or a refusal fired on
+an answer that has not arrived yet, are all defects.
 
 ### 5. The disclosure sentence
 
@@ -148,6 +161,27 @@ Inside the quarantine box, below the button
   the PR (RF6). The pack reports every non-decorative pairing on this box
   clearing its floor; this spec does not inherit that claim without the
   measurement.
+
+### 5b. Copy that named a control by its old place
+
+**Moving a control falsifies every sentence that tells a rower where it is.**
+Three were found by grepping the proposition rather than the string:
+
+- **The `account_conflict` four-step recovery** (`SignInMethods.tsx`). It used
+  to render ON You, beside `Sign out` and above the list holding
+  `Delete account` and `Add <provider>` — so "Tap Sign out." meant the button
+  in view. Read on `/you/account`, that screen has NONE of the three. Every
+  step now names its screen: step 1 `On "You", tap Sign out.`, steps 3 and 4
+  `On "You", open ACCOUNT, then tap …`.
+- **The sign-in screen's conflict line** (`SignIn.tsx`): "delete it from You"
+  becomes "delete it from You under ACCOUNT".
+- **Left alone: the v0.48.0 release note** saying deletion "is on You, under
+  ACCOUNT". It is dated history and still reads true of the door.
+
+These are wording changes on rendering surfaces, so they carry the
+before/after presentation rather than a capture (James, 2026-09-16). They are
+CORRECTIONS forced by the move, not new copy: the alternative is shipping a
+recovery that sends a stuck rower to a screen without the control.
 
 ### 6. CSS
 
@@ -200,9 +234,12 @@ real write and re-read, on the surface that holds it.
   `frontDoorEnabled` is false and when options are not ready (D1).
 - `you/AccountScreen.test.tsx` — renders the list and the delete box; back
   link targets `/you`.
-- `you/accountDoor.test.ts` — the predicate over every `options` state.
+- `you/accountDoor.test.ts` — both predicates over every `options` state,
+  including the one they disagree on, and that the resolver hands back the
+  very controller it was given rather than a copy.
 - `shell/AppRoutes.test.tsx` — `/you/account` renders the screen; redirects to
-  `/you` when the predicate is false (D1's other half).
+  `/you` on a settled refusal and when there is no controller at all; stays
+  MOUNTED while the options read is in flight (D1's other half).
 - `shell/backNavigationChain.test.tsx` — a You -> ACCOUNT -> BACK round trip
   through the real routed screens, starting upstream of the row that writes
   `state.from` (RF24). Its limit, stated: `BackLink`'s fallback is `/you`
@@ -228,6 +265,19 @@ design spec's landscape geometry assertions are the gate on §6.**
 **Captures:** scoped `pnpm screenshots -g "<affected test names>"` — this is a
 layout/structure change, so the PR carries the result (You without the block,
 the subpage in both orientations).
+
+## What this costs the rower, stated
+
+`Delete account` goes from **0 taps and no scrolling** to **1 tap and no
+scrolling**. The after-figure is measured in the Gate 0 pack —
+`renders/layout-audit.json`, `04-option-a-you`, `contentBelowFoldPx: 0` — so
+the ACCOUNT row is reachable without scrolling on a 390x844 frame. **That
+number came off a mock: the PR confirms it against the shipped screen's own
+capture.**
+
+This matters because the row driving the work says deletion "is the one flow
+App Review requires be easy to find and complete". Quieter is the design win;
+further away is the product cost, and they arrive in the same change.
 
 ## Gates
 

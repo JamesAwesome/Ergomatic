@@ -34,7 +34,7 @@ import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
 import AccountScreen from "../you/AccountScreen";
-import { accountDoorAvailable } from "../you/accountDoor";
+import { accountScreenController } from "../you/accountDoor";
 import BaselinesScreen from "../you/BaselinesScreen";
 import DeleteAccount from "../you/DeleteAccount";
 import Diagnostics from "../you/Diagnostics";
@@ -163,6 +163,10 @@ export default function AppRoutes({
 } = {}) {
   const location = useLocation();
   const keyboardOpen = useKeyboardOpen();
+  // Which controller, if any, may serve `/you/account` — resolved once,
+  // here, so the route below has a value to hand the screen rather than a
+  // boolean plus a narrowing guard of its own (`you/accountDoor.ts`).
+  const accountAuth = accountScreenController(authFlow);
   return (
     <div className="app-shell">
       {/* Phase SB: the blurred band behind the status bar that scrolled
@@ -321,14 +325,20 @@ export default function AppRoutes({
                 guarded HERE instead, so the refusal lands on You rather than
                 on the signed-in wildcard's Today: a rower who deep-links or
                 bookmarks this path on a host whose front door is off is one
-                tap from where the door would have been. The predicate is the
-                one You draws the row from (`you/accountDoor.ts`), not a
-                second reading of the same options — invariant D1. */}
+                tap from where the door would have been. The predicate lives
+                beside the door's in `you/accountDoor.ts`, not as a second
+                reading of the same options — invariant D1 — and it refuses
+                only on a SETTLED no, and answers with a CONTROLLER rather
+                than a boolean so this route has one decision and no second
+                guard of its own. An `options` read still in flight is
+                not a refusal: redirecting on it bounces every direct
+                arrival, including every OAuth return, which now lands
+                here (§7). */}
             <Route
               path="/you/account"
               element={
-                authFlow && accountDoorAvailable(authFlow) ? (
-                  <AccountScreen auth={authFlow} />
+                accountAuth ? (
+                  <AccountScreen auth={accountAuth} />
                 ) : (
                   <Navigate to="/you" replace />
                 )

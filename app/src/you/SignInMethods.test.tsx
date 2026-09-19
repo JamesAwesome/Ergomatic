@@ -336,10 +336,15 @@ describe("SignInMethods", () => {
         .getAllByRole("listitem")
         .map((step) => step.textContent),
     ).toStrictEqual([
-      "Tap Sign out.",
+      // STEP 1 NAMES ITS SCREEN TOO. These steps are read on
+      // `/you/account`, which has no `Sign out` button — it is on You.
+      "On \u201cYou\u201d, tap Sign out.",
       "Sign in to that account through Apple.",
-      "On \u201cYou\u201d, tap Delete account.",
-      "Sign in to this account again. On \u201cYou\u201d, tap Add Apple.",
+      // STEPS 3 AND 4 NAME THE DOOR because the controls moved behind it
+      // (Gate 0 2026-09-15, Option A). A recovery step naming a control the
+      // rower cannot find on the screen it names is no recovery at all.
+      "On \u201cYou\u201d, open ACCOUNT, then tap Delete account.",
+      "Sign in to this account again. On \u201cYou\u201d, open ACCOUNT, then tap Add Apple.",
     ]);
   });
 

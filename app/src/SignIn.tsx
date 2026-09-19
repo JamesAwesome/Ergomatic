@@ -45,13 +45,16 @@ function Welcome({ auth }: { auth: AuthFlowController }) {
           means the provider subject already belongs to a different
           Ergomatic account (unique-constraint conflict, attempts.ts:137).
           The recovery deletion makes possible: sign in to THAT account,
-          delete it, then add this sign-in from You. */}
+          delete it, then add this sign-in from You. The deletion is behind
+          You's ACCOUNT door now (Gate 0 2026-09-15), so this names it —
+          a recovery that sends the rower to a screen without the control
+          is not a recovery. */}
       {auth.view.kind === "error" && auth.view.purpose === "signin" && (
         <p className="notice auth-notice-error" role="alert">
           {auth.view.code === "access_denied"
             ? `${auth.view.email ?? "This account"} isn't invited to this Ergomatic. Ask the owner to add you.`
             : auth.view.code === "account_conflict"
-              ? `That ${auth.view.targetProvider ? `${providerName(auth.view.targetProvider)} ` : ""}sign-in already belongs to another Ergomatic account. To use it here, sign in to that account, delete it from You, then add this sign-in.`
+              ? `That ${auth.view.targetProvider ? `${providerName(auth.view.targetProvider)} ` : ""}sign-in already belongs to another Ergomatic account. To use it here, sign in to that account, delete it from You under ACCOUNT, then add this sign-in.`
               : "That sign-in didn’t work. Give it another try."}
         </p>
       )}
@@ -112,7 +115,7 @@ function ConfirmAccount({
         <div className="auth-explain">
           <p>
             This makes a new Ergomatic account. If you already row here, sign in
-            the way you usually do and add {provider} from You.
+            the way you usually do and add {provider} from You, under ACCOUNT.
           </p>
         </div>
         <div className="auth-actions">

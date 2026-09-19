@@ -99,9 +99,15 @@ function methodsNotice(auth: AuthFlowController): React.ReactNode {
   // THE RECOVERY IS A SEQUENCE, SO IT RENDERS AS ONE (Gate 0, James,
   // 2026-09-14). The old single sentence was true and left the rower with
   // nowhere to go; written as prose the four steps ran too long to act on.
-  // Every step names a label that is on a screen the rower can reach:
-  // `Sign out` and `Delete account` on You, `Add <provider>` in the list
-  // below. The screen name is quoted because unquoted "You" reads as a
+  // EVERY STEP NAMES ITS SCREEN, and that is the account door's doing.
+  // This notice used to render ON You, beside `Sign out` and above the list
+  // holding `Delete account` and `Add <provider>`, so step 1 could say
+  // "Tap Sign out" and mean the button in view. Since the block moved to
+  // `/you/account` (Gate 0 2026-09-15, Option A) the rower reads these
+  // steps on a screen that has NONE of the three: `Sign out` is back on
+  // You, and the other two are behind You's ACCOUNT row. A step naming a
+  // control the rower cannot find is the same defect as no recovery at
+  // all. The screen name is quoted because unquoted "You" reads as a
   // pronoun mid-instruction.
   //
   // WHY DELETION AND NOT REMOVE, which is lighter and now exists (#436):
@@ -127,12 +133,12 @@ function methodsNotice(auth: AuthFlowController): React.ReactNode {
           {name(view.targetProvider)} sign-in here:
         </p>
         <ol className="auth-notice-steps">
-          <li>Tap Sign out.</li>
+          <li>On &ldquo;You&rdquo;, tap Sign out.</li>
           <li>Sign in to that account through {name(view.targetProvider)}.</li>
-          <li>On &ldquo;You&rdquo;, tap Delete account.</li>
+          <li>On &ldquo;You&rdquo;, open ACCOUNT, then tap Delete account.</li>
           <li>
-            Sign in to this account again. On &ldquo;You&rdquo;, tap Add{" "}
-            {name(view.targetProvider)}.
+            Sign in to this account again. On &ldquo;You&rdquo;, open ACCOUNT,
+            then tap Add {name(view.targetProvider)}.
           </li>
         </ol>
       </div>
