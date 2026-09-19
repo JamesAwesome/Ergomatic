@@ -397,6 +397,129 @@ describe("front-door transactions against Postgres", () => {
       { clientId: "native.app", refreshToken: "secret" },
     ]);
   });
+  // --- Attempt token revocation, census row 2: the TTL sweep --------------
+  it("the TTL sweep revokes the Apple token on the rows it expires", async () => {
+    const recorder = recordingRevoke();
+    const scoped = createAttempts(
+      pool,
+      createAccessPolicy("public", ""),
+      recorder.revoke,
+    );
+    // A fresh store is `healthy: false` until its first sweep, and
+    // `begin()` refuses every signin while it is.
+    await scoped.sweep();
+    const begun = await scoped.begin({
+      surface: "native",
+      purpose: "signin",
+      targetProvider: "apple",
+    });
+    await scoped.accept(await scoped.claim(begun.attempt), apple);
+    expect(
+      (await pool.query("SELECT apple_refresh_token FROM auth_attempts")).rows,
+    ).toStrictEqual([{ apple_refresh_token: "secret" }]);
+    // Expire it the way time would, rather than deleting it ourselves: the
+    // sweep's own predicate is what must find the row.
+    // BOTH columns: `auth_attempts_expiry_check` requires
+    // expires_at > created_at, so moving expiry alone violates it.
+    await pool.query(
+      "UPDATE auth_attempts SET created_at=now()-interval '2s', expires_at=now()-interval '1s'",
+    );
+
+    await scoped.sweep();
+
+    expect((await pool.query("SELECT 1 FROM auth_attempts")).rowCount).toBe(0);
+    expect(recorder.seen).toStrictEqual([
+      { clientId: "native.app", refreshToken: "secret" },
+    ]);
+  });
+  // A REVOKE FAILURE MUST NOT FLIP `healthy`. `sweep()` owns the front door's
+  // availability flag -- `begin()` refuses every signin while it is false --
+  // so letting Apple's reachability decide it would take sign-in down for up
+  // to 60s because a THIRD PARTY was slow. Only a database failure may.
+  it("a throwing revoker leaves the sweep healthy and sign-in open", async () => {
+    const scoped = createAttempts(
+      pool,
+      createAccessPolicy("public", ""),
+      () => {
+        throw new Error("apple is down");
+      },
+    );
+    // A fresh store is `healthy: false` until its first sweep, and
+    // `begin()` refuses every signin while it is.
+    await scoped.sweep();
+    const begun = await scoped.begin({
+      surface: "native",
+      purpose: "signin",
+      targetProvider: "apple",
+    });
+    await scoped.accept(await scoped.claim(begun.attempt), apple);
+    // BOTH columns: `auth_attempts_expiry_check` requires
+    // expires_at > created_at, so moving expiry alone violates it.
+    await pool.query(
+      "UPDATE auth_attempts SET created_at=now()-interval '2s', expires_at=now()-interval '1s'",
+    );
+
+    await expect(scoped.sweep()).resolves.toBeUndefined();
+
+    expect(scoped.healthy()).toBe(true);
+    // And the door is still open, which is the consequence that matters.
+    await expect(
+      scoped.begin({
+        surface: "native",
+        purpose: "signin",
+        targetProvider: "apple",
+      }),
+    ).resolves.toBeDefined();
+  });
+  // --- Census rows 7 and 8: discard() and cancel() ------------------------
+  it("cancelling a signin revokes the Apple token it was holding", async () => {
+    const recorder = recordingRevoke();
+    const scoped = createAttempts(
+      pool,
+      createAccessPolicy("public", ""),
+      recorder.revoke,
+    );
+    await scoped.sweep();
+    const begun = await scoped.begin({
+      surface: "native",
+      purpose: "signin",
+      targetProvider: "apple",
+    });
+    await scoped.accept(await scoped.claim(begun.attempt), apple);
+
+    await scoped.cancel(begun.attempt.id, begun.bindingSecret, "native");
+
+    expect((await pool.query("SELECT 1 FROM auth_attempts")).rowCount).toBe(0);
+    expect(recorder.seen).toStrictEqual([
+      { clientId: "native.app", refreshToken: "secret" },
+    ]);
+  });
+  it("discarding a signin revokes its token AND still reports the row count", async () => {
+    const recorder = recordingRevoke();
+    const scoped = createAttempts(
+      pool,
+      createAccessPolicy("public", ""),
+      recorder.revoke,
+    );
+    await scoped.sweep();
+    const begun = await scoped.begin({
+      surface: "native",
+      purpose: "signin",
+      targetProvider: "apple",
+    });
+    const held = (await scoped.accept(await scoped.claim(begun.attempt), apple))
+      .attempt!;
+
+    // The BOOLEAN is load-bearing at three call sites in frontDoorRoutes.ts,
+    // so it is asserted beside the revoke rather than assumed to survive.
+    await expect(scoped.discard(held)).resolves.toBe(true);
+
+    expect(recorder.seen).toStrictEqual([
+      { clientId: "native.app", refreshToken: "secret" },
+    ]);
+    // And a second discard of the same snapshot matches nothing and says so.
+    await expect(scoped.discard(held)).resolves.toBe(false);
+  });
   it("claim and same-session replacement wait without a lock-order cycle", async () => {
     const b = await link();
     let release!: () => void;
@@ -1253,6 +1376,50 @@ describe("front-door transactions against Postgres", () => {
       seen.map((g) => g.refreshToken),
       "the revoke must carry the token the cascade destroyed",
     ).toStrictEqual(["rt-NEW"]);
+  });
+  // --- Census row 9's other half: a SIBLING attempt on another session ----
+  //
+  // The hand-push at the deleting attempt covers the row the rower is
+  // deleting THROUGH. A rower with phone and web holds a second session, and
+  // an attempt bound to THAT session cascades away through `sessions` on
+  // `DELETE FROM users` with nothing revoked. This is the case the ROADMAP
+  // row named and the shipped code missed.
+  it("deleting the account revokes a sibling attempt's token on another session", async () => {
+    const recorder = recordingRevoke();
+    const deleting = makeAttempts(recorder.revoke);
+    const user = await seedUser({ googleSub: null, appleSub: "a-sib" });
+    await pool.query(
+      "INSERT INTO apple_grants(user_id,client_id,refresh_token) VALUES($1,'c','rt-grant')",
+      [user.id],
+    );
+    const { ready, session } = await deleteReadyAttempt(
+      { id: user.id, provider: "apple", sub: "a-sib" },
+      undefined,
+      undefined,
+      deleting,
+    );
+    // A SECOND session of the same rower, carrying its own attempt with its
+    // own Apple credential. Built through the store rather than inserted, so
+    // the row is shaped the way production shapes it.
+    const other = await sessions.createSession(user.id);
+    const resolvedOther = (await sessions.resolveSession(other.token))!;
+    await pool.query(
+      `INSERT INTO auth_attempts(id,binding_hash,surface,purpose,target_provider,existing_provider,stage,version,state,nonce,original_session_id,created_at,expires_at,reauthenticated_at,verified_subject,verified_email,verified_name,apple_client_id,apple_refresh_token)
+       VALUES(gen_random_uuid(),'bh','web','delete','apple','apple','delete_ready',1,'st-sib','no-sib',$1,now(),now()+interval '5m',now(),NULL,NULL,NULL,'c','rt-SIBLING')`,
+      [resolvedOther.sessionId],
+    );
+
+    const result = await deleting.deleteAccount(ready, session.id);
+
+    expect(result).toStrictEqual({ outcome: "deleted", appleRevoked: true });
+    expect((await pool.query("SELECT 1 FROM auth_attempts")).rowCount).toBe(0);
+    // The sibling's credential is the one this test exists for. The account's
+    // own grant and the deleting attempt's token are asserted alongside it so
+    // a regression that drops any of the three is visible.
+    expect(recorder.seen.map((g) => g.refreshToken).sort()).toStrictEqual([
+      "rt-SIBLING",
+      "rt-grant",
+    ]);
   });
   it("deletes the account even when Apple cannot be reached, and says so", async () => {
     const deleting = makeAttempts(recordingRevoke(false).revoke);

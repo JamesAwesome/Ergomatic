@@ -13,6 +13,7 @@ import type { VerifiedIdentity } from "./providers.js";
 import { hashToken, SESSION_TTL_MS } from "./sessions.js";
 import type { AccessPolicy } from "./accessPolicy.js";
 import type { AppleGrant, RevokeApple } from "./appleRevoke.js";
+import { dropAttempts } from "./attemptCredentials.js";
 
 export type Surface = "native" | "web";
 export type Stage =
@@ -323,19 +324,53 @@ export function createAttempts(
     requireAccess(user.email);
     await grant(tx, user.id, a);
     const { signedIn } = await mintSession(tx, user);
-    await tx.query("DELETE FROM auth_attempts WHERE id=$1", [a.id]);
+    // Through the helper like every other site, even though `grant()` above
+    // has already promoted this token to `apple_grants` so there is nothing
+    // to revoke. The rule is "all of them", not "the ones we judged risky" —
+    // a site exempted by reasoning is a site the next change can break
+    // without anything noticing.
+    await dropAttempts(tx, "id=$1", [a.id]);
     return { signedIn };
+  }
+  /**
+   *  The tail every revoking path shares: best effort, never throws, never
+   *  changes the outcome of the write that produced these credentials.
+   *
+   *  ALWAYS CALLED AFTER THE COMMIT. Our write can roll back and Apple's
+   *  cannot, so revoking first can destroy a credential for a change that
+   *  never lands. The try/catch is what makes "never throws" true rather than
+   *  merely intended: the type says `Promise<boolean>`, which cannot forbid a
+   *  rejection, and any injected revoker can reject.
+   */
+  async function revokeQuietly(credentials: AppleGrant[]): Promise<boolean> {
+    if (!credentials.length) return true;
+    try {
+      return await revokeApple(credentials);
+    } catch {
+      console.warn(JSON.stringify({ event: "apple_revoke_threw" }));
+      return false;
+    }
   }
   return {
     healthy: () => healthy,
     async sweep(): Promise<void> {
+      // No initialiser: the catch below always rethrows, so control flow
+      // guarantees this is assigned by the time it is read.
+      let credentials: AppleGrant[];
       try {
-        await pool.query("DELETE FROM auth_attempts WHERE expires_at<=now()");
+        ({ credentials } = await dropAttempts(pool, "expires_at<=now()", []));
         healthy = true;
       } catch (error) {
         healthy = false;
         throw error;
       }
+      // OUTSIDE THE try/catch ON PURPOSE, AND `healthy` IS ALREADY TRUE.
+      // `healthy` is the front door's availability flag: `begin()` refuses
+      // EVERY signin while it is false, for up to the 60s until the next
+      // sweep. It must answer "can we reach our own database", never "can we
+      // reach Apple" — otherwise a third party being slow takes our sign-in
+      // down. The revoke is best effort and its failure is a log line.
+      await revokeQuietly(credentials);
     },
     async begin(input: {
       surface: Surface;
@@ -346,10 +381,18 @@ export function createAttempts(
     }): Promise<{ attempt: Attempt; bindingSecret: string }> {
       if (input.purpose === "signin" && !healthy)
         throw new AuthFailure("unavailable");
-      return transaction(async (tx) => {
+      // COLLECTED INSIDE THE TRANSACTION, REVOKED AFTER IT COMMITS. If the
+      // transaction rolls back, `transaction()` throws and the revoke below
+      // is never reached — which is the behaviour we want and is why this is
+      // an accumulator rather than a revoke at each delete site: a rolled-back
+      // delete must not revoke a credential that still exists.
+      const doomed: AppleGrant[] = [];
+      const begun = await transaction(async (tx) => {
         if (input.purpose === "signin") {
           await tx.query("SELECT pg_advisory_xact_lock(173496,1)");
-          await tx.query("DELETE FROM auth_attempts WHERE expires_at<=now()");
+          doomed.push(
+            ...(await dropAttempts(tx, "expires_at<=now()", [])).credentials,
+          );
         }
         let existing: AuthProvider | null = null;
         if (input.purpose === "link" || input.purpose === "delete") {
@@ -383,19 +426,27 @@ export function createAttempts(
           // `auth_attempts_link_session_unique` is keyed on
           // original_session_id ALONE, so it collides across purposes: this
           // sweep is what lets the insert below succeed at all.
-          await tx.query(
-            "DELETE FROM auth_attempts WHERE original_session_id=$1",
-            [input.originalSessionId],
+          doomed.push(
+            ...(
+              await dropAttempts(tx, "original_session_id=$1", [
+                input.originalSessionId,
+              ])
+            ).credentials,
           );
         }
         if (input.replace)
-          await tx.query(
-            "DELETE FROM auth_attempts WHERE id=$1 AND binding_hash=$2 AND surface=$3",
-            [
-              input.replace.id,
-              hashToken(input.replace.bindingSecret),
-              input.surface,
-            ],
+          doomed.push(
+            ...(
+              await dropAttempts(
+                tx,
+                "id=$1 AND binding_hash=$2 AND surface=$3",
+                [
+                  input.replace.id,
+                  hashToken(input.replace.bindingSecret),
+                  input.surface,
+                ],
+              )
+            ).credentials,
           );
         if (input.purpose === "signin") {
           const count = (
@@ -428,6 +479,8 @@ export function createAttempts(
         ).rows[0];
         return { attempt: row, bindingSecret };
       });
+      await revokeQuietly(doomed);
+      return begun;
     },
     /** WAVE A PR2: who owns an adopted session, for a RE-READ of a
      *  follow-through.
@@ -703,7 +756,12 @@ export function createAttempts(
         );
         if (!updated.rowCount) throw new AuthFailure("account_conflict");
         await grant(tx, session.userId, a);
-        await tx.query("DELETE FROM auth_attempts WHERE id=$1", [a.id]);
+        // Through the helper like every other site, even though `grant()` above
+        // has already promoted this token to `apple_grants` so there is nothing
+        // to revoke. The rule is "all of them", not "the ones we judged risky" —
+        // a site exempted by reasoning is a site the next change can break
+        // without anything noticing.
+        await dropAttempts(tx, "id=$1", [a.id]);
         return { linked: true };
       });
     },
@@ -711,33 +769,52 @@ export function createAttempts(
     // A single conditional DELETE locks only the attempt and cannot erase a
     // newer authorization stage after another callback wins its transition.
     async discard(expected: Attempt): Promise<boolean> {
-      const result = await pool.query(
-        `DELETE FROM auth_attempts WHERE id=$1 AND binding_hash=$2 AND surface=$3 AND purpose=$4 AND target_provider=$5 AND existing_provider IS NOT DISTINCT FROM $6 AND stage=$7 AND version=$8 AND state=$9 AND nonce=$10 AND original_session_id IS NOT DISTINCT FROM $11`,
-        [
-          expected.id,
-          expected.bindingHash,
-          expected.surface,
-          expected.purpose,
-          expected.targetProvider,
-          expected.existingProvider,
-          expected.stage,
-          expected.version,
-          expected.state,
-          expected.nonce,
-          expected.originalSessionId,
-        ],
+      // IN A TRANSACTION NOW, WHERE IT USED TO BE A BARE `pool.query`. The
+      // revocable check reads `apple_grants`, and `grant()`'s
+      // `ON CONFLICT DO UPDATE` leaves the FK column unchanged — no RI check,
+      // no lock on the parent — so an unlocked read can be stale past a
+      // concurrent grant (the same fact `deleteAccount` documents). Deciding
+      // and deleting in one transaction is what makes "we never revoke a
+      // credential that still backs a live relationship" true rather than
+      // usually true.
+      const { rowCount, credentials } = await transaction((tx) =>
+        dropAttempts(
+          tx,
+          `id=$1 AND binding_hash=$2 AND surface=$3 AND purpose=$4 AND target_provider=$5 AND existing_provider IS NOT DISTINCT FROM $6 AND stage=$7 AND version=$8 AND state=$9 AND nonce=$10 AND original_session_id IS NOT DISTINCT FROM $11`,
+          [
+            expected.id,
+            expected.bindingHash,
+            expected.surface,
+            expected.purpose,
+            expected.targetProvider,
+            expected.existingProvider,
+            expected.stage,
+            expected.version,
+            expected.state,
+            expected.nonce,
+            expected.originalSessionId,
+          ],
+        ),
       );
-      return result.rowCount === 1;
+      await revokeQuietly(credentials);
+      // THE COUNT, NOT THE CREDENTIALS. Three call sites in
+      // `frontDoorRoutes.ts` branch on this boolean, and an attempt that
+      // matched but held no Apple token is a SUCCESSFUL discard.
+      return rowCount === 1;
     },
     async cancel(
       id: string,
       bindingSecret: string,
       surface: Surface,
     ): Promise<void> {
-      await pool.query(
-        "DELETE FROM auth_attempts WHERE id=$1 AND binding_hash=$2 AND surface=$3",
-        [id, hashToken(bindingSecret), surface],
+      const { credentials } = await transaction((tx) =>
+        dropAttempts(tx, "id=$1 AND binding_hash=$2 AND surface=$3", [
+          id,
+          hashToken(bindingSecret),
+          surface,
+        ]),
       );
+      await revokeQuietly(credentials);
     },
     async methods(
       userId: string,
@@ -881,15 +958,30 @@ export function createAttempts(
             [session.userId],
           )
         ).rows;
-        // The attempt's own credential, which would otherwise cascade away
-        // through sessions with nothing revoked. Guarded on the grant's own
-        // fields rather than on apple_sub, which an unlink can null between
-        // accept() and here.
-        if (a.appleClientId && a.appleRefreshToken)
-          held.push({
-            clientId: a.appleClientId,
-            refreshToken: a.appleRefreshToken,
-          });
+        // EVERY attempt on EVERY session of this rower, not just the one
+        // they are deleting through. This replaces a hand-push of `a`'s own
+        // credential, which covered the deleting attempt and missed the
+        // rower's OTHER session: a phone-and-web rower can hold a second
+        // attempt there, and `DELETE FROM users` takes it through `sessions`
+        // by cascade with nothing revoked. A cascade returns no rows, so
+        // deleting them first is the only way to see those credentials.
+        //
+        // ORDER IS LOAD-BEARING AND MEASURED (DBA gate, 2026-09-19): this
+        // MUST run AFTER the `apple_grants` delete above. The rower still
+        // holds their own grant until that statement runs, so with the order
+        // reversed the revocable predicate reads it and marks this rower's
+        // own attempt token NON-revocable — silently, with every other test
+        // still green. The mutation that gates this invariant is swapping
+        // the two statements.
+        held.push(
+          ...(
+            await dropAttempts(
+              tx,
+              "original_session_id IN (SELECT id FROM sessions WHERE user_id=$1)",
+              [session.userId],
+            )
+          ).credentials,
+        );
         const deleted = await tx.query("DELETE FROM users WHERE id=$1", [
           session.userId,
         ]);
