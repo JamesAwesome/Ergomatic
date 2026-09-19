@@ -442,14 +442,23 @@ test("cancelling a link in-document leaves the rower on the account screen, not 
     name: "Apple Link Tester",
   });
 
-  await page.goto("/you/account");
-  await page.getByRole("button", { name: "Add Apple" }).click();
-  await expect(page.getByRole("heading", { name: "Add Apple" })).toBeVisible();
-  await page.getByRole("button", { name: "Cancel" }).click();
-  await expect(page).toHaveURL(/\/you\/account$/);
-  await expect(
-    page.getByRole("heading", { name: "SIGN-IN METHODS" }),
-  ).toBeVisible();
+  // BOTH of the screen's cancels, because both call `auth.cancel()` and a
+  // rower can reach either: the header's `← CANCEL` and the action row's
+  // `Cancel`. `exact` is what tells them apart — an inexact name match on
+  // "Cancel" resolves to both and the click fails on strict mode, which is
+  // how CI first read this leg.
+  for (const label of ["Cancel", "← CANCEL"]) {
+    await page.goto("/you/account");
+    await page.getByRole("button", { name: "Add Apple" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Add Apple" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: label, exact: true }).click();
+    await expect(page).toHaveURL(/\/you\/account$/);
+    await expect(
+      page.getByRole("heading", { name: "SIGN-IN METHODS" }),
+    ).toBeVisible();
+  }
 });
 
 test("a cancelled link return sends the rower to the account screen once and releases ordinary navigation", async ({
