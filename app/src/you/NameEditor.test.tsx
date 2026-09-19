@@ -19,6 +19,15 @@ describe("NameEditor", () => {
     mockedApi.mockResolvedValue(ok("James"));
   });
 
+  // AXE CANNOT CATCH THIS, which is why it is asserted by hand. An unlabelled
+  // <section> is not exposed as a region at all, so a missing
+  // `aria-labelledby` raises no violation -- the 398 design assertions passed
+  // while this screen had two labelled regions and one anonymous one.
+  it("exposes NAME as a labelled region, like its siblings on the screen", () => {
+    render(<NameEditor name="Rower" onRenamed={vi.fn()} />);
+    expect(screen.getByRole("region", { name: "NAME" })).toBeInTheDocument();
+  });
+
   it("shows the rower's current name, so the screen answers 'what am I called'", () => {
     render(<NameEditor name="Rower" onRenamed={vi.fn()} />);
     expect(screen.getByLabelText("Your name")).toHaveValue("Rower");

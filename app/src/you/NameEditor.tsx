@@ -72,7 +72,12 @@ export default function NameEditor({
   }
 
   return (
-    <section className="auth-name">
+    // `aria-labelledby`, like both siblings on this screen
+    // (`SignInMethods.tsx`). An unlabelled <section> is simply not exposed as
+    // a region, so axe raises nothing and the 398 design assertions passed
+    // with this missing -- the convention was applied at two of three sites
+    // on one screen, which is RF34's shape.
+    <section className="auth-name" aria-labelledby="auth-name-heading">
       <h2 id="auth-name-heading">NAME</h2>
       <div className="auth-name-row">
         <input

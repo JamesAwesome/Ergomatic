@@ -1322,9 +1322,9 @@ it lands the stranger on this same denial.
       live and nothing tries again. That is James's own 2026-09-13 ruling
       withdrawing the `apple_revocations` outbox, not an unfinished edge, and
       it is written here so the narrower win is legible without opening the
-      spec. What makes the residue survivable is the rename surface below:
-      the damage a failed revoke does is permanent only because an account
-      cannot be renamed. The third of the three live credentials the
+      spec. What makes the residue survivable is the rename surface below,
+      **which PR #485 has now shipped**: a failed revoke used to do permanent
+      damage only because an account could not be renamed, and it can be. The third of the three live credentials the
       account-management spec names in §"The other two live credentials"; the
       other two got rows and this one did not. `attempts.begin` stores a
       refresh token on the attempt row, and every path that ends an attempt
@@ -1420,8 +1420,12 @@ it lands the stranger on this same denial.
       Apple, they won't be presented with the initial authorization flow to
       enter their full name, email address, or both." So a rower whose delete
       left a FAILED revoke and later signs up again gets no name from Apple;
-      `providers.ts` falls back to `"Rower"` permanently, because nothing in
-      the product can rename an account. Revision 2's withdrawn
+      `providers.ts` falls back to `"Rower"` — **and until PR #485 that was
+      PERMANENT, because nothing in the product could rename an account. It
+      is now recoverable: the rower renames themselves on `/you/account`.**
+      This row is NARROWED, not closed — a revoke can still fail, and a rower
+      who never looks at the account screen still carries the wrong name — so
+      it is put to James as a re-date rather than a tick. Revision 2's withdrawn
       `apple_revocations` outbox would have retried the failed revoke and so
       lowered the odds of a rower ever landing in this state; James's
       2026-09-13 ruling removed that retry as a direct consequence of
@@ -1442,7 +1446,17 @@ it lands the stranger on this same denial.
       · dies 2026-10-10 · not a fix-now because the actual fix is a rename
       surface in the product, which is its own row below; the wave's own
       deadline is the backstop.
-- [ ] **Let a rower rename their account.** Nothing in the product can change
+- [x] **Let a rower rename their account.**
+      **DELIVERED BY PR #485, 2026-09-19.** `/you/account` carries a NAME
+      field above the sign-in methods (Gate 0 option A, pack at
+      `docs/design/rename-gate0/`), and the two sign-in paths that re-copied
+      the provider's name on every sign-in stopped, so the rename is not
+      reverted by signing in tomorrow. **The deferral clause below is
+      therefore spent** — it argued the control did not exist yet, and it
+      does. Kept rather than struck because striking is James's call.
+      Accepted cost, his ruling: a name changed at Google no longer flows
+      through to Ergomatic.
+      ORIGINAL TEXT: Nothing in the product can change
       an account's name once it is set, so every way of arriving without a
       name from Apple is PERMANENT rather than merely annoying. That is the
       only reason the row above is a defect at all, and it is why the Apple
