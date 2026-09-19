@@ -134,8 +134,9 @@ scope, CPU-derived concurrency and `app/reports/mutation/` artifact path.
 > refreshed full score. **Running a
 > mutation probe on the specific assertion you are adding is still the standing
 > rule** (see §3 and CLAUDE.md's recurring failure 21) — that is a per-change
-> discipline, not a phase gate. Making the full run a real gate again, or
-> dropping the claim, is a live roadmap item (Wave D).
+> discipline, not a phase gate. **Settled 2026-09-19 (James): the full run
+> stays on-demand and is not a gate.** What remains is archiving §3.1's stale
+> baseline, filed under ROADMAP's "Small, queued".
 
 ### 3.1 Baseline (run 2026-07-29, `pnpm mutate`, full scope)
 
@@ -612,7 +613,8 @@ Five typed rules apply to production and tests:
 `only-throw-error`, and `prefer-promise-reject-errors`. Four more apply to
 non-test code only: `no-unsafe-assignment`, `no-unsafe-return`,
 `no-unsafe-call`, and `no-unsafe-member-access`. Unsafe server-test response
-bodies are separate Wave D hardening work; they are not hidden behind a
+bodies are separate hardening work, iceboxed with the two compiler flags
+(ROADMAP, Icebox); they are not hidden behind a
 high-count allowance here.
 
 Every TS/TSX file ESLint checks must belong to a TypeScript Project Service

@@ -7304,3 +7304,69 @@ GATT/program/active-workout recovery is added. TestFlight patch release
 recommended after source review, mutations, browser validation and exact-head
 CI pass; physical notification timing remains a TestFlight observation, not a
 merge premise.
+
+## 2026-09-19 — Wave D refinement gate (main `aa2be8a2`)
+
+Asked to refine Wave D row by row. **Refused the framing: the wave's premise
+was false and the wave should dissolve.** James ruled the same day: dissolve
+it, retire the 2026-08-20 simulator order, take accessibility Tier 1, strike
+the five done-or-dead rows, icebox type hardening — and close out the two
+flakes the sweep found rather than file them. Body archived at
+`docs/history/wave-d.md`.
+
+**The false dependency, measured.** Wave D's status line named "two items
+[that] are Wave C dependencies". Wave C's accessibility row asked only for
+44×44 targets and 4.5:1 contrast as computed numbers — no assistive
+technology. Its cold-start row said "A green simulator run is not this item's
+exit". No Wave C row reached a connected screen. Both dependencies were
+asserted in the instrument wave and echoed once in the consumer.
+
+**Measurements, with commands:**
+- Motion: `grep -cE "@keyframes|animation:|transition:" app/src/index.css` → 0.
+  Dynamic Type: 0 `rem`, 359 `font-size: <n>px`, no `text-size-adjust`, no
+  text-zoom plugin — inert on any device. Apple, "Performing accessibility
+  testing for your app": "Install your app on a physical device, since
+  VoiceOver isn't available on Simulator."
+- The simulator WAS already standing: `app/scripts/ios-test.sh` runs XCTest on
+  a runtime-chosen iPhone simulator, wired into `ios:build`. The row's "It is
+  used nowhere" was its third stale receipt.
+- Dangling `.superpowers/` citations: 50 across 29 files, up from 23 across
+  14 in fifteen days. 42 in dated records (history, left alone); 8 in live
+  reference material. `pm5-interface-notes.md`'s source table cites a raw
+  trace for laptop session 1 while `docs/monitor/sessions/README.md` says
+  "Session 1 has no raw capture".
+- Type flags: no shipped defect either would have caught, across RF1-43,
+  `docs/history/` and three agent ledgers. Cost re-measured by a delegate (not
+  by the controller) on tsc 6.0.3: 145 + 57 and 248 + 767, ~2x the 2026-08-29
+  spec.
+- Two rows ALREADY DONE: the REST fixture (`design.spec.ts` `RESTING_STORY`,
+  `restSeconds: 595`; `connected.spec.ts`'s rest-bearing program) and the
+  wire-gap witness (`traceModel.test.ts`, landed in #141 — the PR AFTER the
+  one the row blamed, stale for 30 days).
+- Flakes: 63 CI runs since 2026-09-16, all attempt 1, 60 `app` + 60 `e2e` logs.
+  `Releases.test.tsx` green in all 57 app jobs that ran it — #452's
+  falsifiable prediction HELD. No `Test timed out`, no integration failure,
+  no `stableBoundingBox` trajectory.
+
+**Controller's corrections to this engagement's report (added when the entry
+was landed).** The report proposed FILING two flakes the sweep surfaced. Both
+were already fixed: `sheetScroll.spec.ts`'s
+last flake was at `59a94e98` (2026-09-16 12:07Z) and `252a482f` inside #463
+fixed it 37 minutes later, with none of the 35 completed e2e jobs since
+carrying a `flaky` line; `mutation.test.mjs`'s one failure on main (run
+`35134632013`) is named in #466's own body, which reproduced an
+immediate-census race and has had zero recurrences in 24 app jobs. The sweep
+counted occurrences and never ran `git log` on the two files. The report also
+said every type-flag edit "lands in `domain/` or `server/`"; by its own
+figures 145 of them are in the app project, so that sentence was not landed.
+
+**Ruled: a desk-only VoiceOver pass on James's phone IS a hardware walk** and
+owes a versioned runsheet plus a PM readiness PASS. `CLAUDE.md` names
+"phone-only" and "zero-rowing" walks explicitly; the operator session is the
+trigger, not the erg.
+
+**Correction to the dispatch:** it asked for a per-row `dies` stamp on every
+kept Wave D row. ROADMAP's "How this file is used" records James's 2026-09-10
+ruling that a wave is stamped on its STATUS LINE; per-row stamps apply only to
+rows that leave a wave for the register, which is what happened to all five
+survivors.
