@@ -988,20 +988,42 @@ describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-ver
     expect(
       machineIntervalSpans([usable, { ...usable, actualSeconds: undefined }]),
     ).toStrictEqual([]);
-    // ABSENT is not zero: `buildMonitorLogSteps` omits the key when the
-    // actual carried no readback (a summary-fallback final, or a row
-    // saved before Phase LP PR 2), and reading that as `0` would redraw
-    // the row's rests at zero width — candidate A, which the board
-    // REJECTED. A real `0` (an r0 piece) is a value and is kept.
-    expect(
-      machineIntervalSpans([
-        usable,
-        { ...usable, machineRestSeconds: undefined },
-      ]),
-    ).toStrictEqual([]);
+    // A real `0` (an r0 piece) is a value and is kept.
     expect(
       machineIntervalSpans([{ ...usable, machineRestSeconds: 0 }]),
     ).toStrictEqual([{ workSeconds: 60, restSeconds: 0 }]);
+  });
+
+  it("Gate 0B board 2: a missing rest readback stands the axis down only when something comes AFTER it", () => {
+    const usable = {
+      actualSource: "pm5" as const,
+      actualSeconds: 60,
+      machineRestSeconds: 30,
+    };
+    const noReadback = { actualSource: "pm5" as const, actualSeconds: 60 };
+
+    // THE TAIL is survivable, and this is the population that makes it
+    // worth surviving: `monitorRun.ts` documents the synthesized-final
+    // fallback (the last split notification is dropped, so the final
+    // interval has work data and no rest data). Standing the whole axis
+    // down there would cost every EARLIER rest its correct width to
+    // protect one band at the very end.
+    expect(machineIntervalSpans([usable, noReadback])).toStrictEqual([
+      { workSeconds: 60, restSeconds: 30 },
+      { workSeconds: 60, restSeconds: 0 },
+    ]);
+
+    // THE MIDDLE is not: an unknown rest shifts every LATER interval
+    // onto the wrong part of the axis.
+    expect(machineIntervalSpans([usable, noReadback, usable])).toStrictEqual(
+      [],
+    );
+
+    // NONE AT ALL is a row with no rest data — a row saved before Phase
+    // LP PR 2. It stands down so the chart keeps the axis and the bands
+    // it had, rather than drawing every rest at zero width, which is the
+    // candidate the board rejected.
+    expect(machineIntervalSpans([noReadback, noReadback])).toStrictEqual([]);
   });
 
   it("Gate 0B board 2: a Just Row carries no spans, so the chart keeps the axis it had", () => {

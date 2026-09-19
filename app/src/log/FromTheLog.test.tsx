@@ -1435,6 +1435,67 @@ describe("FromTheLog — the trace chart (Phase LT spec 3)", () => {
     ).toBeTruthy();
   });
 
+  // Gate 0B board 2, and the last hop of RF24's seam on THIS door: the
+  // stored view can carry the machine's own intervals and the chart can
+  // use them, and this screen is the only thing joining the two. The
+  // e2e `provenance.spec.ts` leg catches a deleted prop here too, but
+  // it needs Docker; this is the gate a desk run can go red on.
+  it("hands the stored row's own interval spans to the chart, so a rest draws at the length the machine says", async () => {
+    // Two 20 s samples of work, a rest sample, then work again — the
+    // rest ADVANCED 20 s of its own, but the machine says it was 60.
+    const series: SeriesData = {
+      samples: [
+        { t: 0, d: 0, p: 1400, spm: 22, r: undefined },
+        { t: 200, d: 80, p: 1380, spm: 22, r: undefined },
+        { t: 400, d: 160, p: 3600, spm: 12, r: true },
+        { t: 600, d: 240, p: 1350, spm: 23, r: undefined },
+        { t: 800, d: 320, p: 1300, spm: 24, r: undefined },
+      ],
+    };
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({
+              series,
+              steps: [
+                {
+                  label: "20s",
+                  actualSource: "pm5",
+                  actualSeconds: 20,
+                  actualMeters: 80,
+                  machineRestSeconds: 60,
+                },
+                {
+                  label: "40s",
+                  actualSource: "pm5",
+                  actualSeconds: 40,
+                  actualMeters: 160,
+                  machineRestSeconds: 0,
+                },
+              ],
+            }),
+          ),
+          { status: 200 },
+        ),
+    );
+    const { container } = await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+
+    const band = container.querySelector(".trace-rest-band");
+    expect(band).not.toBeNull();
+    // The fixture carries 60 s of WORK (five samples spanning 80 s, of
+    // which the rest sample's own 20 s is not work) plus the machine's
+    // 60 s of rest, so the axis is 120 s and the band is half of it,
+    // across the plot's own 284 units (CHART_WIDTH 320 - LEFT_PAD 28 -
+    // RIGHT_PAD 8). Computed here from the fixture, never read back out
+    // of the chart.
+    expect(Number(band!.getAttribute("width"))).toBeCloseTo(
+      (60 / 120) * 284,
+      2,
+    );
+  });
+
   it("renders NOTHING for a pre-spec-2 stored row — `series: null`, §1's own ABSENT case", async () => {
     mockApi(
       () =>

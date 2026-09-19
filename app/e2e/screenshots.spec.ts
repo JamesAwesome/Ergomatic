@@ -4233,7 +4233,9 @@ test("log-detail", async ({ page }) => {
   expect(slowestTickSeconds).toBeGreaterThanOrEqual(135.8);
 
   // R3-1 (review round 3): a viewport-only capture cropped out the
-  // chart's own `.trace-legend` ("BAND = REST", F-2, round 4 wording) — the identical
+  // chart's own `.trace-legend` (the band's swatch plus "= REST" since
+  // Gate 0B board 2; it read "BAND = REST" in words when this was
+  // written) — the identical
   // shape as I-2 (a committed capture that doesn't show the element the
   // round added), one element later. First attempt copied `builder.png`'s
   // `fullPage: true` + `neutralizeFixedTabBarForFullPageCapture` verbatim

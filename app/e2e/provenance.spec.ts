@@ -325,8 +325,9 @@ test("two rests the rower never moved through still draw, and draw the SAME widt
   // the flywheel turns. Both rests are therefore invisible to the series
   // and visible only through the steps' own readback, which is the case
   // candidate B exists to draw. 140 s of samples, which carries the work
-  // clock past both of the row's own interval boundaries (67.9 s and
-  // 124.0 s, the steps' `actualSeconds`).
+  // clock past both of the row's own interval boundaries — the steps'
+  // `actualSeconds` are 67.9 and 56.1, so the boundaries are at 67.9 s
+  // and 124.0 s cumulative.
   const samples = [];
   for (let i = 0; i <= 140; i++) {
     samples.push({ t: i * 10, d: i * 40, p: 1240, spm: 26, hr: 140 });

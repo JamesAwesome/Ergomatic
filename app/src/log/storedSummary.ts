@@ -1323,10 +1323,17 @@ export function buildStoredSummary(row: StoredLog): StoredSummaryView {
     row.machineWorkMeters > 0
       ? machineSplitRows(row.steps)
       : [];
-  // Gate 0B board 2: the same gate, the same steps — one read for the
-  // strip, one for the trace chart's axis.
-  const intervalSpans =
-    machineRows.length > 0 ? machineIntervalSpans(row.steps) : [];
+  // Gate 0B board 2: the same steps, read for the trace chart's axis —
+  // and DELIBERATELY NOT behind `machineRows`'s own gate. That gate is
+  // about the machine SUMMARY STRIP, which needs the row's whole-session
+  // totals (`machineWorkSeconds`/`machineWorkMeters`); the axis needs
+  // only each step's own work and rest, from a different characteristic,
+  // and `machineIntervalSpans` already refuses anything it cannot use.
+  // Gating on the strip made the live door and this one draw DIFFERENT
+  // AXES for the same session — the live door calls it unconditionally,
+  // so a run with actuals but no summary totals got the new axis on the
+  // post-workout screen and the old one when reopened from the log.
+  const intervalSpans = machineIntervalSpans(row.steps);
   return {
     meta,
     heroes,

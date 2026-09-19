@@ -5,16 +5,10 @@ import type { Baselines } from "../../domain/types.js";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import type { PlanData } from "../api/usePlan";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
-import type { IntervalSpan } from "../log/traceModel.js";
 import TraceChart from "../log/TraceChart";
 import BackLink from "../shell/BackLink";
 import { DASH } from "../workout/connected/surfaceModel";
 import MachineSummaryTable from "./MachineSummaryTable";
-
-/** Hoisted for the same reason `TraceChart`'s own `NO_INTERVALS` is: a
- *  `= []` default mints a new array per render and would rebuild the
- *  chart's three traces every time. */
-const NO_INTERVAL_SPANS: IntervalSpan[] = [];
 import { TileSourceSheet } from "./TileSourceSheet";
 import type {
   MachineTier,
@@ -752,7 +746,7 @@ export default function PostWorkoutSummary({
     rows,
     caption,
     machineRows = [],
-    intervalSpans = NO_INTERVAL_SPANS,
+    intervalSpans = [],
   } = model;
 
   // §2F: `Log against plan` carries the plan's own position information

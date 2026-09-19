@@ -171,10 +171,17 @@ export interface StopSpan {
 
 export interface TraceModel {
   /** Segments — a gap over `GAP_BREAK_SECONDS` between two consecutive
-   *  real readings starts a new one, so the drawn line breaks there. A
-   *  REST never starts a new segment (§3: a rest is present data, not a
-   *  gap) — only `GAP_BREAK_SECONDS` does. Never empty: a model with
-   *  nothing to draw is `null`, not `{points: []}`. */
+   *  real readings ON THE AXIS starts a new one, so the drawn line
+   *  breaks there. Never empty: a model with nothing to draw is `null`,
+   *  not `{points: []}`.
+   *
+   *  A REST DOES START A NEW SEGMENT under the stored-interval axis
+   *  (Gate 0B board 2), because the band inserts the machine's own rest
+   *  seconds between two consecutive readings. Measured on the committed
+   *  captures: `rests-finished` 1 segment to 3, `session-2` 2 to 4. This
+   *  doc used to say the opposite, which is still true of the
+   *  no-intervals fallback axis, where the rest's own readings are all
+   *  there is. */
   points: TracePoint[][];
   /** `[0, the session's last sample's own t]`, in seconds — computed
    *  ONCE regardless of which measure is drawn (§3), so a heart-rate line
@@ -420,6 +427,12 @@ function buildSummary(
  *  which is why that clip is load-bearing rather than tidy. */
 const STOP_SECONDS = 5;
 
+/** How far BEFORE its stored boundary a rest-marked sample may open its
+ *  interval's rest band. See `buildAxis`, where the number is argued.
+ *  Measured onset error across both multi-interval captures: +0.4 to
+ *  +1.2 s, always early. */
+const REST_OPEN_SLACK_SECONDS = 3;
+
 /** trace-truth Task 2 (spec §3): half a sample-second of padding on each
  *  side of a rest run's own x-range, so a single ISOLATED rest sample
  *  (surrounded by work on both sides) still draws a visible band rather
@@ -497,17 +510,30 @@ function buildAxis(
   let boundary = intervals[0]!.workSeconds;
   let open: { startX: number; seconds: number; advance: number } | null = null;
   let prevT: number | null = null;
-  let lastX = 0;
 
   for (const s of samples) {
     const dt = prevT === null ? s.t / 10 : (s.t - prevT) / 10;
     prevT = s.t;
     const resting = s.r === true;
 
+    // Interval `cursor`'s rest opens at the first sample that is either
+    // rest-marked NEAR that interval's end or has carried the work clock
+    // to it. NEAR, not merely rest-marked: a lone `r: true` inside live
+    // work — a flicker of the wire's state byte, or a rest run split by
+    // one non-rest sample — would otherwise insert a full readback's
+    // worth of axis in the middle of a work interval and push every
+    // later rest onto the wrong interval's readback. The slack is
+    // measured: across both multi-interval captures every real rest
+    // onset lands 0.4-1.2 s BEFORE its stored boundary, so 3 s is
+    // comfortably above the observed maximum while being far below any
+    // interval this app can program. A rest sample outside the window
+    // falls through to the no-interval arm below and simply advances the
+    // axis by its own elapsed, which is what the old axis did with it.
+    const nearBoundary = work >= boundary - REST_OPEN_SLACK_SECONDS;
     if (
       open === null &&
       cursor < intervals.length &&
-      (resting || work >= boundary)
+      ((resting && nearBoundary) || work >= boundary)
     ) {
       open = {
         startX: work + offset,
@@ -525,8 +551,7 @@ function buildAxis(
         // No clamp needed: the band's own width below is
         // `max(seconds, advance)`, so a rest sample can never land past
         // the band that contains it.
-        lastX = open.startX + open.advance;
-        xs.push(lastX);
+        xs.push(open.startX + open.advance);
         continue;
       }
       // The first work sample after the rest closes it. The band is the
@@ -542,16 +567,25 @@ function buildAxis(
     }
 
     if (resting) {
-      // A rest with no interval left to name it (the series outran the
-      // stored steps). Today's behaviour: it advances the axis by its own
-      // elapsed and adds no work.
-      lastX += dt;
-      xs.push(lastX);
+      // A rest sample with no band to sit in: the series outran the
+      // stored steps, or the sample is a stray mark outside its
+      // interval's own window. It advances the axis by its own elapsed
+      // and adds no WORK — which is what the old axis did with it.
+      //
+      // The advance goes into `offset`, which is what every later
+      // sample's own x is computed from. Crediting it to a running
+      // "last x" instead only looked right until the next WORK sample
+      // recomputed its x as `work + offset` and threw the advance away,
+      // which walks the axis BACKWARDS by the length of the rest run.
+      // `toSegments` cannot break on a negative step, so the polyline
+      // doubled back on itself and `domainX` (the LAST x, not the
+      // largest) clipped the overshoot away silently.
+      offset += dt;
+      xs.push(work + offset);
       continue;
     }
     work += dt;
-    lastX = work + offset;
-    xs.push(lastX);
+    xs.push(work + offset);
   }
 
   if (open !== null) {
@@ -628,13 +662,20 @@ function restBandsForSegment(points: readonly TracePoint[]): RestBand[] {
 function findStopSpans(
   samples: readonly Sample[],
   xs: readonly number[],
-  measure: Measure,
 ): StopSpan[] {
+  // MEASURE-INDEPENDENT, deliberately. A stop is a fact about the
+  // MACHINE'S DISTANCE, so it must not change when the rower taps RATE
+  // or HR. The first draft clipped the run at the last real reading OF
+  // THE DRAWN MEASURE, which meant a strap that dropped out before the
+  // piece ended reported the same stop shorter on the HR tab than on the
+  // pace tab, or not at all. "Real" here is the recorder's own sentinel
+  // rule, which pairs `p` and `spm`: the post-END tail zeroes BOTH
+  // (`seriesRecorder.ts`). `hr` is excluded on purpose — its key is
+  // simply absent when there is no belt, which is not a sentinel and
+  // says nothing about whether the piece was still running.
   let lastReal = -1;
   for (const [i, s] of samples.entries()) {
-    const v =
-      measure === "pace" ? s.p : measure === "rate" ? s.spm : (s.hr ?? 0);
-    if (v !== 0) lastReal = i;
+    if (s.p !== 0 || s.spm !== 0) lastReal = i;
   }
   const out: StopSpan[] = [];
   let from = 0;
@@ -717,7 +758,7 @@ export function buildTrace(
     startX: Math.max(domainX[0], band.startX),
     endX: Math.min(domainX[1], band.endX),
   }));
-  const stops = findStopSpans(series.samples, axis.xs, measure);
+  const stops = findStopSpans(series.samples, axis.xs);
   const ticksY = chooseTicks(domainY, TICK_COUNT);
   const invert = measure === "pace";
   const summary = buildSummary(measure, restBands, stops, readings, segments);

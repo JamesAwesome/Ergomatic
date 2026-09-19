@@ -11045,9 +11045,11 @@ section:not(.news-pinned) .news-row:last-of-type {
    rest happened (`.trace-legend`/`buildSummary` are companions now, not
    substitutes), so still held to WCAG 1.4.11's 3:1 non-text floor.
    Computed (`--trace-rest`'s own tokens.css comment carries the full
-   round-2 numbers): 4.72:1 against --surface, the only background
-   `.trace-figure` ever sits on — UNCHANGED from round 1 (only the
-   band's own geometry moved, `TraceChart.tsx`'s `REST_BAND_HEIGHT`). */
+   round-2 numbers): 4.72:1 against --surface and 4.25:1 against --page,
+   which is what board 2 measured the chart's actual backdrop to be
+   (`board2/frames/contrast.json`) — this comment used to call --surface
+   "the only background `.trace-figure` ever sits on" and that is
+   falsified. Both clear the floor. */
 .trace-rest-band {
   fill: var(--trace-rest);
 }

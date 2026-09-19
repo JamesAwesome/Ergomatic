@@ -513,7 +513,7 @@ describe("TraceChart — §7.3 the inversion is a COORDINATE fact, not a class c
 });
 
 describe("TraceChart — trace-truth Task 2: rests are drawn, but marked (§3), real non-frozen rest capture", () => {
-  it("renders a rest band for every contiguous rest run, and the polyline stays ONE segment per the model's own segment count (unbroken across the rest)", async () => {
+  it("with NO stored intervals: renders a rest band for every contiguous rest run, and the polyline stays ONE segment per the model's own segment count (unbroken across the rest — with the machine's intervals it breaks at every rest instead)", async () => {
     const series = await realSeriesWithRest();
     const trace = buildTrace(series, "pace")!;
     const restedCount = trace.points.flat().filter((p) => p.rest).length;
@@ -816,6 +816,24 @@ describe("TraceChart — PR 3: the span where the rower stood still is marked", 
     expect(container.querySelector(".trace-stop-label")!.textContent).toBe(
       "STOPPED 61s",
     );
+  });
+
+  it("a SHORT stop near the left edge hangs its label inwards instead of painting over the y axis", () => {
+    // `STOPPED 6s` is 10 glyphs of the chart's own mono advance — about
+    // 27 units either side of centre — while a 6 s stop on a 600 s axis
+    // is under 3 units wide. Centred, the label runs back over
+    // `LEFT_PAD` and the y tick labels sitting in it.
+    const samples: Sample[] = [];
+    let d = 0;
+    for (let i = 1; i <= 600; i++) {
+      const stopped = i > 10 && i <= 16;
+      if (!stopped) d += 40;
+      samples.push({ t: i * 10, d, p: 1200, spm: 24, r: undefined });
+    }
+    const { container } = render(<TraceChart series={{ samples }} />);
+    const label = container.querySelector(".trace-stop-label");
+    expect(label!.textContent).toBe("STOPPED 6s");
+    expect(label!.getAttribute("text-anchor")).toBe("start");
   });
 
   it("a trace with nothing frozen in it renders no stop mark at all", async () => {

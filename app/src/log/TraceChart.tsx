@@ -47,11 +47,10 @@ import {
 
 const MEASURES: readonly Measure[] = ["pace", "rate", "hr"];
 
-/** The default `intervals`, hoisted to module scope on purpose: a `= []`
- *  in the parameter list mints a NEW array on every render, which is a
- *  changed `useMemo` dependency below, which rebuilds all three traces
- *  (three real-capture-sized derivations) on every render of a screen
- *  that has no intervals to give. One frozen empty array instead. */
+/** The default `intervals`, hoisted so the doors that have none (timer,
+ *  manual, Just Row) hand the memo below a STABLE array and keep their
+ *  own traces cached across a parent render. The doors that do have
+ *  intervals do not get that — see the memo's own comment. */
 const NO_INTERVALS: readonly IntervalSpan[] = Object.freeze([]);
 
 const MEASURE_LABEL: Record<Measure, { visible: string; spoken: string }> = {
@@ -178,6 +177,32 @@ const PLOT_COLUMNS = CHART_WIDTH - LEFT_PAD - RIGHT_PAD;
  *  rule the axis gutter's constants above follow. */
 const STOP_LABEL_Y = TOP_PAD + 8;
 
+/** Keeps a centred SVG label inside the viewBox by hanging it the other
+ *  way when it would otherwise overrun an edge, DERIVED FROM THE LABEL
+ *  rather than from where it sits (invariant I4). Shared by the x-axis
+ *  ticks (Gate 0A member M8, where a tick on the plot's right edge lost
+ *  its final glyph) and by the stop label, which has the same problem
+ *  from the other direction: `STOPPED 61s` is ~59 units wide and a short
+ *  stop's own rect can be three.
+ *
+ *  THE TWO CALLERS PASS DIFFERENT BOUNDS, and that is the point. An
+ *  x-axis tick label may use the whole viewBox — it sits in the gutter,
+ *  below everything. A stop label sits INSIDE the plot, level with the
+ *  y-axis tick labels, so its bound is the plot's own left edge:
+ *  centred, a 6 s stop's label starts at x 7 and paints straight across
+ *  a `2:10` sitting at x 22. */
+function anchorFor(
+  x: number,
+  label: string,
+  min: number,
+  max: number,
+): "start" | "middle" | "end" {
+  const half = (label.length * ADVANCE.plain) / 2;
+  if (x - half < min) return "start";
+  if (x + half > max) return "end";
+  return "middle";
+}
+
 export default function TraceChart({
   series,
   intervals = NO_INTERVALS,
@@ -197,6 +222,19 @@ export default function TraceChart({
   // one `id` and one clip-path would silently win for both).
   const plotClipId = useId();
 
+  // WHAT THIS MEMO DOES AND DOES NOT BUY, measured rather than assumed.
+  // It holds across a MEASURE TAP (`setMeasure` re-renders this
+  // component alone, with the same props), which is what it is for. It
+  // does NOT hold across a parent render: both producers of `intervals`
+  // (`buildStoredSummary`, `buildSummaryModel`) run unmemoized, so the
+  // array is a fresh object every time even when nothing in it changed,
+  // and the log-detail screen re-renders on every keystroke in its
+  // notes field. Rebuilding all three traces costs **0.070 ms** on the
+  // real 419-sample `session-2` capture (200 iterations, throwaway
+  // probe, 2026-09-19), so that is a real miss and not a real cost —
+  // stated here because the obvious fix, keying on the array's VALUES,
+  // needs either a ref read during render or an eslint suppression, and
+  // neither is worth 70 microseconds.
   const traces = useMemo(() => {
     const built = {} as Record<Measure, TraceModel | null>;
     for (const m of MEASURES) built[m] = buildTrace(series, m, intervals);
@@ -270,10 +308,16 @@ export default function TraceChart({
             stayed geometrically possible, "in practice" prevented only by
             `domainY`'s own padding. Moving the band out of the plot
             entirely removes that "in practice" hedge — see the constant's
-            own comment above. Computed from the FULL (non-decimated)
-            points per segment; the polyline below is decimated
-            independently and stays one continuous stroke across the
-            band's own x-range (§3: a rest is not a gap). */}
+            own comment above.
+            SINCE GATE 0B BOARD 2 the bands come from `traceModel`, not
+            from these points: under the stored-interval axis a band's
+            WIDTH is the machine's own rest readback, which the points
+            cannot supply (they cover only the part of the rest the rower
+            kept moving through — that is the defect). The line no longer
+            runs continuously across a band either; it breaks, because
+            there are no readings for the part of the rest the rower sat
+            still through. Both were true before and are stated here
+            because this comment used to assert them. */}
         {trace.restBands.map((band, index) => {
           const x1 = xScale(band.startX);
           const x2 = xScale(band.endX);
@@ -302,6 +346,7 @@ export default function TraceChart({
         {trace.stops.map((stop, index) => {
           const x1 = xScale(stop.startX);
           const x2 = xScale(stop.endX);
+          const label = `STOPPED ${Math.round(stop.seconds)}s`;
           return (
             <g key={index}>
               <rect
@@ -315,10 +360,15 @@ export default function TraceChart({
                 className="trace-tick-label trace-stop-label"
                 x={(x1 + x2) / 2}
                 y={STOP_LABEL_Y}
-                textAnchor="middle"
+                textAnchor={anchorFor(
+                  (x1 + x2) / 2,
+                  label,
+                  LEFT_PAD,
+                  CHART_WIDTH - RIGHT_PAD,
+                )}
                 dominantBaseline="hanging"
               >
-                {`STOPPED ${Math.round(stop.seconds)}s`}
+                {label}
               </text>
             </g>
           );
@@ -374,9 +424,7 @@ export default function TraceChart({
           // always emits `0` — never reaches an edge at all, so anchoring
           // by index pulled labels off their own marks on every other
           // trace to prevent a clip that was not happening there.
-          const half = (label.length * ADVANCE.plain) / 2;
-          const anchor =
-            x - half < 0 ? "start" : x + half > CHART_WIDTH ? "end" : "middle";
+          const anchor = anchorFor(x, label, 0, CHART_WIDTH);
           return (
             <g key={tick}>
               <line
