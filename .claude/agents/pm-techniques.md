@@ -418,6 +418,38 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   order them so the earlier observation is not spoiled by the later setup** (a
   naive cold start must precede turning VoiceOver on).
 
+- **A wave's decoupling rationale can be killed by a decision made the same
+  day, and the status line keeps quoting it.** Wave B's line read "No longer
+  releases with Wave C: the backup row protects the household's data TODAY" —
+  and James struck the backup row hours later (RDS, in a separate AWS repo).
+  The decoupling still held, for a different reason (its second PR is gated on
+  that repo). **At every refinement, read a status line's stated REASON
+  against the rows the section still contains**, not only its verdict: a
+  correct verdict resting on a dead reason is quoted as settled by the next
+  reader.
+- **Before pricing an "it tells nobody" row, ask which part of it something
+  that already exists answers for free.** Wave B's reporter row welded three
+  failure classes into one M: the server being down (`/api/health` already
+  returns `{ok, db, version}` and 503s on a failed `SELECT 1` — an external
+  checker, zero code here, and James moved it to his AWS repo), a native crash
+  (TestFlight and Xcode Organizer already collect them), and a client render
+  throw (`git log -S "ErrorBoundary" -- app/src` is EMPTY). Only the third is
+  app-side, and it is the one the row's own RF19 argument is about. **Split an
+  instrument row by failure class and check each against the deployed system
+  before sizing it.**
+- **Work gated on ANOTHER REPO goes in as a row with its own trigger, never as
+  a peer that the wave's schedule waits on.** James is building AWS in a
+  separate repo; the app-side cutover (pool TLS, a compose profile, a
+  rehearsed dump/restore, two doc sentences) is real and ownerless, so it
+  belongs in ROADMAP (RF14) — but a wave whose second row cannot start until
+  an external question is answered is the Wave D failure again. Judge the
+  wave's date on what can start today.
+- **A stale line number inside a queued row is evidence the row has not been
+  re-read.** Wave B's backup row cited `compose.yml:102` for the bare `pgdata`
+  volume; at head that line was the `web` service's `container_name`. The
+  claim still held. Treat it as a prompt to re-derive every other figure in
+  the row, not as a typo.
+
 ## Recommendations that turned out wrong
 - **2026-09-13 — the disabled-button contrast fold (#425).** I measured the
   disabled provider button at 2.16:1 (`--ink-5 #a09a8c` on `--accent #b5341f`)
