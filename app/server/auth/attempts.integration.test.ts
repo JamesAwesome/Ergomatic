@@ -328,6 +328,64 @@ describe("front-door transactions against Postgres", () => {
       (await pool.query("SELECT stage FROM auth_attempts")).rows,
     ).toStrictEqual([{ stage: "link_ready" }]);
   });
+  // --- Attempt token revocation, census row 10 (2026-09-19 spec) ---------
+  //
+  // STARTS UPSTREAM OF THE PRODUCER (RF24). The attempt is driven to
+  // `link_ready` through begin/claim/accept rather than inserted, and the
+  // leak is triggered through the real sign-out path, because the defect is
+  // the SEAM between `sessions.deleteSession` and the `ON DELETE cascade`
+  // that reaches `auth_attempts` — not either half on its own.
+  it("signing out revokes the Apple token a pending link left on the attempt", async () => {
+    const recorder = recordingRevoke();
+    const scoped = createAttempts(
+      pool,
+      createAccessPolicy("public", ""),
+      recorder.revoke,
+    );
+    const user = await users.createUser({
+      googleSub: "google",
+      email: "original@test",
+      name: "Original",
+    });
+    const credential = await sessions.createSession(user.id);
+    const resolved = await sessions.resolveSession(credential.token);
+    const begun = await scoped.begin({
+      surface: "native",
+      purpose: "link",
+      targetProvider: "apple",
+      originalSessionId: resolved!.sessionId,
+    });
+    const target = (
+      await scoped.accept(await scoped.claim(begun.attempt), {
+        sub: "google",
+        email: "",
+        emailVerified: false,
+        name: "Rower",
+      })
+    ).attempt!;
+    await scoped.accept(await scoped.claim(target), apple);
+    // The precondition the whole test rests on: the credential really is
+    // parked on the attempt row, and a link guarantees no grant exists to
+    // suppress the revoke (`attempts.ts` refuses a link when apple_sub is set).
+    expect(
+      (
+        await pool.query(
+          "SELECT apple_client_id, apple_refresh_token FROM auth_attempts",
+        )
+      ).rows,
+    ).toStrictEqual([
+      { apple_client_id: "native.app", apple_refresh_token: "secret" },
+    ]);
+    expect((await pool.query("SELECT 1 FROM apple_grants")).rowCount).toBe(0);
+
+    await sessions.deleteSession(credential.token);
+
+    // The row is gone by cascade either way -- that is not the assertion.
+    expect((await pool.query("SELECT 1 FROM auth_attempts")).rowCount).toBe(0);
+    expect(recorder.seen).toStrictEqual([
+      { clientId: "native.app", refreshToken: "secret" },
+    ]);
+  });
   it("claim and same-session replacement wait without a lock-order cycle", async () => {
     const b = await link();
     let release!: () => void;
