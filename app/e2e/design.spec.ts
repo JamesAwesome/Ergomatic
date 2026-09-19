@@ -703,7 +703,7 @@ test.describe("Apple front door and sign-in methods", () => {
     );
   });
 
-  test("You methods and the two-proof screen keep 44px controls and hide the tab bar during linking", async ({
+  test("the account screen's methods and the two-proof screen keep 44px controls and hide the tab bar during linking", async ({
     page,
   }) => {
     await page.route("**/api/auth/options", (route) =>
@@ -716,7 +716,7 @@ test.describe("Apple front door and sign-in methods", () => {
       email: "design-apple-methods@e2e.test",
       name: "Maya Chen",
     });
-    await page.goto("/you");
+    await page.goto("/you/account");
     const addApple = page.getByRole("button", { name: "Add Apple" });
     await expect(addApple).toBeVisible();
     expect((await addApple.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -13212,7 +13212,7 @@ test.describe("the account block, landscape (Wave A PR 1 Task 4)", () => {
     await page.goto(
       "/?authError=signin_failed&authPurpose=link&authProvider=apple",
     );
-    await expect(page).toHaveURL(/\/you$/);
+    await expect(page).toHaveURL(/\/you\/account$/);
     const notice = page.locator(".auth-account-notice .notice");
     await expect(notice).toBeVisible();
 
@@ -13270,7 +13270,7 @@ test.describe("the account block, landscape (Wave A PR 1 Task 4)", () => {
     await page.goto(
       "/?authError=account_conflict&authPurpose=link&authProvider=apple",
     );
-    await expect(page).toHaveURL(/\/you$/);
+    await expect(page).toHaveURL(/\/you\/account$/);
 
     // The steps are what makes it tall, so assert they are actually there
     // before concluding anything from the geometry: without this the test
@@ -13307,7 +13307,7 @@ test.describe("the account block, landscape (Wave A PR 1 Task 4)", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 844, height: 390 });
-    await page.goto("/you");
+    await page.goto("/you/account");
     const list = page.locator(".auth-methods");
     const box = page.locator(".auth-danger-zone");
     await expect(
@@ -13328,5 +13328,79 @@ test.describe("the account block, landscape (Wave A PR 1 Task 4)", () => {
     const viewportHeight = page.viewportSize()!.height;
     expect(deleteBox.y).toBeGreaterThanOrEqual(0);
     expect(deleteBox.y + deleteBox.height).toBeLessThanOrEqual(viewportHeight);
+  });
+
+  // THE MOVE ITSELF (Gate 0 2026-09-15, Option A). The complaint was a
+  // measurement — `Delete account` 433px from the top of You and reachable
+  // without scrolling — so the gate is a measurement: on You it is not on
+  // the page at all, and the row that replaced it is the group's first.
+  test("390x844: You carries an ACCOUNT row and no delete button, and the row opens the screen that has one", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/you");
+    const account = page.getByRole("link", { name: /ACCOUNT/ });
+    await expect(account).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Delete account" }),
+    ).toHaveCount(0);
+    await expect(page.locator(".auth-methods")).toHaveCount(0);
+    // FIRST in the group, above BASELINES — the ruled order, checked by
+    // document position rather than by presence.
+    const doors = page.locator(".you-doors > *");
+    await expect(doors.first()).toHaveText(/ACCOUNT/);
+
+    await account.click();
+    await expect(page).toHaveURL(/\/you\/account$/);
+    await expect(
+      page.getByRole("heading", { name: "Account", level: 1 }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Delete account" }),
+    ).toBeVisible();
+    // The tab bar stays: this is a door, not a flow.
+    await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
+
+  // THE DISCLOSURE'S COLOUR, in a real browser (RF37: a class-name
+  // assertion cannot see the cascade, and jsdom resolves no `var()`).
+  // `--ink-3` on `--surface-sunken` is 6.30:1, computed. Mutation:
+  // `.auth-delete-reauth { color: var(--ink-5) }` → rgb(160, 154, 140).
+  test("390x844: the re-auth disclosure paints --ink-3 inside the box, under the button", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/you/account");
+    const line = page.locator(".auth-delete-reauth");
+    await expect(line).toHaveText("Asks you to sign in with Apple first.");
+    expect(await line.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(87, 84, 76)", // --ink-3
+    );
+    // Inside the quarantine box, below the button it describes.
+    const button = page.getByRole("button", { name: "Delete account" });
+    const lineBox = await stableBoundingBox(line);
+    const buttonBox = await stableBoundingBox(button);
+    if (!lineBox || !buttonBox) throw new Error("delete box not laid out");
+    expect(lineBox.y).toBeGreaterThanOrEqual(buttonBox.y + buttonBox.height);
+    await expect(
+      page.locator(".auth-danger-zone .auth-delete-reauth"),
+    ).toHaveCount(1);
+  });
+
+  test("the account screen clears 44x44 on every tappable and raises no axe violations, both orientations", async ({
+    page,
+  }) => {
+    for (const size of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await page.setViewportSize(size);
+      await page.goto("/you/account");
+      await expect(
+        page.getByRole("heading", { name: "SIGN-IN METHODS" }),
+      ).toBeVisible();
+      await assertTapTargets(page);
+      await assertNoA11yViolations(page);
+    }
   });
 });

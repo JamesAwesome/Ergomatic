@@ -42,6 +42,7 @@ import { destinationFor, useAuthFlow } from "./authFlow";
 import type { AuthFlowController, AuthFlowView } from "./authFlow";
 import LinkSignInMethod from "../auth/LinkSignInMethod";
 import You from "../You";
+import AccountScreen from "../you/AccountScreen";
 import DeleteAccount from "../you/DeleteAccount";
 
 function deferred<T>() {
@@ -1340,7 +1341,7 @@ describe("useAuthFlow", () => {
     ["attached", "/"],
     ["link_confirm", "/you/sign-in-methods"],
     ["link_authorize", "/you/sign-in-methods"],
-    ["linked", "/you"],
+    ["linked", "/you/account"],
     ["idle", null],
     ["busy", null],
   ] as const)("routes a %s view to %s", (kind, expected) => {
@@ -1372,7 +1373,7 @@ describe("useAuthFlow", () => {
 
   it.each([
     ["signin", "/"],
-    ["link", "/you"],
+    ["link", "/you/account"],
   ] as const)(
     "routes a terminal %s outcome back to the surface that started it",
     (purpose, expected) => {
@@ -2220,11 +2221,12 @@ describe("useAuthFlow", () => {
       auth = useAuthFlow(() => {});
       return (
         <MemoryRouter>
-          <You
-            user={{ id: "rower", name: "Rower", email: "rower@example.test" }}
-            onSignedOut={() => {}}
-            authFlow={auth}
-          />
+          {/* THE LIST'S SURFACE IS `/you/account` NOW (account-submenu spec
+              §3): You renders a door to it and nothing else, so reaching
+              `Remove` through You would find no control at all. The seam
+              this case exists for is unchanged — the real component, the
+              real write, the real re-read. */}
+          <AccountScreen auth={auth} />
         </MemoryRouter>
       );
     }
@@ -2262,11 +2264,12 @@ describe("useAuthFlow", () => {
       auth = useAuthFlow(() => {});
       return (
         <MemoryRouter>
-          <You
-            user={{ id: "rower", name: "Rower", email: "rower@example.test" }}
-            onSignedOut={() => {}}
-            authFlow={auth}
-          />
+          {/* THE LIST'S SURFACE IS `/you/account` NOW (account-submenu spec
+              §3): You renders a door to it and nothing else, so reaching
+              `Remove` through You would find no control at all. The seam
+              this case exists for is unchanged — the real component, the
+              real write, the real re-read. */}
+          <AccountScreen auth={auth} />
         </MemoryRouter>
       );
     }
@@ -2379,7 +2382,7 @@ describe("useAuthFlow", () => {
         targetProvider: "google",
       }),
     );
-    expect(result.current.destination).toBe("/you");
+    expect(result.current.destination).toBe("/you/account");
   });
 
   it("hands the erg's own delete route a re-proof attempt, not a sign-in", async () => {
@@ -2665,7 +2668,7 @@ describe("useAuthFlow", () => {
       purpose: "delete",
       code: "account_changed",
     });
-    expect(result.current.destination).toBe("/you");
+    expect(result.current.destination).toBe("/you/account");
   });
 
   it("deletes nothing when no re-proved attempt is live", async () => {
@@ -2775,16 +2778,21 @@ describe("useAuthFlow", () => {
     expect(destinationFor(view)).toStrictEqual(expected);
   });
 
+  // THE METHODS SURFACE MOVED, SO THIS DID (account-submenu spec §7). The
+  // notice for a cancelled or failed delete is rendered by `SignInMethods`
+  // and by nothing else; once that component lives at `/you/account`, a
+  // terminal outcome routed to `/you` lands the rower on a screen that says
+  // nothing at all — which is finding I1 exactly, arriving by a new route.
   it("routes a terminal delete outcome back to the methods surface", () => {
     expect(
       destinationFor({ kind: "cancelled", purpose: "delete" }),
-    ).toStrictEqual("/you");
+    ).toStrictEqual("/you/account");
     expect(
       destinationFor({
         kind: "error",
         purpose: "delete",
         code: "signin_failed",
       }),
-    ).toStrictEqual("/you");
+    ).toStrictEqual("/you/account");
   });
 });

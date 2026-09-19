@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { vi, describe, it, expect, afterEach, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import You from "./You";
+import type { AuthFlowController } from "./adapters/authFlow";
 import { api } from "./api";
 
 // Wave E PR2 Task 8 (card), PR A (row): You mounts the Concept2 ROW, whose
@@ -358,5 +359,133 @@ describe("You: the Concept2 row (Wave E PR A, spec §5.1)", () => {
     );
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByRole("link", { name: /CONCEPT2/ })).toBeNull();
+  });
+});
+
+// THE ACCOUNT DOOR (account-submenu spec §3-§4, Gate 0 Option A, James,
+// 2026-09-15). The account block left You for `/you/account`; what stands in
+// its place is one quiet mono row at the TOP of the doors group. These cases
+// hold both halves of invariant D1 — the row appears exactly when the block
+// it leads to would have rendered on You — because the door and the screen
+// read one predicate and nothing else re-derives it.
+describe("You: the ACCOUNT door", () => {
+  const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
+
+  function authController(
+    options: AuthFlowController["options"],
+  ): AuthFlowController {
+    return {
+      options,
+      view: { kind: "idle" },
+      targetAuthorizationBusy: false,
+      destination: null,
+      startSignIn: vi.fn(),
+      confirmAccount: vi.fn(),
+      useUsualSignIn: vi.fn(),
+      confirmAttach: vi.fn(),
+      declineAttach: vi.fn(),
+      prepareLink: vi.fn(),
+      startPreparedLink: vi.fn(),
+      authorizeLinkTarget: vi.fn(),
+      cancel: vi.fn(),
+      reset: vi.fn(),
+      abandon: vi.fn(),
+      removeMethod: vi.fn(),
+      startDelete: vi.fn(),
+      confirmDelete: vi.fn(),
+    };
+  }
+
+  const ready: AuthFlowController["options"] = {
+    state: "ready",
+    frontDoorEnabled: true,
+    legacyGoogle: false,
+    apple: true,
+    google: true,
+  };
+
+  it("puts ACCOUNT first in the doors group, above BASELINES, pointing at /you/account", async () => {
+    render(
+      <MemoryRouter>
+        <You
+          user={user}
+          onSignedOut={() => {}}
+          authFlow={authController(ready)}
+        />
+      </MemoryRouter>,
+    );
+    const account = screen.getByRole("link", { name: /ACCOUNT/ });
+    expect(account).toHaveAttribute("href", "/you/account");
+    const group = screen.getByRole("navigation", { name: "More" });
+    expect(group).toContainElement(account);
+    expect(group.firstElementChild).toBe(account);
+    const baselines = await screen.findByText("BASELINES");
+    expect(
+      account.compareDocumentPosition(baselines) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("renders no account block of its own — the list and Delete account are behind the door", async () => {
+    render(
+      <MemoryRouter>
+        <You
+          user={user}
+          onSignedOut={() => {}}
+          authFlow={authController(ready)}
+        />
+      </MemoryRouter>,
+    );
+    // POSITIVE OBSERVABLES FIRST, and they have to be the right ones: every
+    // assertion below is a negative, and the block renders ASYNCHRONOUSLY
+    // (its list waits on `/api/auth/methods`), so a "no heading yet" check
+    // run at mount passes whether or not the block is there. Measured with
+    // the block restored: the heading and button checks stayed green and
+    // only the read assertion bit. So the screen is settled first — the
+    // door drawn, another mount-time read resolved — and the read is the
+    // load-bearing line.
+    expect(screen.getByRole("link", { name: /ACCOUNT/ })).toBeVisible();
+    await waitFor(() =>
+      expect(vi.mocked(api)).toHaveBeenCalledWith("/api/concept2/link"),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(vi.mocked(api)).not.toHaveBeenCalledWith("/api/auth/methods");
+    expect(
+      screen.queryByRole("heading", { name: "SIGN-IN METHODS" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete account" })).toBeNull();
+    expect(document.querySelector(".auth-account-block")).toBeNull();
+  });
+
+  it.each([
+    ["the options read is still in flight", { state: "loading" } as const],
+    [
+      "the host's front door is off",
+      {
+        state: "ready",
+        frontDoorEnabled: false,
+        legacyGoogle: true,
+        apple: false,
+        google: true,
+      } as const,
+    ],
+  ])("renders no ACCOUNT row while %s", async (_case, options) => {
+    render(
+      <MemoryRouter>
+        <You
+          user={user}
+          onSignedOut={() => {}}
+          authFlow={authController(options)}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("BASELINES")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /ACCOUNT/ })).toBeNull();
+  });
+
+  it("renders no ACCOUNT row when there is no auth flow at all", async () => {
+    renderYou(user);
+    expect(await screen.findByText("BASELINES")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /ACCOUNT/ })).toBeNull();
   });
 });
