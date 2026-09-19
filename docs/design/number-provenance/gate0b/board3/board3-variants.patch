@@ -1,0 +1,217 @@
+diff --git a/app/src/index.css b/app/src/index.css
+index b30a0b7c..69e04384 100644
+--- a/app/src/index.css
++++ b/app/src/index.css
+@@ -10196,6 +10196,51 @@ section:not(.news-pinned) .news-row:last-of-type {
+   color: var(--ink-3);
+ }
+ 
++/* ===== GATE 0B BOARD 3 PROTOTYPE — THROWAWAY ===== */
++.board3-table {
++  margin: 10px 0 0;
++  border-collapse: collapse;
++  font-family: var(--font-mono);
++  font-variant-numeric: tabular-nums;
++}
++
++.board3-table th,
++.board3-table td {
++  padding: 3px 0 3px 18px;
++  text-align: right;
++}
++
++.board3-table th[scope="row"] {
++  padding-left: 0;
++  text-align: left;
++  font-weight: 400;
++  font-size: 10px;
++  letter-spacing: 0.14em;
++  color: var(--ink-3);
++}
++
++.board3-table th[scope="col"] {
++  font-weight: 400;
++  font-size: 10px;
++  letter-spacing: 0.14em;
++  color: var(--ink-3);
++}
++
++.board3-table tbody td {
++  font-size: 15px;
++  color: var(--ink);
++}
++
++.board3-line {
++  margin: 8px 0 0;
++  font-family: var(--font-mono);
++  font-size: 12px;
++  letter-spacing: 0.04em;
++  color: var(--ink-3);
++  white-space: pre;
++}
++/* ===== END GATE 0B BOARD 3 PROTOTYPE ===== */
++
+ .summary-hero {
+   display: flex;
+   flex: 1;
+diff --git a/app/src/session/PostWorkoutSummary.tsx b/app/src/session/PostWorkoutSummary.tsx
+index 46229f52..e1af0591 100644
+--- a/app/src/session/PostWorkoutSummary.tsx
++++ b/app/src/session/PostWorkoutSummary.tsx
+@@ -419,6 +419,113 @@ function fmt(v: number | undefined): string {
+   return v === undefined ? DASH : String(v);
+ }
+ 
++// ===== GATE 0B BOARD 3 PROTOTYPE — THROWAWAY, NEVER SHIPS =====
++// Three compositions for M4/M5, approved in substance 2026-09-19: the
++// saved row gains the logbook's own figures, so the number the rower saw
++// at the erg (Overall Distance) finally appears where the record is.
++//
++// The NUMBERS are real — the e2e capture seeds the exit-7 walk's own
++// work 500 m / 2:04 and rest 242 m / 2:00 — but the PLUMBING is faked
++// through the query string, because the board is about composition and
++// the real derivation is PR 4's job. `?board3=a|b|c`, `?rest=none` for
++// the interrupted variant (M5's dashes).
++type Board3 = "off" | "a" | "b" | "c";
++
++interface Board3Figures {
++  workMeters: number;
++  workTime: string;
++  restMeters: number | null;
++  restTime: string | null;
++  overallMeters: number | null;
++  overallTime: string | null;
++}
++
++function board3Mode(): { mode: Board3; figures: Board3Figures } {
++  const off = {
++    mode: "off" as const,
++    figures: {
++      workMeters: 0,
++      workTime: "",
++      restMeters: null,
++      restTime: null,
++      overallMeters: null,
++      overallTime: null,
++    },
++  };
++  if (typeof window === "undefined") return off;
++  const q = new URLSearchParams(window.location.search);
++  const raw = q.get("board3");
++  if (raw !== "a" && raw !== "b" && raw !== "c") return off;
++  // M5: an interrupted row whose rest the record declines to claim.
++  const known = q.get("rest") !== "none";
++  return {
++    mode: raw,
++    figures: {
++      workMeters: 500,
++      workTime: "2:04",
++      restMeters: known ? 242 : null,
++      restTime: known ? "2:00" : null,
++      overallMeters: known ? 742 : null,
++      overallTime: known ? "4:04" : null,
++    },
++  };
++}
++
++/** Treatments A and B: the logbook's own three rows, two columns. The
++ *  arithmetic is visible down each column (500 + 242 = 742), which is the
++ *  property RF7 asks for — a reader can check the headline against the
++ *  rows by eye. */
++function Board3Table({ figures }: { figures: Board3Figures }) {
++  const rows: [string, string, string][] = [
++    ["WORK", String(figures.workMeters), figures.workTime],
++    [
++      "REST",
++      figures.restMeters === null ? DASH : String(figures.restMeters),
++      figures.restTime ?? DASH,
++    ],
++    [
++      "OVERALL",
++      figures.overallMeters === null ? DASH : String(figures.overallMeters),
++      figures.overallTime ?? DASH,
++    ],
++  ];
++  return (
++    <table className="board3-table">
++      <thead>
++        <tr>
++          <td />
++          <th scope="col">DISTANCE</th>
++          <th scope="col">TIME</th>
++        </tr>
++      </thead>
++      <tbody>
++        {rows.map(([label, meters, time]) => (
++          <tr key={label}>
++            <th scope="row">{label}</th>
++            <td>{meters}</td>
++            <td>{time}</td>
++          </tr>
++        ))}
++      </tbody>
++    </table>
++  );
++}
++
++/** Treatment C: the prose line replaced by named figures on one line —
++ *  the smallest change that still carries every figure the logbook does. */
++function Board3Line({ figures }: { figures: Board3Figures }) {
++  const rest =
++    figures.restMeters === null
++      ? `REST ${DASH}`
++      : `REST ${figures.restMeters} m · ${figures.restTime}`;
++  const overall =
++    figures.overallMeters === null
++      ? `OVERALL ${DASH}`
++      : `OVERALL ${figures.overallMeters} m · ${figures.overallTime}`;
++  return <p className="board3-line">{`${rest}    ${overall}`}</p>;
++}
++// ===== END GATE 0B BOARD 3 PROTOTYPE =====
++
+ export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
+   const hasHero =
+     heroes.avgSplit !== undefined ||
+@@ -426,6 +533,7 @@ export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
+     heroes.distanceMeters !== undefined;
+   if (!hasHero) return null;
+   const machine = heroes.machine;
++  const board3 = board3Mode();
+   return (
+     <div className="summary-heroes-block">
+       <div className="summary-heroes">
+@@ -435,19 +543,23 @@ export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
+             <span className="summary-hero-value">{heroes.avgSplit}</span>
+           </div>
+         )}
+-        {heroes.time !== undefined && (
++        {heroes.time !== undefined && board3.mode !== "b" && (
+           <div className="summary-hero">
+             <span className="summary-hero-label">TIME</span>
+             <span className="summary-hero-value">{heroes.time}</span>
+           </div>
+         )}
+-        {heroes.distanceMeters !== undefined && (
++        {heroes.distanceMeters !== undefined && board3.mode !== "b" && (
+           <div className="summary-hero">
+             <span className="summary-hero-label">DISTANCE</span>
+             <span className="summary-hero-value">{heroes.distanceMeters}</span>
+           </div>
+         )}
+       </div>
++      {(board3.mode === "a" || board3.mode === "b") && (
++        <Board3Table figures={board3.figures} />
++      )}
++      {board3.mode === "c" && <Board3Line figures={board3.figures} />}
+       {/* RC-5 §2 (hero-truth design spec): the wall-clock total the three
+           heroes above used to fold rest into, now on its own line — right
+           beneath the heroes, unconditionally (no scroll/collapse/lazy
+@@ -456,7 +568,7 @@ export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
+           filing a bug on a heroes total that shrank). Absent whenever
+           `buildTotalLine` had nothing to say (the manual/timer doors, or
+           a monitor row with no measured time at all). */}
+-      {heroes.totalLine !== undefined && (
++      {heroes.totalLine !== undefined && board3.mode === "off" && (
+         <p className="summary-total-line">{heroes.totalLine}</p>
+       )}
+       {/* Phase LP §3 (Gate 0 approved 2026-09-07, artboard

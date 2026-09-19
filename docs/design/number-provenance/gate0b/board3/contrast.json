@@ -1,0 +1,11 @@
+{
+  "measured": "2026-09-19, Chromium, live cascade on /today/log/:id at 390x844",
+  "note": "Every pairing below already exists on this surface — the treatments reuse --ink for values and --ink-3 for labels, the same tokens the heroes use. Background measured as rgb(244,241,232) = --page.",
+  "pairings": {
+    "board3-table value (15px)": { "ratio": 15.41, "aa": 4.5 },
+    "board3-table row label (10px)": { "ratio": 6.69, "aa": 4.5 },
+    "board3-table column label (10px)": { "ratio": 6.69, "aa": 4.5 },
+    "summary-hero-value (36px, unchanged)": { "ratio": 15.41, "aa": 3.0 },
+    "summary-hero-label (10px, unchanged)": { "ratio": 6.69, "aa": 4.5 }
+  }
+}
