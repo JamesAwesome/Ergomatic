@@ -455,6 +455,58 @@ quantity beside a **lossy estimate of a different one**. **Agrees when** one
 of them changes, or both are labelled such that a rower reading them an hour
 apart is not told two different things about one row — see I2's third arm.
 
+**RULED at Gate 0B board 3 (James, 2026-09-19): treatment C — COPY THE
+LOGBOOK.** The saved row keeps its three heroes and replaces the quiet
+prose line with the logbook's own named figures:
+
+> `REST 242 m · 2:00`   `OVERALL 742 m · 4:04`
+
+**Why that closes M4 without touching the live pane.** The number the
+rower sees at the erg IS the logbook's Overall Distance, and the saved
+row has never shown it. Once it does, both screens show 742 and agree.
+
+**The precedent, and the thing it settles about LABELS.** Concept2's own
+logbook renders the same session as `Meters 3,898` / `Rest Distance 113`
+/ `Overall Distance 4,011` (and the matching times), verified on a public
+interval log 2026-09-19; 3,898 + 113 = 4,011, so the reading self-checks.
+Our own integration agrees — the C2 API's fields are `distance`,
+`rest_distance`, `rest_time`, and `server/concept2/mapping.ts` already
+posts the work figure as `distance`. **They disambiguate by
+JUXTAPOSITION, never by adjective**: the headline is not called "work
+meters", and the reader learns what it is because `Overall` sits beside
+it. So the `DISTANCE` hero stays unlabelled and stays the work figure —
+which is precisely the question James asked at the gate ("is the hero
+itself the work number?") and the reason treatment B, which labels it
+`WORK`, was rejected despite being the board's own recommendation.
+
+**Accepted costs, recorded because the gate carried them.** The
+relationship between 500, 242 and 742 is implicit — the reader assembles
+it, exactly as the logbook asks of them today. And the hero's generic
+`DISTANCE` sits near the line's `OVERALL`, a collision the logbook is
+milder about because its headline noun is `Meters`.
+
+**The live pane is NOT changed.** It keeps showing its own total, which
+remains a lossy estimate (an interval producing zero frames is lost from
+it), so the two can still differ in that one case. Accepted rather than
+captioned: the saved row is the record, and a rower comparing them would
+resolve in its favour anyway. I2's third arm is satisfied by the saved
+row naming both quantities, not by annotating the estimate.
+
+**BOTH DOORS CHANGE, and the board only drew one of them.** The frames
+are the stored log detail, but `SummaryHeroesBlock`
+(`src/session/PostWorkoutSummary.tsx`) is shared: the post-workout
+summary renders the identical heroes and the identical `totalLine`.
+The named figures replace that line on BOTH, because a rower who saves a
+piece and reopens it an hour later must not be shown two shapes of the
+same record — which is the member's own complaint. The two doors source
+the figures the way they already source the line they replace: the live
+door through `monitorRest(run)`, the stored door through
+`buildStoredRest`. Implementation detail for the plan, named here only so
+the scope is not guessed.
+
+**The timer and manual doors are unaffected**, the same way `totalLine`
+already is: they have no rest to report and no machine figure to name.
+
 ### M5 — the interrupted TOTAL line
 
 An interrupted session shows a rest clause LIVE and none STORED for the
@@ -464,6 +516,40 @@ than misattribute an abandoned interval's rowed work as rest. **Agrees
 when** the stored line says WHY it cannot speak, or the clause is sourced
 from something the gate does not refuse. "Say the same thing the live one
 did" reverses the fix-round ruling and is not on the table without James.
+
+**RULED at Gate 0B board 3 (James, 2026-09-19): the DASH, in the slot M4
+creates — and M5 therefore costs no new copy and no new concept.**
+
+Under M4's ruling the saved row carries named REST and OVERALL figures.
+An interrupted row renders each of them as this codebase's own absence
+mark: `MachineTier`'s rule is "each field is `undefined` where the
+machine did not say — the screen renders a dash there, and `0` as `0`",
+which the six machine tiles on this same screen already follow.
+
+> `REST —`   `OVERALL —`
+
+**Why the silence is invisible today and legible after:** there is
+currently nowhere for the absence to BE. The whole prose line vanishes,
+so nothing on screen indicates a quantity was withheld. A named figure
+showing a dash says both that the quantity exists and that we decline to
+claim it.
+
+**THE CAUSE IS STRICTER THAN THIS SECTION SAID.** It is not only
+`isReconstructableClose`: `src/monitor/monitorRun.ts` writes the session
+rest pair only when EVERY interval carries both readbacks
+(`actuals.every(a => a.restSeconds !== undefined && a.restDistanceMeters
+!== undefined)`). One abandoned interval drops the pair for the whole
+session.
+
+**REJECTED at the same gate: summing the per-interval readbacks we do
+hold.** Every completed interval still carries its own
+`machineRestSeconds`/`machineRestMeters` — we already send them to
+Concept2 — so a real number is available. It is refused because it
+UNDER-COUNTS whenever the abandoned interval had rest of its own, and
+presenting an understated figure as whole is the same misattribution the
+all-or-nothing rule exists to prevent, only quieter. A dash is honest; a
+low number is not. If this is ever revisited, the figure must be marked
+as partial rather than shown plain.
 
 ### M6 — rest bands are as wide as the rower kept moving
 
@@ -679,7 +765,12 @@ provenance vocabulary verbatim or states a deviation.
    contrast work they forced is what set the legend swatch's own floor
    (`docs/design/number-provenance/gate0b/board2/BOARD2.md`).
 3. The connected live surface's total beside the stored total for the same
-   session (M4, M5).
+   session (M4, M5). **[BUILT AND RULED 2026-09-19 — treatment C.]** What
+   it actually drew was three COMPOSITIONS of the saved row, against a
+   seeded row carrying the exit-7 walk's own numbers, rather than the two
+   surfaces side by side: once the saved row shows the logbook's Overall
+   Distance the two surfaces agree, so the live pane needed no frame of
+   its own. `docs/design/number-provenance/gate0b/board3/BOARD3.md`.
 
 Because members 4, 5 and 7 change stored figures, those boards carry **the
 before and after side by side for a row James already has**, so a moved
@@ -696,13 +787,21 @@ clause is the one that needs the receipt.
 | 1 | M1, M2 | Copy on a rendered surface. No number moves. | after 0B |
 | 2 | M8 + appendix | Layout across four charts, two screens; one copy deletion. No number moves. | **LANDED** |
 | 3 | M3, M6 | Changes what an axis IS. Antagonist pass. No stored data. | **SCOPED 2026-09-19** |
-| 4 | M4, M5, **M9** | **TRIAD** — stored figures render differently. dba + antagonist + PM. | **PROVISIONAL** |
+| 4 | M4, M5 | **TRIAD** — a stored figure renders differently. antagonist + PM; **dba SKIPS** (no db, no store, no bulk read). | **SCOPED 2026-09-19 — board 3 approved** |
+| 5 | M9 | **TRIAD** — a new STORED COLUMN (the session's start), so a migration and a backfill question. dba + antagonist + PM. | **SPLIT OUT 2026-09-19** |
 | M7's gate | M7 | Tests and prose only; no figure moves. Not TRIAD, no board. | **SCOPED 2026-09-19** |
 
 Grouped by risk model rather than by screen so each PR carries one kind of
 review (CLAUDE.md's grouping tie-break).
 
-**[CORRECTED 2026-09-19] M9 MOVED from PR 3 to PR 4.** This table put M3,
+**[CORRECTED 2026-09-19, TWICE] M9 moved from PR 3 to PR 4, then OUT of
+PR 4 into its own PR 5** (James: "Okay split out M9"). M4 and M5 render
+figures the record already holds; M9 needs a new stored column, a
+migration and a backfill decision. Grouping them would make one TRIAD
+review hold two unrelated risk models — "did we name the right figures
+on screen" and "is this schema change safe" — which is the condition
+CLAUDE.md's grouping tie-break says to split on. The original move off
+PR 3 stands and its reasoning is unchanged: This table put M3,
 M6 and M9 together on the grounds that PR 3 changes what an axis is with no
 stored data. M3 and M6 hold. M9 does not: board 2 measured the free row's
 104.6 s pause and its entire footprint in the stored series is a **1.8 s
@@ -860,6 +959,9 @@ that PR; the probe itself does not survive the branch, and neither does
 | PM open | 2026-09-14 | APPROVED with four amendments, all folded in |
 | Gate 0A | 2026-09-14 | **APPROVED as rendered** (James: "approved") — artifact `MZsVEJ1rSsxYLFQRuCrbtS` rev 1, boards at `docs/design/number-provenance/gate0a/`. Rulings 1, 3 and 4 take the option the boards rendered; **ruling 2 (the MACHINE caption) RULED C by James the same day: NO CAPTION** — rulings 18/19 stand, and M7's "or the column says they do not" arm is closed. M7 survives only as the population change, which moves a stored figure and stays TRIAD in PR 4. **[SUPERSEDED 2026-09-19] The population change has no reachable subject — James ruled "Narrow", and M7 left PR 4 as a two-part gate that is not TRIAD; the receipt is in M7's own section** |
 | Gate 0B board 1 | 2026-09-15 | **APPROVED** (James: "go with the recommendation") — artifact `1MKF7K6zhtEK58xXuK3ofB`, boards at `docs/design/number-provenance/gate0b/`. Covers M1, M1b and M2 only; boards 2 and 3 remain unbuilt |
+| Gate 0B board 2 | 2026-09-19 | **APPROVED — candidate B** (James: "B is the one I had in mind not C"), artifact `FjHZpU1motBTyxgGnm1FHS`. The trace axis is work + the machine's own rest, plus the stopped-span mark and the swatch legend. Shipped as PR 3, #478 |
+| M7 narrowing (James) | 2026-09-19 | **"Narrow"** — M7 has no reachable subject, ships as a two-part gate and leaves PR 4. #482 |
+| Gate 0B board 3 | 2026-09-19 | **APPROVED — treatment C** (James: "Go with c"), artifact `NqVPNJbnfBZ16biH3DE9dG`, board at `docs/design/number-provenance/gate0b/board3/`. The saved row keeps its heroes and the prose total line becomes named REST and OVERALL figures; an interrupted row renders each as a dash. **The board recommended B and was wrong** — B labels the headline `WORK`, and the logbook this board was told to copy disambiguates by juxtaposition, never by adjective. James's own question found it |
 | Gate 0B round 2 | 2026-09-15 | **APPROVED as rendered** (James: "approved") — artifact `TuGUWZaKj9BxiGaCR7Sb6A`, record at `gate0b/ROUND2.md`. Board 1's ruling was a DIRECTION, so round 2 drew both halves and measured them. **Ruling 1 = none of A/B/C: no mark on the tile face, an answerable drill-down instead.** **Ruling 2 = B, group the columns, DERIVED first.** Words `DERIVED` / `MEASURED` chosen by James over `COMPUTED HERE` / `REPORTED BY THE PM5` |
 | M2 (AVG HR) | 2026-09-15 | **WITHDRAWN from scope.** The recommendation proposed reopening which number the tile shows; `derivedHeartRate.ts:20-42` records James settling exactly that on 2026-09-07 as Gate 0 option A, with option C rejected on measured numbers and an explicit warning against "fixing" the tile to match the rows. RF18. What M2 actually needed was for the SCREEN to say what the code knew, which the drill-down now does |
 | Gate 0B boards 2 + 3 | — | still owed (the axis; live total vs stored) |
