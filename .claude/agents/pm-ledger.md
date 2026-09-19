@@ -7612,3 +7612,46 @@ on prod is the decisive check (`difficulty` was NOT NULL with no default).
 
 **Release, flagged:** `v0.50.6` is behind two tester-visible merges (#474
 account door, #478 trace-chart axis). Recommended v0.51.0, notes PR first.
+
+## 2026-09-19 — Phases MT / DE / PS: one close gate, three phases (worktree `d08b2a78`, main `708bfa8d`)
+
+The grouped shape recommended that morning, executed. **MT PASS. DE PASS WITH
+CONDITIONS (2). PS PASS WITH CONDITIONS (2).** No tag for the close — all
+twelve PRs verified in released tags (MT v0.43.0-v0.45.0, DE v0.39.0 +
+v0.46.0, PS v0.46.0 + v0.47.0).
+
+**MT.** `close-MT.md` called criteria 1-6, 8, 9 "INFERRED from CI at the
+tags". Wrong register for seven of them: 1-5, 8 and 9 are test-asserted and
+run at head. Only 6 (Gate 0 approved on two rendered screens) is a historical
+event where inference is the only form. **Reworded, not re-derived.**
+
+**DE, condition 1.** The close-out judged four criteria from ROADMAP's Exit
+paragraph; spec §6 has six. §6.5's three named `DEVIATIONS.md` rows are
+reconciled and both `SKILL.md`s are correct — but two cells the spec did not
+name still described the shipped filter sheet as holding DIFFICULTY and PAIN
+groups. **Fixed in the close PR** (and the controller found the TIME group
+there is a range rail since Phase SF PR 2, not the 4-cell grid the first fix
+wrote).
+
+**DE, condition 2.** §6.5's "this spec's body moves to `docs/history/`":
+recorded as DELIBERATELY NOT DONE, with the count as its receipt, and put to
+James in the hand-back because it is a spec criterion.
+
+**PS criterion 6 — MET, conditionally;** the antagonist's same-day pass made
+it MET WITH STATED LIMITS, and that wording is what was archived. Accepted the
+inferred Concept2 LIFETIME rather than spend James's turn. Conditions: the
+residual recorded as unattributed with the 26/26 coincidence named; and the
+check stated as run against `log-dev.concept2.com`, owing ONE re-run after
+Wave E's exit moves production to the live logbook.
+
+**Carried forward, checked, safe:** MT's matrix-staleness trigger ("Small,
+queued", dies 2026-11-30); DE's legacy bulk header, recorded in CODE at
+`app/domain/bulk.ts` — a better carrier than the ROADMAP row ever was; PS's
+deleted-test-point question, owned by Wave C PR 2, which is ALSO discharging
+#165's 2026-08-22 binding ("the list does NOT ship without a remove/void
+answer"). If that row is rescoped the binding returns with it.
+
+**Release, stated at the close:** recommended `v0.51.0`, notes PR first —
+#474, #478 and #480 are tester-visible and untagged past v0.50.6; the docs,
+gate and tooling merges since each owe a stated "no note" line (RF15).
+Another session cuts it.

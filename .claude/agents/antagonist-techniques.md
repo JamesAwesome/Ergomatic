@@ -930,3 +930,37 @@ is exactly what happened: every section in this file stopped growing on
     the only path. It also goes RED spuriously, because a source-text count
     counts the comments (technique 11) and this file quotes SQL in comments
     constantly.
+
+98. **When both sides of an "external oracle" read the same stored column,
+    the agreement is a round-trip receipt, not a measurement.** Phase PS's
+    exit criterion compared the app's weekly metres against Concept2's
+    logbook rows — but `mapping.ts`'s `postedMeters` and
+    `domain/stats/rowContribution.ts`'s machine tier both return
+    `row.machineWorkMeters`, so the 24,507 m row-for-row agreement proved the
+    send path and the stats path read one column and that Concept2 stored it
+    unchanged. Before crediting an external number, find the FIELD each side
+    derives from; if it is one field, say what the check DID prove (a seam, a
+    transport) rather than what it looks like it proved. RF11's second half,
+    applied to a number we posted ourselves.
+99. **An oracle run against a SANDBOX account cannot go red on a lifetime
+    total, because the sandbox holds only what we put there.** PS's Concept2
+    LIFETIME was "inferred equal to its season"; on `log-dev.concept2.com` it
+    could not have been anything else. Ask whether the authority holds any row
+    we did not write before counting it as an authority (RF21, applied to a
+    data source).
+100. **A residual computed by subtraction is a restatement, not a second
+     observation.** "~49,635 m was never sent" is exactly 128,660 − 79,025. For
+     any "the gap is explained by X" claim, check whether X was MEASURED or
+     whether it is the difference the claim is explaining.
+101. **A drizzle migration file is ATOMIC with every other pending file and
+     with its own journal row** — `drizzle-orm/pg-core/dialect.js` runs the
+     whole loop inside one `session.transaction`. So evidence that ONE
+     statement in a multi-DROP migration landed proves they all did. Read the
+     migrator before pricing a per-statement confirmation on production.
+102. **A close record that inherits the ROADMAP's Exit PARAGRAPH inherits a
+     SHORTER list than the spec's.** Phase DE's worklist walked four criteria
+     and cited "spec §6", which has six; the two it dropped were the
+     test-suite criterion and the housekeeping one that owns the archive move
+     itself. Open the spec's own section and count before writing MET against
+     anything.
+

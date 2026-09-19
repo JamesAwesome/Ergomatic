@@ -1,3 +1,29 @@
+# Phase MT — the app refuses a machine it cannot record (CLOSED 2026-09-19)
+
+**Closed by James's word on 2026-09-19, together with Phases DE and PS, in one
+doc-class PR** — one antagonist exit pass and one PM close gate covered all
+three. Shipped in v0.43.0 (#366), v0.44.0 (#369, #370) and v0.45.0 (#377, #378,
+#380). Close record: `docs/closeouts/close-MT.md`.
+
+**PM close gate: PASS.** **Antagonist exit pass: EXIT HOLDS WITH STATED
+LIMITS.** Exit criteria 1-5, 8 and 9 are enforced by tests in the tree at head
+(spot-checked: `ergMachine.test.ts` per-value refusals, `Plan.test.tsx`'s
+`state.from` pins, `fake.test.ts`'s ordering assertion); criteria 7 and 10 were
+verified in tree at the close; criterion 6 — Gate 0 approved on both rendered
+screens — is a historical event, met at #366 and re-met by the later gates on
+#369, #370 and #378, which changed both screens.
+
+**Where its seven residuals went (#481):** one ticked as a ruled record, one
+struck with a measured receipt (`docs/history/register-evictions-2026-09-19.md`),
+and five lifted with dates — the published matrix to "Small, queued", the
+MultiErg static-value case to "Accepted, pinned", the ungated refusal guard to
+Tooling, the hardcoded `type: "rower"` to Wave E, and pre-2018 classification
+to the Icebox.
+
+The body below is the section as it stood at the close, verbatim.
+
+---
+
 ## Phase MT — the app refuses a machine it cannot record
 
 **Status: all three PRs merged — PR 1 (#366, `a476cbc6`) 2026-09-08 shipped in
