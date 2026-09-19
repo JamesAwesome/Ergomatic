@@ -500,6 +500,97 @@ describe("AppRoutes", () => {
     expect(screen.getByRole("navigation", { name: "Main" })).toBeVisible();
   });
 
+  // THE ACCOUNT DOOR'S OTHER HALF (account-submenu spec §4, invariant D1).
+  // You draws the ACCOUNT row only when `accountDoorAvailable` is true; this
+  // route must refuse under exactly the same condition, or a deep link, a
+  // bookmark, or an options flip mid-session reaches a screen the rower has
+  // no door to. Mounted for REAL, like /you/settings below: the screen is a
+  // frame around `SignInMethods`, whose own read fails harmlessly under
+  // jsdom and leaves the headings this asserts on.
+  it("routes /you/account when signed in and the front door is on", async () => {
+    const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
+    render(
+      <MemoryRouter initialEntries={["/you/account"]}>
+        <AppRoutes
+          user={user}
+          onSignedOut={() => {}}
+          authFlow={idleAuthFlow()}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Account", level: 1 }),
+    ).toBeVisible();
+    // The tab bar stays, as on every other /you/* door — /you/account is NOT
+    // in HIDDEN_TABBAR_PREFIXES, unlike the flow-only /you/sign-in-methods.
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
+
+  // AN UNANSWERED OPTIONS READ IS NOT A REFUSAL. A direct arrival — a
+  // bookmark, a deep link, or an OAuth return, which lands here now — hits
+  // this route before the controller's own read resolves. Sharing the
+  // door's predicate bounced every one of them to You: measured in
+  // `appleAuth.spec.ts`'s refusal leg, which found no `Remove Apple` at all
+  // because the redirect had already fired.
+  it("keeps /you/account mounted while the options read is still in flight", async () => {
+    const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
+    const auth = idleAuthFlow();
+    auth.options = { state: "loading" };
+    render(
+      <MemoryRouter initialEntries={["/you/account"]}>
+        <AppRoutes user={user} onSignedOut={() => {}} authFlow={auth} />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Account", level: 1 }),
+    ).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "You" })).toBeNull();
+  });
+
+  it("redirects /you/account to You when the host's front door is off", async () => {
+    const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
+    const auth = idleAuthFlow();
+    auth.options = {
+      state: "ready",
+      frontDoorEnabled: false,
+      legacyGoogle: true,
+      apple: false,
+      google: true,
+    };
+    render(
+      <MemoryRouter initialEntries={["/you/account"]}>
+        <AppRoutes user={user} onSignedOut={() => {}} authFlow={auth} />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "You" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Account" })).toBeNull();
+  });
+
+  it("redirects /you/account to You when there is no auth flow to serve it", async () => {
+    const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
+    render(
+      <MemoryRouter initialEntries={["/you/account"]}>
+        <AppRoutes user={user} onSignedOut={() => {}} />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "You" })).toBeVisible();
+  });
+
+  // A CHARACTERISATION TEST, AND IT SAYS SO (branch review F4, RF21). No
+  // mutation of this PR's own code reds it — with no controller the route
+  // redirects to `/you`, which itself wildcards to Today, so deleting the
+  // route or inverting its guard leaves this green. What it WOULD catch is a
+  // future change that let a signed-out rower reach the account screen at
+  // all, which is worth a line.
+  it("wildcards /you/account to Today when signed out", async () => {
+    render(
+      <MemoryRouter initialEntries={["/you/account"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
+  });
+
   // Phase JC (Gate 0, 2026-09-08): the judged-colour settings screen behind
   // You's SETTINGS row, behind the same signed-in guard. Mounted for REAL
   // rather than stubbed like Diagnostics/Concept2Screen above — the screen

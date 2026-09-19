@@ -56,7 +56,7 @@ test("signed-in methods disable Add when either proof is unavailable and idle de
     name: "Apple Link Tester",
   });
 
-  await page.goto("/you");
+  await page.goto("/you/account");
   await expect(page.getByText("CONNECTED")).toBeVisible();
   const addApple = page.getByRole("button", { name: "Add Apple" });
   await expect(addApple).toBeDisabled();
@@ -74,8 +74,15 @@ test("signed-in methods disable Add when either proof is unavailable and idle de
   expect(disabledStyles.rowCursor).toBe("not-allowed");
   expect(disabledStyles.actionCursor).toBe("not-allowed");
 
+  // The flow-only route still redirects an idle remount to You — and You is
+  // now the door rather than the list, so the list is one tap further on.
   await page.goto("/you/sign-in-methods");
   await expect(page).toHaveURL(/\/you$/);
+  await expect(
+    page.getByRole("heading", { name: "SIGN-IN METHODS" }),
+  ).toHaveCount(0);
+  await page.getByRole("link", { name: /ACCOUNT/ }).click();
+  await expect(page).toHaveURL(/\/you\/account$/);
   await expect(
     page.getByRole("heading", { name: "SIGN-IN METHODS" }),
   ).toBeVisible();
@@ -302,7 +309,7 @@ test("linking Apple proves Google then Apple and preserves the signed-in account
   expect(created.ok, created.body).toBe(true);
 
   try {
-    await page.goto("/you");
+    await page.goto("/you/account");
     await page.getByRole("button", { name: "Add Apple" }).click();
     await expect(
       page.getByRole("heading", { name: "Add Apple" }),
@@ -414,7 +421,47 @@ test("a lost finalize response reports uncertainty without claiming failure or s
   ).toHaveAttribute("aria-current", "page");
 });
 
-test("a cancelled link return sends the rower to You once and releases ordinary navigation", async ({
+// TWO WRITERS, ONE URL, AND THEY DISAGREE FOR THE FIRST TIME (branch review
+// F2). An in-document Cancel sets `cancelled`, and two things then write the
+// URL in the same flush: the flow route's own `<Navigate to="/you" replace>`
+// for a view it no longer owns, and `App`'s destination effect, which since
+// the account submenu sends a terminal link or delete outcome to
+// `/you/account`. Before the move both wrote `/you` and the ordering could
+// not matter; now the notice lives on only one of them, so the ordering is a
+// claim and this is the assertion on it. Reachable on both platforms — no
+// callback, no provider, just the button.
+test("cancelling a link in-document leaves the rower on the account screen, not on You", async ({
+  page,
+}, testInfo) => {
+  await enableFrontDoor(page);
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({ status: 200, json: { apple: false, google: true } }),
+  );
+  await signInViaBackdoor(page, {
+    email: `apple-cancel-in-document-${testInfo.parallelIndex}@e2e.test`,
+    name: "Apple Link Tester",
+  });
+
+  // BOTH of the screen's cancels, because both call `auth.cancel()` and a
+  // rower can reach either: the header's `← CANCEL` and the action row's
+  // `Cancel`. `exact` is what tells them apart — an inexact name match on
+  // "Cancel" resolves to both and the click fails on strict mode, which is
+  // how CI first read this leg.
+  for (const label of ["Cancel", "← CANCEL"]) {
+    await page.goto("/you/account");
+    await page.getByRole("button", { name: "Add Apple" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Add Apple" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: label, exact: true }).click();
+    await expect(page).toHaveURL(/\/you\/account$/);
+    await expect(
+      page.getByRole("heading", { name: "SIGN-IN METHODS" }),
+    ).toBeVisible();
+  }
+});
+
+test("a cancelled link return sends the rower to the account screen once and releases ordinary navigation", async ({
   page,
 }, testInfo) => {
   await enableFrontDoor(page);
@@ -429,8 +476,11 @@ test("a cancelled link return sends the rower to You once and releases ordinary 
     name: "Apple Link Tester",
   });
 
+  // THE RETURN LANDS ON THE SCREEN THAT ANSWERS IT (account-submenu spec §7):
+  // the methods list moved behind the ACCOUNT door, so a terminal link
+  // outcome routed to /you would say nothing at all.
   await page.goto("/?authResult=cancelled&authPurpose=link&authProvider=apple");
-  await expect(page).toHaveURL(/\/you$/);
+  await expect(page).toHaveURL(/\/you\/account$/);
   await expect(
     page.getByRole("heading", { name: "SIGN-IN METHODS" }),
   ).toBeVisible();
@@ -473,7 +523,7 @@ test("removing a method re-reads the list rather than trusting the screen", asyn
     name: "Remove Tester",
   });
 
-  await page.goto("/you");
+  await page.goto("/you/account");
   const removals = page.getByRole("button", { name: /^Remove / });
   await expect(removals).toHaveCount(2);
   // 44px is a hard requirement, and an inline control's own box cannot
@@ -507,7 +557,7 @@ test("a removal the server refuses says which of the three things happened", asy
     name: "Refusal Tester",
   });
 
-  await page.goto("/you");
+  await page.goto("/you/account");
   await page.getByRole("button", { name: "Remove Apple" }).click();
   await expect(page.getByRole("alert")).toHaveText(
     "This account no longer exists. Nothing was changed.",
@@ -595,7 +645,7 @@ test("a failed web delete says so instead of bouncing the rower to a silent scre
   await page.goto(
     "/?authError=invalid_proof&authPurpose=delete&authProvider=apple",
   );
-  await expect(page).toHaveURL(/\/you$/);
+  await expect(page).toHaveURL(/\/you\/account$/);
   await expect(page.getByRole("alert")).toHaveText(
     "We couldn’t confirm it was you. Nothing was deleted.",
   );

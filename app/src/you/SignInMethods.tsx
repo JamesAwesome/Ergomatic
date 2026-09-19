@@ -99,9 +99,15 @@ function methodsNotice(auth: AuthFlowController): React.ReactNode {
   // THE RECOVERY IS A SEQUENCE, SO IT RENDERS AS ONE (Gate 0, James,
   // 2026-09-14). The old single sentence was true and left the rower with
   // nowhere to go; written as prose the four steps ran too long to act on.
-  // Every step names a label that is on a screen the rower can reach:
-  // `Sign out` and `Delete account` on You, `Add <provider>` in the list
-  // below. The screen name is quoted because unquoted "You" reads as a
+  // EVERY STEP NAMES ITS SCREEN, and that is the account door's doing.
+  // This notice used to render ON You, beside `Sign out` and above the list
+  // holding `Delete account` and `Add <provider>`, so step 1 could say
+  // "Tap Sign out" and mean the button in view. Since the block moved to
+  // `/you/account` (Gate 0 2026-09-15, Option A) the rower reads these
+  // steps on a screen that has NONE of the three: `Sign out` is back on
+  // You, and the other two are behind You's ACCOUNT row. A step naming a
+  // control the rower cannot find is the same defect as no recovery at
+  // all. The screen name is quoted because unquoted "You" reads as a
   // pronoun mid-instruction.
   //
   // WHY DELETION AND NOT REMOVE, which is lighter and now exists (#436):
@@ -127,12 +133,12 @@ function methodsNotice(auth: AuthFlowController): React.ReactNode {
           {name(view.targetProvider)} sign-in here:
         </p>
         <ol className="auth-notice-steps">
-          <li>Tap Sign out.</li>
+          <li>On &ldquo;You&rdquo;, tap Sign out.</li>
           <li>Sign in to that account through {name(view.targetProvider)}.</li>
-          <li>On &ldquo;You&rdquo;, tap Delete account.</li>
+          <li>On &ldquo;You&rdquo;, open ACCOUNT, then tap Delete account.</li>
           <li>
-            Sign in to this account again. On &ldquo;You&rdquo;, tap Add{" "}
-            {name(view.targetProvider)}.
+            Sign in to this account again. On &ldquo;You&rdquo;, open ACCOUNT,
+            then tap Add {name(view.targetProvider)}.
           </li>
         </ol>
       </div>
@@ -185,6 +191,30 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
   const notice = methodsNotice(auth);
   if (auth.options.state !== "ready" || !auth.options.frontDoorEnabled) {
     return null;
+  }
+  // A FAILED READ IS NOT A BLANK SCREEN (branch review F1, invariant D1).
+  // `useAuthMethods` terminates at `error` with no retry of its own, and
+  // this component used to answer that by rendering nothing at all. That
+  // was survivable while it lived on You — a screenful of other things
+  // stood around it — and it is a dead end now that an ACCOUNT row promises
+  // a screen: back link, title, nothing, for as long as the read keeps
+  // failing. The two reads have different lifetimes, which is what makes it
+  // easy to reach: `options` is read ONCE per document (so the door is
+  // drawn on the signal the rower had at launch) and `methods` on EVERY
+  // mount of this component (so the tap can happen with no signal at all).
+  //
+  // LOADING STILL DRAWS NOTHING. A pending read is not a failure, and a
+  // message on it would flash on every ordinary open.
+  if (methods.state === "error") {
+    return (
+      <section className="auth-methods">
+        {notice}
+        <p className="notice auth-notice-error" role="alert">
+          We couldn&rsquo;t load your sign-in methods. Check your connection and
+          open this screen again.
+        </p>
+      </section>
+    );
   }
   if (methods.state !== "ready") {
     return notice ? <section className="auth-methods">{notice}</section> : null;
@@ -300,12 +330,34 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
         <button
           className="auth-delete-account"
           disabled={deleteProvider === undefined}
+          aria-describedby={deleteProvider ? "auth-delete-reauth" : undefined}
           onClick={() =>
             void (deleteProvider && auth.startDelete(deleteProvider))
           }
         >
           Delete account
         </button>
+        {/* THE RE-AUTH DISCLOSURE (Gate 0 ruling 3, James, 2026-09-14,
+            immediately after running the deletion twice on a real account:
+            "we really need to make it more obvious that the reauth is
+            required to delete the account"). AT THE TAP, not on the confirm
+            screen: the provider round trip happens BEFORE that screen, so a
+            warning there reaches the rower after the cost is paid — and the
+            confirm screen's own 2026-09-14 ruling (state facts, not prose)
+            stays intact by not being touched.
+
+            It names `deleteProvider`, the provider `startDelete` is actually
+            called with, so the sentence cannot promise one provider while
+            the flow proves another. ABSENT when that is undefined: the
+            button is disabled on such a host, no round trip is coming, and
+            there is no provider to name. Also the button's
+            `aria-describedby`, so it is announced at the tap rather than
+            found afterwards. */}
+        {deleteProvider && (
+          <p id="auth-delete-reauth" className="auth-delete-reauth">
+            Asks you to sign in with {name(deleteProvider)} first.
+          </p>
+        )}
       </section>
     </div>
   );

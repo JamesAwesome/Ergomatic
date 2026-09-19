@@ -53,6 +53,34 @@ function bothConnected() {
 }
 
 describe("SignInMethods", () => {
+  // THE DOOR MUST NOT OPEN ONTO A BLANK SCREEN (branch review F1, invariant
+  // D1). `useAuthMethods` has no retry and no error state of its own, so a
+  // failed `/api/auth/methods` used to mean this component rendered NOTHING
+  // — harmless while it lived on You, which had a screenful of other things,
+  // and a dead end now that a row promises a screen. `options` is read once
+  // per document and `methods` on every mount, so the two can easily
+  // disagree: signal at launch draws the door, no signal at the tap draws
+  // the screen.
+  it("says so when the methods read fails, rather than rendering an empty screen", async () => {
+    vi.mocked(api).mockRejectedValue(new Error("offline"));
+    render(<SignInMethods auth={controller({ kind: "idle" })} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We couldn’t load your sign-in methods. Check your connection and open this screen again.",
+    );
+  });
+
+  it("stays quiet while the methods read is still in flight", async () => {
+    // A pending read is not a failure: a message here would flash on every
+    // ordinary open. Nothing renders until the read settles one way or the
+    // other.
+    vi.mocked(api).mockImplementation(() => new Promise(() => {}));
+    const { container } = render(
+      <SignInMethods auth={controller({ kind: "idle" })} />,
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it("renders Apple first, connected state, and the available add action", async () => {
     vi.mocked(api).mockResolvedValue(
       new Response(JSON.stringify({ apple: false, google: true }), {
@@ -336,10 +364,15 @@ describe("SignInMethods", () => {
         .getAllByRole("listitem")
         .map((step) => step.textContent),
     ).toStrictEqual([
-      "Tap Sign out.",
+      // STEP 1 NAMES ITS SCREEN TOO. These steps are read on
+      // `/you/account`, which has no `Sign out` button — it is on You.
+      "On \u201cYou\u201d, tap Sign out.",
       "Sign in to that account through Apple.",
-      "On \u201cYou\u201d, tap Delete account.",
-      "Sign in to this account again. On \u201cYou\u201d, tap Add Apple.",
+      // STEPS 3 AND 4 NAME THE DOOR because the controls moved behind it
+      // (Gate 0 2026-09-15, Option A). A recovery step naming a control the
+      // rower cannot find on the screen it names is no recovery at all.
+      "On \u201cYou\u201d, open ACCOUNT, then tap Delete account.",
+      "Sign in to this account again. On \u201cYou\u201d, open ACCOUNT, then tap Add Apple.",
     ]);
   });
 
@@ -490,6 +523,66 @@ describe("SignInMethods", () => {
       await screen.findByRole("button", { name: "Delete account" }),
     );
     expect(auth.startDelete).toHaveBeenCalledWith("google");
+  });
+
+  // THE DISCLOSURE (Gate 0 ruling 3, James, 2026-09-14, after running the
+  // deletion twice on a real account: *"we really need to make it more
+  // obvious that the reauth is required to delete the account."*). It goes
+  // at the TAP, not on the confirm screen, because the re-auth happens
+  // BEFORE the confirm screen — a warning there arrives after the cost is
+  // paid. It names the provider `startDelete` will actually use, so the
+  // sentence and the round trip cannot disagree.
+  it.each([
+    ["google", { apple: false, google: true }, "Google"] as const,
+    ["apple", { apple: true, google: true }, "Apple"] as const,
+  ])(
+    "says the delete will re-prove %s, the provider it starts",
+    async (provider, methods, label) => {
+      vi.mocked(api).mockResolvedValue(
+        new Response(JSON.stringify(methods), { status: 200 }),
+      );
+      const auth = controller({ kind: "idle" });
+      render(<SignInMethods auth={auth} />);
+      const remove = await screen.findByRole("button", {
+        name: "Delete account",
+      });
+      expect(
+        screen.getByText(`Asks you to sign in with ${label} first.`),
+      ).toBeVisible();
+      // The sentence is the button's accessible description, so it is read
+      // AT the tap by ear as well as by eye.
+      expect(remove).toHaveAccessibleDescription(
+        `Asks you to sign in with ${label} first.`,
+      );
+      await userEvent.click(remove);
+      expect(auth.startDelete).toHaveBeenCalledWith(provider);
+    },
+  );
+
+  it("says nothing about a re-auth when no provider can be re-proved here", async () => {
+    // The button is disabled on this host, so there is no round trip to
+    // disclose and no provider to name. A sentence here would promise a
+    // sign-in that cannot happen.
+    vi.mocked(api).mockResolvedValue(
+      new Response(JSON.stringify({ apple: true, google: false }), {
+        status: 200,
+      }),
+    );
+    const auth = controller({ kind: "idle" });
+    auth.options = {
+      state: "ready",
+      frontDoorEnabled: true,
+      legacyGoogle: false,
+      apple: false,
+      google: true,
+    };
+    render(<SignInMethods auth={auth} />);
+    const remove = await screen.findByRole("button", {
+      name: "Delete account",
+    });
+    expect(remove).toBeDisabled();
+    expect(screen.queryByText(/Asks you to sign in with/)).toBeNull();
+    expect(remove).toHaveAccessibleDescription("");
   });
 
   it("disables Delete account when no held provider can be re-proved here", async () => {

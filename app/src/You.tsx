@@ -7,7 +7,7 @@ import BaselinesRow from "./you/BaselinesRow";
 import { clearConcept2Seen } from "./you/concept2Seen";
 import Concept2Row from "./you/Concept2Row";
 import YouStatsHero from "./you/stats/YouStatsHero";
-import SignInMethods from "./you/SignInMethods";
+import { accountDoorAvailable } from "./you/accountDoor";
 
 function initials(name: string): string {
   return name
@@ -97,15 +97,15 @@ export default function You({
           covers. It IS the door to /you/stats; `.you-doors` below gains no
           STATS row. */}
       <YouStatsHero />
-      {authFlow && <SignInMethods auth={authFlow} />}
       {/* THE DOORS (Wave E PR A, spec 2026-09-04-concept2-walk-fixes §5.1,
           Gate 0 amendment §8 approved 2026-09-04; THIRD ROW added by the
           baselines-subpage Gate 0, 2026-09-05): the foot of You is one
           GROUP of quiet mono rows, pinned to the bottom by ONE
           `margin-top: auto` on this wrapper (`.you-doors`, index.css) —
           invariant R7; rows each carrying their own auto margin would
-          be a flex free-space split, not a stack. ORDER: BASELINES,
-          CONCEPT2, SETTINGS, DIAGNOSTICS — ruling 7 fixed CONCEPT2 above
+          be a flex free-space split, not a stack. ORDER: ACCOUNT,
+          BASELINES, CONCEPT2, SETTINGS, DIAGNOSTICS — ruling 7 fixed
+          CONCEPT2 above
           DIAGNOSTICS and keeps DIAGNOSTICS You's last child, Phase JC's
           Gate 0 ruling 3 (James, 2026-09-08: "put settings under concept
           2 but above diagnostics") put SETTINGS between them, and
@@ -115,6 +115,29 @@ export default function You({
           verdict): CONCEPT2 is a status surface whose SEND FAILED /
           RECONNECT NEEDED warning a drawer would hide, and neither
           "Advanced" nor "Settings" is an honest name for all four.
+
+          ACCOUNT (Gate 0 2026-09-15, Option A — James: "I want to also
+          move the account settings into a submenu because 'delete your
+          account' is FAR too prominent"): the sign-in methods list and the
+          delete box used to render HERE, above this group, which put a red
+          `Delete account` 433 px from the top of You and visible without
+          scrolling. Both moved to `/you/account`
+          (`you/AccountScreen.tsx`); this row is what is left of them. It
+          sits FIRST because it is the only row about the ACCOUNT rather
+          than about rowing — nothing constrains the top of the group, and
+          ruling 7's CONCEPT2-above-DIAGNOSTICS and DIAGNOSTICS-last are
+          untouched by adding above BASELINES.
+
+          ITS PREDICATE LIVES BESIDE THE SCREEN'S, in
+          `you/accountDoor.ts` (invariant D1). The block it leads to draws
+          nothing at all on a host whose front door is off, so a door here
+          would open onto an empty screen; before the split there was one
+          decision and it could not disagree with itself. The two are not
+          IDENTICAL, on purpose: this row hides while the options read is
+          still in flight, because an unknown answer is not a yes, while
+          the ROUTE waits on that same state rather than refusing — see
+          `accountDoor.ts`, which carries the measurement. Do not
+          re-derive either condition in this file.
 
           BASELINES (Gate 0, 2026-09-05 — James: "move baselines into a
           subpage of You, I'd still like them to be visible when they are
@@ -164,6 +187,12 @@ export default function You({
           times), so the menu's own BackLink returns HERE. Stays the LAST
           child of You. */}
       <nav className="you-doors" aria-label="More">
+        {authFlow && accountDoorAvailable(authFlow) && (
+          <Link to="/you/account" state={{ from: "/you" }} className="diag-row">
+            <span>ACCOUNT</span>
+            <span aria-hidden="true">&rsaquo;</span>
+          </Link>
+        )}
         <BaselinesRow />
         <Concept2Row accountId={user.id} />
         <Link to="/you/settings" state={{ from: "/you" }} className="diag-row">

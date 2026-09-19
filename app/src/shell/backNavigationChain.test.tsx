@@ -178,3 +178,81 @@ describe("history-aware BACK: the baselines re-test shortcut -> detail round tri
     expect(screen.queryByRole("heading", { name: "Library" })).toBeNull();
   });
 });
+
+// THE ACCOUNT DOOR'S ROUND TRIP, starting UPSTREAM of the producer (RF24).
+// You writes `state={{ from: "/you" }}` on the ACCOUNT row and
+// `AccountScreen`'s BackLink reads it; both halves have their own tests, and
+// neither can see the other. This leg begins before the write and asserts
+// after the read, through the real routed screens, so a row that forgets its
+// state — or a screen whose fallback quietly carries the trip instead — is
+// visible here. The fallback IS `/you` too, so the assertion below is on the
+// ROUTE the rower reaches, and the case that distinguishes them is the
+// `from`-less deep link covered in `AccountScreen.test.tsx`.
+describe("history-aware BACK: the You -> ACCOUNT round trip", () => {
+  it("returns to You after BACK from the account screen, through the real routed screens", async () => {
+    mockHooks();
+    // The two reads this leg's screens make, answered in-process: You's
+    // Concept2 row and the account screen's methods list. Through the REAL
+    // `api` they are relative-URL fetches, which reject under jsdom and
+    // land as unhandled rejections after the assertions — green tests, red
+    // job.
+    vi.doMock("../api", () => ({
+      api: vi.fn(async (path: string) =>
+        path === "/api/auth/methods"
+          ? new Response(JSON.stringify({ apple: false, google: true }), {
+              status: 200,
+            })
+          : new Response(JSON.stringify({ available: false }), { status: 200 }),
+      ),
+    }));
+    const { default: AppRoutes } = await import("./AppRoutes");
+    const authFlow = {
+      options: {
+        state: "ready" as const,
+        frontDoorEnabled: true,
+        legacyGoogle: false,
+        apple: true,
+        google: true,
+      },
+      view: { kind: "idle" as const },
+      targetAuthorizationBusy: false,
+      destination: null,
+      startSignIn: vi.fn(),
+      confirmAccount: vi.fn(),
+      useUsualSignIn: vi.fn(),
+      confirmAttach: vi.fn(),
+      declineAttach: vi.fn(),
+      prepareLink: vi.fn(),
+      startPreparedLink: vi.fn(),
+      authorizeLinkTarget: vi.fn(),
+      cancel: vi.fn(),
+      reset: vi.fn(),
+      abandon: vi.fn(),
+      removeMethod: vi.fn(),
+      startDelete: vi.fn(),
+      confirmDelete: vi.fn(),
+    };
+    render(
+      <MemoryRouter initialEntries={["/you"]}>
+        <AppRoutes
+          user={{ id: "u1", email: "rower@e2e.test", name: "Row Er" }}
+          onSignedOut={() => {}}
+          authFlow={authFlow}
+        />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(await screen.findByRole("link", { name: /ACCOUNT/ }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Account" }),
+    ).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "SIGN-IN METHODS" }),
+    ).toBeVisible();
+
+    await userEvent.click(screen.getByRole("link", { name: "← BACK" }));
+    expect(await screen.findByText("rower@e2e.test")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Account" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Library" })).toBeNull();
+  });
+});

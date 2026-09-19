@@ -124,7 +124,7 @@ export interface AuthFlowController {
   options: AuthOptionsView;
   view: AuthFlowView;
   targetAuthorizationBusy: boolean;
-  destination: "/" | "/you" | "/you/sign-in-methods" | null;
+  destination: "/" | "/you/account" | "/you/sign-in-methods" | null;
   startSignIn(provider: AuthProvider): Promise<void>;
   confirmAccount(): Promise<void>;
   useUsualSignIn(): Promise<void>;
@@ -205,7 +205,7 @@ function isAuthOptions(value: unknown): value is AuthOptions {
  * pure logic exclusively through a browser inverts the pyramid. */
 export function destinationFor(
   view: AuthFlowView,
-): "/" | "/you" | "/you/sign-in-methods" | null {
+): "/" | "/you/account" | "/you/sign-in-methods" | null {
   // `delete_ready` joins the two link steps: all three are full-screen auth
   // stages, and this route is the one holder for them (AppRoutes.tsx).
   if (
@@ -216,15 +216,20 @@ export function destinationFor(
     return "/you/sign-in-methods";
   }
   // A terminal outcome goes back to the surface that started it, and for a
-  // link OR a delete that surface is You — the only screen that renders
-  // either notice. Finding I1 is the cost of getting this wrong: a delete
-  // routed to "/" lands a signed-in rower somewhere that says nothing at all.
+  // link OR a delete that surface is `/you/account` — the only screen that
+  // renders either notice, since `SignInMethods` moved there behind the
+  // ACCOUNT door (Gate 0 2026-09-15 Option A; account-submenu spec §7).
+  // Finding I1 is the cost of getting this wrong: a delete routed to "/"
+  // lands a signed-in rower somewhere that says nothing at all — and after
+  // the move, so does one routed to "/you", which is the same defect by a
+  // new route. THE ROUTE AND THE NOTICE ARE ONE FACT: if the list ever
+  // moves again, this line moves with it.
   if (
     view.kind === "linked" ||
     ((view.kind === "cancelled" || view.kind === "error") &&
       (view.purpose === "link" || view.purpose === "delete"))
   ) {
-    return "/you";
+    return "/you/account";
   }
   // `unlinked`, `unlink_refused`, `unlink_failed` and `deleted` route
   // NOWHERE. The first three are answered in place on the methods list the

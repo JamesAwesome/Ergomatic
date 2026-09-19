@@ -515,55 +515,6 @@ web build against the post-PR-2 server saves `pain: 3`, reads back
 `effort: 3`, and a workout it creates carries a derived difficulty)
 recorded in PR 2's body; release note in rower words (spec §6.6).
 
-## The free row's rate tile disagrees with itself
-
-**Status: DONE — fixed and merged in #402 (2026-09-12); closed on Phase MD
-PR 1's branch on the way past.** Was: SCHEDULED 2026-09-12 — one small PR,
-not a phase item and not fast path (it changes what a rower reads). S. ·
-dies 2026-09-19 · a wrong number
-on a screen today with a one-clause fix and no migration; a week is generous
-and anything longer means a refactor phase outranked a defect, which is the
-exact trade the PM gate refused.
-
-**What a rower sees.** Finish a connected free row and the RATE tile reads the
-monitor's own average — 25 spm on the capture we hold. Reopen that same row
-from History and it reads `—`. Same row, same trace, two screens, one number
-present and one gone.
-
-**Why.** The tier is derived twice and the two derivations disagree.
-`summaryModel.ts:1255` (live) sets `finished: run.endedBy === "finished" ||
-run.mode === "justrow"`. `storedSummary.ts:780` (reopened) sets
-`finished = row.endedBy === "finished" || row.endedBy == null` — and `StoredLog`
-has no `mode`. A connected free row's `endedBy` is always `"rower"` and it
-stores `steps: []`, so the reopened door takes the terminated branch with no
-weighable split and `sessionStrokeRate` (`logbookDerived.ts:53-62`) returns
-`undefined`. The per-interval table beside it IS correctly shared by both
-doors; only the hero tile skipped the pattern.
-
-**The fix is one clause.** `StoredLog` already carries `workoutId` and
-`workoutType`, and `domain/types.ts:38` already exports `isFreeRow`. No column,
-no migration, no stored-shape change — which is why this is not TRIAD despite
-touching a number, and why deferring it was never worth what it cost to defer.
-
-**Its gate is the whole point, and neither suite has it.** One test that saves
-a connected free row through the live door and reads it back through the stored
-door, asserting the two RATE values are EQUAL — RF24's producer-to-consumer
-shape. No existing test pairs a `workoutId: null` fixture with a rate
-assertion, which is exactly why three green suites never saw this.
-
-**Evidence status.** The divergence is confirmed in code, read at all four
-sites by the controller and independently at the PM gate. That a saved free row
-carries `endedBy: "rower"` rests on `summaryModel.ts:1247-1249`'s own measured
-comment and the fixture at `storedSummary.test.ts:1866`, not on a run against a
-real row. The test above settles it either way, and if it comes back green the
-row closes with that recorded rather than being quietly dropped.
-
-**Found by** the 2026-09-12 architecture walk
-([findings](docs/superpowers/audits/2026-09-12-architecture-walk/findings.md),
-S1). Left out of Phase MD because it is a defect, not a deepening; scheduled
-here because the PM gate priced the fix and ruled that "out of scope for this
-phase" is not a reason to leave a wrong number on a screen.
-
 ## Phase PS — career stats on the You tab
 
 **Status: OPEN 2026-09-12 — spec approved by James the same day; the three
@@ -1034,6 +985,11 @@ it lands the stranger on this same denial.
       identical path is announced by its ConfirmLine; door 2 has no confirm.
       `src/onboarding/KnowBaseline.tsx:52`. Rides this wave because it is a
       sign-in-adjacent onboarding screen. **S**
+      · dies 2026-10-12 · dated on the way past by the account-submenu PR
+      (campsite rule — it was the one row in this wave carrying no date). A
+      row and not a fix now because the honest fix is a confirm line on door
+      2, which is a copy-and-layout question on an onboarding screen, not the
+      one-line clamp it looks like.
 
 - [x] **SHIPPED #436 (2026-09-14, main `638e79eb`) — Remove a sign-in method
       from You.** `DELETE /api/auth/methods/:provider` and the Remove control
@@ -1054,8 +1010,11 @@ it lands the stranger on this same denial.
       · dies 2026-10-10 · not a fix-now on its own because today's recovery for
       every identity failure is one person with psql against six accounts, and
       that escape hatch ends at public activation — this wave's own deadline.
-- [ ] **"I already have an account" attaches the identity it just proved.**
-      Today the flow cancels the attempt and destroys the verified subject and
+- [x] **DONE 2026-09-15 (PR #453), RELEASED in v0.50.0 build 1011.
+      "I already have an account" attaches the identity it just proved.**
+      **Ticked on the way past by the account-submenu PR** — the work
+      shipped and the row stayed open, which is the failure RF14 exists to
+      prevent. Was: today the flow cancels the attempt and destroys the verified subject and
       the Apple grant, so the same screen returns on EVERY future Apple sign-in
       — a fresh chance to create a duplicate each time. Ruled 2026-09-13: follow
       through WITH a confirmation naming both identities. **James ruled
@@ -1219,11 +1178,13 @@ it lands the stranger on this same denial.
       account) will fail identically on every future sign-in with no message
       ever produced. The code comment says it "belongs on the methods list",
       which is a decide-later ruling rather than a row (RF29), so here it is.
-      **S** · dies 2026-11-15 · a row and not a fix now because the methods
-      list is the surface the account submenu relocates, so writing the
-      notice before that lands means writing it twice — and the only failure
-      that repeats deterministically is `account_conflict`, whose recovery
-      copy the sign-in screen already prints.
+      **S** · dies 2026-11-15 · unchanged. Its blocker has cleared — the
+      account submenu landed and the methods list now lives at
+      `/you/account` — so the surface is settled and the notice can be
+      written once. It stays a row rather than riding that PR because
+      `confirmAttach` swallows the failure with nothing carrying it
+      forward, so surfacing it means inventing the state that does: a
+      different risk model from a navigation change, and its own gate.
 - [ ] **`begin()`'s pre-sweep silently destroys an in-flight follow-through.**
       Measured by the DBA gate on the shipped schema (2026-09-15, PR #453):
       starting a link or a delete from a session whose provider attach has not
@@ -1240,7 +1201,15 @@ it lands the stranger on this same denial.
       PRODUCT ruling — whether a rower should be offered "Add a provider" or
       "Delete account" at all while an attach is pending — not a SQL change,
       and the race needs a rower doing both at once on one device.
-- [ ] **Move the account block behind an ACCOUNT door on You. GATE 0 IS DONE
+- [x] **SHIPPED #474 (2026-09-19) — the account block is behind an ACCOUNT
+      door.** The sign-in methods list and the delete box moved to
+      `/you/account`, reached by one quiet row at the top of You's doors
+      group; `Delete account` goes from 0 taps and no scrolling to 1 tap and
+      no scrolling (`docs/screenshots/you-account-door.png`). Two findings
+      came out of it and are in the spec: the terminal link/delete
+      destination had to move with the list (§7), and the route must not
+      refuse while the options read is in flight (§4) — the second caught by
+      e2e, not by any client test. Was: **GATE 0 IS DONE
       AND JAMES RULED OPTION A (2026-09-15); nothing has built it.** He asked
       for it in as many words: _"I want to also move the account settings into
       a submenu because 'delete your account' is FAR too prominent."_ Measured
@@ -1269,7 +1238,12 @@ it lands the stranger on this same denial.
       is this repo's own split test. Dated to match the three copy rows below,
       because Task 7 Step 1's disclosure rides this and the four should land
       together.
-- [ ] **Delete account does not say that it will ask you to prove it is you.**
+- [x] **SHIPPED #474 (2026-09-19) — `Delete account` says the re-auth is
+      coming.** One line under the button, naming the provider `startDelete`
+      actually re-proves: "Asks you to sign in with Apple first." It rode the
+      submenu above, as ruling 3 said it would, and the confirm screen is
+      untouched. Was: **Delete account does not say that it will ask you to
+      prove it is you.**
       James, 2026-09-14, immediately after running the deletion twice on a real
       account: _"we really need to make it more obvious that the reauth is
       required to delete the account."_ The button reads `Delete account`, the
