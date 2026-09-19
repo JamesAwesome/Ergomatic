@@ -103,6 +103,45 @@ export interface TracePoint extends ChartPoint {
   rest: boolean;
 }
 
+/** Gate 0B board 2 (APPROVED 2026-09-19): one interval's two machine
+ *  figures, in the order the machine rowed them — the only stored input
+ *  candidate B's axis needs.
+ *
+ *  `restSeconds` is a READBACK, never a measurement
+ *  (`domain/monitor/types.ts`'s own rule for `IntervalActual.restSeconds`,
+ *  which every comment about the field must repeat). Whether it is the
+ *  machine's own timing of the rest or a readback of the rest we
+ *  programmed is not established; on every committed capture it equals the
+ *  program exactly, the rower has no mechanism to extend a rest
+ *  (`domain/monitor/pm5/commands.ts`), and the arithmetic has closed once
+ *  against a real walk (wall 374.76 s against work 254.8 + rest 120,
+ *  BOARD2.md). That is a stated dependency of this axis, not a proof.
+ *
+ *  `workSeconds` is 0x0039's own per-interval elapsed — WORK ONLY, which
+ *  is why it can place a rest the series itself never recorded. */
+export interface IntervalSpan {
+  workSeconds: number;
+  /** The rest that FOLLOWS this interval. `0` for the last one, and for
+   *  any interval the program gave no rest. */
+  restSeconds: number;
+}
+
+/** A rest span in the axis's own x units (seconds). */
+export interface RestBand {
+  startX: number;
+  endX: number;
+}
+
+/** Gate 0B board 2, M3: a span where the machine's own DISTANCE did not
+ *  move while its CLOCK did — the rower standing still inside a work
+ *  interval. Recoverable from the series alone, unlike a free row's pause
+ *  (the clock sleeps there, so no samples exist to flatten). */
+export interface StopSpan {
+  startX: number;
+  endX: number;
+  seconds: number;
+}
+
 export interface TraceModel {
   /** Segments — a gap over `GAP_BREAK_SECONDS` between two consecutive
    *  real readings starts a new one, so the drawn line breaks there. A
@@ -135,6 +174,19 @@ export interface TraceModel {
    *  segment count (when the line actually breaks) is a fact about the
    *  DRAWN LINE, not a claim about workout structure. */
   summary: string;
+  /** Gate 0B board 2 (APPROVED 2026-09-19, candidate B): every rest span
+   *  to draw, in the axis's own x units. The renderer never re-derives
+   *  these from `points` — under candidate B a band's WIDTH is the
+   *  machine's own rest readback, and the rest-marked points cover only
+   *  the part of the rest the rower kept the flywheel moving through,
+   *  which is the defect (M6) the band exists to fix. With no stored
+   *  intervals the bands fall back to those same points, which is exactly
+   *  what shipped before this change. */
+  restBands: RestBand[];
+  /** Gate 0B board 2, M3: every span where the machine's own distance
+   *  stood still while its clock ran. Orthogonal to the axis — a stop
+   *  happens INSIDE a work interval, where no rest exists to widen. */
+  stops: StopSpan[];
 }
 
 /** §3: the line breaks across a gap of more than this many seconds. */
@@ -176,10 +228,17 @@ interface Reading {
 /** Extracts `measure`'s own real readings from `samples`, in wire order —
  *  §2's sentinel rule, applied once per measure so `buildTrace` never
  *  repeats the exclusion logic per caller. */
-function realReadings(samples: readonly Sample[], measure: Measure): Reading[] {
+function realReadings(
+  samples: readonly Sample[],
+  measure: Measure,
+  xs: readonly number[],
+): Reading[] {
   const out: Reading[] = [];
-  for (const s of samples) {
-    const t = s.t / 10;
+  for (const [i, s] of samples.entries()) {
+    // `t` is the sample's position on the AXIS, which is no longer always
+    // its own `t` (Gate 0B board 2): `buildAxis` below owns that mapping,
+    // and hands one x per sample in wire order.
+    const t = xs[i]!;
     const rest = s.r === true;
     switch (measure) {
       case "pace":
@@ -241,25 +300,6 @@ function formatValue(measure: Measure, value: number): string {
   return `${Math.round(value)} ${unit}`;
 }
 
-/** Counts contiguous runs of `rest === true` in `readings`' own wire
- *  order — the same run-grouping `TraceChart.tsx`'s own
- *  `restBandsForSegment` does per segment, but here across the whole
- *  trace (a count for the TEXT alternative has no use for a segment
- *  boundary the reader never sees rendered as a mark, §4). */
-function countRestRuns(readings: readonly Reading[]): number {
-  let runs = 0;
-  let inRun = false;
-  for (const r of readings) {
-    if (r.rest) {
-      if (!inRun) runs++;
-      inRun = true;
-    } else {
-      inRun = false;
-    }
-  }
-  return runs;
-}
-
 /** §5's text alternative: the measure, its first/last real reading (the
  *  session's own direction of travel), and its own extreme — "fastest"
  *  for pace (the minimum split), "highest" for rate/hr (the maximum
@@ -274,6 +314,7 @@ function countRestRuns(readings: readonly Reading[]): number {
  *  and this clause doesn't. */
 function buildSummary(
   measure: Measure,
+  restBands: readonly RestBand[],
   readings: readonly Reading[],
   segments: readonly ChartPoint[][],
 ): string {
@@ -285,7 +326,11 @@ function buildSummary(
   const extremeLabel = measure === "pace" ? "fastest" : "highest";
   const segmentClause =
     segments.length > 1 ? `, in ${segments.length} segments` : "";
-  const restRuns = countRestRuns(readings);
+  // Gate 0B board 2: the BANDS, not the rest-marked readings. A rest the
+  // rower sat still through has no readings of its own and still draws,
+  // so counting readings would leave a screen-reader user short of a
+  // span a sighted reader can see.
+  const restRuns = restBands.length;
   // "marked", never "shaded" (review round 4, C1's own reasoning applied
   // here too): round 1's rest treatment was a full-height tint — that
   // was shading. Round 2 replaced it with a short band, and this string
@@ -303,13 +348,234 @@ function buildSummary(
   );
 }
 
+/** Gate 0B board 2, M3: the shortest flat-distance run this treats as the
+ *  rower standing still. It sits above every non-stop flat run this repo
+ *  has measured (4 s across staging; 3.0 s, 1.0 s and 0.00 s on the three
+ *  committed captures BOARD2.md names) and below the one real stop, at
+ *  60.5 s. */
+const STOP_SECONDS = 5;
+
+/** trace-truth Task 2 (spec §3): half a sample-second of padding on each
+ *  side of a rest run's own x-range, so a single ISOLATED rest sample
+ *  (surrounded by work on both sides) still draws a visible band rather
+ *  than a zero-width rect — the 1 Hz sample it came from genuinely covers
+ *  about this much of the timeline either side of its own timestamp.
+ *  Applies ONLY to the no-stored-intervals fallback: candidate B's bands
+ *  take their width from the machine, which needs no such nicety. Moved
+ *  down here from `TraceChart.tsx` with the band derivation itself. */
+const REST_BAND_PAD_SECONDS = 0.5;
+
+interface Axis {
+  /** One x per sample, in wire order — the sample's position on the axis
+   *  the chart draws. */
+  xs: number[];
+  /** Candidate B's bands, from the machine's own rest seconds. Empty when
+   *  there are no stored intervals; the caller falls back to the rest
+   *  RUNS then, which is what shipped before this change. */
+  bands: RestBand[];
+}
+
+/** Gate 0B board 2's candidate B, APPROVED 2026-09-19: `x = work + the
+ *  machine's own rest`.
+ *
+ *  WHAT WAS WRONG. Today's axis is each sample's own `t`, which is not a
+ *  defined quantity: this module's own header says so — a frozen rest
+ *  contributes nothing to `t` and an advancing rest contributes all of
+ *  itself. Measured on `session-2-wu-4unequal`, three EQUAL 30 s rests
+ *  drew 5.75, 5.21 and 2.71 SVG units, the last at 47 % of the first.
+ *
+ *  WHY THE WORK BOUNDARY PLACES THE REST, rather than the rest-marked
+ *  samples. A rest the rower sits still through emits NO samples at all:
+ *  0x0031's elapsed advances only while the flywheel turns (measured on
+ *  `walk-2026-08-25`'s own frames — elapsed held at 64.62 s across three
+ *  still seconds inside a rest), and the recorder buckets on that clock.
+ *  Keying the band off the rest RUNS would therefore lose such a rest
+ *  entirely AND shift every later one onto the wrong interval. The work
+ *  clock is what both kinds of rest have in common: interval `i`'s rest
+ *  opens at the first sample that is either rest-marked or has carried
+ *  the work clock to interval `i`'s own end, whichever comes first.
+ *
+ *  WHAT THIS ASSERTS ON THE MACHINE'S BEHALF: nothing. Both inputs are
+ *  the machine's own per-interval figures (0x0039's work elapsed,
+ *  0x0037's rest readback). What it does NOT have is an oracle — 0x0039
+ *  is work-only, so no PM5 field ever reports "time at the erg" for this
+ *  to be checked against. */
+function buildAxis(
+  samples: readonly Sample[],
+  intervals: readonly IntervalSpan[],
+): Axis {
+  const xs: number[] = [];
+  if (intervals.length === 0) {
+    // No stored intervals — a free row (which has no rests to widen), a
+    // timer/manual row, or a row saved before the rest readback shipped.
+    // The axis stays exactly what it was.
+    for (const s of samples) xs.push(s.t / 10);
+    return { xs, bands: [] };
+  }
+
+  const bands: RestBand[] = [];
+  /** The work clock: seconds of NON-rest samples, which is the quantity
+   *  interval boundaries are stated in. */
+  let work = 0;
+  /** Rest already inserted ahead of `work` on the axis. */
+  let offset = 0;
+  /** Which interval's work is being accumulated. */
+  let cursor = 0;
+  /** The work clock at which `cursor`'s own interval ends. */
+  let boundary = intervals[0]!.workSeconds;
+  let open: { startX: number; seconds: number; advance: number } | null = null;
+  let prevT: number | null = null;
+  let lastX = 0;
+
+  for (const s of samples) {
+    const dt = prevT === null ? s.t / 10 : (s.t - prevT) / 10;
+    prevT = s.t;
+    const resting = s.r === true;
+
+    if (
+      open === null &&
+      cursor < intervals.length &&
+      (resting || work >= boundary)
+    ) {
+      open = {
+        startX: work + offset,
+        seconds: intervals[cursor]!.restSeconds,
+        advance: 0,
+      };
+    }
+
+    if (open !== null) {
+      if (resting) {
+        // Inside the band. A rest sample carries no work, so it advances
+        // by its own elapsed only — which is how the part the rower DID
+        // row through keeps its shape inside a band the machine sized.
+        open.advance += dt;
+        // No clamp needed: the band's own width below is
+        // `max(seconds, advance)`, so a rest sample can never land past
+        // the band that contains it.
+        lastX = open.startX + open.advance;
+        xs.push(lastX);
+        continue;
+      }
+      // The first work sample after the rest closes it. The band is the
+      // machine's own rest seconds — never NARROWER than what was
+      // actually observed, which would stack several samples on one x.
+      const width = Math.max(open.seconds, open.advance);
+      if (width > 0)
+        bands.push({ startX: open.startX, endX: open.startX + width });
+      offset += width;
+      cursor += 1;
+      if (cursor < intervals.length) boundary += intervals[cursor]!.workSeconds;
+      open = null;
+    }
+
+    if (resting) {
+      // A rest with no interval left to name it (the series outran the
+      // stored steps). Today's behaviour: it advances the axis by its own
+      // elapsed and adds no work.
+      lastX += dt;
+      xs.push(lastX);
+      continue;
+    }
+    work += dt;
+    lastX = work + offset;
+    xs.push(lastX);
+  }
+
+  if (open !== null) {
+    // The piece ended inside a rest.
+    const width = Math.max(open.seconds, open.advance);
+    if (width > 0)
+      bands.push({ startX: open.startX, endX: open.startX + width });
+  }
+  return { xs, bands };
+}
+
+/** Every contiguous run of `rest === true` points in ONE segment, as an
+ *  x-range padded per `REST_BAND_PAD_SECONDS`. The no-stored-intervals
+ *  fallback, and byte-for-byte the derivation `TraceChart.tsx` ran
+ *  itself before Gate 0B board 2 — per segment, so a rest run split by a
+ *  real gap becomes two bands rather than one band spanning the gap. */
+function restBandsForSegment(points: readonly TracePoint[]): RestBand[] {
+  const bands: RestBand[] = [];
+  let runStart: number | null = null;
+  let runEnd = 0;
+  for (const p of points) {
+    if (p.rest) {
+      if (runStart === null) runStart = p.x;
+      runEnd = p.x;
+    } else if (runStart !== null) {
+      bands.push({
+        startX: runStart - REST_BAND_PAD_SECONDS,
+        endX: runEnd + REST_BAND_PAD_SECONDS,
+      });
+      runStart = null;
+    }
+  }
+  if (runStart !== null) {
+    bands.push({
+      startX: runStart - REST_BAND_PAD_SECONDS,
+      endX: runEnd + REST_BAND_PAD_SECONDS,
+    });
+  }
+  return bands;
+}
+
+/** Gate 0B board 2, M3: every span of at least `STOP_SECONDS` where the
+ *  machine's own distance did not move while its clock did.
+ *
+ *  WHY IT SHIPS. On `walk-2026-09-15-work-clock` the monitor holds its
+ *  last pace and last stroke rate across a 60.5 s dead stop, so the trace
+ *  draws a flat minute at 2:16.0 at 26 spm with distance frozen at
+ *  51.7 m, directly under a header reading 2:09.2 work · 250 m — a stored
+ *  split of 4:18.4/500m for a piece pulled at about 2:17. Unmarked, the
+ *  chart does not merely fail to show the stop: it asserts the rower was
+ *  pulling.
+ *
+ *  THE TAIL IS NOT A STOP. Every sample after the rower presses END is a
+ *  `p === 0` sentinel at a frozen distance (measured at 5.1 s on that same
+ *  capture), so a stop counts only when a REAL reading for the drawn
+ *  measure follows it — otherwise the mark would land on the moment the
+ *  piece ended. */
+function findStopSpans(
+  samples: readonly Sample[],
+  xs: readonly number[],
+  measure: Measure,
+): StopSpan[] {
+  let lastReal = -1;
+  for (const [i, s] of samples.entries()) {
+    const v =
+      measure === "pace" ? s.p : measure === "rate" ? s.spm : (s.hr ?? 0);
+    if (v !== 0) lastReal = i;
+  }
+  const out: StopSpan[] = [];
+  let from = 0;
+  for (let i = 1; i <= samples.length; i++) {
+    // `d` is stored in TENTHS of a metre, so `< 1` is "under 0.1 m".
+    const same =
+      i < samples.length && Math.abs(samples[i]!.d - samples[from]!.d) < 1;
+    if (same) continue;
+    const seconds = (samples[i - 1]!.t - samples[from]!.t) / 10;
+    if (seconds >= STOP_SECONDS && i - 1 < lastReal) {
+      out.push({ startX: xs[from]!, endX: xs[i - 1]!, seconds });
+    }
+    from = i;
+  }
+  return out;
+}
+
 export function buildTrace(
   series: SeriesData | undefined,
   measure: Measure,
+  /** Gate 0B board 2: the machine's own per-interval work and rest
+   *  seconds, in rowed order. Empty (the default) keeps the axis exactly
+   *  as it was — see `buildAxis`. */
+  intervals: readonly IntervalSpan[] = [],
 ): TraceModel | null {
   if (series === undefined || series.samples.length === 0) return null;
 
-  const readings = realReadings(series.samples, measure);
+  const axis = buildAxis(series.samples, intervals);
+  const readings = realReadings(series.samples, measure, axis.xs);
   if (readings.length < MIN_REAL_READINGS) return null;
 
   // 2026-08-20 ruling (file header, above): the vertical domain is built
@@ -332,13 +598,32 @@ export function buildTrace(
   });
   if (domainY === null) return null;
 
-  const lastSample = series.samples[series.samples.length - 1]!;
-  const domainX: [number, number] = [0, lastSample.t / 10];
+  const domainX: [number, number] = [0, axis.xs[axis.xs.length - 1] ?? 0];
 
   const segments = toSegments(readings);
+  // Candidate B's bands come from the machine; with no stored intervals
+  // they come from the rest-marked points, exactly as before.
+  const restBands = (
+    intervals.length > 0
+      ? axis.bands
+      : segments.flatMap((segment) => restBandsForSegment(segment))
+  ).map((band) => ({
+    startX: Math.max(domainX[0], band.startX),
+    endX: Math.min(domainX[1], band.endX),
+  }));
+  const stops = findStopSpans(series.samples, axis.xs, measure);
   const ticksY = chooseTicks(domainY, TICK_COUNT);
   const invert = measure === "pace";
-  const summary = buildSummary(measure, readings, segments);
+  const summary = buildSummary(measure, restBands, readings, segments);
 
-  return { points: segments, domainX, domainY, ticksY, invert, summary };
+  return {
+    points: segments,
+    domainX,
+    domainY,
+    ticksY,
+    invert,
+    summary,
+    restBands,
+    stops,
+  };
 }

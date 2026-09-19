@@ -625,18 +625,22 @@ describe("TraceChart — trace-truth Task 2: rests are drawn, but marked (§3), 
   // was cited from `PostWorkoutSummary.tsx`'s `.summary-legend` until
   // Phase JC deleted that legend for naming colours a rower can now
   // change; the no-colour-word rule below is why this one survived.)
-  // "BAND = REST"
-  // (review round 4, C1): "SHADED = REST" named the round-1 treatment
-  // (a full-height tint) that round 2 replaced with a short bar — the
-  // word never moved with the geometry. No colour word either (`#97692a`
-  // reads differently to different eyes/PR bodies; "band" stays true
-  // regardless).
-  it("F-2: a rest-bearing trace renders a legend naming the band, absent on a rest-free one", async () => {
+  // Gate 0B board 2 (APPROVED 2026-09-19): the word BAND is now the mark
+  // itself — a swatch of the real band colour, with the word surviving
+  // visually hidden for a reader who cannot see one. The no-colour-word
+  // rule (round 4, C1) is unchanged and is now enforced by construction:
+  // the swatch takes its fill from the same token the band does.
+  it("F-2: a rest-bearing trace's legend shows the band's own swatch and reads 'Band = REST'", async () => {
     const restSeries = await realSeriesWithRest();
     const { container: withRest } = render(<TraceChart series={restSeries} />);
     const legend = withRest.querySelector(".trace-legend");
     expect(legend).not.toBeNull();
-    expect(legend!.textContent).toBe("BAND = REST");
+    // What a screen reader hears — the swatch is `aria-hidden`, so the
+    // hidden word is the only thing standing in for it.
+    expect(legend!.textContent).toBe("Band = REST");
+    const swatch = legend!.querySelector(".trace-legend-swatch");
+    expect(swatch).not.toBeNull();
+    expect(swatch!.getAttribute("aria-hidden")).toBe("true");
     // Never claims anything about the rest's own pace value (§3), and
     // never names a colour (round 4, C1).
     expect(legend!.textContent!.toLowerCase()).not.toMatch(
@@ -723,5 +727,99 @@ describe("TraceChart — 2026-08-20: domainY no longer includes rest, so the plo
       expect(y).toBeGreaterThanOrEqual(clipTop);
       expect(y).toBeLessThanOrEqual(clipBottom);
     }
+  });
+});
+
+// ---------------------------------------------------------------------
+// Gate 0B board 2, PR 3 (APPROVED 2026-09-19, candidate B) — rendered.
+//
+// Every expected number below is INDEPENDENT of the code under test: the
+// spans are transcribed from the capture's own stored actuals, and the
+// band width is computed here from the chart's published frame
+// (`CHART_WIDTH` 320, `LEFT_PAD` 28, `RIGHT_PAD` 8 — the same literals
+// this file's other geometry describes duplicate) against the axis the
+// board measured. It matches BOARD2.md's own 17.47 SVG units.
+// ---------------------------------------------------------------------
+describe("TraceChart — PR 3: three equal rests draw three equal bands", () => {
+  /** `board2/fixtures/session2-actuals.json` — the machine's own
+   *  per-interval work elapsed and rest readback for this capture. */
+  const SESSION_2_SPANS = [
+    { workSeconds: 29.7, restSeconds: 0 },
+    { workSeconds: 60, restSeconds: 30 },
+    { workSeconds: 120, restSeconds: 30 },
+    { workSeconds: 128.7, restSeconds: 30 },
+    { workSeconds: 60, restSeconds: 0 },
+  ];
+
+  const PLOT_WIDTH = 320 - 28 - 8;
+
+  it("with the machine's own intervals the three 30 s rests are the same width; without them they are not", async () => {
+    const series = await realSeriesWithRest();
+
+    const { container: today } = render(<TraceChart series={series} />);
+    const todayWidths = [...today.querySelectorAll(".trace-rest-band")].map(
+      (b) => Number(Number(b.getAttribute("width")).toFixed(2)),
+    );
+    // James's own complaint, rendered: the last of three identical rests
+    // draws at under half the first (BOARD2.md's 5.75 / 5.21 / 2.71).
+    expect(todayWidths).toStrictEqual([5.75, 5.21, 2.71]);
+
+    const { container } = render(
+      <TraceChart series={series} intervals={SESSION_2_SPANS} />,
+    );
+    const widths = [...container.querySelectorAll(".trace-rest-band")].map(
+      (b) => Number(b.getAttribute("width")),
+    );
+    expect(widths).toHaveLength(3);
+    // 30 s of a 487.8 s axis across the plot's own 284 units — computed
+    // from the board's measured axis, never from `buildTrace`.
+    const expected = (30 / 487.8) * PLOT_WIDTH;
+    for (const w of widths) expect(w).toBeCloseTo(expected, 2);
+    expect(Number(expected.toFixed(2))).toBe(17.47); // BOARD2.md's own number
+  });
+});
+
+describe("TraceChart — PR 3: the span where the rower stood still is marked", () => {
+  /** `docs/monitor/sessions/walk-2026-09-15-work-clock/README.md`: "Walk
+   *  Keystone (`x2` / `w 250m 6k @24`), abandoned after interval 1". */
+  const WORK_CLOCK_PROGRAM: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "distance",
+        value: 250,
+        targetSplit: 129,
+        displaySpm: 24,
+        restSeconds: 0,
+      },
+      {
+        type: "work",
+        kind: "distance",
+        value: 250,
+        targetSplit: 129,
+        displaySpm: 24,
+        restSeconds: 0,
+      },
+    ],
+  };
+
+  it("the 2026-09-15 capture's 60.5 s dead stop renders a band and says how long it was", async () => {
+    const series = seriesFromFrames(
+      await loadCaptureFrames(
+        "walk-2026-09-15-work-clock",
+        "pm5-recording-1789471533667.jsonl.gz",
+        WORK_CLOCK_PROGRAM,
+      ),
+    );
+    const { container } = render(<TraceChart series={series} />);
+    expect(container.querySelectorAll(".trace-stop-span")).toHaveLength(1);
+    expect(container.querySelector(".trace-stop-label")!.textContent).toBe(
+      "STOPPED 61s",
+    );
+  });
+
+  it("a trace with nothing frozen in it renders no stop mark at all", async () => {
+    const { container } = render(<TraceChart series={await realSeries()} />);
+    expect(container.querySelectorAll(".trace-stop-span")).toHaveLength(0);
   });
 });

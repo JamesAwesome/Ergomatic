@@ -11052,6 +11052,49 @@ section:not(.news-pinned) .news-row:last-of-type {
   fill: var(--trace-rest);
 }
 
+/* Gate 0B board 2, M3 (APPROVED 2026-09-19): the span where the machine's
+   own distance stood still while its clock ran. `--ink-3` has a NARROW
+   window here and 0.68 sits in the middle of it: below 0.647 the band
+   misses WCAG 1.4.11's 3:1 against the page, and above 0.710 the 9 px
+   label sitting ON it misses 4.5:1. Measured from the live cascade, not
+   computed from the token
+   (`docs/design/number-provenance/gate0b/board2/frames/contrast.json`):
+   the band 3.21:1, its label 4.80:1, and the trace line where the band
+   crosses it 4.80:1 — down from 15.41:1 off the band, still clear of the
+   3:1 a graphical object needs. Change either value and both numbers move;
+   re-measure rather than re-reason. */
+.trace-stop-span {
+  fill: var(--ink-3);
+  opacity: 0.68;
+}
+
+/* The `STOPPED 61s` label. `.trace-tick-label` already carries the size,
+   family and colour (this rule adds nothing but a hook for the e2e
+   selector and for the contrast sweep) — it is listed separately rather
+   than folded in because it is the one label in this chart that sits on a
+   fill rather than on the page. */
+.trace-stop-label {
+  fill: var(--ink);
+}
+
+/* Gate 0B board 2: the swatch that IS the word BAND (James, 2026-09-19:
+   "if instead of the word 'band' just show a [yellow] bar and then '=
+   rest'"). Sized to the band it stands for — `REST_BAND_HEIGHT` is 8 SVG
+   units in a 320-unit viewBox, so at the legend's own 10 px type an 18x8
+   bar reads as the same object rather than as a bullet. Full-strength
+   `var(--trace-rest)`, the same fill `.trace-rest-band` carries, so the
+   legend and the mark cannot drift; measured 4.25:1 against the page,
+   which clears the 3:1 WCAG 1.4.11 asks of a graphical object that
+   carries meaning. */
+.trace-legend-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 8px;
+  background: var(--trace-rest);
+  vertical-align: baseline;
+  margin-right: 0.35em;
+}
+
 /* F-2 (review round 2): the quiet-caption idiom — mono, small, quiet
    ink, centered under the element it explains. It cited the summary's
    own `.summary-legend` as the precedent until Phase JC deleted that

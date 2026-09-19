@@ -107,10 +107,12 @@ import {
   type SummaryMeta,
   type SummaryRow,
   agreedTargetSpm,
+  machineIntervalSpans,
   machineSplitRows,
   type MachineSplitRow,
   type MachineTier,
 } from "../session/summaryModel";
+import type { IntervalSpan } from "./traceModel.js";
 import {
   logbookCalPerHour,
   logbookWatts,
@@ -355,6 +357,11 @@ export interface StoredSummaryView {
    *  timer rows and on a Just Row. REST reads the step's own
    *  `machineRestMeters` (Phase LP PR 2); a dash on rows saved before it. */
   machineRows: MachineSplitRow[];
+  /** Gate 0B board 2: the machine's own per-interval work and rest
+   *  seconds, for the trace chart's x axis. Gated exactly as
+   *  `machineRows` is — the axis is the machine's account of a machine
+   *  row, so a by-hand row gets none however its steps are marked. */
+  intervalSpans: IntervalSpan[];
   caption?: string;
   readBack: StoredReadBack;
   /** §5E: `Logged to <title> · SESSION <plan_index+1> OF <sequence
@@ -1316,11 +1323,16 @@ export function buildStoredSummary(row: StoredLog): StoredSummaryView {
     row.machineWorkMeters > 0
       ? machineSplitRows(row.steps)
       : [];
+  // Gate 0B board 2: the same gate, the same steps — one read for the
+  // strip, one for the trace chart's axis.
+  const intervalSpans =
+    machineRows.length > 0 ? machineIntervalSpans(row.steps) : [];
   return {
     meta,
     heroes,
     rows,
     machineRows,
+    intervalSpans,
     caption,
     readBack,
     planFooter,
