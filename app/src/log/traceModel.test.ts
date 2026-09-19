@@ -664,6 +664,32 @@ describe("buildTrace — PR 3: the axis is work plus the machine's own rest", ()
     expect(trace.domainX).toStrictEqual([0, 150]);
   });
 
+  it("a piece that ENDS in a rest draws that rest at the same width as the one before it — the axis runs to the end of the rest, not to the last sample", () => {
+    // Two 30 s intervals, each with a 60 s rest after it. The second rest
+    // has no samples of its own and nothing follows it.
+    const samples: Sample[] = [];
+    for (let i = 1; i <= 60; i++) {
+      samples.push({
+        t: i * 10,
+        d: i * 40,
+        p: 1200,
+        spm: 24,
+        r: undefined,
+      } as Sample);
+    }
+    const trace = buildTrace({ samples }, "pace", [
+      { workSeconds: 30, restSeconds: 60 },
+      { workSeconds: 30, restSeconds: 60 },
+    ])!;
+    // 30 s of work, 60 s of rest, 30 s of work, 60 s of rest — and the
+    // axis runs the full 180, so both bands draw at 60.
+    expect(trace.restBands).toStrictEqual([
+      { startX: 30, endX: 90 },
+      { startX: 120, endX: 180 },
+    ]);
+    expect(trace.domainX).toStrictEqual([0, 180]);
+  });
+
   it("with no stored intervals (a free row, or a row saved before the rest readback shipped) the axis is exactly today's", async () => {
     const series = seriesFromFrames(
       await loadCaptureFrames(

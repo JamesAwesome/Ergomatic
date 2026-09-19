@@ -487,6 +487,15 @@ function buildAxis(
     const width = Math.max(open.seconds, open.advance);
     if (width > 0)
       bands.push({ startX: open.startX, endX: open.startX + width });
+  } else if (cursor < intervals.length && work >= boundary) {
+    // The piece ended ON an interval boundary, with that interval's own
+    // rest still to come and no sample left to open it — the ordinary
+    // shape of a programmed row whose last interval carries a rest. The
+    // `work >= boundary` guard is what keeps this from inventing a rest
+    // for a piece that stopped PART WAY through its last interval.
+    const seconds = intervals[cursor]!.restSeconds;
+    if (seconds > 0)
+      bands.push({ startX: work + offset, endX: work + offset + seconds });
   }
   return { xs, bands };
 }
@@ -598,7 +607,15 @@ export function buildTrace(
   });
   if (domainY === null) return null;
 
-  const domainX: [number, number] = [0, axis.xs[axis.xs.length - 1] ?? 0];
+  // The axis runs to the last sample — or, when the piece ENDS in a rest,
+  // to the end of that rest. Without the second arm the trailing band is
+  // clipped at the domain's own edge and draws NARROWER than the rest
+  // before it, which is M6 all over again on the one band whose width
+  // nothing else can check (seen on `log-detail`'s own capture, where
+  // both steps carry a 60 s readback).
+  const lastSampleX = axis.xs[axis.xs.length - 1] ?? 0;
+  const lastBandX = axis.bands[axis.bands.length - 1]?.endX ?? 0;
+  const domainX: [number, number] = [0, Math.max(lastSampleX, lastBandX)];
 
   const segments = toSegments(readings);
   // Candidate B's bands come from the machine; with no stored intervals
