@@ -421,6 +421,37 @@ test("a lost finalize response reports uncertainty without claiming failure or s
   ).toHaveAttribute("aria-current", "page");
 });
 
+// TWO WRITERS, ONE URL, AND THEY DISAGREE FOR THE FIRST TIME (branch review
+// F2). An in-document Cancel sets `cancelled`, and two things then write the
+// URL in the same flush: the flow route's own `<Navigate to="/you" replace>`
+// for a view it no longer owns, and `App`'s destination effect, which since
+// the account submenu sends a terminal link or delete outcome to
+// `/you/account`. Before the move both wrote `/you` and the ordering could
+// not matter; now the notice lives on only one of them, so the ordering is a
+// claim and this is the assertion on it. Reachable on both platforms — no
+// callback, no provider, just the button.
+test("cancelling a link in-document leaves the rower on the account screen, not on You", async ({
+  page,
+}, testInfo) => {
+  await enableFrontDoor(page);
+  await page.route("**/api/auth/methods", (route) =>
+    route.fulfill({ status: 200, json: { apple: false, google: true } }),
+  );
+  await signInViaBackdoor(page, {
+    email: `apple-cancel-in-document-${testInfo.parallelIndex}@e2e.test`,
+    name: "Apple Link Tester",
+  });
+
+  await page.goto("/you/account");
+  await page.getByRole("button", { name: "Add Apple" }).click();
+  await expect(page.getByRole("heading", { name: "Add Apple" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page).toHaveURL(/\/you\/account$/);
+  await expect(
+    page.getByRole("heading", { name: "SIGN-IN METHODS" }),
+  ).toBeVisible();
+});
+
 test("a cancelled link return sends the rower to the account screen once and releases ordinary navigation", async ({
   page,
 }, testInfo) => {

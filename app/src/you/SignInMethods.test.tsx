@@ -53,6 +53,34 @@ function bothConnected() {
 }
 
 describe("SignInMethods", () => {
+  // THE DOOR MUST NOT OPEN ONTO A BLANK SCREEN (branch review F1, invariant
+  // D1). `useAuthMethods` has no retry and no error state of its own, so a
+  // failed `/api/auth/methods` used to mean this component rendered NOTHING
+  // — harmless while it lived on You, which had a screenful of other things,
+  // and a dead end now that a row promises a screen. `options` is read once
+  // per document and `methods` on every mount, so the two can easily
+  // disagree: signal at launch draws the door, no signal at the tap draws
+  // the screen.
+  it("says so when the methods read fails, rather than rendering an empty screen", async () => {
+    vi.mocked(api).mockRejectedValue(new Error("offline"));
+    render(<SignInMethods auth={controller({ kind: "idle" })} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "We couldn’t load your sign-in methods. Check your connection and open this screen again.",
+    );
+  });
+
+  it("stays quiet while the methods read is still in flight", async () => {
+    // A pending read is not a failure: a message here would flash on every
+    // ordinary open. Nothing renders until the read settles one way or the
+    // other.
+    vi.mocked(api).mockImplementation(() => new Promise(() => {}));
+    const { container } = render(
+      <SignInMethods auth={controller({ kind: "idle" })} />,
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it("renders Apple first, connected state, and the available add action", async () => {
     vi.mocked(api).mockResolvedValue(
       new Response(JSON.stringify({ apple: false, google: true }), {

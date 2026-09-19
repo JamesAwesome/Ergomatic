@@ -56,9 +56,11 @@ overrule at the PR with no rework.
 
 `/you/account`, registered in the signed-in fragment of
 `src/shell/AppRoutes.tsx` beside `/you/baselines`, `/you/concept2`,
-`/you/settings`, `/you/stats`. It sits INSIDE the existing `{authFlow && …}`
-guard, because the screen's content is `SignInMethods`, which takes the
-controller.
+`/you/settings`, `/you/stats`. It sits OUTSIDE the existing `{authFlow && …}`
+fragment and carries its own guard (§4), so a refusal lands on You rather
+than on the signed-in wildcard's Today. (This paragraph said INSIDE until the
+branch review caught it: the route was written the other way, deliberately,
+and the spec was the half left stale.)
 
 **NOT in `HIDDEN_TABBAR_PREFIXES`** (`AppRoutes.tsx:63-79`) — the tab bar stays,
 as on every other `/you/*` door.
@@ -278,6 +280,25 @@ capture.**
 This matters because the row driving the work says deletion "is the one flow
 App Review requires be easy to find and complete". Quieter is the design win;
 further away is the product cost, and they arrive in the same change.
+
+### 8. A failed methods read is not a blank screen
+
+Found by the branch review (F1), and it is invariant D1's own first defect:
+`useAuthMethods` terminates at `error` with no retry, and `SignInMethods`
+answered that by rendering `null`. Survivable while it lived on You;
+a dead end behind a door that promises a screen.
+
+**The two reads have different lifetimes, which is what makes it reachable
+rather than theoretical.** `options` is read ONCE per document
+(`authFlow.ts`, at `useAuthFlow` mount) so the door is drawn on the signal
+the rower had at launch; `methods` is read on EVERY mount of the component,
+so the tap can happen with no signal at all. Native is one document for the
+app's whole lifetime.
+
+So the error state says so, in the component's existing error-notice
+pattern: *"We couldn't load your sign-in methods. Check your connection and
+open this screen again."* **A pending read still draws nothing** — a message
+on it would flash on every ordinary open.
 
 ## Gates
 

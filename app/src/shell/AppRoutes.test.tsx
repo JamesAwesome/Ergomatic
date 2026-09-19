@@ -576,6 +576,12 @@ describe("AppRoutes", () => {
     expect(await screen.findByRole("heading", { name: "You" })).toBeVisible();
   });
 
+  // A CHARACTERISATION TEST, AND IT SAYS SO (branch review F4, RF21). No
+  // mutation of this PR's own code reds it — with no controller the route
+  // redirects to `/you`, which itself wildcards to Today, so deleting the
+  // route or inverting its guard leaves this green. What it WOULD catch is a
+  // future change that let a signed-out rower reach the account screen at
+  // all, which is worth a line.
   it("wildcards /you/account to Today when signed out", async () => {
     render(
       <MemoryRouter initialEntries={["/you/account"]}>

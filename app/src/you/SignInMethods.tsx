@@ -192,6 +192,30 @@ export default function SignInMethods({ auth }: { auth: AuthFlowController }) {
   if (auth.options.state !== "ready" || !auth.options.frontDoorEnabled) {
     return null;
   }
+  // A FAILED READ IS NOT A BLANK SCREEN (branch review F1, invariant D1).
+  // `useAuthMethods` terminates at `error` with no retry of its own, and
+  // this component used to answer that by rendering nothing at all. That
+  // was survivable while it lived on You — a screenful of other things
+  // stood around it — and it is a dead end now that an ACCOUNT row promises
+  // a screen: back link, title, nothing, for as long as the read keeps
+  // failing. The two reads have different lifetimes, which is what makes it
+  // easy to reach: `options` is read ONCE per document (so the door is
+  // drawn on the signal the rower had at launch) and `methods` on EVERY
+  // mount of this component (so the tap can happen with no signal at all).
+  //
+  // LOADING STILL DRAWS NOTHING. A pending read is not a failure, and a
+  // message on it would flash on every ordinary open.
+  if (methods.state === "error") {
+    return (
+      <section className="auth-methods">
+        {notice}
+        <p className="notice auth-notice-error" role="alert">
+          We couldn&rsquo;t load your sign-in methods. Check your connection and
+          open this screen again.
+        </p>
+      </section>
+    );
+  }
   if (methods.state !== "ready") {
     return notice ? <section className="auth-methods">{notice}</section> : null;
   }
