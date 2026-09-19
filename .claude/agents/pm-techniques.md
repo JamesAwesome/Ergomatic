@@ -520,6 +520,31 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   twelve days. A host name in a roadmap sentence is a claim; read the config
   default and the URL bar.
 
+- **A close-out judges the exit criteria it can SEE, and the ROADMAP's Exit
+  paragraph is an abridgement.** `close-DE.md` listed four criteria under
+  "ROADMAP's Exit paragraph; spec §6"; §6 has SIX, and the two it dropped were
+  the two nobody else would check — the test-invariant criterion and the
+  records criterion. Checking §6.5 by hand found the three `DEVIATIONS.md`
+  rows the spec NAMED reconciled and two it did not still describing the
+  shipped filter sheet as holding DIFFICULTY and PAIN groups — RF34 inside
+  RF9's own file. **At every close gate, open the SPEC's exit section and
+  count its criteria against the close-out's list before judging any.**
+- **A reconciliation on one axis is an identity, not an explanation.** PS's
+  eyeball oracle reconciled 128,660 − 91,175 = 49,635 − 12,150 exactly and
+  left the TIME axis (1:53:51) and the COUNT axis (26 machine sessions against
+  26 Concept2 results) untouched. **When a close record explains a gap, check
+  every axis the two sources publish** — an identity with one free variable
+  always closes. The antagonist went further the same day: the row-for-row
+  agreement was a round trip through one stored column, and the only
+  genuinely external agreement was the shared 142-day divisor.
+- **An exit clause the repo has never practised is not a debt, and honouring
+  it once creates a precedent of one.** DE §6.5 required its spec body move to
+  `docs/history/`; 159 specs sit in `docs/superpowers/specs/`, `docs/history/`
+  holds none, and moving it would dangle five citations (two in tracked SQL).
+  **Before honouring a records clause at a close gate, count how many closed
+  phases did it**, and record the count as the receipt — but it is a spec
+  criterion, so the not-doing goes to James, not around him.
+
 ## Recommendations that turned out wrong
 - **2026-09-13 — the disabled-button contrast fold (#425).** I measured the
   disabled provider button at 2.16:1 (`--ink-5 #a09a8c` on `--accent #b5341f`)

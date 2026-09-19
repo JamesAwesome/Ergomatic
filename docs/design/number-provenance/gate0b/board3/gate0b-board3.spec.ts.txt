@@ -1,0 +1,194 @@
+// GATE 0B BOARD 3 CAPTURE HARNESS — THROWAWAY, deleted with the board.
+// Same shape as board 2's: it renders the prototype's treatments against
+// a REAL seeded row and captures frames; it asserts nothing about
+// product behaviour. The PR that implements the ruling deletes this and
+// replaces it with tests that assert.
+//
+// The numbers are the exit-7 walk's own (work 500 m / 2:04, rest 242 m /
+// 2:00, overall 742 m / 4:04) — the same pair `log-detail`'s committed
+// capture uses, so the frames can be read beside a shipped screen.
+import { test, expect, type Page } from "@playwright/test";
+import path from "node:path";
+import { RUN_ID, signInViaBackdoor } from "./helpers";
+
+const FRAMES = path.join(
+  process.cwd(),
+  "../docs/design/number-provenance/gate0b/board3/frames",
+);
+
+function machineRow(title: string) {
+  const step = (secs: number, meters: number, restM: number) => ({
+    label: "250m @ 2:07.0",
+    targetSplit: 127.0,
+    actualSplit: (secs / meters) * 500,
+    actualSeconds: secs,
+    actualSource: "pm5",
+    meters,
+    actualMeters: meters,
+    actualSpm: 26,
+    spm: 26,
+    machineCalories: 16,
+    machineDragFactor: 100,
+    machineRestHr: null,
+    machineRestSeconds: 60,
+    machineRestMeters: restM,
+  });
+  return {
+    workoutId: null,
+    workoutTitle: title,
+    workoutType: "AT",
+    deviceName: "PM5 432331249",
+    source: "pm5",
+    held: "under",
+    effort: 3,
+    notes: null,
+    avgSplitSeconds: 124.0,
+    timeSeconds: 244,
+    distanceMeters: 742,
+    restSeconds: 120,
+    restMeters: 242,
+    advancesPlan: false,
+    endedBy: "finished",
+    steps: [step(67.9, 250, 147), step(56.1, 250, 95)],
+    machineWorkSeconds: 124.0,
+    machineWorkMeters: 500,
+    machineSummary: { avgPaceSecondsPer500m: 124.0 },
+  };
+}
+
+async function seed(page: Page, body: unknown): Promise<string> {
+  return page.evaluate(async (b) => {
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(b),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(text);
+    return (JSON.parse(text) as { id: string }).id;
+  }, body);
+}
+
+const TREATMENTS = [
+  ["a", "heroes kept, logbook table beneath"],
+  ["b", "avg split alone, logbook table carries distance and time"],
+  ["c", "heroes kept, one named line"],
+] as const;
+
+test("board 3: the saved row's composition, three treatments", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await signInViaBackdoor(page, {
+    email: `board3-${RUN_ID}@e2e.test`,
+    name: "Board Three",
+  });
+  const id = await seed(page, machineRow("Rill Wind"));
+
+  for (const [mode, label] of TREATMENTS) {
+    for (const rest of ["known", "none"] as const) {
+      for (const [orient, w, h] of [
+        ["portrait", 390, 844],
+        ["landscape", 844, 390],
+      ] as const) {
+        await page.setViewportSize({ width: w, height: h });
+        const q = `?board3=${mode}${rest === "none" ? "&rest=none" : ""}`;
+        await page.goto(`/today/log/${id}${q}`);
+        await expect(
+          page.getByRole("heading", { name: "Rill Wind" }),
+        ).toBeVisible();
+        // The treatment really rendered — a frame of the OLD shape would
+        // be the whole board silently wrong (board 2's own lesson).
+        if (mode === "c") {
+          await expect(page.locator(".board3-line")).toBeVisible();
+        } else {
+          await expect(page.locator(".board3-table")).toBeVisible();
+        }
+        await expect(page.locator(".summary-total-line")).toHaveCount(0);
+        await page.screenshot({
+          path: path.join(FRAMES, `${mode}-${rest}-${orient}.png`),
+        });
+      }
+    }
+    process.stdout.write(`\ncaptured ${mode}: ${label}\n`);
+  }
+
+  // Contrast, MEASURED from the live cascade rather than computed from
+  // the tokens (RF6: judge by number, not by eye — and the board's own
+  // treatments introduce two new text sizes on this surface).
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/today/log/${id}?board3=b`);
+  await expect(page.locator(".board3-table")).toBeVisible();
+  const contrast = await page.evaluate(() => {
+    const lum = (c: string): number => {
+      const [r, g, b] = c
+        .match(/\d+(\.\d+)?/g)!
+        .slice(0, 3)
+        .map((v) => {
+          const x = Number(v) / 255;
+          return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+        });
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    const bgOf = (el: Element): string => {
+      let node: Element | null = el;
+      while (node !== null) {
+        const bg = getComputedStyle(node).backgroundColor;
+        if (bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") return bg;
+        node = node.parentElement;
+      }
+      return getComputedStyle(document.body).backgroundColor;
+    };
+    const ratio = (el: Element): number => {
+      const a = lum(getComputedStyle(el).color);
+      const b = lum(bgOf(el));
+      const [hi, lo] = a > b ? [a, b] : [b, a];
+      return Number(((hi + 0.05) / (lo + 0.05)).toFixed(2));
+    };
+    const pick = (sel: string) => {
+      const el = document.querySelector(sel);
+      return el === null
+        ? null
+        : {
+            ratio: ratio(el),
+            color: getComputedStyle(el).color,
+            background: bgOf(el),
+            fontSize: getComputedStyle(el).fontSize,
+            text: (el.textContent ?? "").trim().slice(0, 24),
+          };
+    };
+    return {
+      tableValue: pick(".board3-table tbody td"),
+      tableRowLabel: pick('.board3-table th[scope="row"]'),
+      tableColLabel: pick('.board3-table th[scope="col"]'),
+      heroValue: pick(".summary-hero-value"),
+      heroLabel: pick(".summary-hero-label"),
+      shippedTotalLine: null as unknown,
+    };
+  });
+  await page.goto(`/today/log/${id}`);
+  await expect(page.locator(".summary-total-line")).toBeVisible();
+  contrast.shippedTotalLine = await page.evaluate(() => {
+    const el = document.querySelector(".summary-total-line")!;
+    return {
+      fontSize: getComputedStyle(el).fontSize,
+      color: getComputedStyle(el).color,
+      text: (el.textContent ?? "").trim().slice(0, 40),
+    };
+  });
+  process.stdout.write(`\nCONTRAST ${JSON.stringify(contrast, null, 1)}\n`);
+
+  // The shipped shape, same row and same viewports, as the "what it
+  // replaces" half of the board.
+  for (const [orient, w, h] of [
+    ["portrait", 390, 844],
+    ["landscape", 844, 390],
+  ] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.goto(`/today/log/${id}`);
+    await expect(page.locator(".summary-total-line")).toBeVisible();
+    await page.screenshot({
+      path: path.join(FRAMES, `today-${orient}.png`),
+    });
+  }
+});
